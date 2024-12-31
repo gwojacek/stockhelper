@@ -81,6 +81,70 @@ def calculate_results(
     return stock_results
 
 
+def calculate_take_profit(entry_price, highest_price, lowest_price):
+    """Calculate the take profit price based on the highest and lowest points."""
+    price_range = highest_price - lowest_price
+    take_profit_price = entry_price + (2 / 3) * price_range
+    return take_profit_price
+
+
+def generate_adjusted_prices(entry_price, adjustment_range=0.02, step_percentage=0.001):
+    """Generate a list of adjusted entry prices within a specified range."""
+    start_price = entry_price * (1 - adjustment_range)
+    end_price = entry_price * (1 + adjustment_range)
+    adjusted_prices = [
+        start_price + i * (step_percentage * entry_price)
+        for i in range(
+            int((end_price - start_price) / (step_percentage * entry_price)) + 1
+        )
+    ]
+    return adjusted_prices
+
+
+def calculate_results_for_adjusted_price(
+    adjusted_price, stop_loss_price, initial_capital, max_capital, risk
+):
+    """Calculate results for a given adjusted price and return formatted data."""
+    results = calculate_results(
+        adjusted_price, stop_loss_price, initial_capital, max_capital, [risk]
+    )
+    data = results[risk]
+
+    return [
+        f"{adjusted_price:.2f} zł",
+        data["max_shares_restricted"],
+        f"{data['engaged_capital']:.2f} zł",
+        f"{data['actual_loss']:.2f} zł",
+        f"{data['actual_loss_percentage']:.2f}%",
+    ]
+
+
+def extended_calculation(
+    entry_price, stop_loss_price, initial_capital, max_capital, risk_levels
+):
+    """Perform extended calculations for entry price adjustments."""
+    print(color_text("\n--- Extended Calculation: Entry Price Adjustments ---", "cyan"))
+    adjusted_prices = generate_adjusted_prices(entry_price)
+
+    for risk in risk_levels:
+        table_data = [
+            calculate_results_for_adjusted_price(
+                adjusted_price, stop_loss_price, initial_capital, max_capital, risk
+            )
+            for adjusted_price in adjusted_prices
+        ]
+
+        headers = [
+            "Entry Price",
+            "Max Shares",
+            "Engaged Capital",
+            "Actual Loss",
+            "Actual % Loss",
+        ]
+        print(color_text(f"\n--- Risk Level: {risk * 100:.1f}% ---", "green"))
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+
 def main():
     # Initialize constants for the calculations
     initial_capital = 207000
@@ -98,9 +162,9 @@ def main():
         entry_price, stop_loss_price, initial_capital, max_capital, risk_levels
     )
 
-    # Calculate take profit and profit/risk metrics
-    price_range = highest_point - lowest_point
-    take_profit_price = entry_price + (2 / 3) * price_range
+    take_profit_price = calculate_take_profit(entry_price, highest_point, lowest_point)
+
+    # Calculate profit/risk metrics
     profit = take_profit_price - entry_price
     risk = entry_price - stop_loss_price
     profit_risk_ratio = profit / risk
