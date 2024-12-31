@@ -46,16 +46,16 @@ def calculate_take_profit(entry_price, highest_point, lowest_point):
 
 def main():
     initial_capital = 207000  # Capital available for investment
-    entry_price = 73.80       # Entry price in PLN
-    stop_loss_price = 72.83   # Stop loss price in PLN
-    lot_price = 30239.33      # Price per lot in PLN
-    pip_value = 4096          # Value of one pip in PLN
-    spread = 0.05 * pip_value  # Spread cost for 1 lot in PLN (0.03 pip)
+    entry_price = 554.75       # Entry price in PLN
+    stop_loss_price = 539   # Stop loss price in PLN
+    lot_price = 90211.18     # Price per lot in PLN
+    pip_value = 1643.56          # Value of one pip in PLN
+    spread = 1.05 * pip_value  # Spread cost for 1 lot in PLN (0.03 pip)
     risk_levels = [0.005, 0.03]  # Risk levels: 0.5% and 3%
 
     # Define highest and lowest points manually
-    highest_point = 80.0  # Example value, replace with actual value
-    lowest_point = 70.0   # Example value, replace with actual value
+    highest_point = 617.25  # Example value, replace with actual value
+    lowest_point = 520.75  # Example value, replace with actual value
 
     results = calculate_investment(entry_price, stop_loss_price, initial_capital, risk_levels, lot_price, pip_value, spread)
     take_profit_price, h = calculate_take_profit(entry_price, highest_point, lowest_point)
