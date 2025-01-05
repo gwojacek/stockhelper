@@ -1,5 +1,8 @@
 from tabulate import tabulate
-import pandas as pd
+from colorama import Fore, Style, init
+
+# Initialize colorama
+init(autoreset=True)
 
 
 def calculate_investment(
@@ -25,7 +28,7 @@ def calculate_investment(
             spread_loss_entry = spread * lots
             spread_loss_exit = (spread * lots) * (
                 stop_loss_price / entry_price
-            )  # Spread cost at stop loss level, changed calculation for short position
+            )  # Spread cost at stop loss level
             total_loss = loss_per_lot + spread_loss_entry + spread_loss_exit
             return total_loss
 
@@ -59,17 +62,46 @@ def calculate_take_profit(entry_price, highest_point, lowest_point):
     return take_profit_price, h
 
 
+def display_take_profit_info(
+    take_profit_price, profit_risk_ratio, potential_profit, profit_percentage
+):
+    """Display detailed take profit info with colors."""
+    print(
+        "\n" + Fore.BLUE + "--- Take Profit Information ---" + Style.RESET_ALL
+    )  # Header in blue
+    print(
+        Fore.YELLOW + f"Take Profit Price:" + Style.RESET_ALL,
+        f"{take_profit_price:.2f} PLN",
+    )  # Yellow for Take Profit Price
+    print(
+        Fore.MAGENTA + f"Profit/Risk Ratio (Z/R):" + Style.RESET_ALL,
+        f"{profit_risk_ratio:.2f}",
+    )  # Magenta for Profit/Risk Ratio
+    print(
+        Fore.GREEN + f"Potential Profit:" + Style.RESET_ALL,
+        f"{potential_profit:.2f} PLN",
+    )  # Green for Potential Profit
+    print(
+        Fore.CYAN + f"Potential Profit as % of Initial Capital:" + Style.RESET_ALL,
+        f"{profit_percentage:.2f}%",
+    )  # Cyan for Profit Percentage
+
+
 def main():
-    initial_capital = 207000
-    entry_price = 73.80
-    stop_loss_price = 74.33  # Stop loss higher than entry for short
-    lot_price = 30081.33
-    pip_value = 4096
-    spread = 0.05 * pip_value
+    initial_capital = 207000  # Capital available for investment
+    entry_price = 529  # Entry price in PLN
+    stop_loss_price = 540  # Stop loss price in PLN
+    lot_price = 87729.90  # Price per lot in PLN
+    pip_value = 1656.50  # Value of one pip in PLN
+    spread = 1.01 * pip_value  # Spread cost for 1 lot in PLN (0.03 pip)
     risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
 
-    highest_point = 80.0  # Example value, replace with actual value
-    lowest_point = 70.0  # Example value, replace with actual value
+    # Define the commodity name
+    commodity_name = "Example Commodity"  # Replace with the actual commodity name
+
+    # Define highest and lowest points manually
+    highest_point = 617.25  # Example value, replace with actual value
+    lowest_point = 520.75  # Example value, replace with actual value
 
     results = calculate_investment(
         entry_price,
@@ -88,7 +120,11 @@ def main():
     risk = stop_loss_price - entry_price  # Changed for short position
     profit_risk_ratio = profit / risk
 
-    print("\n--- Calculation Results ---")
+    # Display results
+    print(
+        "\n--- Calculation Results ---",
+        Fore.LIGHTRED_EX + f"({commodity_name})" + Style.RESET_ALL,
+    )  # Added commodity name to the header
     table_data = []
     for risk, data in results.items():
         table_data.append(
@@ -110,12 +146,26 @@ def main():
     ]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-    print(f"\nTake Profit Price: {take_profit_price:.2f} PLN")
-    print(f"Profit/Risk Ratio (Z/R): {profit_risk_ratio:.2f}")
+    # Dedicated section for 0.5% risk level
+    if 0.005 in results:
+        data = results[0.005]
+        potential_profit = profit * data["max_lots"] * pip_value
+        potential_profit_percentage = (potential_profit / initial_capital) * 100
+        display_take_profit_info(
+            take_profit_price,
+            profit_risk_ratio,
+            potential_profit,
+            potential_profit_percentage,
+        )
+    else:
+        print("No results available for 0.5% risk level.")
 
     if profit_risk_ratio <= 4:
         print(
-            "\nWarning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
+            "\n"
+            + Fore.RED
+            + "Warning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
+            + Style.RESET_ALL
         )
 
 

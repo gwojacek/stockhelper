@@ -2,20 +2,33 @@ from utils.color_coding import color_text
 from tabulate import tabulate
 
 
-def display_trade_info(initial_capital, entry_price, stop_loss_price, max_capital):
-    """Display crucial trade information."""
+def display_trade_info(
+    stock_name, initial_capital, entry_price, stop_loss_price, max_capital
+):
+    """Display general trade information."""
     print(color_text("\n--- Trade Information ---", "blue"))
+    print(color_text(f"Stock Name: {stock_name}", "magenta"))
     print(color_text(f"Initial Capital: {initial_capital:.2f} zł", "magenta"))
     print(color_text(f"Entry Price: {entry_price:.2f} zł", "cyan"))
     print(color_text(f"Stop Loss Price: {stop_loss_price:.2f} zł", "cyan"))
     print(color_text(f"Maximum Capital Limit: {max_capital:.2f} zł", "cyan"))
 
 
-def display_profit_risk_info(take_profit_price, profit_risk_ratio):
-    """Display Take Profit Price and Profit/Risk Ratio."""
+def display_trade_info_05_risk(
+    take_profit_price, profit_risk_ratio, potential_profit, profit_percentage
+):
+    """Display trade details for the 0.5% Risk Level."""
+    print(color_text("\n--- Trade Information for 0.5% Risk Level ---", "blue"))
     print(color_text(f"Take Profit Price: {take_profit_price:.2f} zł", "cyan"))
     print(
         color_text(f"Profit/Risk Ratio (Profit/Risk): {profit_risk_ratio:.2f}", "cyan")
+    )
+    print(color_text(f"Potential Profit: {potential_profit:.2f} zł", "cyan"))
+    print(
+        color_text(
+            f"Potential Profit as % of Initial Capital: {profit_percentage:.2f}%",
+            "cyan",
+        )
     )
 
 
@@ -88,6 +101,11 @@ def calculate_take_profit(entry_price, highest_price, lowest_price):
     return take_profit_price
 
 
+def calculate_potential_profit(entry_price, take_profit_price, max_shares):
+    """Calculate the potential profit at the take profit level."""
+    return max_shares * (take_profit_price - entry_price)
+
+
 def generate_adjusted_prices(entry_price, adjustment_range=0.02, step_percentage=0.001):
     """Generate a list of adjusted entry prices within a specified range."""
     start_price = entry_price * (1 - adjustment_range)
@@ -147,16 +165,19 @@ def extended_calculation(
 
 def main():
     # Initialize constants for the calculations
+    stock_name = "Example Stock"  # Add the stock name here
     initial_capital = 207000
-    entry_price = 11.32
-    stop_loss_price = 10.99
+    entry_price = 9.118
+    stop_loss_price = 8.721
     risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
-    ten_session_trade_volume = 10000000
+    ten_session_trade_volume = 8100000
     max_capital = ten_session_trade_volume / 100
-    highest_point = 12.5
-    lowest_point = 10.0
+    highest_point = 9.360
+    lowest_point = 7.780
 
-    display_trade_info(initial_capital, entry_price, stop_loss_price, max_capital)
+    display_trade_info(
+        stock_name, initial_capital, entry_price, stop_loss_price, max_capital
+    )
 
     results = calculate_results(
         entry_price, stop_loss_price, initial_capital, max_capital, risk_levels
@@ -169,7 +190,16 @@ def main():
     risk = entry_price - stop_loss_price
     profit_risk_ratio = profit / risk
 
-    display_profit_risk_info(take_profit_price, profit_risk_ratio)
+    # Calculate potential profit for the 0.5% risk level
+    max_shares_05_risk = results[0.005]["max_shares_restricted"]
+    potential_profit = calculate_potential_profit(
+        entry_price, take_profit_price, max_shares_05_risk
+    )
+    profit_percentage = (potential_profit / initial_capital) * 100
+
+    display_trade_info_05_risk(
+        take_profit_price, profit_risk_ratio, potential_profit, profit_percentage
+    )
     display_results_table(results, risk_levels)
 
     # Warning for low profit/risk ratio

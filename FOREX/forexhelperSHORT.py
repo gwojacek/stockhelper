@@ -1,5 +1,8 @@
 from tabulate import tabulate
-import pandas as pd
+from colorama import Fore, Style, init
+
+# Initialize colorama
+init(autoreset=True)
 
 
 def calculate_investment(
@@ -32,7 +35,6 @@ def calculate_investment(
             return total_loss
 
         max_lots = 0
-        total_loss = 0
         while True:
             max_lots += 0.01  # Increment lots in steps of 0.01
             total_loss = calculate_loss_for_lots(max_lots)
@@ -56,48 +58,41 @@ def calculate_investment(
 
 def calculate_take_profit(entry_price, highest_point, lowest_point):
     """Calculate the take profit selling level based on highest and lowest points for SHORT trading."""
-    h = (
-        highest_point - lowest_point
-    )  # Calculate the distance between the highest and lowest points
+    h = highest_point - lowest_point  # Distance between the highest and lowest points
     take_profit_price = (
         entry_price - (2 / 3) * h
     )  # Take profit price for SHORT: lower than entry
     return take_profit_price, h
 
 
-def main():
-    initial_capital = 207000  # Capital available for investment
-    entry_price = 1.2000  # Entry price in PLN
-    stop_loss_price = 1.2050  # Stop loss price in PLN (above the entry price)
-    lot_price = (
-        20247.75  # Price per lot in PLN (should be realistic according to market)
+def calculate_potential_profit(entry_price, take_profit_price, max_lots, pip_value):
+    """Calculate potential profit for given parameters in terms of pips for SHORT trading."""
+    price_movement = (
+        entry_price - take_profit_price
+    ) / 0.0001  # Assuming a pip is 0.0001
+    return (
+        max_lots * price_movement * pip_value,
+        price_movement,
+    )  # Return both potential profit and price movement in pips
+
+
+def display_results(
+    results,
+    profit_risk_ratio,
+    take_profit_price,
+    potential_profit,
+    profit_percentage,
+    initial_capital,
+    commodity_name,
+):
+    """Display results in a formatted table with colors."""
+    print(
+        "\n"
+        + Fore.LIGHTRED_EX
+        + f"--- Calculation Results --- {commodity_name} ---"
+        + Style.RESET_ALL
     )
-    pip_value = 10  # Value of one pip in PLN for a standard lot
-    spread = 35 * pip_value  # Spread cost for 1 lot in PLN
-    risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
 
-    # Define highest and lowest points manually
-    highest_point = 1.2500  # Example value, replace with actual value
-    lowest_point = 1.1500  # Example value, replace with actual value
-
-    results = calculate_investment(
-        entry_price,
-        stop_loss_price,
-        initial_capital,
-        risk_levels,
-        lot_price,
-        pip_value,
-        spread,
-    )
-    take_profit_price, h = calculate_take_profit(
-        entry_price, highest_point, lowest_point
-    )
-
-    profit = entry_price - take_profit_price  # Profit calculation for SHORT
-    risk = stop_loss_price - entry_price  # Risk calculation for SHORT
-    profit_risk_ratio = profit / risk
-
-    print("\n--- Calculation Results ---")
     table_data = []
     for risk, data in results.items():
         table_data.append(
@@ -119,14 +114,80 @@ def main():
     ]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-    # Format take profit price with four decimal places
-    print(f"\nTake Profit Price: {take_profit_price:.4f} PLN")
-    print(f"Profit/Risk Ratio (Z/R): {profit_risk_ratio:.2f}")
+    # Display take profit and potential profit information
+    print(
+        Fore.BLUE + f"Take Profit Price: {take_profit_price:.4f} PLN" + Style.RESET_ALL
+    )
+    print(
+        Fore.MAGENTA
+        + f"Profit/Risk Ratio (Z/R): {profit_risk_ratio:.2f}"
+        + Style.RESET_ALL
+    )
+    print(
+        Fore.GREEN + f"Potential Profit: {potential_profit:.2f} PLN" + Style.RESET_ALL
+    )
+    print(
+        Fore.CYAN
+        + f"Potential Profit as % of Initial Capital: {profit_percentage:.2f}%"
+        + Style.RESET_ALL
+    )
 
     if profit_risk_ratio <= 4:
         print(
-            "\nWarning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
+            "\n"
+            + Fore.RED
+            + "Warning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
+            + Style.RESET_ALL
         )
+
+
+def main():
+    initial_capital = 207000  # Capital available for investment
+    entry_price = 1.2000  # Entry price in PLN
+    stop_loss_price = 1.2050  # Stop loss price in PLN (above the entry price)
+    lot_price = 20247.75  # Price per lot in PLN
+    pip_value = 10  # Value of one pip in PLN for a standard lot
+    spread = 35 * pip_value  # Spread cost for 1 lot in PLN
+    risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
+
+    commodity_name = "Example Forex Pair (Short)"  # Change as necessary
+    highest_point = 1.2500  # Example value, replace with actual value
+    lowest_point = 1.1500  # Example value, replace with actual value
+
+    results = calculate_investment(
+        entry_price,
+        stop_loss_price,
+        initial_capital,
+        risk_levels,
+        lot_price,
+        pip_value,
+        spread,
+    )
+    take_profit_price, h = calculate_take_profit(
+        entry_price, highest_point, lowest_point
+    )
+
+    profit = entry_price - take_profit_price  # Profit calculation for SHORT
+    risk = stop_loss_price - entry_price  # Risk calculation for SHORT
+    profit_risk_ratio = profit / risk if risk != 0 else 0  # Prevent division by zero
+
+    # Calculate potential profit for the maximum lots at the lowest risk level
+    max_lots_05_risk = results[0.005]["max_lots"]
+    potential_profit, _ = calculate_potential_profit(
+        entry_price, take_profit_price, max_lots_05_risk, pip_value
+    )
+    profit_percentage = (potential_profit / initial_capital) * 100
+
+    # Display results
+    display_results(
+        results,
+        profit_risk_ratio,
+        take_profit_price,
+        potential_profit,
+        profit_percentage,
+        initial_capital,
+        commodity_name,
+    )
 
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
 from tabulate import tabulate
-import pandas as pd
+from colorama import Fore, Style, init
+
+# Initialize colorama
+init(autoreset=True)
 
 
 def calculate_investment(
@@ -30,7 +33,6 @@ def calculate_investment(
             return total_loss
 
         max_lots = 0
-        total_loss = 0
         while True:
             max_lots += 0.01  # Increment lots in steps of 0.01
             total_loss = calculate_loss_for_lots(max_lots)
@@ -61,21 +63,64 @@ def calculate_take_profit(entry_price, highest_point, lowest_point):
     return take_profit_price, h
 
 
+def display_take_profit_info(
+    take_profit_price,
+    profit_risk_ratio,
+    potential_profit,
+    profit_percentage,
+    pips_earned,
+):
+    """Display detailed take profit info with colors."""
+    print("\n" + Fore.BLUE + "--- Take Profit Information ---" + Style.RESET_ALL)
+    print(
+        Fore.YELLOW + f"Take Profit Price:" + Style.RESET_ALL,
+        f"{take_profit_price:.4f} PLN",
+    )
+    print(
+        Fore.MAGENTA + f"Profit/Risk Ratio (Z/R):" + Style.RESET_ALL,
+        f"{profit_risk_ratio:.2f}",
+    )
+    print(
+        Fore.GREEN + f"Potential Profit:" + Style.RESET_ALL,
+        f"{potential_profit:.2f} PLN",
+    )
+    print(
+        Fore.CYAN + f"Potential Profit as % of Initial Capital:" + Style.RESET_ALL,
+        f"{profit_percentage:.2f}%",
+    )
+    print(
+        Fore.CYAN + f"Pips Earned (if TP executed):" + Style.RESET_ALL,
+        f"{pips_earned:.2f} pips",
+    )
+
+
+def calculate_potential_profit(entry_price, take_profit_price, max_lots, pip_value):
+    """Calculate potential profit for given parameters in terms of pips."""
+    # Calculate the price difference in pips
+    price_movement = (
+        take_profit_price - entry_price
+    ) / 0.0001  # Assuming a pip is 0.0001
+    return (
+        max_lots * price_movement * pip_value,
+        price_movement,
+    )  # Return both potential profit and price movement in pips
+
+
 def main():
+    # Parameters
     initial_capital = 207000  # Capital available for investment
     entry_price = 1.2000  # Entry price in PLN
     stop_loss_price = 1.1950  # Stop loss price in PLN
-    lot_price = (
-        20247.75  # Price per lot in PLN (should be realistic according to market)
-    )
+    lot_price = 20247.75  # Price per lot in PLN
     pip_value = 10  # Value of one pip in PLN for a standard lot
     spread = 35 * pip_value  # Spread cost for 1 lot in PLN
     risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
 
-    # Define highest and lowest points manually
+    commodity_name = "Example Forex Pair"  # Change as necessary
     highest_point = 1.2500  # Example value, replace with actual value
     lowest_point = 1.1500  # Example value, replace with actual value
 
+    # Calculate investments
     results = calculate_investment(
         entry_price,
         stop_loss_price,
@@ -85,15 +130,28 @@ def main():
         pip_value,
         spread,
     )
+
+    # Calculate take profit price
     take_profit_price, h = calculate_take_profit(
         entry_price, highest_point, lowest_point
     )
 
     profit = take_profit_price - entry_price
     risk = entry_price - stop_loss_price
-    profit_risk_ratio = profit / risk
+    profit_risk_ratio = profit / risk if risk != 0 else 0  # Prevent division by zero
 
-    print("\n--- Calculation Results ---")
+    # Calculate potential profit for 0.5% risk level
+    max_lots_05_risk = results[0.005]["max_lots"]
+    potential_profit, pips_earned = calculate_potential_profit(
+        entry_price, take_profit_price, max_lots_05_risk, pip_value
+    )
+    profit_percentage = (potential_profit / initial_capital) * 100
+
+    # Display results
+    print(
+        f"\n--- Calculation Results --- {Fore.LIGHTRED_EX}({commodity_name}){Style.RESET_ALL}"
+    )
+
     table_data = []
     for risk, data in results.items():
         table_data.append(
@@ -115,13 +173,21 @@ def main():
     ]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-    # Format take profit price with four decimal places
-    print(f"\nTake Profit Price: {take_profit_price:.4f} PLN")
-    print(f"Profit/Risk Ratio (Z/R): {profit_risk_ratio:.2f}")
+    # Display consolidated take profit information
+    display_take_profit_info(
+        take_profit_price,
+        profit_risk_ratio,
+        potential_profit,
+        profit_percentage,
+        pips_earned,
+    )
 
     if profit_risk_ratio <= 4:
         print(
-            "\nWarning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
+            "\n"
+            + Fore.RED
+            + "Warning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
+            + Style.RESET_ALL
         )
 
 
