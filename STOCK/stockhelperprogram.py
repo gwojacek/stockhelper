@@ -55,14 +55,22 @@ def display_results_table(results, risk_levels):
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 
-def calculate_max_shares(entry_price, stop_loss_price, initial_capital, risk):
-    """Calculate maximum shares to trade based on entry and stop-loss prices."""
+def calculate_max_shares(
+    entry_price, stop_loss_price, initial_capital, risk, max_capital
+):
+    """Calculate maximum shares to trade based on entry and stop-loss prices and capital limit."""
     loss_per_share = entry_price - stop_loss_price
     max_loss = risk * initial_capital
     max_shares_based_on_loss = int(max_loss / loss_per_share)
     max_shares_based_on_capital = int(initial_capital / entry_price)
+    max_shares_based_on_max_capital = int(max_capital / entry_price)
 
-    max_shares_restricted = min(max_shares_based_on_loss, max_shares_based_on_capital)
+    # Restrict shares to the lowest of the calculated limits
+    max_shares_restricted = min(
+        max_shares_based_on_loss,
+        max_shares_based_on_capital,
+        max_shares_based_on_max_capital,
+    )
 
     return max_shares_restricted, loss_per_share
 
@@ -74,7 +82,7 @@ def calculate_results(
     stock_results = {}
     for risk in risk_levels:
         max_shares_restricted, loss_per_share = calculate_max_shares(
-            entry_price, stop_loss_price, initial_capital, risk
+            entry_price, stop_loss_price, initial_capital, risk, max_capital
         )
 
         # Calculate engaged capital and actual loss
@@ -164,16 +172,15 @@ def extended_calculation(
 
 
 def main():
-    # Initialize constants for the calculations
-    stock_name = "Example Stock"  # Add the stock name here
+    stock_name = "OPL"  # Add the stock name here
     initial_capital = 207000
-    entry_price = 9.118
-    stop_loss_price = 8.721
+    entry_price = 7.398
+    stop_loss_price = 7.20
     risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
-    ten_session_trade_volume = 8100000
+    ten_session_trade_volume = 300000000
     max_capital = ten_session_trade_volume / 100
-    highest_point = 9.360
-    lowest_point = 7.780
+    highest_point = 8.666
+    lowest_point = 7.040
 
     display_trade_info(
         stock_name, initial_capital, entry_price, stop_loss_price, max_capital

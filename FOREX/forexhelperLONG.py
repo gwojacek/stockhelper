@@ -13,31 +13,30 @@ def calculate_investment(
     lot_price,
     pip_value,
     spread,
+    pip_size,
 ):
-    """Calculate maximum lot size to stay within specified risk levels."""
+    """Calculate maximum lot size to stay within specified risk levels for LONG trading."""
     results = {}
 
     for risk in risk_levels:
-        max_loss = risk * initial_capital  # Maximum allowable loss at this risk level
+        max_loss = risk * initial_capital
 
         def calculate_loss_for_lots(lots):
-            adjusted_pip_value = (
-                pip_value * lots
-            )  # Adjust pip value proportionally to lot size
-            loss_per_lot = (entry_price - stop_loss_price) * adjusted_pip_value
-            spread_loss_entry = spread * lots  # Spread cost at entry
-            spread_loss_exit = (spread * lots) * (
-                stop_loss_price / entry_price
-            )  # Spread cost at stop loss level
-            total_loss = loss_per_lot + spread_loss_entry + spread_loss_exit
+            # Calculate pips between entry and stop loss
+            pips = (entry_price - stop_loss_price) / pip_size
+            loss_per_lot = abs(pips) * pip_value * lots
+            spread_cost = spread * lots * 2  # Spread paid both entry and exit
+            total_loss = loss_per_lot + spread_cost
             return total_loss
 
         max_lots = 0
         while True:
-            max_lots += 0.01  # Increment lots in steps of 0.01
+            max_lots += 0.01
             total_loss = calculate_loss_for_lots(max_lots)
-            if total_loss > max_loss:
-                max_lots -= 0.01  # Rollback to last valid lot size
+            engaged_capital = max_lots * lot_price
+
+            if total_loss > max_loss or engaged_capital > initial_capital:
+                max_lots -= 0.01
                 break
 
         engaged_capital = max_lots * lot_price
@@ -55,140 +54,143 @@ def calculate_investment(
 
 
 def calculate_take_profit(entry_price, highest_point, lowest_point):
-    """Calculate the take profit selling level based on highest and lowest points."""
-    h = (
-        highest_point - lowest_point
-    )  # Calculate the distance between highest and lowest points
-    take_profit_price = entry_price + (2 / 3) * h
-    return take_profit_price, h
+    """Calculate take profit level using 2/3 volatility rule for LONG positions."""
+    h = highest_point - lowest_point
+    return entry_price + (2 / 3) * h, h
 
 
-def display_take_profit_info(
-    take_profit_price,
+def calculate_potential_profit(
+    entry_price, take_profit_price, max_lots, pip_value, pip_size
+):
+    """Calculate profit potential in both currency and pips."""
+    pips_earned = (take_profit_price - entry_price) / pip_size
+    return pips_earned * pip_value * max_lots, pips_earned
+
+
+def display_results(
+    results,
     profit_risk_ratio,
+    take_profit_price,
     potential_profit,
     profit_percentage,
     pips_earned,
+    pip_size,
+    commodity_name,
 ):
-    """Display detailed take profit info with colors."""
-    print("\n" + Fore.BLUE + "--- Take Profit Information ---" + Style.RESET_ALL)
+    """Display formatted results with pip size context."""
+    pip_decimal_places = (
+        4 if pip_size == 0.0001 else 2
+    )  # Adjust display based on pip size
+
     print(
-        Fore.YELLOW + f"Take Profit Price:" + Style.RESET_ALL,
-        f"{take_profit_price:.4f} PLN",
-    )
-    print(
-        Fore.MAGENTA + f"Profit/Risk Ratio (Z/R):" + Style.RESET_ALL,
-        f"{profit_risk_ratio:.2f}",
-    )
-    print(
-        Fore.GREEN + f"Potential Profit:" + Style.RESET_ALL,
-        f"{potential_profit:.2f} PLN",
-    )
-    print(
-        Fore.CYAN + f"Potential Profit as % of Initial Capital:" + Style.RESET_ALL,
-        f"{profit_percentage:.2f}%",
-    )
-    print(
-        Fore.CYAN + f"Pips Earned (if TP executed):" + Style.RESET_ALL,
-        f"{pips_earned:.2f} pips",
+        f"\n{Fore.LIGHTRED_EX}--- Calculation Results ({commodity_name}) ---{Style.RESET_ALL}"
     )
 
+    # Results table
+    table_data = [
+        [
+            f"{risk * 100:.1f}%",
+            f"{data['max_lots']:.2f}",
+            f"{data['engaged_capital']:.2f} PLN",
+            f"{data['actual_loss']:.2f} PLN",
+            f"{data['actual_percentage_loss']:.2f}%",
+        ]
+        for risk, data in results.items()
+    ]
 
-def calculate_potential_profit(entry_price, take_profit_price, max_lots, pip_value):
-    """Calculate potential profit for given parameters in terms of pips."""
-    # Calculate the price difference in pips
-    price_movement = (
-        take_profit_price - entry_price
-    ) / 0.0001  # Assuming a pip is 0.0001
-    return (
-        max_lots * price_movement * pip_value,
-        price_movement,
-    )  # Return both potential profit and price movement in pips
+    print(
+        tabulate(
+            table_data,
+            headers=["Risk", "Lots", "Capital", "Loss", "Loss%"],
+            tablefmt="grid",
+        )
+    )
+
+    # Take profit info
+    print(
+        f"\n{Fore.BLUE}Take Profit: {take_profit_price:.{pip_decimal_places}f}{Style.RESET_ALL}"
+    )
+    print(
+        f"{Fore.MAGENTA}Profit/Risk Ratio: {profit_risk_ratio:.2f}:1{Style.RESET_ALL}"
+    )
+    print(
+        f"{Fore.GREEN}Potential Profit: {potential_profit:.2f} PLN ({pips_earned:.1f} pips){Style.RESET_ALL}"
+    )
+    print(
+        f"{Fore.CYAN}Profit Potential: {profit_percentage:.2f}% of capital{Style.RESET_ALL}"
+    )
+
+    if profit_risk_ratio < 3:
+        print(
+            f"\n{Fore.RED}Warning: Risk/Reward ratio below 3:1 - Consider better trade setup{Style.RESET_ALL}"
+        )
 
 
 def main():
-    # Parameters
-    initial_capital = 207000  # Capital available for investment
-    entry_price = 1.2000  # Entry price in PLN
-    stop_loss_price = 1.1950  # Stop loss price in PLN
-    lot_price = 20247.75  # Price per lot in PLN
-    pip_value = 10  # Value of one pip in PLN for a standard lot
-    spread = 35 * pip_value  # Spread cost for 1 lot in PLN
+    # Instrument configuration guide:
+    # - JPY pairs (USD/JPY): pip_size = 0.01 (2 decimal places display)
+    # - Standard FX (EUR/USD): pip_size = 0.0001 (4 decimal places)
+    # - Gold (XAU/USD): pip_size = 0.10 (2 decimal places)
+
+    # Configuration for GBP/USD
+    pip_size = 0.0001  # Standard forex pair
+    pip_value = 40.67  # Value per pip in account currency
+    spread_multiplier = 1.5  # Broker spread cost
+
+    # Trading parameters
+    initial_capital = 251000
+    entry_price = 1.24240
+    stop_loss_price = 1.23090
+    lot_price = 16792.86  # Margin requirement per lot
     risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
+    commodity_name = "GBP/USD Long"
+    market_data = {"highest": 1.34231, "lowest": 1.21003}
 
-    commodity_name = "Example Forex Pair"  # Change as necessary
-    highest_point = 1.2500  # Example value, replace with actual value
-    lowest_point = 1.1500  # Example value, replace with actual value
-
-    # Calculate investments
+    # Execute calculations
     results = calculate_investment(
-        entry_price,
-        stop_loss_price,
-        initial_capital,
-        risk_levels,
-        lot_price,
-        pip_value,
-        spread,
+        entry_price=entry_price,
+        stop_loss_price=stop_loss_price,
+        initial_capital=initial_capital,
+        risk_levels=risk_levels,
+        lot_price=lot_price,
+        pip_value=pip_value,
+        spread=spread_multiplier * pip_value,
+        pip_size=pip_size,
     )
 
-    # Calculate take profit price
-    take_profit_price, h = calculate_take_profit(
-        entry_price, highest_point, lowest_point
+    take_profit_price, volatility = calculate_take_profit(
+        entry_price=entry_price,
+        highest_point=market_data["highest"],
+        lowest_point=market_data["lowest"],
     )
 
-    profit = take_profit_price - entry_price
-    risk = entry_price - stop_loss_price
-    profit_risk_ratio = profit / risk if risk != 0 else 0  # Prevent division by zero
+    # Risk calculations
+    risk_amount = entry_price - stop_loss_price
+    reward_amount = take_profit_price - entry_price
+    profit_risk_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
 
-    # Calculate potential profit for 0.5% risk level
-    max_lots_05_risk = results[0.005]["max_lots"]
+    # Profit potential
+    max_lots = results[0.005]["max_lots"]
     potential_profit, pips_earned = calculate_potential_profit(
-        entry_price, take_profit_price, max_lots_05_risk, pip_value
+        entry_price=entry_price,
+        take_profit_price=take_profit_price,
+        max_lots=max_lots,
+        pip_value=pip_value,
+        pip_size=pip_size,
     )
     profit_percentage = (potential_profit / initial_capital) * 100
 
     # Display results
-    print(
-        f"\n--- Calculation Results --- {Fore.LIGHTRED_EX}({commodity_name}){Style.RESET_ALL}"
+    display_results(
+        results=results,
+        profit_risk_ratio=profit_risk_ratio,
+        take_profit_price=take_profit_price,
+        potential_profit=potential_profit,
+        profit_percentage=profit_percentage,
+        pips_earned=pips_earned,
+        pip_size=pip_size,
+        commodity_name=commodity_name,
     )
-
-    table_data = []
-    for risk, data in results.items():
-        table_data.append(
-            [
-                f"{risk * 100:.1f}%",
-                f"{data['max_lots']:.2f} Lots",
-                f"{data['engaged_capital']:.2f} PLN",
-                f"{data['actual_loss']:.2f} PLN",
-                f"{data['actual_percentage_loss']:.2f}%",
-            ]
-        )
-
-    headers = [
-        "Risk Level",
-        "Max Lots",
-        "Engaged Capital",
-        "Actual Loss",
-        "Actual % Loss",
-    ]
-    print(tabulate(table_data, headers=headers, tablefmt="grid"))
-
-    # Display consolidated take profit information
-    display_take_profit_info(
-        take_profit_price,
-        profit_risk_ratio,
-        potential_profit,
-        profit_percentage,
-        pips_earned,
-    )
-
-    if profit_risk_ratio <= 4:
-        print(
-            "\n"
-            + Fore.RED
-            + "Warning: The Profit/Risk Ratio (Z/R) is less than or equal to 4. Consider revising your strategy."
-            + Style.RESET_ALL
-        )
 
 
 if __name__ == "__main__":

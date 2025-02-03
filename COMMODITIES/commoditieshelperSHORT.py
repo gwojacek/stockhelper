@@ -88,16 +88,16 @@ def display_take_profit_info(
 
 
 def main():
-    initial_capital = 207000  # Capital available for investment
-    entry_price = 529  # Entry price in PLN
+    initial_capital = 240000  # Capital available for investment
+    entry_price = 532.86  # Entry price in PLN
     stop_loss_price = 540  # Stop loss price in PLN
-    lot_price = 87729.90  # Price per lot in PLN
-    pip_value = 1656.50  # Value of one pip in PLN
-    spread = 1.01 * pip_value  # Spread cost for 1 lot in PLN (0.03 pip)
+    lot_price = 87937.83  # Price per lot in PLN
+    pip_value = 1658.50  # Value of one pip in PLN
+    spread = 1.05 * pip_value  # Spread cost for 1 lot in PLN (0.03 pip)
     risk_levels = [0.005, 0.03, 0.025, 0.02, 0.015, 0.01]
 
     # Define the commodity name
-    commodity_name = "Example Commodity"  # Replace with the actual commodity name
+    commodity_name = "WHEAT"  # Replace with the actual commodity name
 
     # Define highest and lowest points manually
     highest_point = 617.25  # Example value, replace with actual value
