@@ -1,18 +1,15 @@
 from core.factory import StrategyFactory
-from configs.stocks.opl_config import OPLConfig
-from core.display import DisplayHandler
+from configs.stocks import pepco, CCC
+from configs.stocks import opl  # opl should be a module exporting TradingConfig
 
 
-def stock_main():
-    config = OPLConfig()
-    strategy = StrategyFactory.create(config)
+def analyze(config_module):
+    # Create an instance of TradingConfig from the module
+    strategy = StrategyFactory.create(config_module.TradingConfig())
     strategy.calculate()
     strategy.display_results()
 
-    if input("Run extended analysis? (y/n): ").lower() == 'y':
-        analysis = strategy.extended_analysis()
-        DisplayHandler(config).show_extended_analysis(analysis)
-
 
 if __name__ == "__main__":
-    stock_main()
+    analyze(CCC)
+    # analyze(opl)

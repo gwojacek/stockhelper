@@ -15,18 +15,20 @@ class ForexStrategy(BaseStrategy):
                 spread=self.config.spread,
                 pip_size=self.config.pip_size,
                 position_type=self.config.position_type,
-                instrument_type="forex"
+                instrument_type="forex",
             )
 
         self.take_profit = risk_manager.calculate_take_profit(
             self.config.entry,
             self.config.high,
             self.config.low,
-            self.config.position_type
+            self.config.position_type,
         )
 
-        max_lots = self.results[min(self.config.risk_levels)]['lots']
-        self.profit = abs(self.take_profit - self.config.entry) * max_lots * self.config.pip_value
+        max_lots = self.results[min(self.config.risk_levels)]["lots"]
+        self.profit = (
+            abs(self.take_profit - self.config.entry) * max_lots * self.config.pip_value
+        )
         self.profit_pct = (self.profit / self.config.capital) * 100
 
     def display_results(self):
@@ -36,8 +38,10 @@ class ForexStrategy(BaseStrategy):
         disp.show_take_profit(
             self.config.entry,
             self.take_profit,
-            self.profit / self.results[min(self.config.risk_levels)]['potential_loss'],
+            self.profit / self.results[min(self.config.risk_levels)]["potential_loss"],
             self.profit,
-            self.profit_pct
+            self.profit_pct,
         )
-        disp.show_warning(self.profit / self.results[min(self.config.risk_levels)]['potential_loss'])
+        disp.show_warning(
+            self.profit / self.results[min(self.config.risk_levels)]["potential_loss"]
+        )

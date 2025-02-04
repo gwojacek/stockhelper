@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 
+
 @dataclass
-class OPLConfig:
+class TradingConfig:
     name: str = "OPL"
     capital: float = 250000
     entry: float = 7.398

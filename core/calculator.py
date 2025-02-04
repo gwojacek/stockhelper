@@ -1,14 +1,14 @@
 def calculate_position_size(
-        entry: float,
-        stop_loss: float,
-        capital: float,
-        risk_percent: float,
-        pip_value: float,
-        lot_cost: float,
-        spread: float,
-        pip_size: float = 1.0,
-        position_type: str = "long",
-        instrument_type: str = "commodity"
+    entry: float,
+    stop_loss: float,
+    capital: float,
+    risk_percent: float,
+    pip_value: float,
+    lot_cost: float,
+    spread: float,
+    pip_size: float = 1.0,
+    position_type: str = "long",
+    instrument_type: str = "commodity",
 ) -> dict:
     max_loss = capital * risk_percent
     lots = 0.0
@@ -36,17 +36,16 @@ def calculate_position_size(
         "lots": round(lots, 2),
         "capital_used": round(lots * lot_cost, 2),
         "potential_loss": total_loss,
-        "risk_percent": round((total_loss / capital) * 100, 2)
+        "risk_percent": round((total_loss / capital) * 100, 2),
     }
 
 
-
 def calculate_stock_position(
-        entry: float,
-        stop_loss: float,
-        capital: float,
-        risk_percent: float,
-        max_capital: float
+    entry: float,
+    stop_loss: float,
+    capital: float,
+    risk_percent: float,
+    max_capital: float,
 ) -> dict:
     loss_per_share = entry - stop_loss
     max_loss = risk_percent * capital
@@ -54,7 +53,7 @@ def calculate_stock_position(
     max_shares = [
         int(max_loss / loss_per_share) if loss_per_share > 0 else 0,
         int(capital / entry),
-        int(max_capital / entry)
+        int(max_capital / entry),
     ]
 
     shares = min(filter(lambda x: x >= 0, max_shares))
@@ -63,5 +62,5 @@ def calculate_stock_position(
         "shares": shares,
         "capital_used": shares * entry,
         "potential_loss": shares * loss_per_share,
-        "risk_percent": (shares * loss_per_share / capital) * 100
+        "risk_percent": (shares * loss_per_share / capital) * 100,
     }
