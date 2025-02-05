@@ -22,7 +22,7 @@ class DisplayHandler:
             "Risk Level",
             "Position Size",
             "Engaged Capital",
-            "Potential Loss",
+            "Potential Loss With Spread",
             "Loss %",
         ]
 

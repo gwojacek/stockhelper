@@ -1,4 +1,4 @@
-from core import DisplayHandler, calculator, risk_manager
+from core import calculator, risk_manager, DisplayHandler
 from strategies.base_strategy import BaseStrategy
 
 
@@ -26,13 +26,16 @@ class ForexStrategy(BaseStrategy):
         )
 
         max_lots = self.results[min(self.config.risk_levels)]["lots"]
-        self.profit = (
-            abs(self.take_profit - self.config.entry) * max_lots * self.config.pip_value
-        )
+
+        # Convert price difference into pips by dividing by pip_size
+        pips_reward = abs(self.take_profit - self.config.entry) / self.config.pip_size
+        self.profit = pips_reward * max_lots * self.config.pip_value
+
         self.profit_pct = (self.profit / self.config.capital) * 100
 
     def display_results(self):
         disp = DisplayHandler(self.config)
+        # Change header to use name or pair if needed:
         disp.show_header(f"{self.config.pair} {self.config.position_type}")
         disp.show_results(self.results)
         disp.show_take_profit(

@@ -16,5 +16,5 @@ class TradingConfig:
     lot_cost: float = 16792.86
     pip_value: float = 40.67
     pip_size: float = 0.0001
-    spread: float = 1.5 * 40.67  # Spread per side
+    spread: float = 1.5 * pip_value  # Spread per side
     risk_levels: tuple = (0.005, 0.03, 0.025, 0.02, 0.015, 0.01)
