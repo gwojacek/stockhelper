@@ -1,5 +1,5 @@
 from core.factory import StrategyFactory
-from configs.stocks import pepco, CCC
+from configs.stocks import pepco, CCC, kruk, jsw
 from configs.stocks import opl  # opl should be a module exporting TradingConfig
 
 
@@ -11,5 +11,6 @@ def analyze(config_module):
 
 
 if __name__ == "__main__":
-    analyze(CCC)
-    # analyze(opl)
+    # analyze(kruk)
+    # analyze(CCC)
+    analyze(jsw)
