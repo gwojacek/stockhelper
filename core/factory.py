@@ -2,7 +2,6 @@ from strategies.commodities import CommodityStrategy
 from strategies.forex import ForexStrategy
 from strategies.stock import StockStrategy
 
-
 class StrategyFactory:
     @staticmethod
     def create(config):
@@ -11,6 +10,11 @@ class StrategyFactory:
                 return CommodityStrategy(config)
             if config.instrument_type == "forex":
                 return ForexStrategy(config)
-        if hasattr(config, "max_capital"):
+            if config.instrument_type == "stock":
+                return StockStrategy(config)
+        # Fallback: jeśli konfiguracja ma symbol, uznajemy ją za akcje
+        if hasattr(config, "symbol"):
+            return StockStrategy(config)
+        if hasattr(config, "max_capital"):  # legacy
             return StockStrategy(config)
         raise ValueError("Invalid configuration")
