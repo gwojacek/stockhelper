@@ -7,5 +7,6 @@ def analyze(config_module):
     strategy.calculate()
     strategy.display_results()
 
+
 if __name__ == "__main__":
     analyze(kruk)

@@ -15,7 +15,9 @@ def get_avg_daily_turnover_yahoo(symbol: str) -> float:
     hist = stock.history(period="10d")  # Pobierz dane z ostatnich 10 dni
     if not hist.empty:
         # Oblicz średnią cenę dla każdego dnia
-        hist["AveragePrice"] = (hist["Open"] + hist["Close"] + hist["High"] + hist["Low"]) / 4
+        hist["AveragePrice"] = (
+            hist["Open"] + hist["Close"] + hist["High"] + hist["Low"]
+        ) / 4
         # Oblicz dzienne obroty (wartość sprzedanych akcji)
         hist["DailyTurnover"] = hist["Volume"] * hist["AveragePrice"]
         # Oblicz średnią wartość dziennego obrotu za ostatnie 10 dni

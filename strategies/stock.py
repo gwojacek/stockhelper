@@ -43,12 +43,14 @@ class StockStrategy(BaseStrategy):
         disp.show_results(self.results)
 
         # Jeżeli użyto fallbacku, wyróżnij wartość kolorem (np. czerwonym)
-        if getattr(self, 'used_default_turnover', False):
+        if getattr(self, "used_default_turnover", False):
             default_info = f"{Fore.RED}(użyto domyślnej wartości){Style.RESET_ALL}"
         else:
             default_info = ""
 
-        print(f"\nCalculated Max Capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}")
+        print(
+            f"\nCalculated Max Capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}"
+        )
 
         potential_loss = self.results[min(self.config.risk_levels)]["potential_loss"]
         ratio = self.profit / potential_loss if potential_loss != 0 else 0

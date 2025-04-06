@@ -2,6 +2,7 @@ from strategies.commodities import CommodityStrategy
 from strategies.forex import ForexStrategy
 from strategies.stock import StockStrategy
 
+
 class StrategyFactory:
     @staticmethod
     def create(config):
