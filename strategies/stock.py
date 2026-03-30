@@ -39,11 +39,14 @@ class StockStrategy(BaseStrategy):
 
     def _get_min_capital_threshold(self, base_threshold: float) -> float:
         """Przelicza próg bazowy PLN o mnożnik GDP(PPP) względem Polski."""
+        return base_threshold * self._get_gdp_multiplier()
+
+    def _get_gdp_multiplier(self) -> float:
+        """Zwraca mnożnik GDP(PPP) kraju względem Polski."""
         country_code = self._get_country_code()
         pl_gdp_ppp = self.GDP_PPP_VALUE["PL"]
         country_gdp_ppp = self.GDP_PPP_VALUE.get(country_code, pl_gdp_ppp)
-        multiplier = country_gdp_ppp / pl_gdp_ppp
-        return base_threshold * multiplier
+        return country_gdp_ppp / pl_gdp_ppp
 
     def _get_liquidity_threshold(self) -> float:
         """Zwraca próg płynności dla Ichimoku (bazowo 300k PLN, GDP-adjusted)."""
@@ -129,6 +132,8 @@ class StockStrategy(BaseStrategy):
 
         min_capital = self._get_min_capital_threshold(5000)
         min_capital_ichimoku = self._get_min_capital_threshold(7000)
+        gdp_multiplier = self._get_gdp_multiplier()
+        country_code = self._get_country_code()
 
         print(
             f"\nCalculated Max Capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}"
@@ -141,6 +146,7 @@ class StockStrategy(BaseStrategy):
             print(
                 f"FX conversion used: {self.currency_pair_used} = {self.fx_rate_to_pln:.4f} (daily turnover converted from {self.stock_currency} to PLN)"
             )
+        print(f"GDP multiplier used ({country_code}/PL): {gdp_multiplier:.4f}x")
 
         if self.config.max_capital < min_capital_ichimoku:
             print(
