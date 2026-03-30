@@ -5,15 +5,15 @@ from dataclasses import dataclass
 class TradingConfig:
     instrument_type: str = "commodity"
     position_type: str = "long"
-    name: str = "sugar"
+    name: str = "WIG20"
 
     capital: float = 234000
-    entry: float = 15.88
-    stop_loss: float = 15.35
-    high: float = 17.05
-    low: float = 15.10
+    entry: float = 2832
+    stop_loss: float = 2795
+    high: float = 3022
+    low: float = 2726
 
-    lot_cost: float = 6718.23
-    pip_value: float = 4054
-    spread: float = 0.05 * pip_value
+    lot_cost: float = 5724.8
+    pip_value: float = 20
+    spread: float = 1.8 * pip_value
     risk_levels: tuple = (0.005, 0.03, 0.025, 0.02, 0.015, 0.01)

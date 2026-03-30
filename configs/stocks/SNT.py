@@ -3,12 +3,12 @@ from dataclasses import dataclass
 
 @dataclass
 class TradingConfig:
-    name: str = "Kruk"
-    symbol: str = "KRU.WA"
+    name: str = "SNT"
+    symbol: str = "SNT.WA"
     instrument_type: str = "stock"
     capital: float = 242000
-    entry: float = 397.15
-    stop_loss: float = 382.495
-    high: float = 423.2
-    low: float = 328.9
+    entry: float = 218.3
+    stop_loss: float = 211.08
+    high: float = 236.4
+    low: float = 180.2
     risk_levels: tuple = (0.005, 0.03, 0.025, 0.02, 0.015, 0.01)

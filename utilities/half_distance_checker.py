@@ -10,10 +10,10 @@ def midpoint(x1, x2):
 
 
 def main():
-    p1 = 377.7
-    p2 = 394.7
+    p1 = 16.4
+    p2 = 15.75
     mid = midpoint(p1, p2)  # Znajdujemy punkt środkowy
-    print(mid)  # Wyświetlamy wynik
+    print(f"{mid:.4f}")  # Wyświetlamy wynik
 
 
 if __name__ == "__main__":
