@@ -52,7 +52,6 @@ class StockStrategy(BaseStrategy):
     def calculate(self):
         """Liczy pozycje, max kapitał i metryki płynności (w PLN)."""
         self.used_default_turnover = False
-        self.used_default_turnover_ichimoku = False
         self.currency_pair_used = "PLNPLN=X"
         self.fx_rate_to_pln = 1.0
         self.stock_currency = "PLN"
@@ -74,7 +73,6 @@ class StockStrategy(BaseStrategy):
             avg_daily_turnover = 30000000
             daily_turnovers_20d = []
             self.used_default_turnover = True
-            self.used_default_turnover_ichimoku = True
 
         avg_daily_turnover_pln = avg_daily_turnover * self.fx_rate_to_pln
         daily_turnovers_20d_pln = [
@@ -89,7 +87,6 @@ class StockStrategy(BaseStrategy):
         self.config.max_capital = avg_daily_turnover_pln * 0.01
 
         # Ichimoku używa tego samego max_capital (z 10d), ale ma osobny safeguard płynności 20d
-        self.max_capital_ichimoku = self.config.max_capital
         self.liquidity_threshold_ichimoku = self._get_liquidity_threshold()
         self.low_turnover_days_ichimoku = sum(
             1
@@ -130,13 +127,6 @@ class StockStrategy(BaseStrategy):
         else:
             default_info = ""
 
-        if getattr(self, "used_default_turnover_ichimoku", False):
-            default_info_ichimoku = (
-                f" {Fore.RED}(użyto domyślnej wartości){Style.RESET_ALL}"
-            )
-        else:
-            default_info_ichimoku = ""
-
         min_capital = self._get_min_capital_threshold(5000)
         min_capital_ichimoku = self._get_min_capital_threshold(7000)
 
@@ -152,10 +142,7 @@ class StockStrategy(BaseStrategy):
                 f"FX conversion used: {self.currency_pair_used} = {self.fx_rate_to_pln:.4f} (daily turnover converted from {self.stock_currency} to PLN)"
             )
 
-        print(
-            f"\nCalculated Max Capital for Ichimoku: {self.max_capital_ichimoku:,.2f} {disp._get_currency()}{default_info_ichimoku}"
-        )
-        if self.max_capital_ichimoku < min_capital_ichimoku:
+        if self.config.max_capital < min_capital_ichimoku:
             print(
                 f"{Fore.RED}{Style.BRIGHT}WARNING: Calculated Max Capital for Ichimoku is below minimum {min_capital_ichimoku:,.0f} PLN (GDP-adjusted)!{Style.RESET_ALL}"
             )
