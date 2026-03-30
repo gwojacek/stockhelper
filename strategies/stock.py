@@ -97,9 +97,9 @@ class StockStrategy(BaseStrategy):
             if turnover < self.liquidity_threshold_ichimoku
         )
 
-        # Używamy ręcznie ustawionych wartości entry, high, low (z pliku konfiguracyjnego)
-        self.take_profit = risk_manager.calculate_take_profit(
-            self.entry_pln, self.high_pln, self.low_pln, "long"
+        # Take profit do wyświetlania zostaje w walucie instrumentu
+        self.take_profit_display = risk_manager.calculate_take_profit(
+            self.config.entry, self.config.high, self.config.low, "long"
         )
 
         for risk in self.config.risk_levels:
@@ -112,7 +112,11 @@ class StockStrategy(BaseStrategy):
             )
 
         base_shares = self.results[min(self.config.risk_levels)]["shares"]
-        self.profit = base_shares * (self.take_profit - self.entry_pln)
+        self.profit = (
+            base_shares
+            * (self.take_profit_display - self.config.entry)
+            * self.fx_rate_to_pln
+        )
         self.profit_pct = (self.profit / self.config.capital) * 100
 
     def display_results(self):
@@ -164,12 +168,12 @@ class StockStrategy(BaseStrategy):
         ratio = self.profit / potential_loss if potential_loss != 0 else 0
 
         disp.show_take_profit(
-            self.entry_pln,
-            self.take_profit,
+            self.config.entry,
+            self.take_profit_display,
             ratio,
             self.profit,
             self.profit_pct,
-            stop_loss=self.stop_loss_pln,
+            stop_loss=self.config.stop_loss,
         )
         disp.show_warning(ratio)
 
