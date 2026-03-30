@@ -73,6 +73,7 @@ class CommodityStrategy(BaseStrategy):
                 ratio,
                 self.profit,
                 self.profit_pct,
+                stop_loss=self.config.stop_loss,
             )
             disp.show_warning(ratio)
         except ZeroDivisionError:
