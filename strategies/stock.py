@@ -1,4 +1,5 @@
 from colorama import Fore, Style
+import math
 
 from core import DisplayHandler, calculator, risk_manager
 from strategies.base_strategy import BaseStrategy
@@ -70,11 +71,22 @@ class StockStrategy(BaseStrategy):
             self.currency_pair_used, self.fx_rate_to_pln = get_fx_to_pln_rate_yahoo(
                 self.stock_currency
             )
+            if not math.isfinite(avg_daily_turnover) or avg_daily_turnover <= 0:
+                raise ValueError(
+                    f"Nieprawidłowy średni dzienny obrót z Yahoo: {avg_daily_turnover}"
+                )
+            if not math.isfinite(self.fx_rate_to_pln) or self.fx_rate_to_pln <= 0:
+                raise ValueError(
+                    f"Nieprawidłowy kurs FX do PLN z Yahoo: {self.fx_rate_to_pln}"
+                )
         except Exception as e:
             print(f"Błąd podczas pobierania danych z Yahoo Finance: {e}")
             # Fallback: użycie domyślnego średniego obrotu
             avg_daily_turnover = 30000000
             daily_turnovers_20d = []
+            self.currency_pair_used = "PLNPLN=X"
+            self.fx_rate_to_pln = 1.0
+            self.stock_currency = "PLN"
             self.used_default_turnover = True
 
         avg_daily_turnover_pln = avg_daily_turnover * self.fx_rate_to_pln

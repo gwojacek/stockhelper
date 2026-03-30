@@ -1,3 +1,6 @@
+import math
+
+
 def calculate_position_size(
     entry: float,
     stop_loss: float,
@@ -47,6 +50,19 @@ def calculate_stock_position(
     risk_percent: float,
     max_capital: float,
 ) -> dict:
+    if not math.isfinite(entry) or entry <= 0:
+        raise ValueError(f"Invalid entry price for stock position calculation: {entry}")
+    if not math.isfinite(stop_loss):
+        raise ValueError(
+            f"Invalid stop loss for stock position calculation: {stop_loss}"
+        )
+    if not math.isfinite(capital) or capital <= 0:
+        raise ValueError(f"Invalid capital for stock position calculation: {capital}")
+    if not math.isfinite(max_capital) or max_capital < 0:
+        raise ValueError(
+            f"Invalid max_capital for stock position calculation: {max_capital}"
+        )
+
     loss_per_share = entry - stop_loss
     max_loss = risk_percent * capital
 
