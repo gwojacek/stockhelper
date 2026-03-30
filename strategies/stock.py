@@ -80,6 +80,10 @@ class StockStrategy(BaseStrategy):
         daily_turnovers_20d_pln = [
             turnover * self.fx_rate_to_pln for turnover in daily_turnovers_20d
         ]
+        self.entry_pln = self.config.entry * self.fx_rate_to_pln
+        self.stop_loss_pln = self.config.stop_loss * self.fx_rate_to_pln
+        self.high_pln = self.config.high * self.fx_rate_to_pln
+        self.low_pln = self.config.low * self.fx_rate_to_pln
 
         # Obliczenie max_capital jako 1% średniego dziennego obrotu
         self.config.max_capital = avg_daily_turnover_pln * 0.01
@@ -95,20 +99,20 @@ class StockStrategy(BaseStrategy):
 
         # Używamy ręcznie ustawionych wartości entry, high, low (z pliku konfiguracyjnego)
         self.take_profit = risk_manager.calculate_take_profit(
-            self.config.entry, self.config.high, self.config.low, "long"
+            self.entry_pln, self.high_pln, self.low_pln, "long"
         )
 
         for risk in self.config.risk_levels:
             self.results[risk] = calculator.calculate_stock_position(
-                self.config.entry,
-                self.config.stop_loss,
+                self.entry_pln,
+                self.stop_loss_pln,
                 self.config.capital,
                 risk,
                 self.config.max_capital,
             )
 
         base_shares = self.results[min(self.config.risk_levels)]["shares"]
-        self.profit = base_shares * (self.take_profit - self.config.entry)
+        self.profit = base_shares * (self.take_profit - self.entry_pln)
         self.profit_pct = (self.profit / self.config.capital) * 100
 
     def display_results(self):
@@ -160,19 +164,19 @@ class StockStrategy(BaseStrategy):
         ratio = self.profit / potential_loss if potential_loss != 0 else 0
 
         disp.show_take_profit(
-            self.config.entry,
+            self.entry_pln,
             self.take_profit,
             ratio,
             self.profit,
             self.profit_pct,
-            stop_loss=self.config.stop_loss,
+            stop_loss=self.stop_loss_pln,
         )
         disp.show_warning(ratio)
 
     def extended_analysis(self):
         """Zwraca analizę wrażliwości wyników dla kilku wariantów ceny wejścia."""
         adjusted_prices = [
-            self.config.entry * (1 + adj) for adj in [-0.02, -0.01, 0, 0.01, 0.02]
+            self.entry_pln * (1 + adj) for adj in [-0.02, -0.01, 0, 0.01, 0.02]
         ]
 
         return [
@@ -180,7 +184,7 @@ class StockStrategy(BaseStrategy):
                 "price": price,
                 **calculator.calculate_stock_position(
                     price,
-                    self.config.stop_loss,
+                    self.stop_loss_pln,
                     self.config.capital,
                     min(self.config.risk_levels),
                     self.config.max_capital,
