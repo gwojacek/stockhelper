@@ -18,18 +18,39 @@ class CommodityStrategy(BaseStrategy):
                 instrument_type="commodity",
             )
 
-        self.take_profit = risk_manager.calculate_take_profit(
-            self.config.entry,
-            self.config.high,
-            self.config.low,
-            self.config.position_type,
+        self.line_cross_value = getattr(self.config, "line_cross_value", None)
+        self.check_zr_value = getattr(
+            self.config, "check_zr_value_fibo_or_elevation", None
         )
 
-        max_lots = self.results[min(self.config.risk_levels)]["lots"]
-        self.profit = (
-            abs(self.take_profit - self.config.entry) * max_lots * self.config.pip_value
-        )
-        self.profit_pct = (self.profit / self.config.capital) * 100
+        self.take_profit = None
+        self.profit = 0.0
+        self.profit_pct = 0.0
+
+        if self.line_cross_value is not None:
+            self.take_profit = risk_manager.calculate_take_profit(
+                self.config.entry,
+                self.config.high,
+                self.config.low,
+                self.config.position_type,
+                start_value=self.line_cross_value,
+            )
+
+            max_lots = self.results[min(self.config.risk_levels)]["lots"]
+            self.profit = (
+                abs(self.take_profit - self.config.entry)
+                * max_lots
+                * self.config.pip_value
+            )
+            self.profit_pct = (self.profit / self.config.capital) * 100
+
+        self.check_zr_ratio = None
+        if self.check_zr_value is not None:
+            self.check_zr_ratio = risk_manager.calculate_distance_ratio(
+                self.config.entry,
+                self.config.stop_loss,
+                self.check_zr_value,
+            )
 
     def display_results(self):
         disp = DisplayHandler(self.config)
@@ -65,18 +86,36 @@ class CommodityStrategy(BaseStrategy):
         )
         base_result = self.results[base_risk]
 
-        try:
-            ratio = self.profit / base_result["potential_loss"]
-            disp.show_take_profit(
-                self.config.entry,
-                self.take_profit,
-                ratio,
-                self.profit,
-                self.profit_pct,
-                stop_loss=self.config.stop_loss,
-            )
-            disp.show_warning(ratio)
-        except ZeroDivisionError:
+        if self.take_profit is None:
             print(
-                f"\n{Fore.YELLOW}Note: Risk/reward ratio could not be calculated{Style.RESET_ALL}"
+                f"\n{Fore.YELLOW}Note: Take Profit was not calculated because optional line_cross_value is not set in TradingConfig.{Style.RESET_ALL}"
             )
+        else:
+            try:
+                ratio = self.profit / base_result["potential_loss"]
+                disp.show_take_profit(
+                    self.config.entry,
+                    self.take_profit,
+                    ratio,
+                    self.profit,
+                    self.profit_pct,
+                    stop_loss=self.config.stop_loss,
+                )
+                disp.show_warning(ratio)
+            except ZeroDivisionError:
+                print(
+                    f"\n{Fore.YELLOW}Note: Risk/reward ratio could not be calculated{Style.RESET_ALL}"
+                )
+
+        if self.check_zr_ratio is None:
+            print(
+                f"{Fore.YELLOW}Note: Optional check_zr_value_fibo_or_elevation is not set, so additional Z/R>=4 validation was skipped.{Style.RESET_ALL}"
+            )
+        else:
+            print(
+                f"Additional Z/R check (check_zr_value_fibo_or_elevation): {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}"
+            )
+            if self.check_zr_ratio <= 4:
+                print(
+                    f"{Fore.RED}WARNING: Additional Z/R ratio is <= 4:1 for check_zr_value_fibo_or_elevation.{Style.RESET_ALL}"
+                )
