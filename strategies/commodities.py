@@ -56,14 +56,15 @@ class CommodityStrategy(BaseStrategy):
         disp = DisplayHandler(self.config)
         disp.show_header(f"{self.config.name} {self.config.position_type}")
         disp.show_results(self.results)
-        print(
-            f"\nEntry Price: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}"
-        )
-        print(
-            f"Stop_loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}"
-        )
 
         notes: list[str] = []
+
+        def show_notes():
+            if not notes:
+                return
+            print(f"\n{Fore.BLUE}--- Notes ---{Style.RESET_ALL}")
+            for note in notes:
+                print(f"- {Fore.YELLOW}{note}{Style.RESET_ALL}")
 
         # Find which risk levels have invalid positions
         invalid_risks = [
@@ -87,10 +88,9 @@ class CommodityStrategy(BaseStrategy):
         ]
         if not valid_results:
             notes.append(
-                f"{Fore.YELLOW}Note: Take Profit and additional Z/R checks were skipped because no valid position size was calculated.{Style.RESET_ALL}"
+                "Take Profit and additional Z/R checks were skipped because no valid position size was calculated."
             )
-            for note in notes:
-                print(note)
+            show_notes()
             return
 
         # Use the smallest valid risk level for profit calculations
@@ -113,11 +113,17 @@ class CommodityStrategy(BaseStrategy):
                 disp.show_warning(ratio)
             except ZeroDivisionError:
                 notes.append(
-                    f"\n{Fore.YELLOW}Note: Risk/reward ratio could not be calculated{Style.RESET_ALL}"
+                    "Risk/reward ratio could not be calculated."
                 )
         else:
+            print(
+                f"\nEntry Price: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}"
+            )
+            print(
+                f"Stop_loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}"
+            )
             notes.append(
-                f"\n{Fore.YELLOW}Note: Take Profit was not calculated because optional line_cross_value is not set in TradingConfig.{Style.RESET_ALL}"
+                "Take Profit was not calculated because optional line_cross_value is not set in TradingConfig."
             )
 
         if self.check_zr_ratio is not None:
@@ -130,8 +136,7 @@ class CommodityStrategy(BaseStrategy):
                 )
         else:
             notes.append(
-                f"{Fore.YELLOW}Note: Optional check_zr_value_fibo_or_elevation is not set, so additional Z/R>=4 validation was skipped.{Style.RESET_ALL}"
+                "Optional check_zr_value_fibo_or_elevation is not set, so additional Z/R>=4 validation was skipped."
             )
 
-        for note in notes:
-            print(note)
+        show_notes()
