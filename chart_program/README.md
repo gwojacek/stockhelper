@@ -15,7 +15,8 @@ python -m chart_program.main jsw --data-source yahoo
 - Click a button, then click chart to set/update that value (reselection supported).
 - Right sidebar shows selected values and manual-edit inputs (`position_type`, `capital`, `lot_cost`, `pip_value`, `spread`, `pip_size`).
 - Cursor box shows current hover price/date.
-- Zoom/pan is preserved while setting levels (no auto reset).
+- Mouse wheel zoom is enabled and zoom state is preserved (no auto reset).
+- Mode bar removes autoscale, pan, and lasso tools.
 
 ## Data window
 
@@ -34,3 +35,10 @@ If any error happens after chart selection starts (config write, chart export, o
 ## API key note
 
 Stooq CSV endpoint typically works without an API key. If your environment/provider requires one, pass it with `--api-key` and the tool will try both `apikey` and `api_key` query variants on `stooq.pl` and `stooq.com`.
+
+
+## Drawing tools
+
+- **Line tool**: click `Line tool`, click chart to create a colored horizontal line object.
+- **Fib 61.8 tool**: click `Fib 61.8`, click first anchor, then second anchor; tool creates `FIB 61.8` object.
+- All drawn objects can be removed from sidebar (`Delete selected object`).
