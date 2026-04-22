@@ -11,21 +11,25 @@ python -m chart_program.main jsw
 or:
 
 ```bash
-python chart_program/main.py coffee_long --instrument commodity --position-type long --api-key YOUR_KEY
+python chart_program/main.py coffee_long --instrument commodity --position-type long --data-source yahoo
 ```
 
 It will:
 1. Detect instrument type (or use `--instrument`).
-2. Load/update daily candles from Stooq.
+2. Load/update daily candles (Yahoo first by default, then Stooq fallback in `auto` mode).
 3. Open the interactive chart for level selection.
 4. Save/update config in `configs/stocks|commodities|forex`.
 5. Save chart image in `charts/<config_name>_levels.png`.
-
 
 ## Failure behavior
 
 If any error happens after chart selection starts (config write, chart export, or data save), the tool rolls back file changes and leaves existing files untouched (all-or-nothing writes).
 
+## Data source options
+
+- `--data-source auto` (default): try Yahoo Finance first, then Stooq.
+- `--data-source yahoo`: use only Yahoo Finance.
+- `--data-source stooq`: use only Stooq.
 
 ## API key note
 

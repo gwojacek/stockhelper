@@ -15,9 +15,92 @@ DATA_DIR_BY_INSTRUMENT = {
     "forex": Path("data/forex"),
 }
 
+COMMODITY_YAHOO_MAP = {
+    "GOLD": "GC=F",
+    "SILVER": "SI=F",
+    "COFFEE": "KC=F",
+    "COCOA": "CC=F",
+    "SUGAR": "SB=F",
+    "WHEAT": "ZW=F",
+    "COPPER": "HG=F",
+    "CRUDE_OIL": "CL=F",
+    "NATURAL_GAS": "NG=F",
+}
+
 
 def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
+
+
+def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
+    cleaned = symbol.strip().upper()
+    candidates: list[str] = []
+
+    if instrument_type == "forex":
+        compact = cleaned.replace("/", "")
+        if len(compact) >= 6:
+            candidates.append(f"{compact[:6]}=X")
+        candidates.append(f"{compact}=X")
+    elif instrument_type == "commodity":
+        mapped = COMMODITY_YAHOO_MAP.get(cleaned)
+        if mapped:
+            candidates.append(mapped)
+        candidates.append(cleaned)
+    else:
+        candidates.append(cleaned)
+
+    deduped = []
+    for candidate in candidates:
+        if candidate not in deduped:
+            deduped.append(candidate)
+    return deduped
+
+
+def _yahoo_download(symbol: str, instrument_type: str) -> pd.DataFrame:
+    try:
+        import yfinance as yf
+    except ImportError as exc:
+        raise ValueError("yfinance is not installed") from exc
+
+    errors = []
+    for candidate in _yahoo_symbol_candidates(symbol, instrument_type):
+        try:
+            hist = yf.Ticker(candidate).history(period="max", interval="1d", auto_adjust=False)
+            if hist is None or hist.empty:
+                errors.append(f"{candidate}: empty data")
+                continue
+
+            df = hist.reset_index()
+            rename_map = {
+                "Datetime": "Date",
+                "date": "Date",
+                "Open": "Open",
+                "High": "High",
+                "Low": "Low",
+                "Close": "Close",
+                "Volume": "Volume",
+            }
+            df = df.rename(columns=rename_map)
+            if "Date" not in df.columns:
+                if df.columns.size > 0:
+                    df = df.rename(columns={df.columns[0]: "Date"})
+
+            required_columns = {"Date", "Open", "High", "Low", "Close"}
+            if not required_columns.issubset(df.columns):
+                errors.append(f"{candidate}: missing OHLC columns")
+                continue
+
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.tz_localize(None)
+            df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+            if df.empty:
+                errors.append(f"{candidate}: no valid OHLC rows")
+                continue
+
+            return df.sort_values("Date").reset_index(drop=True)
+        except Exception as exc:
+            errors.append(f"{candidate}: {exc}")
+
+    raise ValueError(f"No daily data returned from Yahoo for {symbol}. Tried: {' | '.join(errors)}")
 
 
 def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
@@ -118,11 +201,30 @@ def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = Non
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
 
+def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> pd.DataFrame:
+    if data_source == "yahoo":
+        return _yahoo_download(symbol, instrument_type)
+    if data_source == "stooq":
+        return _stooq_download(symbol, instrument_type, api_key=api_key)
+
+    yahoo_error = None
+    try:
+        return _yahoo_download(symbol, instrument_type)
+    except ValueError as exc:
+        yahoo_error = exc
+
+    try:
+        return _stooq_download(symbol, instrument_type, api_key=api_key)
+    except ValueError as stooq_exc:
+        raise ValueError(f"Yahoo failed: {yahoo_error} ; Stooq failed: {stooq_exc}") from stooq_exc
+
+
 def load_or_update_daily_data(
     symbol: str,
     instrument_type: str,
     persist: bool = True,
     api_key: str | None = None,
+    data_source: str = "auto",
 ) -> tuple[pd.DataFrame, Path]:
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -139,7 +241,7 @@ def load_or_update_daily_data(
             local = None
 
     try:
-        remote = _stooq_download(symbol=symbol, instrument_type=instrument_type, api_key=api_key)
+        remote = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
             return local.sort_values("Date").reset_index(drop=True), csv_path
