@@ -65,6 +65,24 @@ class ChartLevelSelectorUI:
             ]
         )
 
+        # Transparent wick-capture overlay for precise Y hover/click on candle shadows.
+        overlay_x = []
+        overlay_y = []
+        for _, row in self.df.iterrows():
+            overlay_x.extend([row["Date"], row["Date"], None])
+            overlay_y.extend([row["Low"], row["High"], None])
+        fig.add_trace(
+            go.Scatter(
+                x=overlay_x,
+                y=overlay_y,
+                mode="lines",
+                line={"width": 14, "color": "rgba(255,255,255,0.01)"},
+                name="cursor_capture",
+                showlegend=False,
+                hovertemplate="Price: %{y:.5f}<extra></extra>",
+            )
+        )
+
         level_colors = {
             "high": "#d946ef",
             "low": "#14b8a6",
@@ -100,8 +118,10 @@ class ChartLevelSelectorUI:
                 go.Scatter(
                     x=[obj.get("x0"), obj.get("x1")],
                     y=[obj.get("y0"), obj.get("y1")],
-                    mode="lines",
+                    mode="lines+text",
                     line={"color": obj.get("color", LINE_COLORS["gold"]), "width": 2},
+                    text=["", obj.get("label", "OBJECT")],
+                    textposition="top center",
                     name=obj.get("label", "OBJECT"),
                     customdata=[obj.get("id"), obj.get("id")],
                     hovertemplate=f"{obj.get('label', 'OBJECT')}: %{{y:.5f}}<extra></extra>",
@@ -311,24 +331,31 @@ class ChartLevelSelectorUI:
                 if fib_anchor is None:
                     return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": price}, None
 
-                y0 = fib_anchor["y"]
-                y1 = price
-                fib_value = y0 + (y1 - y0) * 0.618
+                y_start = fib_anchor["y"]
+                y_end = price
                 x0 = fib_anchor["x"]
                 x1 = date
-                objects_store.append(
-                    {
-                        "id": str(uuid4()),
-                        "type": "fib",
-                        "label": "FIB 61.8",
-                        "x0": x0,
-                        "x1": x1,
-                        "y0": fib_value,
-                        "y1": fib_value,
-                        "price": fib_value,
-                        "color": color or LINE_COLORS["gold"],
-                    }
-                )
+                y_618 = y_start + (y_end - y_start) * 0.618
+
+                fib_lines = [
+                    ("FIB 100%", y_start),
+                    ("FIB 61.8%", y_618),
+                    ("FIB 0%", y_end),
+                ]
+                for label, y_val in fib_lines:
+                    objects_store.append(
+                        {
+                            "id": str(uuid4()),
+                            "type": "fib",
+                            "label": label,
+                            "x0": x0,
+                            "x1": x1,
+                            "y0": y_val,
+                            "y1": y_val,
+                            "price": y_val,
+                            "color": color or LINE_COLORS["gold"],
+                        }
+                    )
                 return levels_store, level_points, objects_store, line_anchor, None, None
 
             if active_field == "high":

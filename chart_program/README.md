@@ -29,7 +29,7 @@ python -m chart_program.main jsw --data-source yahoo
 ## Drawing tools
 
 - **Line tool**: click first point, then second point to create a segment line object.
-- **Fib 61.8 tool**: click first anchor, then second anchor to place `FIB 61.8` line object.
+- **Fib 61.8 tool**: click first anchor, then second anchor to place 3 fib objects: `100%`, `61.8%`, `0%`.
 - Color options: Golden yellow (default), Blue, Red.
 - Click a drawn object on chart to select it, then delete via sidebar.
 - `Reset all` clears all selected levels and drawn objects.
