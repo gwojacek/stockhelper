@@ -12,11 +12,27 @@ python -m chart_program.main jsw --data-source yahoo
 
 - Modern dark layout with chart area + right sidebar.
 - Level buttons: `HIGH`, `LOW`, `ENTRY`, `STOP LOSS`, `CHECK_ZR`, `LINE_CROSS`.
-- Click a button, then click chart to set/update that value (reselection supported).
-- Right sidebar shows selected values and manual-edit inputs (`position_type`, `capital`, `lot_cost`, `pip_value`, `spread`, `pip_size`).
-- Cursor box shows current hover price/date.
-- Mouse wheel zoom is enabled and zoom state is preserved (no auto reset).
-- Mode bar removes autoscale, pan, and lasso tools.
+- Active selected level button is highlighted in blue.
+- Click a level button, then click chart to set/update that value.
+- For clicked levels, the chart shows **short local segments** (not full-width lines).
+- Right sidebar shows selected values and labeled manual inputs.
+- Inputs not used by the detected instrument are disabled/greyed-out.
+- Instrument type and symbol/name are displayed in sidebar.
+- Capital defaults to `255000`.
+
+## Navigation and zoom
+
+- Drag on chart to pan (grab/move behavior).
+- Mouse wheel zoom enabled.
+- Mode bar removes autoscale, pan, lasso, and extra zoom/reset buttons.
+
+## Drawing tools
+
+- **Line tool**: click first point, then second point to create a segment line object.
+- **Fib 61.8 tool**: click first anchor, then second anchor to place `FIB 61.8` line object.
+- Color options: Golden yellow (default), Blue, Red.
+- Click a drawn object on chart to select it, then delete via sidebar.
+- `Reset all` clears all selected levels and drawn objects.
 
 ## Data window
 
@@ -35,10 +51,3 @@ If any error happens after chart selection starts (config write, chart export, o
 ## API key note
 
 Stooq CSV endpoint typically works without an API key. If your environment/provider requires one, pass it with `--api-key` and the tool will try both `apikey` and `api_key` query variants on `stooq.pl` and `stooq.com`.
-
-
-## Drawing tools
-
-- **Line tool**: click `Line tool`, click chart to create a colored horizontal line object.
-- **Fib 61.8 tool**: click `Fib 61.8`, click first anchor, then second anchor; tool creates `FIB 61.8` object.
-- All drawn objects can be removed from sidebar (`Delete selected object`).

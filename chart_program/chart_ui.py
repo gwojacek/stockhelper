@@ -34,11 +34,24 @@ LINE_COLORS = {
 class ChartLevelSelectorUI:
     def __init__(self, symbol: str, dataframe, instrument_type: str, preset_values: dict | None = None):
         self.symbol = symbol
-        self.df = dataframe
+        self.df = dataframe.reset_index(drop=True)
         self.instrument_type = instrument_type
         self.values = preset_values or {}
 
-    def _build_figure(self, current_values: dict, objects: list[dict] | None = None):
+    def _date_window(self, date_value, size: int = 5):
+        dates = list(self.df["Date"])
+        if not dates:
+            return None, None
+        if date_value in dates:
+            idx = dates.index(date_value)
+        else:
+            idx = len(dates) - 1
+
+        left = max(0, idx - size)
+        right = min(len(dates) - 1, idx + size)
+        return dates[left], dates[right]
+
+    def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None):
         fig = go.Figure(
             data=[
                 go.Candlestick(
@@ -61,31 +74,52 @@ class ChartLevelSelectorUI:
             "line_cross_value": "#3b82f6",
         }
 
-        for key, value in current_values.items():
-            if isinstance(value, (int, float)):
-                fig.add_hline(
-                    y=value,
-                    line_width=2,
-                    line_color=level_colors.get(key, "gray"),
-                    annotation_text=f"{LABELS.get(key, key)}: {value:.5f}",
-                    annotation_position="right",
+        for field in SELECTION_SEQUENCE:
+            point = (level_points or {}).get(field)
+            if not point:
+                continue
+            price = point.get("price")
+            date = point.get("date")
+            x0, x1 = self._date_window(date)
+            if x0 is None:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=[x0, x1],
+                    y=[price, price],
+                    mode="lines",
+                    line={"color": level_colors.get(field, "gray"), "width": 3},
+                    name=f"{LABELS[field]}: {price:.5f}",
+                    hoverinfo="name",
+                    showlegend=True,
                 )
+            )
 
         for obj in (objects or []):
-            y_val = obj.get("price")
-            color = obj.get("color", LINE_COLORS["gold"])
-            label = obj.get("label", "OBJ")
-            fig.add_hline(y=y_val, line_width=2, line_color=color, annotation_text=f"{label}: {y_val:.5f}", annotation_position="left")
+            fig.add_trace(
+                go.Scatter(
+                    x=[obj.get("x0"), obj.get("x1")],
+                    y=[obj.get("y0"), obj.get("y1")],
+                    mode="lines",
+                    line={"color": obj.get("color", LINE_COLORS["gold"]), "width": 2},
+                    name=obj.get("label", "OBJECT"),
+                    customdata=[obj.get("id"), obj.get("id")],
+                    hovertemplate=f"{obj.get('label', 'OBJECT')}: %{{y:.5f}}<extra></extra>",
+                    showlegend=True,
+                )
+            )
 
         fig.update_layout(
             title=f"{self.symbol} ({self.instrument_type}) - Daily (1Y)",
             xaxis_rangeslider_visible=False,
             hovermode="x unified",
+            dragmode="pan",
             template="plotly_dark",
             uirevision="keep_zoom",
             margin={"l": 24, "r": 24, "t": 45, "b": 20},
             paper_bgcolor="#0b1220",
             plot_bgcolor="#111827",
+            legend={"orientation": "h", "y": 1.02, "x": 0},
         )
         fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True)
         fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True)
@@ -104,8 +138,15 @@ class ChartLevelSelectorUI:
                     pass
         return None
 
+    @staticmethod
+    def _input_style():
+        return {"width": "100%", "color": "black", "background": "white"}
+
     def run(self):
         app = Dash(__name__)
+
+        is_stock = self.instrument_type == "stock"
+        is_commodity = self.instrument_type == "commodity"
 
         button_row = html.Div(
             [html.Button(LABELS[field], id=f"btn-{field}", n_clicks=0, className="level-btn") for field in SELECTION_SEQUENCE],
@@ -125,6 +166,7 @@ class ChartLevelSelectorUI:
                             children=[
                                 html.Button("Line tool", id="tool-line", n_clicks=0),
                                 html.Button("Fib 61.8", id="tool-fib", n_clicks=0),
+                                html.Button("Reset all", id="reset-all", n_clicks=0),
                                 dcc.Dropdown(
                                     id="line-color",
                                     options=[
@@ -140,21 +182,12 @@ class ChartLevelSelectorUI:
                         ),
                         dcc.Graph(
                             id="candle-chart",
-                            figure=self._build_figure(self.values, []),
+                            figure=self._build_figure(self.values, {}, []),
                             style={"height": "82vh"},
                             config={
                                 "scrollZoom": True,
                                 "displaylogo": False,
-                                "modeBarButtonsToRemove": [
-                                    "autoScale2d",
-                                    "pan2d",
-                                    "lasso2d",
-                                    "select2d",
-                                    "zoom2d",
-                                    "zoomIn2d",
-                                    "zoomOut2d",
-                                    "resetScale2d",
-                                ],
+                                "modeBarButtonsToRemove": ["autoScale2d", "pan2d", "lasso2d", "select2d", "zoom2d", "zoomIn2d", "zoomOut2d", "resetScale2d"],
                             },
                         ),
                         html.Div(id="cursor-box", style={"marginTop": "8px", "fontFamily": "monospace"}),
@@ -169,17 +202,17 @@ class ChartLevelSelectorUI:
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),
                         html.Label("Position type"),
-                        dcc.Dropdown(id="position-type", options=[{"label": "LONG", "value": "long"}, {"label": "SHORT", "value": "short"}], value=self.values.get("position_type", "long")),
+                        dcc.Dropdown(id="position-type", options=[{"label": "LONG", "value": "long"}, {"label": "SHORT", "value": "short"}], value=self.values.get("position_type", "long"), disabled=is_stock),
                         html.Label("Capital", style={"marginTop": "8px", "display": "block"}),
-                        dcc.Input(id="capital", type="number", value=self.values.get("capital", 0), style={"width": "100%"}),
-                        html.Label("Lot cost", style={"marginTop": "8px", "display": "block"}),
-                        dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost", 0), style={"width": "100%"}),
-                        html.Label("Pip value", style={"marginTop": "8px", "display": "block"}),
-                        dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value", 0), style={"width": "100%"}),
-                        html.Label("Spread", style={"marginTop": "8px", "display": "block"}),
-                        dcc.Input(id="spread", type="number", value=self.values.get("spread", 0), style={"width": "100%"}),
-                        html.Label("Pip size", style={"marginTop": "8px", "display": "block"}),
-                        dcc.Input(id="pip-size", type="number", value=self.values.get("pip_size", 0.0001), style={"width": "100%"}),
+                        dcc.Input(id="capital", type="number", value=self.values.get("capital", 255000), style=self._input_style()),
+                        html.Label("Lot cost", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost", 0), style=self._input_style(), disabled=is_stock),
+                        html.Label("Pip value", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value", 0), style=self._input_style(), disabled=is_stock),
+                        html.Label("Spread", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        dcc.Input(id="spread", type="number", value=self.values.get("spread", 0), style=self._input_style(), disabled=is_stock),
+                        html.Label("Pip size", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if (is_stock or is_commodity) else 1}),
+                        dcc.Input(id="pip-size", type="number", value=self.values.get("pip_size", 0.0001), style=self._input_style(), disabled=(is_stock or is_commodity)),
                         html.H4("Drawn objects", style={"marginTop": "14px"}),
                         dcc.Dropdown(id="object-picker", options=[], value=None, clearable=True),
                         html.Button("Delete selected object", id="delete-object", n_clicks=0, style={"marginTop": "8px", "width": "100%"}),
@@ -188,9 +221,11 @@ class ChartLevelSelectorUI:
                     ],
                 ),
                 dcc.Store(id="levels-store", data=self.values),
+                dcc.Store(id="level-points-store", data={}),
                 dcc.Store(id="objects-store", data=[]),
                 dcc.Store(id="active-field", data="entry"),
                 dcc.Store(id="active-tool", data="level"),
+                dcc.Store(id="line-anchor", data=None),
                 dcc.Store(id="fib-anchor", data=None),
             ],
         )
@@ -219,35 +254,82 @@ class ChartLevelSelectorUI:
 
         @app.callback(
             Output("levels-store", "data"),
+            Output("level-points-store", "data"),
             Output("objects-store", "data"),
+            Output("line-anchor", "data"),
             Output("fib-anchor", "data"),
+            Output("object-picker", "value"),
             Input("candle-chart", "clickData"),
+            Input("reset-all", "n_clicks"),
             State("levels-store", "data"),
+            State("level-points-store", "data"),
             State("objects-store", "data"),
             State("active-field", "data"),
             State("active-tool", "data"),
             State("line-color", "value"),
+            State("line-anchor", "data"),
             State("fib-anchor", "data"),
             prevent_initial_call=True,
         )
-        def apply_click(click_data, levels_store, objects_store, active_field, active_tool, color, fib_anchor):
+        def apply_click(click_data, reset_clicks, levels_store, level_points, objects_store, active_field, active_tool, color, line_anchor, fib_anchor):
             levels_store = levels_store or {}
+            level_points = level_points or {}
             objects_store = objects_store or []
+
+            if ctx.triggered_id == "reset-all":
+                self.values = {}
+                return {}, {}, [], None, None, None
+
             point = (click_data or {}).get("points", [{}])[0]
+            clicked_object_id = point.get("customdata")
+            if clicked_object_id:
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, clicked_object_id
+
             price = self._extract_price(point)
+            date = point.get("x")
             if price is None:
-                return levels_store, objects_store, fib_anchor
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, None
 
             if active_tool == "line":
-                objects_store.append({"id": str(uuid4()), "type": "line", "price": price, "color": color or LINE_COLORS["gold"], "label": "LINE"})
-                return levels_store, objects_store, fib_anchor
+                if line_anchor is None:
+                    return levels_store, level_points, objects_store, {"x": date, "y": price}, fib_anchor, None
+                objects_store.append(
+                    {
+                        "id": str(uuid4()),
+                        "type": "line",
+                        "label": "LINE",
+                        "x0": line_anchor["x"],
+                        "y0": line_anchor["y"],
+                        "x1": date,
+                        "y1": price,
+                        "color": color or LINE_COLORS["gold"],
+                    }
+                )
+                return levels_store, level_points, objects_store, None, fib_anchor, None
 
             if active_tool == "fib":
                 if fib_anchor is None:
-                    return levels_store, objects_store, price
-                fib_value = fib_anchor + (price - fib_anchor) * 0.618
-                objects_store.append({"id": str(uuid4()), "type": "fib", "price": fib_value, "color": color or LINE_COLORS["gold"], "label": "FIB 61.8"})
-                return levels_store, objects_store, None
+                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": price}, None
+
+                y0 = fib_anchor["y"]
+                y1 = price
+                fib_value = y0 + (y1 - y0) * 0.618
+                x0 = fib_anchor["x"]
+                x1 = date
+                objects_store.append(
+                    {
+                        "id": str(uuid4()),
+                        "type": "fib",
+                        "label": "FIB 61.8",
+                        "x0": x0,
+                        "x1": x1,
+                        "y0": fib_value,
+                        "y1": fib_value,
+                        "price": fib_value,
+                        "color": color or LINE_COLORS["gold"],
+                    }
+                )
+                return levels_store, level_points, objects_store, line_anchor, None, None
 
             if active_field == "high":
                 selected = self._extract_price({"high": point.get("high")})
@@ -258,8 +340,10 @@ class ChartLevelSelectorUI:
 
             if selected is not None:
                 levels_store[active_field] = selected
+                level_points[active_field] = {"price": selected, "date": date}
+
             self.values = levels_store
-            return levels_store, objects_store, fib_anchor
+            return levels_store, level_points, objects_store, line_anchor, fib_anchor, None
 
         @app.callback(
             Output("objects-store", "data", allow_duplicate=True),
@@ -280,14 +364,16 @@ class ChartLevelSelectorUI:
             Output("object-picker", "options"),
             [Output(f"btn-{field}", "style") for field in SELECTION_SEQUENCE],
             Input("levels-store", "data"),
+            Input("level-points-store", "data"),
             Input("objects-store", "data"),
             Input("active-field", "data"),
             Input("active-tool", "data"),
         )
-        def redraw(levels_store, objects_store, active_field, active_tool):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool):
             levels_store = levels_store or {}
+            level_points = level_points or {}
             objects_store = objects_store or []
-            fig = self._build_figure(levels_store, objects_store)
+            fig = self._build_figure(levels_store, level_points, objects_store)
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":
@@ -296,7 +382,7 @@ class ChartLevelSelectorUI:
                 value = levels_store.get(field)
                 lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.5f}'}"))
 
-            obj_options = [{"label": f"{obj.get('label', 'OBJ')} @ {obj.get('price', 0):.5f}", "value": obj.get("id")} for obj in objects_store]
+            obj_options = [{"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")} for obj in objects_store]
 
             btn_styles = []
             for field in SELECTION_SEQUENCE:
@@ -305,7 +391,7 @@ class ChartLevelSelectorUI:
                 else:
                     btn_styles.append({"background": "#1f2937", "color": "#e5e7eb", "border": "1px solid #334155", "padding": "8px"})
 
-            return (fig, lines, obj_options, *btn_styles)
+            return fig, lines, obj_options, *btn_styles
 
         @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
         def hover_info(hover_data):
@@ -336,7 +422,7 @@ class ChartLevelSelectorUI:
                 levels_store.update(
                     {
                         "position_type": position_type,
-                        "capital": capital or 0,
+                        "capital": capital or 255000,
                         "lot_cost": lot_cost or 0,
                         "pip_value": pip_value or 0,
                         "spread": spread or 0,
@@ -354,5 +440,10 @@ class ChartLevelSelectorUI:
     def save_chart_snapshot(self, levels: dict, file_path: Path):
         file_path.parent.mkdir(parents=True, exist_ok=True)
         objects = levels.get("drawn_objects", []) if isinstance(levels, dict) else []
-        fig = self._build_figure(levels, objects)
+        level_points = {}
+        for field in SELECTION_SEQUENCE:
+            value = levels.get(field) if isinstance(levels, dict) else None
+            if isinstance(value, (int, float)):
+                level_points[field] = {"price": value, "date": self.df["Date"].iloc[-1]}
+        fig = self._build_figure(levels if isinstance(levels, dict) else {}, level_points, objects)
         fig.write_image(str(file_path), width=1800, height=1000)
