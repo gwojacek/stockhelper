@@ -109,10 +109,9 @@ class StockStrategy(BaseStrategy):
             if turnover < self.liquidity_threshold_ichimoku
         )
 
-        # Take profit do wyświetlania zostaje w walucie instrumentu
-        self.take_profit_display = risk_manager.calculate_take_profit(
-            self.config.entry, self.config.high, self.config.low, "long"
-        )
+        # Take profit do wyświetlania liczymy tylko, jeśli optional line_cross_value jest ustawione.
+        line_cross_value = getattr(self.config, "line_cross_value", None)
+        self.take_profit_display = None
 
         for risk in self.config.risk_levels:
             self.results[risk] = calculator.calculate_stock_position(
@@ -123,13 +122,24 @@ class StockStrategy(BaseStrategy):
                 self.config.max_capital,
             )
 
-        base_shares = self.results[min(self.config.risk_levels)]["shares"]
-        self.profit = (
-            base_shares
-            * (self.take_profit_display - self.config.entry)
-            * self.fx_rate_to_pln
-        )
-        self.profit_pct = (self.profit / self.config.capital) * 100
+        self.profit = 0.0
+        self.profit_pct = 0.0
+        if line_cross_value is not None:
+            self.take_profit_display = risk_manager.calculate_take_profit(
+                self.config.entry,
+                self.config.high,
+                self.config.low,
+                "long",
+                start_value=line_cross_value,
+            )
+
+            base_shares = self.results[min(self.config.risk_levels)]["shares"]
+            self.profit = (
+                base_shares
+                * (self.take_profit_display - self.config.entry)
+                * self.fx_rate_to_pln
+            )
+            self.profit_pct = (self.profit / self.config.capital) * 100
 
     def display_results(self):
         """Wyświetla tabelę wyników, warningi i analizę take-profit."""
@@ -168,6 +178,18 @@ class StockStrategy(BaseStrategy):
             print(
                 f"{Fore.RED}{Style.BRIGHT}WARNING: Ichimoku liquidity check failed ({self.low_turnover_days_ichimoku} days below {self.liquidity_threshold_ichimoku:,.0f} PLN turnover in last 20 days).{Style.RESET_ALL}"
             )
+
+        if self.take_profit_display is None:
+            print(
+                f"\nEntry Price: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}"
+            )
+            print(
+                f"Stop_loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}"
+            )
+            print(
+                f"{Fore.YELLOW}Note: Take Profit was not calculated because optional line_cross_value is not set in TradingConfig.{Style.RESET_ALL}"
+            )
+            return
 
         potential_loss = self.results[min(self.config.risk_levels)]["potential_loss"]
         ratio = self.profit / potential_loss if potential_loss != 0 else 0

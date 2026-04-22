@@ -16,9 +16,11 @@ def calculate_position_size(
     max_loss = capital * risk_percent
     lots = 0.0
     position_multiplier = 1 if position_type == "long" else -1
+    lot_step = 0.001 if instrument_type == "commodity" else 0.01
+    lot_precision = 3 if lot_step < 0.01 else 2
 
     while True:
-        lots += 0.01
+        lots = round(lots + lot_step, lot_precision + 2)
         price_diff = (stop_loss - entry) * position_multiplier
         pips = abs(price_diff / pip_size)
         spread_cost = spread * lots
@@ -27,7 +29,7 @@ def calculate_position_size(
 
         # If the loss or required capital exceed limits, step back one increment
         if total_loss > max_loss or lots * lot_cost > capital:
-            lots -= 0.01  # Adjust the lot size back
+            lots = max(0.0, round(lots - lot_step, lot_precision + 2))
             # Recalculate using the adjusted lots value
             spread_cost = spread * lots
 
@@ -36,7 +38,7 @@ def calculate_position_size(
             break
 
     return {
-        "lots": round(lots, 2),
+        "lots": round(lots, lot_precision),
         "capital_used": round(lots * lot_cost, 2),
         "potential_loss": total_loss,
         "risk_percent": round((total_loss / capital) * 100, 2),
