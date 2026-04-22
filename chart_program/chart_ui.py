@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+import numpy as np
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html
 
@@ -38,15 +39,24 @@ class ChartLevelSelectorUI:
         self.instrument_type = instrument_type
         self.values = preset_values or {}
 
-    def _date_window(self, date_value, size: int = 5):
+    def _resolve_candle_index(self, date_value):
         dates = list(self.df["Date"])
         if not dates:
-            return None, None
-        if date_value in dates:
-            idx = dates.index(date_value)
-        else:
-            idx = len(dates) - 1
+            return None
+        try:
+            target = str(date_value)
+            for i, d in enumerate(dates):
+                if str(d) == target or str(d).startswith(target):
+                    return i
+        except Exception:
+            pass
+        return len(dates) - 1
 
+    def _date_window(self, date_value, size: int = 5):
+        dates = list(self.df["Date"])
+        idx = self._resolve_candle_index(date_value)
+        if idx is None:
+            return None, None
         left = max(0, idx - size)
         right = min(len(dates) - 1, idx + size)
         return dates[left], dates[right]
@@ -65,21 +75,22 @@ class ChartLevelSelectorUI:
             ]
         )
 
-        # Transparent wick-capture overlay for precise Y hover/click on candle shadows.
-        overlay_x = []
-        overlay_y = []
-        for _, row in self.df.iterrows():
-            overlay_x.extend([row["Date"], row["Date"], None])
-            overlay_y.extend([row["Low"], row["High"], None])
+        # Transparent heatmap overlay for precise XY cursor price picking.
+        y_min = float(self.df["Low"].min())
+        y_max = float(self.df["High"].max())
+        y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
+        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 280)
+        x_grid = list(self.df["Date"])
+        z = np.zeros((len(y_grid), len(x_grid)))
         fig.add_trace(
-            go.Scatter(
-                x=overlay_x,
-                y=overlay_y,
-                mode="lines",
-                line={"width": 14, "color": "rgba(255,255,255,0.01)"},
-                name="cursor_capture",
-                showlegend=False,
+            go.Heatmap(
+                x=x_grid,
+                y=y_grid,
+                z=z,
+                showscale=False,
+                opacity=0.01,
                 hovertemplate="Price: %{y:.5f}<extra></extra>",
+                name="cursor_capture",
             )
         )
 
@@ -141,7 +152,7 @@ class ChartLevelSelectorUI:
             plot_bgcolor="#111827",
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
-        fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True)
+        fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True, type="category")
         fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True)
         return fig
 
@@ -186,7 +197,7 @@ class ChartLevelSelectorUI:
                             children=[
                                 html.Button("Line tool", id="tool-line", n_clicks=0),
                                 html.Button("Fib 61.8", id="tool-fib", n_clicks=0),
-                                html.Button("Reset all", id="reset-all", n_clicks=0),
+                                html.Button("Reset all", id="reset-all", n_clicks=0, style={"marginLeft": "auto"}),
                                 dcc.Dropdown(
                                     id="line-color",
                                     options=[
@@ -333,14 +344,17 @@ class ChartLevelSelectorUI:
 
                 y_start = fib_anchor["y"]
                 y_end = price
-                x0 = fib_anchor["x"]
-                x1 = date
+                start_idx = self._resolve_candle_index(fib_anchor["x"])
+                end_idx = self._resolve_candle_index(date)
+                left_idx = min(start_idx, end_idx) if start_idx is not None and end_idx is not None else 0
+                x0 = self.df.iloc[left_idx]["Date"]
+                x1 = self.df.iloc[-1]["Date"]
                 y_618 = y_start + (y_end - y_start) * 0.618
 
                 fib_lines = [
-                    ("FIB 100%", y_start),
-                    ("FIB 61.8%", y_618),
-                    ("FIB 0%", y_end),
+                    (f"FIB 100% ({y_start:.5f})", y_start),
+                    (f"FIB 61.8% ({y_618:.5f})", y_618),
+                    (f"FIB 0% ({y_end:.5f})", y_end),
                 ]
                 for label, y_val in fib_lines:
                     objects_store.append(
@@ -358,10 +372,13 @@ class ChartLevelSelectorUI:
                     )
                 return levels_store, level_points, objects_store, line_anchor, None, None
 
-            if active_field == "high":
-                selected = self._extract_price({"high": point.get("high")})
-            elif active_field == "low":
-                selected = self._extract_price({"low": point.get("low")})
+            if active_field in ("high", "low"):
+                idx = self._resolve_candle_index(date)
+                if idx is not None:
+                    row = self.df.iloc[idx]
+                    selected = float(row["High"]) if active_field == "high" else float(row["Low"])
+                else:
+                    selected = None
             else:
                 selected = price
 
