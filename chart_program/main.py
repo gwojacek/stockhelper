@@ -13,6 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pip-value", type=float, default=0.0)
     parser.add_argument("--spread", type=float, default=0.0)
     parser.add_argument("--pip-size", type=float, default=0.0001)
+    parser.add_argument("--api-key", help="Optional API key passed to data provider")
     return parser
 
 
@@ -39,6 +40,8 @@ def main() -> int:
     forwarded.extend(["--pip-value", str(args.pip_value)])
     forwarded.extend(["--spread", str(args.spread)])
     forwarded.extend(["--pip-size", str(args.pip_size)])
+    if args.api_key:
+        forwarded.extend(["--api-key", args.api_key])
     forwarded.extend(unknown)
 
     from chart_program.level_selector import run_level_selector

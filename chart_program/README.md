@@ -11,7 +11,7 @@ python -m chart_program.main jsw
 or:
 
 ```bash
-python chart_program/main.py coffee_long --instrument commodity --position-type long
+python chart_program/main.py coffee_long --instrument commodity --position-type long --api-key YOUR_KEY
 ```
 
 It will:
@@ -25,3 +25,8 @@ It will:
 ## Failure behavior
 
 If any error happens after chart selection starts (config write, chart export, or data save), the tool rolls back file changes and leaves existing files untouched (all-or-nothing writes).
+
+
+## API key note
+
+Stooq CSV endpoint typically works without an API key. If your environment/provider requires one, pass it with `--api-key` and the tool will try both `apikey` and `api_key` query variants on `stooq.pl` and `stooq.com`.

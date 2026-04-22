@@ -57,6 +57,7 @@ def _parse_args(raw_args=None):
     parser.add_argument("--pip-value", type=float, default=0.0)
     parser.add_argument("--spread", type=float, default=0.0)
     parser.add_argument("--pip-size", type=float, default=0.0001)
+    parser.add_argument("--api-key", help="Optional API key forwarded to Stooq query parameters")
     return parser.parse_args(raw_args)
 
 
@@ -90,7 +91,12 @@ def run_level_selector(raw_args=None):
     else:
         symbol = existing.get("name", args.target.upper())
 
-    df, data_path = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=False)
+    df, data_path = load_or_update_daily_data(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        persist=False,
+        api_key=args.api_key,
+    )
 
     ui = ChartLevelSelectorUI(symbol=symbol, dataframe=df, instrument_type=instrument_type, preset_values=existing)
     selected = ui.run()

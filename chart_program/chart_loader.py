@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import StringIO
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -51,12 +52,25 @@ def _download_text(url: str) -> str:
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     lines = csv_text.splitlines()
-    header_index = next((i for i, line in enumerate(lines) if line.startswith("Date,")), None)
+    header_index = None
+    separator = ","
+    for i, raw_line in enumerate(lines):
+        line = raw_line.strip()
+        line_lower = line.lower()
+        if line_lower.startswith("date,open,high,low,close"):
+            header_index = i
+            separator = ","
+            break
+        if line_lower.startswith("date;open;high;low;close"):
+            header_index = i
+            separator = ";"
+            break
+
     if header_index is None:
         raise ValueError("Stooq response does not contain expected CSV header.")
 
     normalized = "\n".join(lines[header_index:])
-    df = pd.read_csv(StringIO(normalized), on_bad_lines="skip")
+    df = pd.read_csv(StringIO(normalized), sep=separator, on_bad_lines="skip")
 
     required_columns = {"Date", "Open", "High", "Low", "Close"}
     if not required_columns.issubset(df.columns):
@@ -67,23 +81,49 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     return df.sort_values("Date").reset_index(drop=True)
 
 
-def _stooq_download(symbol: str, instrument_type: str) -> pd.DataFrame:
+def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
+    query = {"s": symbol, "i": "d"}
+    if api_key and param_name:
+        query[param_name] = api_key
+    return f"https://{domain}/q/d/l/?{urlencode(query)}"
+
+
+def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> pd.DataFrame:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
-        url = f"https://stooq.pl/q/d/l/?s={candidate}&i=d"
-        try:
-            text = _download_text(url)
-            df = _parse_stooq_csv_text(text)
-            if not df.empty:
-                return df
-            errors.append(f"{candidate}: empty data")
-        except (URLError, ValueError, pd.errors.ParserError) as exc:
-            errors.append(f"{candidate}: {exc}")
+        urls = [
+            _stooq_url(candidate, domain="stooq.pl"),
+            _stooq_url(candidate, domain="stooq.com"),
+        ]
+        if api_key:
+            urls.extend(
+                [
+                    _stooq_url(candidate, api_key=api_key, param_name="apikey", domain="stooq.pl"),
+                    _stooq_url(candidate, api_key=api_key, param_name="api_key", domain="stooq.pl"),
+                    _stooq_url(candidate, api_key=api_key, param_name="apikey", domain="stooq.com"),
+                    _stooq_url(candidate, api_key=api_key, param_name="api_key", domain="stooq.com"),
+                ]
+            )
+
+        for url in urls:
+            try:
+                text = _download_text(url)
+                df = _parse_stooq_csv_text(text)
+                if not df.empty:
+                    return df
+                errors.append(f"{candidate}: empty data from {url}")
+            except (URLError, ValueError, pd.errors.ParserError) as exc:
+                errors.append(f"{candidate}: {exc}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
 
-def load_or_update_daily_data(symbol: str, instrument_type: str, persist: bool = True) -> tuple[pd.DataFrame, Path]:
+def load_or_update_daily_data(
+    symbol: str,
+    instrument_type: str,
+    persist: bool = True,
+    api_key: str | None = None,
+) -> tuple[pd.DataFrame, Path]:
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,7 +139,7 @@ def load_or_update_daily_data(symbol: str, instrument_type: str, persist: bool =
             local = None
 
     try:
-        remote = _stooq_download(symbol=symbol, instrument_type=instrument_type)
+        remote = _stooq_download(symbol=symbol, instrument_type=instrument_type, api_key=api_key)
     except ValueError:
         if local is not None and not local.empty:
             return local.sort_values("Date").reset_index(drop=True), csv_path
