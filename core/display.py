@@ -64,10 +64,10 @@ class DisplayHandler:
         print(f"Take Profit: {Fore.GREEN}{tp:.{self.pip_decimals}f}{Style.RESET_ALL}")
         print(f"Z/R Ratio: {Fore.MAGENTA}{ratio:.2f}:1{Style.RESET_ALL}")
         print(
-            f"Potential Profit: {Fore.CYAN}{profit:,.2f} {self._get_currency()}{Style.RESET_ALL}"
+            f"Potential profit on trade: {Fore.CYAN}{profit:,.2f} {self._get_currency()}{Style.RESET_ALL}"
         )
         print(
-            f"Profit Potential: {Fore.LIGHTBLUE_EX}{profit_pct:.2f}%{Style.RESET_ALL}"
+            f"Whole wallet profit potential: {Fore.LIGHTBLUE_EX}{profit_pct:.2f}%{Style.RESET_ALL}"
         )
 
     def show_warning(self, ratio):

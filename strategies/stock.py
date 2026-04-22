@@ -109,9 +109,15 @@ class StockStrategy(BaseStrategy):
             if turnover < self.liquidity_threshold_ichimoku
         )
 
-        # Take profit do wyświetlania zostaje w walucie instrumentu
+        # Take profit do wyświetlania zostaje w walucie instrumentu.
+        # Optional line_cross_value can be used as TP start point.
+        line_cross_value = getattr(self.config, "line_cross_value", None)
         self.take_profit_display = risk_manager.calculate_take_profit(
-            self.config.entry, self.config.high, self.config.low, "long"
+            self.config.entry,
+            self.config.high,
+            self.config.low,
+            "long",
+            start_value=line_cross_value,
         )
 
         for risk in self.config.risk_levels:
