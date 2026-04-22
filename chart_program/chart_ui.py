@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html
 
@@ -27,8 +28,8 @@ LABELS = {
 
 LINE_COLORS = {
     "gold": "#facc15",
-    "blue": "#3b82f6",
-    "red": "#ef4444",
+    "purple": "#a855f7",
+    "green": "#22c55e",
 }
 
 
@@ -40,17 +41,28 @@ class ChartLevelSelectorUI:
         self.values = preset_values or {}
 
     def _resolve_candle_index(self, date_value):
-        dates = list(self.df["Date"])
-        if not dates:
+        if self.df.empty:
             return None
-        try:
-            target = str(date_value)
-            for i, d in enumerate(dates):
-                if str(d) == target or str(d).startswith(target):
-                    return i
-        except Exception:
-            pass
-        return len(dates) - 1
+        target = pd.to_datetime(date_value, errors="coerce")
+        if pd.isna(target):
+            return len(self.df) - 1
+        all_dates = pd.to_datetime(self.df["Date"], errors="coerce")
+        deltas = (all_dates - target).abs()
+        idx = int(deltas.idxmin())
+        return idx
+
+    def _monthly_ticks(self):
+        dates = pd.to_datetime(self.df["Date"], errors="coerce")
+        labels = dates.dt.strftime("%Y-%m")
+        tickvals = []
+        ticktext = []
+        prev = None
+        for i, label in enumerate(labels):
+            if label != prev:
+                tickvals.append(self.df["Date"].iloc[i])
+                ticktext.append(label)
+                prev = label
+        return tickvals, ticktext
 
     def _date_window(self, date_value, size: int = 5):
         dates = list(self.df["Date"])
@@ -71,6 +83,8 @@ class ChartLevelSelectorUI:
                     low=self.df["Low"],
                     close=self.df["Close"],
                     name="Daily",
+                    hoverinfo="skip",
+                    hovertemplate=None,
                 )
             ]
         )
@@ -79,7 +93,7 @@ class ChartLevelSelectorUI:
         y_min = float(self.df["Low"].min())
         y_max = float(self.df["High"].max())
         y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 280)
+        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 1200)
         x_grid = list(self.df["Date"])
         z = np.zeros((len(y_grid), len(x_grid)))
         fig.add_trace(
@@ -88,7 +102,7 @@ class ChartLevelSelectorUI:
                 y=y_grid,
                 z=z,
                 showscale=False,
-                opacity=0.01,
+                opacity=0.001,
                 hovertemplate="Price: %{y:.5f}<extra></extra>",
                 name="cursor_capture",
             )
@@ -152,7 +166,18 @@ class ChartLevelSelectorUI:
             plot_bgcolor="#111827",
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
-        fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True, type="category")
+        tickvals, ticktext = self._monthly_ticks()
+        fig.update_xaxes(
+            showspikes=True,
+            spikemode="across",
+            spikesnap="cursor",
+            showline=True,
+            type="category",
+            tickmode="array",
+            tickvals=tickvals,
+            ticktext=ticktext,
+            tickangle=0,
+        )
         fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True)
         return fig
 
@@ -198,19 +223,18 @@ class ChartLevelSelectorUI:
                                 html.Button("Line tool", id="tool-line", n_clicks=0),
                                 html.Button("Fib 61.8", id="tool-fib", n_clicks=0),
                                 html.Button("Reset all", id="reset-all", n_clicks=0, style={"marginLeft": "auto"}),
-                                dcc.Dropdown(
-                                    id="line-color",
-                                    options=[
-                                        {"label": "Golden yellow", "value": LINE_COLORS["gold"]},
-                                        {"label": "Blue", "value": LINE_COLORS["blue"]},
-                                        {"label": "Red", "value": LINE_COLORS["red"]},
+                                html.Div(
+                                    style={"display": "flex", "gap": "6px", "alignItems": "center"},
+                                    children=[
+                                        html.Div("Line color:"),
+                                        html.Button("", id="color-gold", n_clicks=0, style={"width": "22px", "height": "22px", "background": LINE_COLORS["gold"], "border": "1px solid white"}),
+                                        html.Button("", id="color-purple", n_clicks=0, style={"width": "22px", "height": "22px", "background": LINE_COLORS["purple"], "border": "1px solid white"}),
+                                        html.Button("", id="color-green", n_clicks=0, style={"width": "22px", "height": "22px", "background": LINE_COLORS["green"], "border": "1px solid white"}),
                                     ],
-                                    value=LINE_COLORS["gold"],
-                                    clearable=False,
-                                    style={"width": "220px", "color": "black"},
                                 ),
                             ],
                         ),
+                        html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600"}),
                         dcc.Graph(
                             id="candle-chart",
                             figure=self._build_figure(self.values, {}, []),
@@ -221,7 +245,6 @@ class ChartLevelSelectorUI:
                                 "modeBarButtonsToRemove": ["autoScale2d", "pan2d", "lasso2d", "select2d", "zoom2d", "zoomIn2d", "zoomOut2d", "resetScale2d"],
                             },
                         ),
-                        html.Div(id="cursor-box", style={"marginTop": "8px", "fontFamily": "monospace"}),
                     ],
                 ),
                 html.Div(
@@ -258,8 +281,28 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="active-tool", data="level"),
                 dcc.Store(id="line-anchor", data=None),
                 dcc.Store(id="fib-anchor", data=None),
+                dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
             ],
         )
+
+
+        @app.callback(
+            Output("line-color-store", "data"),
+            Input("color-gold", "n_clicks"),
+            Input("color-purple", "n_clicks"),
+            Input("color-green", "n_clicks"),
+            State("line-color-store", "data"),
+            prevent_initial_call=True,
+        )
+        def choose_color(_, __, ___, current):
+            trig = ctx.triggered_id
+            if trig == "color-gold":
+                return LINE_COLORS["gold"]
+            if trig == "color-purple":
+                return LINE_COLORS["purple"]
+            if trig == "color-green":
+                return LINE_COLORS["green"]
+            return current
 
         @app.callback(
             Output("active-field", "data"),
@@ -297,7 +340,7 @@ class ChartLevelSelectorUI:
             State("objects-store", "data"),
             State("active-field", "data"),
             State("active-tool", "data"),
-            State("line-color", "value"),
+            State("line-color-store", "data"),
             State("line-anchor", "data"),
             State("fib-anchor", "data"),
             prevent_initial_call=True,
