@@ -1,23 +1,9 @@
-from configs.stocks import kghm, CCC
+import argparse
+
+from chart_tools.level_selector import run_level_selector
+from configs.stocks import CCC
 from core.factory import StrategyFactory
-from configs.commodities import (
-    wheat_short,
-    silver_long,
-    copper_long,
-    sugar_long,
-    coffee_long, wig20_long, us100, Cocoa, US500_long, smci_long, Lockhead_Martin_long, natural_gas_long,
-    crude_oil_long, Cocoa_short,
-)
-from configs.forex import (
-    gbpusd_long,
-    eurjpy_long,
-    eurchf_short,
-    eurgbp_long,
-    gbpchf_long,
-    eurchf_long,
-    audusd_long,
-    eurpln_long, usdjpy_long, usdpln_long, usd_pln_short, usdcad_long,
-)
+from configs.commodities import Lockhead_Martin_long
 
 
 def analyze(config_module):
@@ -26,8 +12,20 @@ def analyze(config_module):
     strategy.display_results()
 
 
-if __name__ == "__main__":
-    # analyze(CCC)
-    analyze(Lockhead_Martin_long)
-    # analyze(sugar_long)
+def _build_parser():
+    parser = argparse.ArgumentParser(description="stockhelper entrypoint")
+    parser.add_argument("--chart", help="Launch interactive chart selector for symbol/config slug")
+    return parser
 
+
+if __name__ == "__main__":
+    parser = _build_parser()
+    args, unknown = parser.parse_known_args()
+
+    if args.chart:
+        selector_args = [args.chart, *unknown]
+        result = run_level_selector(selector_args)
+        print("Chart workflow completed:", result)
+    else:
+        # analyze(CCC)
+        analyze(Lockhead_Martin_long)
