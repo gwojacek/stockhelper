@@ -111,6 +111,9 @@ class StockStrategy(BaseStrategy):
 
         # Take profit do wyświetlania liczymy tylko, jeśli optional line_cross_value jest ustawione.
         line_cross_value = getattr(self.config, "line_cross_value", None)
+        self.check_zr_value = getattr(
+            self.config, "check_zr_value_fibo_or_elevation", None
+        )
         self.take_profit_display = None
 
         for risk in self.config.risk_levels:
@@ -140,6 +143,14 @@ class StockStrategy(BaseStrategy):
                 * self.fx_rate_to_pln
             )
             self.profit_pct = (self.profit / self.config.capital) * 100
+
+        self.check_zr_ratio = None
+        if self.check_zr_value is not None:
+            self.check_zr_ratio = risk_manager.calculate_distance_ratio(
+                self.config.entry,
+                self.config.stop_loss,
+                self.check_zr_value,
+            )
 
     def display_results(self):
         """Wyświetla tabelę wyników, warningi i analizę take-profit."""
@@ -179,6 +190,20 @@ class StockStrategy(BaseStrategy):
                 f"{Fore.RED}{Style.BRIGHT}WARNING: Ichimoku liquidity check failed ({self.low_turnover_days_ichimoku} days below {self.liquidity_threshold_ichimoku:,.0f} PLN turnover in last 20 days).{Style.RESET_ALL}"
             )
 
+        notes: list[str] = []
+        if self.check_zr_ratio is not None:
+            print(
+                f"Additional Z/R check (check_zr_value_fibo_or_elevation): {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}"
+            )
+            if self.check_zr_ratio <= 4:
+                print(
+                    f"{Fore.RED}WARNING: Additional Z/R ratio is <= 4:1 for check_zr_value_fibo_or_elevation.{Style.RESET_ALL}"
+                )
+        else:
+            notes.append(
+                "Optional check_zr_value_fibo_or_elevation is not set, so additional Z/R>=4 validation was skipped."
+            )
+
         if self.take_profit_display is None:
             print(
                 f"\nEntry Price: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}"
@@ -186,9 +211,13 @@ class StockStrategy(BaseStrategy):
             print(
                 f"Stop_loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}"
             )
-            print(
-                f"{Fore.YELLOW}Note: Take Profit was not calculated because optional line_cross_value is not set in TradingConfig.{Style.RESET_ALL}"
+            notes.append(
+                "Take Profit was not calculated because optional line_cross_value is not set in TradingConfig."
             )
+            if notes:
+                print(f"\n{Fore.BLUE}--- Notes ---{Style.RESET_ALL}")
+                for note in notes:
+                    print(f"- {Fore.YELLOW}{note}{Style.RESET_ALL}")
             return
 
         potential_loss = self.results[min(self.config.risk_levels)]["potential_loss"]
@@ -203,6 +232,10 @@ class StockStrategy(BaseStrategy):
             stop_loss=self.config.stop_loss,
         )
         disp.show_warning(ratio)
+        if notes:
+            print(f"\n{Fore.BLUE}--- Notes ---{Style.RESET_ALL}")
+            for note in notes:
+                print(f"- {Fore.YELLOW}{note}{Style.RESET_ALL}")
 
     def extended_analysis(self):
         """Zwraca analizę wrażliwości wyników dla kilku wariantów ceny wejścia."""
