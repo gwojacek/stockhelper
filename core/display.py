@@ -28,11 +28,16 @@ class DisplayHandler:
 
         table_data = []
         for risk, data in results.items():
+            position_value = data.get("lots", data.get("shares", 0))
+            if "lots" in data:
+                lot_decimals = 3 if getattr(self.config, "instrument_type", "") == "commodity" else 2
+            else:
+                lot_decimals = 0
             row = [
                 # Risk Level (no color)
                 f"{risk * 100:.1f}%",
                 # Position Size (yellow value only)
-                f"{Fore.YELLOW}{data.get('lots', data.get('shares', 0)):.2f}{Style.RESET_ALL} {'Lots' if 'lots' in data else 'Shares'}",
+                f"{Fore.YELLOW}{position_value:.{lot_decimals}f}{Style.RESET_ALL} {'Lots' if 'lots' in data else 'Shares'}",
                 # Engaged Capital (magenta value only)
                 f"{Fore.MAGENTA}{data['capital_used']:,.2f}{Style.RESET_ALL} {self._get_currency()}",
                 # Potential Loss (red value only)
@@ -59,10 +64,10 @@ class DisplayHandler:
         print(f"Take Profit: {Fore.GREEN}{tp:.{self.pip_decimals}f}{Style.RESET_ALL}")
         print(f"Z/R Ratio: {Fore.MAGENTA}{ratio:.2f}:1{Style.RESET_ALL}")
         print(
-            f"Potential Profit: {Fore.CYAN}{profit:,.2f} {self._get_currency()}{Style.RESET_ALL}"
+            f"Potential profit on trade: {Fore.CYAN}{profit:,.2f} {self._get_currency()}{Style.RESET_ALL}"
         )
         print(
-            f"Profit Potential: {Fore.LIGHTBLUE_EX}{profit_pct:.2f}%{Style.RESET_ALL}"
+            f"Whole wallet profit potential: {Fore.LIGHTBLUE_EX}{profit_pct:.2f}%{Style.RESET_ALL}"
         )
 
     def show_warning(self, ratio):
