@@ -60,6 +60,20 @@ def _parse_args(raw_args=None):
     return parser.parse_args(raw_args)
 
 
+def _snapshot_file(path: Path):
+    if path.exists():
+        return True, path.read_bytes()
+    return False, b""
+
+
+def _restore_file(path: Path, existed_before: bool, content: bytes):
+    if existed_before:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    elif path.exists():
+        path.unlink()
+
+
 def run_level_selector(raw_args=None):
     args = _parse_args(raw_args)
 
@@ -76,7 +90,7 @@ def run_level_selector(raw_args=None):
     else:
         symbol = existing.get("name", args.target.upper())
 
-    df, data_path = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type)
+    df, data_path = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=False)
 
     ui = ChartLevelSelectorUI(symbol=symbol, dataframe=df, instrument_type=instrument_type, preset_values=existing)
     selected = ui.run()
@@ -116,14 +130,28 @@ def run_level_selector(raw_args=None):
             }
         )
 
-    path = write_or_update_config(instrument_type=instrument_type, config_path=config_path, values=values)
-
     snapshot_name = f"{config_path.stem}_levels.png"
-    ui.save_chart_snapshot(selected, Path("charts") / snapshot_name)
+    chart_path = Path("charts") / snapshot_name
+
+    config_existed, config_backup = _snapshot_file(config_path)
+    chart_existed, chart_backup = _snapshot_file(chart_path)
+    data_existed, data_backup = _snapshot_file(data_path)
+
+    try:
+        path = write_or_update_config(instrument_type=instrument_type, config_path=config_path, values=values)
+        ui.save_chart_snapshot(selected, chart_path)
+
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(data_path, index=False)
+    except Exception:
+        _restore_file(config_path, config_existed, config_backup)
+        _restore_file(chart_path, chart_existed, chart_backup)
+        _restore_file(data_path, data_existed, data_backup)
+        raise
 
     return {
         "instrument_type": instrument_type,
         "config_path": str(path),
         "data_path": str(data_path),
-        "chart_path": str(Path('charts') / snapshot_name),
+        "chart_path": str(chart_path),
     }

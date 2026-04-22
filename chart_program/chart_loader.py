@@ -83,7 +83,7 @@ def _stooq_download(symbol: str, instrument_type: str) -> pd.DataFrame:
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
 
-def load_or_update_daily_data(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path]:
+def load_or_update_daily_data(symbol: str, instrument_type: str, persist: bool = True) -> tuple[pd.DataFrame, Path]:
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -112,5 +112,6 @@ def load_or_update_daily_data(symbol: str, instrument_type: str) -> tuple[pd.Dat
     else:
         merged = remote
 
-    merged.to_csv(csv_path, index=False)
+    if persist:
+        merged.to_csv(csv_path, index=False)
     return merged, csv_path
