@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+DEFAULT_RISK_LEVELS = (0.005, 0.03, 0.025, 0.02, 0.015, 0.01)
+
+CONFIG_SUBDIR_BY_INSTRUMENT = {
+    "stock": "stocks",
+    "commodity": "commodities",
+    "forex": "forex",
+}
+
+
+def _format_value(value):
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, tuple):
+        return f"({', '.join(str(v) for v in value)})"
+    return str(value)
+
+
+def _build_template(instrument_type: str, values: dict) -> str:
+    risk_levels = values.get("risk_levels", DEFAULT_RISK_LEVELS)
+
+    if instrument_type == "stock":
+        return f'''from dataclasses import dataclass
+
+
+@dataclass
+class TradingConfig:
+    name: str = "{values["name"]}"
+    symbol: str = "{values["symbol"]}"
+    instrument_type: str = "stock"
+    capital: float = {values.get("capital", 0)}
+    entry: float = {values["entry"]}
+    stop_loss: float = {values["stop_loss"]}
+    high: float = {values["high"]}
+    low: float = {values["low"]}
+    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
+    line_cross_value: float = {values.get("line_cross_value", values["entry"])}
+    risk_levels: tuple = {risk_levels}
+'''
+
+    if instrument_type == "commodity":
+        return f'''from dataclasses import dataclass
+
+
+@dataclass
+class TradingConfig:
+    instrument_type: str = "commodity"
+    position_type: str = "{values.get("position_type", "long")}"
+    name: str = "{values["name"]}"
+
+    capital: float = {values.get("capital", 0)}
+
+    entry: float = {values["entry"]}
+    stop_loss: float = {values["stop_loss"]}
+    high: float = {values["high"]}
+    low: float = {values["low"]}
+
+    lot_cost: float = {values.get("lot_cost", 0.0)}
+    pip_value: float = {values.get("pip_value", 0.0)}
+    spread: float = {values.get("spread", 0.0)}
+    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
+    line_cross_value: float = {values.get("line_cross_value", values["entry"])}
+    risk_levels: tuple = {risk_levels}
+'''
+
+    return f'''from dataclasses import dataclass
+
+
+@dataclass
+class TradingConfig:
+    instrument_type: str = "forex"
+    position_type: str = "{values.get("position_type", "long")}"
+    pair: str = "{values["pair"]}"
+
+    capital: float = {values.get("capital", 0)}
+
+    entry: float = {values["entry"]}
+    stop_loss: float = {values["stop_loss"]}
+    high: float = {values["high"]}
+    low: float = {values["low"]}
+
+    lot_cost: float = {values.get("lot_cost", 0.0)}
+    pip_value: float = {values.get("pip_value", 0.0)}
+    pip_size: float = {values.get("pip_size", 0.0001)}
+    spread: float = {values.get("spread", 0.0)}
+    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
+    line_cross_value: float = {values.get("line_cross_value", values["entry"])}
+    risk_levels: tuple = {risk_levels}
+'''
+
+
+def _update_existing_text(content: str, values: dict) -> str:
+    updated = content
+    for key, value in values.items():
+        pattern = rf"^(\s*{re.escape(key)}\s*:\s*[^=]+?=\s*).*$"
+        replacement = rf"\g<1>{_format_value(value)}"
+        updated, count = re.subn(pattern, replacement, updated, flags=re.MULTILINE)
+        if count == 0:
+            insert_line = f"    {key}: float = {_format_value(value)}\n"
+            if "risk_levels" in updated:
+                updated = updated.replace("    risk_levels", insert_line + "    risk_levels", 1)
+            else:
+                updated += "\n" + insert_line
+
+    if "risk_levels" not in updated:
+        updated += f"\n    risk_levels: tuple = {_format_value(DEFAULT_RISK_LEVELS)}\n"
+
+    return updated
+
+
+def resolve_config_path(instrument_type: str, target_name: str) -> Path:
+    subdir = CONFIG_SUBDIR_BY_INSTRUMENT[instrument_type]
+    safe_name = target_name.lower().replace("/", "").replace(".", "_")
+    return Path("configs") / subdir / f"{safe_name}.py"
+
+
+def write_or_update_config(instrument_type: str, config_path: Path, values: dict) -> Path:
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    values = dict(values)
+    values["risk_levels"] = DEFAULT_RISK_LEVELS
+
+    if config_path.exists():
+        content = config_path.read_text(encoding="utf-8")
+        updated = _update_existing_text(content, values)
+        config_path.write_text(updated, encoding="utf-8")
+    else:
+        rendered = _build_template(instrument_type=instrument_type, values=values)
+        config_path.write_text(rendered, encoding="utf-8")
+
+    return config_path
