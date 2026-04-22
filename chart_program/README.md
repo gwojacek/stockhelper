@@ -5,31 +5,31 @@ This is a separate, standalone tool for interactive level selection.
 ## Run
 
 ```bash
-python -m chart_program.main jsw
+python -m chart_program.main jsw --data-source yahoo
 ```
 
-or:
+## UI highlights
 
-```bash
-python chart_program/main.py coffee_long --instrument commodity --position-type long --data-source yahoo
-```
+- Modern dark layout with chart area + right sidebar.
+- Level buttons: `HIGH`, `LOW`, `ENTRY`, `STOP LOSS`, `CHECK_ZR`, `LINE_CROSS`.
+- Click a button, then click chart to set/update that value (reselection supported).
+- Right sidebar shows selected values and manual-edit inputs (`position_type`, `capital`, `lot_cost`, `pip_value`, `spread`, `pip_size`).
+- Cursor box shows current hover price/date.
+- Zoom/pan is preserved while setting levels (no auto reset).
 
-It will:
-1. Detect instrument type (or use `--instrument`).
-2. Load/update daily candles (Yahoo first by default, then Stooq fallback in `auto` mode).
-3. Open the interactive chart for level selection.
-4. Save/update config in `configs/stocks|commodities|forex`.
-5. Save chart image in `charts/<config_name>_levels.png`.
+## Data window
 
-## Failure behavior
-
-If any error happens after chart selection starts (config write, chart export, or data save), the tool rolls back file changes and leaves existing files untouched (all-or-nothing writes).
+Only the latest ~1 year of daily candles is used and saved.
 
 ## Data source options
 
 - `--data-source auto` (default): try Yahoo Finance first, then Stooq.
 - `--data-source yahoo`: use only Yahoo Finance.
 - `--data-source stooq`: use only Stooq.
+
+## Failure behavior
+
+If any error happens after chart selection starts (config write, chart export, or data save), the tool rolls back file changes and leaves existing files untouched (all-or-nothing writes).
 
 ## API key note
 

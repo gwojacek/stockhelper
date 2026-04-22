@@ -96,7 +96,7 @@ def _yahoo_download(symbol: str, instrument_type: str) -> pd.DataFrame:
                 errors.append(f"{candidate}: no valid OHLC rows")
                 continue
 
-            return df.sort_values("Date").reset_index(drop=True)
+            return _last_year_only(df)
         except Exception as exc:
             errors.append(f"{candidate}: {exc}")
 
@@ -161,7 +161,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
 
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
-    return df.sort_values("Date").reset_index(drop=True)
+    return _last_year_only(df)
 
 
 def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
@@ -200,6 +200,17 @@ def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = Non
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
+
+
+def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    latest = pd.to_datetime(df["Date"], errors="coerce").max()
+    if pd.isna(latest):
+        return df
+    cutoff = latest - pd.Timedelta(days=370)
+    trimmed = df[df["Date"] >= cutoff]
+    return trimmed.sort_values("Date").reset_index(drop=True)
 
 def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> pd.DataFrame:
     if data_source == "yahoo":
@@ -244,7 +255,7 @@ def load_or_update_daily_data(
         remote = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
-            return local.sort_values("Date").reset_index(drop=True), csv_path
+            return _last_year_only(local), csv_path
         raise
 
     if local is not None and not local.empty:
@@ -253,6 +264,8 @@ def load_or_update_daily_data(
         merged = merged.sort_values("Date").reset_index(drop=True)
     else:
         merged = remote
+
+    merged = _last_year_only(merged)
 
     if persist:
         merged.to_csv(csv_path, index=False)
