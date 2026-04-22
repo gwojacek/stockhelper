@@ -53,7 +53,7 @@ class DisplayHandler:
         return "PLN" if hasattr(self.config, "pip_value") else "zł"
 
     def show_take_profit(self, entry, tp, ratio, profit, profit_pct, stop_loss=None):
-        print(f"\n{Fore.BLUE}--- Take Profit Analysis ---{Style.RESET_ALL}")
+        print(f"\n{Fore.BLUE}--- Position Analysis ---{Style.RESET_ALL}")
         print(
             f"Entry Price: {Fore.YELLOW}{entry:.{self.pip_decimals}f}{Style.RESET_ALL}"
         )

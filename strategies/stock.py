@@ -192,6 +192,7 @@ class StockStrategy(BaseStrategy):
 
         notes: list[str] = []
         if self.check_zr_ratio is not None:
+            print(f"\n{Fore.BLUE}--- Additional Z/R Check ---{Style.RESET_ALL}")
             print(
                 f"Additional Z/R check (check_zr_value_fibo_or_elevation): {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}"
             )
