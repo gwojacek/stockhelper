@@ -1,49 +1,32 @@
-import argparse
+from configs.stocks import kghm, CCC
+from core.factory import StrategyFactory
+from configs.commodities import (
+    wheat_short,
+    silver_long,
+    copper_long,
+    sugar_long,
+    coffee_long, wig20_long, us100, Cocoa, US500_long, smci_long, Lockhead_Martin_long, natural_gas_long,
+    crude_oil_long, Cocoa_short,
+)
+from configs.forex import (
+    gbpusd_long,
+    eurjpy_long,
+    eurchf_short,
+    eurgbp_long,
+    gbpchf_long,
+    eurchf_long,
+    audusd_long,
+    eurpln_long, usdjpy_long, usdpln_long, usd_pln_short, usdcad_long,
+)
+
 
 def analyze(config_module):
-    from core.factory import StrategyFactory
-
     strategy = StrategyFactory.create(config_module.TradingConfig())
     strategy.calculate()
     strategy.display_results()
 
 
-def _build_parser():
-    parser = argparse.ArgumentParser(description="stockhelper entrypoint")
-    parser.add_argument("--chart", help="Launch interactive chart selector for symbol/config slug")
-    parser.add_argument(
-        "--analyze-default",
-        action="store_true",
-        help="Run legacy default analysis flow (Lockhead_Martin_long)",
-    )
-    return parser
-
-
-def _prompt_chart_target() -> str | None:
-    try:
-        target = input("Enter symbol/config for chart mode (e.g. jsw, coffee_long, AUD/USD): ").strip()
-    except EOFError:
-        return None
-    return target or None
-
-
 if __name__ == "__main__":
-    parser = _build_parser()
-    args, unknown = parser.parse_known_args()
-
-    chart_target = args.chart
-    if not chart_target and not args.analyze_default:
-        chart_target = _prompt_chart_target()
-
-    if chart_target:
-        from chart_tools.level_selector import run_level_selector
-
-        selector_args = [chart_target, *unknown]
-        result = run_level_selector(selector_args)
-        print("Chart workflow completed:", result)
-    elif args.analyze_default:
-        from configs.commodities import Lockhead_Martin_long
-
-        analyze(Lockhead_Martin_long)
-    else:
-        parser.print_help()
+    # analyze(CCC)
+    analyze(Lockhead_Martin_long)
+    # analyze(sugar_long)

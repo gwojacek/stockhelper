@@ -4,10 +4,10 @@ import argparse
 import importlib.util
 from pathlib import Path
 
-from chart_tools.chart_loader import load_or_update_daily_data
-from chart_tools.chart_ui import ChartLevelSelectorUI
-from chart_tools.config_writer import resolve_config_path, write_or_update_config
-from chart_tools.instrument_detector import detect_instrument_type
+from chart_program.chart_loader import load_or_update_daily_data
+from chart_program.chart_ui import ChartLevelSelectorUI
+from chart_program.config_writer import resolve_config_path, write_or_update_config
+from chart_program.instrument_detector import detect_instrument_type
 
 
 def _load_existing_config_values(config_path: Path) -> dict:
