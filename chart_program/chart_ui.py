@@ -184,7 +184,6 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            range=[self.df["Date"].min(), self.df["Date"].max()],
         )
         fig.update_yaxes(
             showspikes=True,

@@ -82,7 +82,17 @@ def run_level_selector(raw_args=None):
     maybe_config_path = Path(args.config) if args.config else None
     instrument_type = args.instrument or detect_instrument_type(args.target, maybe_config_path)
 
-    config_path = maybe_config_path or resolve_config_path(instrument_type, args.target)
+    if maybe_config_path:
+        config_path = maybe_config_path
+    else:
+        target_slug = args.target
+        if instrument_type in ("commodity", "forex"):
+            lowered = target_slug.lower()
+            if not lowered.endswith("_long") and not lowered.endswith("_short"):
+                pos = (args.position_type or "long").lower()
+                target_slug = f"{target_slug}_{pos}"
+        config_path = resolve_config_path(instrument_type, target_slug)
+
     existing = _load_existing_config_values(config_path)
 
     if instrument_type == "forex":
