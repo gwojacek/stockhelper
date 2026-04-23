@@ -492,29 +492,18 @@ class ChartLevelSelectorUI:
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
 
-                objects_store.append(
-                    {
-                        "id": str(uuid4()),
-                        "type": "fib_anchor",
-                        "label": "FIB ANCHOR",
-                        "x0": x_start,
-                        "x1": x_end,
-                        "y0": y_start,
-                        "y1": y_end,
-                        "color": color or LINE_COLORS["gold"],
-                    }
-                )
                 for r in retrace_levels:
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
                     y_val = round(y_end - delta * r, 2)
                     base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.2f})"
+                    x_level_start = x_start + (x_end - x_start) * (1 - r)
                     objects_store.append(
                         {
                             "id": str(uuid4()),
                             "type": "fib",
                             "label": label,
-                            "x0": x_end,
+                            "x0": x_level_start,
                             "x1": x_right,
                             "y0": y_val,
                             "y1": y_val,
