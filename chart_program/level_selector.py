@@ -120,7 +120,7 @@ def run_level_selector(raw_args=None):
             "config_path": None,
             "data_path": str(data_path),
             "chart_path": None,
-            "message": "No changes saved (Finish was not clicked). Downloaded data was cached.",
+            "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
     values = {

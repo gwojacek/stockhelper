@@ -49,7 +49,10 @@ def main() -> int:
     from chart_program.level_selector import run_level_selector
 
     result = run_level_selector(forwarded)
-    print("Chart workflow completed:", result)
+    if isinstance(result, dict) and result.get("message"):
+        print(result["message"])
+    else:
+        print("Chart workflow completed:", result)
     return 0
 
 

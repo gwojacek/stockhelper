@@ -39,7 +39,7 @@ LINE_COLORS = {
 class ChartLevelSelectorUI:
     def __init__(self, symbol: str, dataframe, instrument_type: str, preset_values: dict | None = None):
         self.symbol = symbol
-        self.df = dataframe.reset_index(drop=True)
+        self.df = dataframe.dropna(subset=["Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
         self.instrument_type = instrument_type
         self.values = preset_values or {}
 
@@ -218,6 +218,11 @@ class ChartLevelSelectorUI:
     def run(self):
         app = Dash(__name__)
 
+        @app.server.route("/shutdown", methods=["POST"])
+        def _shutdown_app():
+            threading.Timer(0.2, lambda: os._exit(0)).start()
+            return "ok"
+
         is_stock = self.instrument_type == "stock"
         is_commodity = self.instrument_type == "commodity"
 
@@ -300,6 +305,7 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="fib-anchor", data=None),
                 dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
                 dcc.Store(id="finished-store", data=False),
+                html.Script("window.addEventListener('beforeunload', () => {navigator.sendBeacon('/shutdown');});"),
             ],
         )
 
