@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 from pathlib import Path
 
 from chart_program.chart_loader import load_or_update_daily_data
@@ -76,6 +77,27 @@ def _restore_file(path: Path, existed_before: bool, content: bytes):
         path.unlink()
 
 
+def _session_path(config_path: Path) -> Path:
+    return Path("data/sessions") / f"{config_path.stem}.json"
+
+
+def _load_session_state(config_path: Path) -> dict:
+    path = _session_path(config_path)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_session_state(config_path: Path, values: dict):
+    path = _session_path(config_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    safe = {k: v for k, v in (values or {}).items() if k != "__finished__"}
+    path.write_text(json.dumps(safe, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+
 def run_level_selector(raw_args=None):
     args = _parse_args(raw_args)
 
@@ -107,6 +129,9 @@ def run_level_selector(raw_args=None):
         config_path = resolve_config_path(instrument_type, target_slug)
 
     existing = _load_existing_config_values(config_path)
+    session_state = _load_session_state(config_path)
+    if session_state:
+        existing.update(session_state)
 
     if instrument_type == "forex":
         symbol = existing.get("pair", args.target if "/" in args.target else f"{args.target[:3].upper()}/{args.target[3:6].upper()}")
@@ -132,6 +157,7 @@ def run_level_selector(raw_args=None):
         source_name=fetch_info.get("name"),
     )
     selected = ui.run()
+    _save_session_state(config_path, selected)
 
 
     if not selected.get("__finished__"):
@@ -191,6 +217,8 @@ def run_level_selector(raw_args=None):
     if not maybe_config_path and instrument_type in ("commodity", "forex") and target_base_slug:
         final_position = values.get("position_type", inferred_position or "long")
         final_config_path = resolve_config_path(instrument_type, f"{target_base_slug}_{final_position}")
+        if final_config_path != config_path:
+            _save_session_state(final_config_path, selected)
 
     snapshot_name = f"{final_config_path.stem}_levels.png"
     chart_path = Path("charts") / snapshot_name

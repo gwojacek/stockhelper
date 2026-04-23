@@ -250,6 +250,8 @@ class ChartLevelSelectorUI:
     def run(self):
         app = Dash(__name__)
         server_holder: dict[str, object] = {}
+        initial_level_points = self.values.get("level_points", {}) if isinstance(self.values, dict) else {}
+        initial_objects = self.values.get("drawn_objects", []) if isinstance(self.values, dict) else []
 
         class QuietRequestHandler(WSGIRequestHandler):
             def log(self, type, message, *args):  # noqa: A003
@@ -260,7 +262,7 @@ class ChartLevelSelectorUI:
             shutdown = request.environ.get("werkzeug.server.shutdown")
             if shutdown:
                 shutdown()
-            elif self._finished and server_holder.get("server") is not None:
+            elif server_holder.get("server") is not None:
                 threading.Timer(0.1, lambda: server_holder["server"].shutdown()).start()
             return "ok"
 
@@ -301,7 +303,7 @@ class ChartLevelSelectorUI:
                         html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
                         dcc.Graph(
                             id="candle-chart",
-                            figure=self._build_figure(self.values, {}, []),
+                            figure=self._build_figure(self.values, initial_level_points, initial_objects),
                             style={"height": "82vh"},
                             config={
                                 "scrollZoom": True,
@@ -343,8 +345,8 @@ class ChartLevelSelectorUI:
                     ],
                 ),
                 dcc.Store(id="levels-store", data=self.values),
-                dcc.Store(id="level-points-store", data={}),
-                dcc.Store(id="objects-store", data=[]),
+                dcc.Store(id="level-points-store", data=initial_level_points),
+                dcc.Store(id="objects-store", data=initial_objects),
                 dcc.Store(id="active-field", data="entry"),
                 dcc.Store(id="active-tool", data="level"),
                 dcc.Store(id="line-anchor", data=None),
@@ -525,7 +527,9 @@ class ChartLevelSelectorUI:
                 levels_store[active_field] = selected
                 level_points[active_field] = {"price": selected, "plot_price": round(plot_price, 2), "date": resolved_date}
 
-            self.values = levels_store
+            self.values = dict(levels_store)
+            self.values["drawn_objects"] = objects_store
+            self.values["level_points"] = level_points
             return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, None
 
         @app.callback(
