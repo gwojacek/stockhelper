@@ -176,7 +176,7 @@ class ChartLevelSelectorUI:
         for obj in (objects or []):
             obj_type = obj.get("type")
             is_fib_618 = obj_type == "fib" and "61.8%" in str(obj.get("label", ""))
-            line_width = 1.4 if is_fib_618 else (0.8 if obj_type == "fib" else 1.2)
+            line_width = 1.8 if is_fib_618 else (1.2 if obj_type == "fib" else 1.2)
             line_color = "#fde047" if is_fib_618 else obj.get("color", LINE_COLORS["gold"])
             fig.add_trace(
                 go.Scatter(
@@ -236,6 +236,17 @@ class ChartLevelSelectorUI:
             showline=True,
             side="right",
         )
+        y_min = pd.to_numeric(self.df["Low"], errors="coerce").min()
+        y_max = pd.to_numeric(self.df["High"], errors="coerce").max()
+        for obj in (objects or []):
+            for key in ("y0", "y1"):
+                y_val = pd.to_numeric(pd.Series([obj.get(key)]), errors="coerce").iloc[0]
+                if not pd.isna(y_val):
+                    y_min = y_val if pd.isna(y_min) else min(y_min, y_val)
+                    y_max = y_val if pd.isna(y_max) else max(y_max, y_val)
+        if not pd.isna(y_min) and not pd.isna(y_max):
+            pad = (y_max - y_min) * 0.05 if y_max > y_min else 0.5
+            fig.update_yaxes(range=[y_min - pad, y_max + pad])
         return fig
 
     @staticmethod
@@ -505,13 +516,14 @@ class ChartLevelSelectorUI:
                     base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.2f})"
                     x_level_start = x_start + (x_end - x_start) * (1 - r)
+                    x_level_end = x_level_start + abs(x_end - x_start) * 3
                     objects_store.append(
                         {
                             "id": str(uuid4()),
                             "type": "fib",
                             "label": label,
                             "x0": x_level_start,
-                            "x1": x_level_start + (x_right - x_level_start) * 3,
+                            "x1": x_level_end,
                             "y0": y_val,
                             "y1": y_val,
                             "price": y_val,
