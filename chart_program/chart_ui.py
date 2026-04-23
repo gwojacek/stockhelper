@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 import threading
+import time
 import webbrowser
 from urllib.request import Request, urlopen
 
@@ -250,6 +251,7 @@ class ChartLevelSelectorUI:
     def run(self):
         app = Dash(__name__)
         server_holder: dict[str, object] = {}
+        heartbeat = {"ts": time.time()}
         initial_level_points = self.values.get("level_points", {}) if isinstance(self.values, dict) else {}
         initial_objects = self.values.get("drawn_objects", []) if isinstance(self.values, dict) else []
 
@@ -264,6 +266,11 @@ class ChartLevelSelectorUI:
                 shutdown()
             elif server_holder.get("server") is not None:
                 threading.Timer(0.1, lambda: server_holder["server"].shutdown()).start()
+            return "ok"
+
+        @app.server.route("/heartbeat", methods=["POST"])
+        def _heartbeat():
+            heartbeat["ts"] = time.time()
             return "ok"
 
         is_stock = self.instrument_type == "stock"
@@ -326,7 +333,13 @@ class ChartLevelSelectorUI:
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),
                         html.Label("Position type"),
-                        dcc.Dropdown(id="position-type", options=[{"label": "LONG", "value": "long"}, {"label": "SHORT", "value": "short"}], value=self.values.get("position_type", "long"), disabled=is_stock),
+                        dcc.Dropdown(
+                            id="position-type",
+                            options=[{"label": "LONG", "value": "long"}, {"label": "SHORT", "value": "short"}],
+                            value=self.values.get("position_type", "long"),
+                            disabled=is_stock,
+                            style={"color": "black", "background": "white"},
+                        ),
                         html.Label("Capital", style={"marginTop": "8px", "display": "block"}),
                         dcc.Input(id="capital", type="number", value=self.values.get("capital") or 255000, style=self._input_style()),
                         html.Label("Lot cost", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
@@ -355,7 +368,9 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
                 dcc.Store(id="finished-store", data=False),
                 dcc.Store(id="close-tab-signal", data=0),
-                html.Script("window.addEventListener('beforeunload', () => {navigator.sendBeacon('/shutdown');});"),
+                dcc.Store(id="heartbeat-store", data=0),
+                dcc.Interval(id="heartbeat-interval", interval=1000, n_intervals=0),
+                html.Script("window.addEventListener('beforeunload', () => {navigator.sendBeacon('/shutdown');});window.addEventListener('pagehide', () => {navigator.sendBeacon('/shutdown');});window.addEventListener('unload', () => {navigator.sendBeacon('/shutdown');});"),
             ],
         )
 
@@ -468,15 +483,17 @@ class ChartLevelSelectorUI:
                 x_start = pd.to_datetime(fib_anchor["x"], errors="coerce")
                 x_end = pd.to_datetime(date, errors="coerce")
                 x_right = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
-                y_618 = y_start + (y_end - y_start) * 0.618
-
                 if pd.isna(x_start) or pd.isna(x_end) or x_start == x_end:
                     x_start = pd.to_datetime(self.df.iloc[0]["Date"], errors="coerce")
                     x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
 
-                ratios = [("FIB 100%", y_start), ("FIB 61.8%", y_618), ("FIB 0%", y_end)]
+                delta = y_end - y_start
+                retrace_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]
                 x_left = min(x_start, x_end)
-                for base_label, y_val in ratios:
+                for r in retrace_levels:
+                    pct = f"{r * 100:.1f}%".replace(".0%", "%")
+                    y_val = round(y_end - delta * r, 2)
+                    base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.2f})"
                     objects_store.append(
                         {
@@ -599,6 +616,20 @@ class ChartLevelSelectorUI:
             curr_txt = "  CURSOR:--"
             return f"D:---- -- --  O:--  H:--  L:--  C:--{curr_txt}"
 
+        app.clientside_callback(
+            """
+            function(n) {
+                try {
+                    fetch('/heartbeat', {method: 'POST', keepalive: true});
+                } catch (e) {}
+                return n || 0;
+            }
+            """,
+            Output("heartbeat-store", "data"),
+            Input("heartbeat-interval", "n_intervals"),
+            prevent_initial_call=False,
+        )
+
         @app.callback(
             Output("result-box", "children"),
             Output("finished-store", "data"),
@@ -670,6 +701,9 @@ class ChartLevelSelectorUI:
         try:
             while server_thread.is_alive():
                 if self._finished:
+                    server.shutdown()
+                    break
+                if time.time() - heartbeat["ts"] > 4:
                     server.shutdown()
                     break
                 server_thread.join(0.1)
