@@ -489,9 +489,9 @@ class ChartLevelSelectorUI:
 
                 delta = y_end - y_start
                 retrace_levels = [0.0, 0.618, 1.0]
-                x_left = min(x_start, x_end)
+                x_base = x_start
                 x_right = max(x_start, x_end)
-                extension = (x_right - x_left) * 0.25
+                extension = abs(x_end - x_start) * 0.25
                 x_extended = x_right + extension
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 if not pd.isna(last_date) and x_extended > last_date:
@@ -506,7 +506,7 @@ class ChartLevelSelectorUI:
                             "id": str(uuid4()),
                             "type": "fib",
                             "label": label,
-                            "x0": x_left,
+                            "x0": x_base,
                             "x1": x_extended,
                             "y0": y_val,
                             "y1": y_val,
