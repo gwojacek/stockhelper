@@ -177,13 +177,15 @@ class ChartLevelSelectorUI:
             obj_type = obj.get("type")
             is_fib_618 = obj_type == "fib" and "61.8%" in str(obj.get("label", ""))
             line_width = 2.0 if is_fib_618 else (1.6 if obj_type == "fib" else 1.2)
-            line_color = "#fde047" if is_fib_618 else obj.get("color", LINE_COLORS["gold"])
+            line_color = "#ffffff" if is_fib_618 else obj.get("color", LINE_COLORS["gold"])
+            mode = "lines+text+markers" if is_fib_618 else "lines+text"
             fig.add_trace(
                 go.Scatter(
                     x=[obj.get("x0"), obj.get("x1")],
                     y=[obj.get("y0"), obj.get("y1")],
-                    mode="lines+text",
+                    mode=mode,
                     line={"color": line_color, "width": line_width},
+                    marker={"size": 5, "color": line_color} if is_fib_618 else None,
                     text=["", obj.get("label", "OBJECT")],
                     textposition="top center",
                     name=obj.get("label", "OBJECT"),
