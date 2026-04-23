@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from uuid import uuid4
-import os
-import signal
 import threading
 import webbrowser
 from urllib.request import Request, urlopen
@@ -248,8 +246,6 @@ class ChartLevelSelectorUI:
                 shutdown()
             elif self._finished and server_holder.get("server") is not None:
                 threading.Timer(0.1, lambda: server_holder["server"].shutdown()).start()
-            elif self._finished:
-                threading.Timer(0.1, lambda: os.kill(os.getpid(), signal.SIGINT)).start()
             return "ok"
 
         is_stock = self.instrument_type == "stock"
@@ -644,11 +640,17 @@ class ChartLevelSelectorUI:
         server_holder["server"] = server
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
-        while server_thread.is_alive():
+        try:
+            while server_thread.is_alive():
+                if self._finished:
+                    server.shutdown()
+                    break
+                server_thread.join(0.1)
+        except KeyboardInterrupt:
             if self._finished:
                 server.shutdown()
-                break
-            server_thread.join(0.1)
+            else:
+                raise
         server_thread.join(timeout=2)
         return self.values
 
