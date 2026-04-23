@@ -13,6 +13,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html
 from flask import request
+from werkzeug.serving import make_server
 
 SELECTION_SEQUENCE = [
     "high",
@@ -238,12 +239,15 @@ class ChartLevelSelectorUI:
 
     def run(self):
         app = Dash(__name__)
+        server_holder: dict[str, object] = {}
 
         @app.server.route("/shutdown", methods=["GET", "POST"])
         def _shutdown_app():
             shutdown = request.environ.get("werkzeug.server.shutdown")
             if shutdown:
                 shutdown()
+            elif self._finished and server_holder.get("server") is not None:
+                threading.Timer(0.1, lambda: server_holder["server"].shutdown()).start()
             elif self._finished:
                 threading.Timer(0.1, lambda: os.kill(os.getpid(), signal.SIGINT)).start()
             return "ok"
@@ -269,6 +273,7 @@ class ChartLevelSelectorUI:
                             children=[
                                 html.Button("Line tool", id="tool-line", n_clicks=0),
                                 html.Button("Fib 61.8", id="tool-fib", n_clicks=0),
+                                html.Button("Half→SL", id="tool-half", n_clicks=0),
                                 html.Button("Reset all", id="reset-all", n_clicks=0, style={"marginLeft": "auto"}),
                                 html.Div(
                                     style={"display": "flex", "gap": "6px", "alignItems": "center"},
@@ -328,6 +333,7 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="active-tool", data="level"),
                 dcc.Store(id="line-anchor", data=None),
                 dcc.Store(id="fib-anchor", data=None),
+                dcc.Store(id="half-anchor", data=None),
                 dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
                 dcc.Store(id="finished-store", data=False),
                 dcc.Store(id="close-tab-signal", data=0),
@@ -357,7 +363,7 @@ class ChartLevelSelectorUI:
         @app.callback(
             Output("active-field", "data"),
             Output("active-tool", "data"),
-            [Input(f"btn-{field}", "n_clicks") for field in SELECTION_SEQUENCE] + [Input("tool-line", "n_clicks"), Input("tool-fib", "n_clicks")],
+            [Input(f"btn-{field}", "n_clicks") for field in SELECTION_SEQUENCE] + [Input("tool-line", "n_clicks"), Input("tool-fib", "n_clicks"), Input("tool-half", "n_clicks")],
             State("active-field", "data"),
             State("active-tool", "data"),
             prevent_initial_call=True,
@@ -374,6 +380,8 @@ class ChartLevelSelectorUI:
                 return current_field, "line"
             if trigger == "tool-fib":
                 return current_field, "fib"
+            if trigger == "tool-half":
+                return "stop_loss", "half"
             return current_field, current_tool
 
         @app.callback(
@@ -382,6 +390,7 @@ class ChartLevelSelectorUI:
             Output("objects-store", "data"),
             Output("line-anchor", "data"),
             Output("fib-anchor", "data"),
+            Output("half-anchor", "data"),
             Output("object-picker", "value"),
             Input("candle-chart", "clickData"),
             Input("reset-all", "n_clicks"),
@@ -393,30 +402,31 @@ class ChartLevelSelectorUI:
             State("line-color-store", "data"),
             State("line-anchor", "data"),
             State("fib-anchor", "data"),
+            State("half-anchor", "data"),
             prevent_initial_call=True,
         )
-        def apply_click(click_data, reset_clicks, levels_store, level_points, objects_store, active_field, active_tool, color, line_anchor, fib_anchor):
+        def apply_click(click_data, reset_clicks, levels_store, level_points, objects_store, active_field, active_tool, color, line_anchor, fib_anchor, half_anchor):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
 
             if ctx.triggered_id == "reset-all":
                 self.values = {}
-                return {}, {}, [], None, None, None
+                return {}, {}, [], None, None, None, None
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
             if clicked_object_id and active_tool != "level":
-                return levels_store, level_points, objects_store, line_anchor, fib_anchor, clicked_object_id
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, clicked_object_id
 
             price = self._extract_price(point)
             date = point.get("x")
             if price is None:
-                return levels_store, level_points, objects_store, line_anchor, fib_anchor, None
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, None
 
             if active_tool == "line":
                 if line_anchor is None:
-                    return levels_store, level_points, objects_store, {"x": date, "y": round(price, 2)}, fib_anchor, None
+                    return levels_store, level_points, objects_store, {"x": date, "y": round(price, 2)}, fib_anchor, half_anchor, None
                 objects_store.append(
                     {
                         "id": str(uuid4()),
@@ -429,11 +439,11 @@ class ChartLevelSelectorUI:
                         "color": color or LINE_COLORS["gold"],
                     }
                 )
-                return levels_store, level_points, objects_store, None, fib_anchor, None
+                return levels_store, level_points, objects_store, None, fib_anchor, half_anchor, None
 
             if active_tool == "fib":
                 if fib_anchor is None:
-                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": round(price, 2)}, None
+                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": round(price, 2)}, half_anchor, None
 
                 y_start = round(fib_anchor["y"], 2)
                 y_end = round(price, 2)
@@ -467,7 +477,19 @@ class ChartLevelSelectorUI:
                             "color": color or LINE_COLORS["gold"],
                         }
                     )
-                return levels_store, level_points, objects_store, line_anchor, None, None
+                return levels_store, level_points, objects_store, line_anchor, None, half_anchor, None
+
+            if active_tool == "half":
+                current_price = round(price, 2)
+                if half_anchor is None:
+                    return levels_store, level_points, objects_store, line_anchor, fib_anchor, {"x": date, "y": current_price}, None
+                midpoint = round((half_anchor["y"] + current_price) / 2.0, 2)
+                idx = self._resolve_candle_index(date)
+                resolved_date = self.df.iloc[idx]["Date"] if idx is not None else date
+                levels_store["stop_loss"] = midpoint
+                level_points["stop_loss"] = {"price": midpoint, "plot_price": midpoint, "date": resolved_date}
+                self.values = levels_store
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, None, None
 
             if active_field in ("high", "low"):
                 idx = self._resolve_candle_index(date)
@@ -492,7 +514,7 @@ class ChartLevelSelectorUI:
                 level_points[active_field] = {"price": selected, "plot_price": round(plot_price, 2), "date": resolved_date}
 
             self.values = levels_store
-            return levels_store, level_points, objects_store, line_anchor, fib_anchor, None
+            return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, None
 
         @app.callback(
             Output("objects-store", "data", allow_duplicate=True),
@@ -618,10 +640,16 @@ class ChartLevelSelectorUI:
         )
 
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
-        try:
-            app.run(debug=False, dev_tools_silence_routes_logging=True)
-        except KeyboardInterrupt:
-            pass
+        server = make_server("127.0.0.1", 8050, app.server, threaded=True)
+        server_holder["server"] = server
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        while server_thread.is_alive():
+            if self._finished:
+                server.shutdown()
+                break
+            server_thread.join(0.1)
+        server_thread.join(timeout=2)
         return self.values
 
     def save_chart_snapshot(self, levels: dict, file_path: Path):
