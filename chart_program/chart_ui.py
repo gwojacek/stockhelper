@@ -490,6 +490,12 @@ class ChartLevelSelectorUI:
                 delta = y_end - y_start
                 retrace_levels = [0.0, 0.618, 1.0]
                 x_left = min(x_start, x_end)
+                x_right = max(x_start, x_end)
+                extension = (x_right - x_left) * 0.25
+                x_extended = x_right + extension
+                last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
+                if not pd.isna(last_date) and x_extended > last_date:
+                    x_extended = last_date
                 for r in retrace_levels:
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
                     y_val = round(y_end - delta * r, 2)
@@ -501,7 +507,7 @@ class ChartLevelSelectorUI:
                             "type": "fib",
                             "label": label,
                             "x0": x_left,
-                            "x1": x_right,
+                            "x1": x_extended,
                             "y0": y_val,
                             "y1": y_val,
                             "price": y_val,
