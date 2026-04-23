@@ -98,6 +98,11 @@ def _save_session_state(config_path: Path, values: dict):
     path.write_text(json.dumps(safe, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
 
+def _infer_forex_pip_size(pair: str) -> float:
+    pair_upper = (pair or "").upper().replace("/", "")
+    return 0.01 if "JPY" in pair_upper else 0.0001
+
+
 def run_level_selector(raw_args=None):
     args = _parse_args(raw_args)
 
@@ -199,17 +204,19 @@ def run_level_selector(raw_args=None):
             }
         )
     else:
+        pair = symbol
+        auto_pip_size = _infer_forex_pip_size(pair)
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
         values.update(
             {
-                "pair": symbol,
+                "pair": pair,
                 "position_type": chosen_pos,
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
                 "pip_value": selected.get("pip_value", args.pip_value),
                 "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
                 "spread_multiplier": selected.get("spread_multiplier", args.spread),
-                "pip_size": selected.get("pip_size", args.pip_size),
+                "pip_size": auto_pip_size,
             }
         )
 

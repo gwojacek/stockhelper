@@ -368,8 +368,6 @@ class ChartLevelSelectorUI:
                         dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value") if self.values.get("pip_value") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
                         html.Label("Spread multiplier (spread = Multiplier * pip_value)", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="spread-mult", type="number", value=self.values.get("spread_multiplier") if self.values.get("spread_multiplier") not in (0, None) else None, placeholder="e.g. 9", style=self._input_style(), disabled=is_stock),
-                        html.Label("Pip size", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if (is_stock or is_commodity) else 1}),
-                        dcc.Input(id="pip-size", type="number", value=self.values.get("pip_size", 0.0001), style=self._input_style(), disabled=(is_stock or is_commodity)),
                         html.H4("Drawn objects", style={"marginTop": "14px"}),
                         dcc.Dropdown(id="object-picker", options=[], value=None, clearable=True),
                         html.Button("Delete selected object", id="delete-object", n_clicks=0, style={"marginTop": "8px", "width": "100%"}),
@@ -666,12 +664,11 @@ class ChartLevelSelectorUI:
             State("lot-cost", "value"),
             State("pip-value", "value"),
             State("spread-mult", "value"),
-            State("pip-size", "value"),
             State("objects-store", "data"),
             State("level-points-store", "data"),
             prevent_initial_call=True,
         )
-        def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread_mult, pip_size, objects_store, level_points):
+        def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread_mult, objects_store, level_points):
             if n_clicks > 0:
                 levels_store = levels_store or {}
                 levels_store.update(
@@ -682,7 +679,6 @@ class ChartLevelSelectorUI:
                         "pip_value": round((pip_value or 0), 2),
                         "spread_multiplier": round((spread_mult or 0), 2),
                         "spread": round((spread_mult or 0) * (pip_value or 0), 2),
-                        "pip_size": pip_size or 0.0001,
                         "drawn_objects": objects_store or [],
                         "level_points": level_points or {},
                         "__finished__": True,
