@@ -488,7 +488,7 @@ class ChartLevelSelectorUI:
                     x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
 
                 delta = y_end - y_start
-                retrace_levels = [0.618]
+                retrace_levels = [0.0, 0.618, 1.0]
                 x_left = min(x_start, x_end)
                 for r in retrace_levels:
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
