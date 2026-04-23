@@ -82,6 +82,9 @@ def run_level_selector(raw_args=None):
     maybe_config_path = Path(args.config) if args.config else None
     instrument_type = args.instrument or detect_instrument_type(args.target, maybe_config_path)
 
+    target_base_slug = None
+    inferred_position = None
+
     if maybe_config_path:
         config_path = maybe_config_path
     else:
@@ -98,6 +101,8 @@ def run_level_selector(raw_args=None):
                 base_slug = lowered[: -len("_short")]
             pos = (args.position_type or suffix_pos).lower()
             pos = "short" if pos == "short" else "long"
+            target_base_slug = base_slug
+            inferred_position = pos
             target_slug = f"{base_slug}_{pos}"
         config_path = resolve_config_path(instrument_type, target_slug)
 
@@ -148,10 +153,12 @@ def run_level_selector(raw_args=None):
     if instrument_type == "stock":
         values.update({"name": args.target.lower(), "symbol": symbol})
     elif instrument_type == "commodity":
+        chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
+        chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
         values.update(
             {
                 "name": symbol,
-                "position_type": selected.get("position_type", args.position_type or "long"),
+                "position_type": chosen_pos,
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
                 "pip_value": selected.get("pip_value", args.pip_value),
                 "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
@@ -159,10 +166,12 @@ def run_level_selector(raw_args=None):
             }
         )
     else:
+        chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
+        chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
         values.update(
             {
                 "pair": symbol,
-                "position_type": selected.get("position_type", args.position_type or "long"),
+                "position_type": chosen_pos,
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
                 "pip_value": selected.get("pip_value", args.pip_value),
                 "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
@@ -171,21 +180,26 @@ def run_level_selector(raw_args=None):
             }
         )
 
-    snapshot_name = f"{config_path.stem}_levels.png"
+    final_config_path = config_path
+    if not maybe_config_path and instrument_type in ("commodity", "forex") and target_base_slug:
+        final_position = values.get("position_type", inferred_position or "long")
+        final_config_path = resolve_config_path(instrument_type, f"{target_base_slug}_{final_position}")
+
+    snapshot_name = f"{final_config_path.stem}_levels.png"
     chart_path = Path("charts") / snapshot_name
 
-    config_existed, config_backup = _snapshot_file(config_path)
+    config_existed, config_backup = _snapshot_file(final_config_path)
     chart_existed, chart_backup = _snapshot_file(chart_path)
     data_existed, data_backup = _snapshot_file(data_path)
 
     try:
-        path = write_or_update_config(instrument_type=instrument_type, config_path=config_path, values=values)
+        path = write_or_update_config(instrument_type=instrument_type, config_path=final_config_path, values=values)
         ui.save_chart_snapshot(selected, chart_path)
 
         data_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(data_path, index=False)
     except Exception:
-        _restore_file(config_path, config_existed, config_backup)
+        _restore_file(final_config_path, config_existed, config_backup)
         _restore_file(chart_path, chart_existed, chart_backup)
         _restore_file(data_path, data_existed, data_backup)
         raise
