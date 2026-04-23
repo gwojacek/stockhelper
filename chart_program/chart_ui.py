@@ -221,7 +221,7 @@ class ChartLevelSelectorUI:
         )
         fig.update_yaxes(
             showspikes=True,
-            spikemode="toaxis+across",
+            spikemode="across+marker",
             spikesnap="cursor",
             spikedash="dash",
             spikethickness=1,

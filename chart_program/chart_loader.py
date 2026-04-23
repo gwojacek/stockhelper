@@ -321,6 +321,10 @@ def load_or_update_daily_data(
     if persist:
         merged.to_csv(csv_path, index=False)
     display_name = symbol.title()
+    display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
         display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), symbol.title())
-    return merged, csv_path, {"source": source, "symbol": str(source_symbol).upper(), "name": display_name}
+        preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
+        if preferred_stooq_symbol:
+            display_symbol = preferred_stooq_symbol.upper()
+    return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name}
