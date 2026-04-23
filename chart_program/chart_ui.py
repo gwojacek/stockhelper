@@ -619,20 +619,21 @@ class ChartLevelSelectorUI:
 
         app.clientside_callback(
             """
-            function(n, current) {
-                if (n && n > 0) {
+            function(finished, current) {
+                if (finished) {
                     try {
                         window.open('', '_self');
                         window.close();
                     } catch (e) {}
+                    return (current || 0) + 1;
                 }
-                return n || current || 0;
+                return current || 0;
             }
             """,
             Output("close-tab-signal", "data"),
-            Input("finish-btn", "n_clicks"),
+            Input("finished-store", "data"),
             State("close-tab-signal", "data"),
-            prevent_initial_call=True,
+            prevent_initial_call=False,
         )
 
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
