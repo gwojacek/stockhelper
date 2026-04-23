@@ -53,15 +53,15 @@ class ChartLevelSelectorUI:
 
     def _monthly_ticks(self):
         dates = pd.to_datetime(self.df["Date"], errors="coerce")
-        labels = dates.dt.strftime("%Y-%m")
         tickvals = []
         ticktext = []
         prev = None
-        for i, label in enumerate(labels):
-            if label != prev:
+        for i, d in enumerate(dates):
+            label_key = d.strftime("%Y-%m")
+            if label_key != prev:
                 tickvals.append(self.df["Date"].iloc[i])
-                ticktext.append(label)
-                prev = label
+                ticktext.append(d.strftime("%Y") if d.month == 1 else d.strftime("%b"))
+                prev = label_key
         return tickvals, ticktext
 
     def _date_window(self, date_value, size: int = 5):
@@ -103,7 +103,7 @@ class ChartLevelSelectorUI:
                 z=z,
                 showscale=False,
                 opacity=0.001,
-                hovertemplate="Price: %{y:.5f}<extra></extra>",
+                hovertemplate="Price: %{y:.2f}<extra></extra>",
                 name="cursor_capture",
             )
         )
@@ -121,7 +121,7 @@ class ChartLevelSelectorUI:
             point = (level_points or {}).get(field)
             if not point:
                 continue
-            price = point.get("price")
+            price = point.get("plot_price", point.get("price"))
             date = point.get("date")
             x0, x1 = self._date_window(date)
             if x0 is None:
@@ -132,7 +132,7 @@ class ChartLevelSelectorUI:
                     y=[price, price],
                     mode="lines",
                     line={"color": level_colors.get(field, "gray"), "width": 3},
-                    name=f"{LABELS[field]}: {price:.5f}",
+                    name=f"{LABELS[field]}: {price:.2f}",
                     hoverinfo="name",
                     showlegend=True,
                 )
@@ -157,11 +157,11 @@ class ChartLevelSelectorUI:
         fig.update_layout(
             title=f"{self.symbol} ({self.instrument_type}) - Daily (1Y)",
             xaxis_rangeslider_visible=False,
-            hovermode="x unified",
+            hovermode="closest",
             dragmode="pan",
             template="plotly_dark",
             uirevision="keep_zoom",
-            margin={"l": 24, "r": 24, "t": 45, "b": 20},
+            margin={"l": 24, "r": 24, "t": 45, "b": 45},
             paper_bgcolor="#0b1220",
             plot_bgcolor="#111827",
             legend={"orientation": "h", "y": 1.02, "x": 0},
@@ -177,8 +177,9 @@ class ChartLevelSelectorUI:
             tickvals=tickvals,
             ticktext=ticktext,
             tickangle=0,
+            ticklabelposition="outside",
         )
-        fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True)
+        fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True, side="right")
         return fig
 
     @staticmethod
@@ -258,7 +259,7 @@ class ChartLevelSelectorUI:
                         html.Label("Position type"),
                         dcc.Dropdown(id="position-type", options=[{"label": "LONG", "value": "long"}, {"label": "SHORT", "value": "short"}], value=self.values.get("position_type", "long"), disabled=is_stock),
                         html.Label("Capital", style={"marginTop": "8px", "display": "block"}),
-                        dcc.Input(id="capital", type="number", value=self.values.get("capital", 255000), style=self._input_style()),
+                        dcc.Input(id="capital", type="number", value=self.values.get("capital") or 255000, style=self._input_style()),
                         html.Label("Lot cost", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost", 0), style=self._input_style(), disabled=is_stock),
                         html.Label("Pip value", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
@@ -366,7 +367,7 @@ class ChartLevelSelectorUI:
 
             if active_tool == "line":
                 if line_anchor is None:
-                    return levels_store, level_points, objects_store, {"x": date, "y": price}, fib_anchor, None
+                    return levels_store, level_points, objects_store, {"x": date, "y": round(price, 2)}, fib_anchor, None
                 objects_store.append(
                     {
                         "id": str(uuid4()),
@@ -375,7 +376,7 @@ class ChartLevelSelectorUI:
                         "x0": line_anchor["x"],
                         "y0": line_anchor["y"],
                         "x1": date,
-                        "y1": price,
+                        "y1": round(price, 2),
                         "color": color or LINE_COLORS["gold"],
                     }
                 )
@@ -383,10 +384,10 @@ class ChartLevelSelectorUI:
 
             if active_tool == "fib":
                 if fib_anchor is None:
-                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": price}, None
+                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": round(price, 2)}, None
 
-                y_start = fib_anchor["y"]
-                y_end = price
+                y_start = round(fib_anchor["y"], 2)
+                y_end = round(price, 2)
                 start_idx = self._resolve_candle_index(fib_anchor["x"])
                 end_idx = self._resolve_candle_index(date)
                 left_idx = min(start_idx, end_idx) if start_idx is not None and end_idx is not None else 0
@@ -419,15 +420,23 @@ class ChartLevelSelectorUI:
                 idx = self._resolve_candle_index(date)
                 if idx is not None:
                     row = self.df.iloc[idx]
-                    selected = float(row["High"]) if active_field == "high" else float(row["Low"])
+                    selected = round(float(row["High"]), 2) if active_field == "high" else round(float(row["Low"]), 2)
+                    resolved_date = self.df.iloc[idx]["Date"]
+                    offset = max((float(row["High"]) - float(row["Low"])) * 0.03, 0.01)
+                    plot_price = selected + offset if active_field == "high" else selected - offset
                 else:
                     selected = None
+                    resolved_date = date
+                    plot_price = None
             else:
-                selected = price
+                selected = round(price, 2)
+                idx = self._resolve_candle_index(date)
+                resolved_date = self.df.iloc[idx]["Date"] if idx is not None else date
+                plot_price = selected
 
             if selected is not None:
                 levels_store[active_field] = selected
-                level_points[active_field] = {"price": selected, "date": date}
+                level_points[active_field] = {"price": selected, "plot_price": round(plot_price, 2), "date": resolved_date}
 
             self.values = levels_store
             return levels_store, level_points, objects_store, line_anchor, fib_anchor, None
@@ -486,9 +495,14 @@ class ChartLevelSelectorUI:
                 point = hover_data["points"][0]
                 price = self._extract_price(point)
                 date = point.get("x")
-                if price is not None:
-                    return f"Cursor Price: {price:.5f} | Date: {date}"
-            return "Cursor Price: n/a"
+                idx = self._resolve_candle_index(date)
+                if idx is not None:
+                    row = self.df.iloc[idx]
+                    d = pd.to_datetime(row["Date"], errors="coerce")
+                    d_txt = d.strftime("%d/%m/%Y") if not pd.isna(d) else str(row["Date"])
+                    if price is not None:
+                        return f"D:{d_txt}  O:{row['Open']:.2f}  H:{row['High']:.2f}  L:{row['Low']:.2f}  C:{row['Close']:.2f}  |  P:{price:.2f}"
+            return "D:--/--/----  O:--  H:--  L:--  C:--  |  P:--"
 
         @app.callback(
             Output("result-box", "children"),
@@ -509,10 +523,10 @@ class ChartLevelSelectorUI:
                 levels_store.update(
                     {
                         "position_type": position_type,
-                        "capital": capital or 255000,
-                        "lot_cost": lot_cost or 0,
-                        "pip_value": pip_value or 0,
-                        "spread": spread or 0,
+                        "capital": round((capital or 255000), 2),
+                        "lot_cost": round((lot_cost or 0), 2),
+                        "pip_value": round((pip_value or 0), 2),
+                        "spread": round((spread or 0), 2),
                         "pip_size": pip_size or 0.0001,
                         "drawn_objects": objects_store or [],
                     }
