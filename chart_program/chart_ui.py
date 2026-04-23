@@ -175,13 +175,15 @@ class ChartLevelSelectorUI:
 
         for obj in (objects or []):
             obj_type = obj.get("type")
-            line_width = 0.8 if obj_type == "fib" else 1.2
+            is_fib_618 = obj_type == "fib" and "61.8%" in str(obj.get("label", ""))
+            line_width = 1.4 if is_fib_618 else (0.8 if obj_type == "fib" else 1.2)
+            line_color = "#fde047" if is_fib_618 else obj.get("color", LINE_COLORS["gold"])
             fig.add_trace(
                 go.Scatter(
                     x=[obj.get("x0"), obj.get("x1")],
                     y=[obj.get("y0"), obj.get("y1")],
                     mode="lines+text",
-                    line={"color": obj.get("color", LINE_COLORS["gold"]), "width": line_width},
+                    line={"color": line_color, "width": line_width},
                     text=["", obj.get("label", "OBJECT")],
                     textposition="top center",
                     name=obj.get("label", "OBJECT"),
@@ -204,6 +206,11 @@ class ChartLevelSelectorUI:
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
         tickvals, ticktext = self._monthly_ticks()
+        x_max = pd.to_datetime(self.df["Date"].max(), errors="coerce")
+        for obj in (objects or []):
+            x1 = pd.to_datetime(obj.get("x1"), errors="coerce")
+            if not pd.isna(x1) and (pd.isna(x_max) or x1 > x_max):
+                x_max = x1
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -217,7 +224,7 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            range=[self.df["Date"].min(), self.df["Date"].max()],
+            range=[self.df["Date"].min(), x_max if not pd.isna(x_max) else self.df["Date"].max()],
             rangebreaks=[dict(bounds=["sat", "mon"])],
         )
         fig.update_yaxes(
@@ -504,7 +511,7 @@ class ChartLevelSelectorUI:
                             "type": "fib",
                             "label": label,
                             "x0": x_level_start,
-                            "x1": x_right,
+                            "x1": x_level_start + (x_right - x_level_start) * 3,
                             "y0": y_val,
                             "y1": y_val,
                             "price": y_val,
