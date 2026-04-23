@@ -163,12 +163,14 @@ class ChartLevelSelectorUI:
                 )
 
         for obj in (objects or []):
+            obj_type = obj.get("type")
+            line_width = 0.8 if obj_type == "fib" else 1.2
             fig.add_trace(
                 go.Scatter(
                     x=[obj.get("x0"), obj.get("x1")],
                     y=[obj.get("y0"), obj.get("y1")],
                     mode="lines+text",
-                    line={"color": obj.get("color", LINE_COLORS["gold"]), "width": 1.2},
+                    line={"color": obj.get("color", LINE_COLORS["gold"]), "width": line_width},
                     text=["", obj.get("label", "OBJECT")],
                     textposition="top center",
                     name=obj.get("label", "OBJECT"),
@@ -456,20 +458,16 @@ class ChartLevelSelectorUI:
                     x_start = pd.to_datetime(self.df.iloc[0]["Date"], errors="coerce")
                     x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
 
-                ratios = [("FIB 100%", 1.0, y_start), ("FIB 61.8%", 0.618, y_618), ("FIB 0%", 0.0, y_end)]
-                for base_label, ratio, y_val in ratios:
-                    if y_end == y_start:
-                        t = 0.0
-                    else:
-                        t = (y_val - y_start) / (y_end - y_start)
-                    x_level = x_start + (x_end - x_start) * t
+                ratios = [("FIB 100%", y_start), ("FIB 61.8%", y_618), ("FIB 0%", y_end)]
+                x_left = min(x_start, x_end)
+                for base_label, y_val in ratios:
                     label = f"{base_label} ({y_val:.2f})"
                     objects_store.append(
                         {
                             "id": str(uuid4()),
                             "type": "fib",
                             "label": label,
-                            "x0": x_level,
+                            "x0": x_left,
                             "x1": x_right,
                             "y0": y_val,
                             "y1": y_val,
@@ -591,9 +589,10 @@ class ChartLevelSelectorUI:
             State("spread-mult", "value"),
             State("pip-size", "value"),
             State("objects-store", "data"),
+            State("level-points-store", "data"),
             prevent_initial_call=True,
         )
-        def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread_mult, pip_size, objects_store):
+        def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread_mult, pip_size, objects_store, level_points):
             if n_clicks > 0:
                 levels_store = levels_store or {}
                 levels_store.update(
@@ -606,6 +605,7 @@ class ChartLevelSelectorUI:
                         "spread": round((spread_mult or 0) * (pip_value or 0), 2),
                         "pip_size": pip_size or 0.0001,
                         "drawn_objects": objects_store or [],
+                        "level_points": level_points or {},
                         "__finished__": True,
                     }
                 )
@@ -662,10 +662,11 @@ class ChartLevelSelectorUI:
     def save_chart_snapshot(self, levels: dict, file_path: Path):
         file_path.parent.mkdir(parents=True, exist_ok=True)
         objects = levels.get("drawn_objects", []) if isinstance(levels, dict) else []
-        level_points = {}
-        for field in SELECTION_SEQUENCE:
-            value = levels.get(field) if isinstance(levels, dict) else None
-            if isinstance(value, (int, float)):
-                level_points[field] = {"price": value, "date": self.df["Date"].iloc[-1]}
+        level_points = (levels.get("level_points") if isinstance(levels, dict) else None) or {}
+        if not level_points:
+            for field in SELECTION_SEQUENCE:
+                value = levels.get(field) if isinstance(levels, dict) else None
+                if isinstance(value, (int, float)):
+                    level_points[field] = {"price": value, "date": self.df["Date"].iloc[-1]}
         fig = self._build_figure(levels if isinstance(levels, dict) else {}, level_points, objects)
         fig.write_image(str(file_path), width=1800, height=1000)
