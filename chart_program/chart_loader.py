@@ -44,6 +44,23 @@ COMMODITY_STOOQ_MAP = {
     "NATURAL_GAS": "ng.f",
 }
 
+COMMODITY_DISPLAY_NAME = {
+    "GOLD": "Gold",
+    "SILVER": "Silver",
+    "PLATINUM": "Platinum",
+    "PALLADIUM": "Palladium",
+    "COFFEE": "Coffee",
+    "COCOA": "Cocoa",
+    "SUGAR": "Sugar",
+    "COTTON": "Cotton",
+    "WHEAT": "Wheat",
+    "CORN": "Corn",
+    "SOYBEAN": "Soybean",
+    "SOYBEAN_OIL": "Soybean Oil",
+    "CRUDE_OIL_BRENT": "Crude Oil Brent",
+    "NATURAL_GAS": "Natural Gas",
+}
+
 
 def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
@@ -289,7 +306,7 @@ def load_or_update_daily_data(
         remote, source, source_symbol = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
-            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol}
+            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title()}
         raise
 
     if local is not None and not local.empty:
@@ -303,4 +320,7 @@ def load_or_update_daily_data(
 
     if persist:
         merged.to_csv(csv_path, index=False)
-    return merged, csv_path, {"source": source, "symbol": source_symbol}
+    display_name = symbol.title()
+    if instrument_type == "commodity":
+        display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), symbol.title())
+    return merged, csv_path, {"source": source, "symbol": str(source_symbol).upper(), "name": display_name}

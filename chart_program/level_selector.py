@@ -88,9 +88,17 @@ def run_level_selector(raw_args=None):
         target_slug = args.target
         if instrument_type in ("commodity", "forex"):
             lowered = target_slug.lower()
-            if not lowered.endswith("_long") and not lowered.endswith("_short"):
-                pos = (args.position_type or "long").lower()
-                target_slug = f"{target_slug}_{pos}"
+            suffix_pos = "long"
+            base_slug = lowered
+            if lowered.endswith("_long"):
+                suffix_pos = "long"
+                base_slug = lowered[: -len("_long")]
+            elif lowered.endswith("_short"):
+                suffix_pos = "short"
+                base_slug = lowered[: -len("_short")]
+            pos = (args.position_type or suffix_pos).lower()
+            pos = "short" if pos == "short" else "long"
+            target_slug = f"{base_slug}_{pos}"
         config_path = resolve_config_path(instrument_type, target_slug)
 
     existing = _load_existing_config_values(config_path)
@@ -122,6 +130,7 @@ def run_level_selector(raw_args=None):
             "chart_path": None,
             "data_source": fetch_info.get("source"),
             "data_symbol": fetch_info.get("symbol"),
+            "data_name": fetch_info.get("name"),
             "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
@@ -188,4 +197,5 @@ def run_level_selector(raw_args=None):
         "chart_path": str(chart_path),
         "data_source": fetch_info.get("source"),
         "data_symbol": fetch_info.get("symbol"),
+        "data_name": fetch_info.get("name"),
     }
