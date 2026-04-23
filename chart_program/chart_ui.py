@@ -578,15 +578,11 @@ class ChartLevelSelectorUI:
 
         @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
         def hover_info(hover_data):
-            current_close = None
-            if not self.df.empty:
-                try:
-                    current_close = float(self.df.iloc[-1]["Close"])
-                except (TypeError, ValueError):
-                    current_close = None
+            cursor_price = None
             if hover_data and hover_data.get("points"):
                 point = hover_data["points"][0]
                 price = self._extract_price(point)
+                cursor_price = price
                 date = point.get("x")
                 idx = self._resolve_candle_index(date)
                 if idx is not None:
@@ -594,9 +590,9 @@ class ChartLevelSelectorUI:
                     d = pd.to_datetime(row["Date"], errors="coerce")
                     if price is not None:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
-                        curr_txt = f"  CURRENT:{current_close:.2f}" if current_close is not None else ""
+                        curr_txt = f"  CURSOR:{cursor_price:.2f}" if cursor_price is not None else "  CURSOR:--"
                         return f"D:{d_txt}  O:{row['Open']:.2f}  H:{row['High']:.2f}  L:{row['Low']:.2f}  C:{row['Close']:.2f}{curr_txt}"
-            curr_txt = f"  CURRENT:{current_close:.2f}" if current_close is not None else ""
+            curr_txt = "  CURSOR:--"
             return f"D:---- -- --  O:--  H:--  L:--  C:--{curr_txt}"
 
         @app.callback(
