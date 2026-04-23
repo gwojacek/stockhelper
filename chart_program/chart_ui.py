@@ -39,12 +39,22 @@ LINE_COLORS = {
 
 
 class ChartLevelSelectorUI:
-    def __init__(self, symbol: str, dataframe, instrument_type: str, preset_values: dict | None = None):
+    def __init__(
+        self,
+        symbol: str,
+        dataframe,
+        instrument_type: str,
+        preset_values: dict | None = None,
+        source_ticker: str | None = None,
+        source_name: str | None = None,
+    ):
         self.symbol = symbol
         self.df = dataframe.dropna(subset=["Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
         self.instrument_type = instrument_type
         self.values = preset_values or {}
         self._finished = False
+        self.source_ticker = source_ticker
+        self.source_name = source_name
 
     def _resolve_candle_index(self, date_value):
         if self.df.empty:
@@ -305,7 +315,11 @@ class ChartLevelSelectorUI:
                     style={"borderLeft": "1px solid #1f2937", "padding": "16px", "background": "#0b1220", "overflowY": "auto"},
                     children=[
                         html.H4(f"Instrument: {self.instrument_type.upper()}"),
-                        html.Div(f"Symbol/Name: {self.symbol}", style={"marginBottom": "12px"}),
+                        html.Div(
+                            f"Symbol/Name: {self.source_name or self.symbol}"
+                            + (f" ({self.source_ticker})" if self.source_ticker else ""),
+                            style={"marginBottom": "12px"},
+                        ),
                         html.H4("Selected values", style={"marginTop": 0}),
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),

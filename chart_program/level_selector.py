@@ -123,7 +123,14 @@ def run_level_selector(raw_args=None):
         data_source=args.data_source,
     )
 
-    ui = ChartLevelSelectorUI(symbol=symbol, dataframe=df, instrument_type=instrument_type, preset_values=existing)
+    ui = ChartLevelSelectorUI(
+        symbol=symbol,
+        dataframe=df,
+        instrument_type=instrument_type,
+        preset_values=existing,
+        source_ticker=fetch_info.get("symbol"),
+        source_name=fetch_info.get("name"),
+    )
     selected = ui.run()
 
 
