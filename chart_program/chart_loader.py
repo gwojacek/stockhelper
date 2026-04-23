@@ -27,6 +27,23 @@ COMMODITY_YAHOO_MAP = {
     "NATURAL_GAS": "NG=F",
 }
 
+COMMODITY_STOOQ_MAP = {
+    "GOLD": "xauusd",
+    "SILVER": "xagusd",
+    "PLATINUM": "pl.f",
+    "PALLADIUM": "xpdusd",
+    "COFFEE": "kc.f",
+    "COCOA": "cc.f",
+    "SUGAR": "sb.f",
+    "COTTON": "ct.f",
+    "WHEAT": "zw.f",
+    "CORN": "zc.f",
+    "SOYBEAN": "zs.f",
+    "SOYBEAN_OIL": "zl.f",
+    "CRUDE_OIL_BRENT": "cb.f",
+    "NATURAL_GAS": "ng.f",
+}
+
 
 def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
@@ -56,7 +73,7 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
-def _yahoo_download(symbol: str, instrument_type: str) -> pd.DataFrame:
+def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str]:
     try:
         import yfinance as yf
     except ImportError as exc:
@@ -96,7 +113,7 @@ def _yahoo_download(symbol: str, instrument_type: str) -> pd.DataFrame:
                 errors.append(f"{candidate}: no valid OHLC rows")
                 continue
 
-            return _last_year_only(df)
+            return _last_year_only(df), candidate
         except Exception as exc:
             errors.append(f"{candidate}: {exc}")
 
@@ -117,6 +134,13 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         else:
             candidates.append(cleaned)
             candidates.append(f"{cleaned}.pl")
+    elif instrument_type == "commodity":
+        mapped = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
+        if mapped:
+            candidates.append(mapped)
+        candidates.append(cleaned)
+        if cleaned.isalpha():
+            candidates.append(f"{cleaned}.f")
     else:
         candidates.append(cleaned)
 
@@ -171,7 +195,7 @@ def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None =
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
 
 
-def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> pd.DataFrame:
+def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
         urls = [
@@ -193,7 +217,7 @@ def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = Non
                 text = _download_text(url)
                 df = _parse_stooq_csv_text(text)
                 if not df.empty:
-                    return df
+                    return df, candidate
                 errors.append(f"{candidate}: empty data from {url}")
             except (URLError, ValueError, pd.errors.ParserError) as exc:
                 errors.append(f"{candidate}: {exc}")
@@ -212,20 +236,30 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
-def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> pd.DataFrame:
+def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str]:
     if data_source == "yahoo":
-        return _yahoo_download(symbol, instrument_type)
+        df, candidate = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate
     if data_source == "stooq":
-        return _stooq_download(symbol, instrument_type, api_key=api_key)
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+        return df, "stooq", candidate
 
     yahoo_error = None
     try:
-        return _yahoo_download(symbol, instrument_type)
+        if instrument_type == "commodity":
+            df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+            return df, "stooq", candidate
+        df, candidate = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate
     except ValueError as exc:
         yahoo_error = exc
 
     try:
-        return _stooq_download(symbol, instrument_type, api_key=api_key)
+        if instrument_type == "commodity":
+            df, candidate = _yahoo_download(symbol, instrument_type)
+            return df, "yahoo", candidate
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+        return df, "stooq", candidate
     except ValueError as stooq_exc:
         raise ValueError(f"Yahoo failed: {yahoo_error} ; Stooq failed: {stooq_exc}") from stooq_exc
 
@@ -236,7 +270,7 @@ def load_or_update_daily_data(
     persist: bool = True,
     api_key: str | None = None,
     data_source: str = "auto",
-) -> tuple[pd.DataFrame, Path]:
+) -> tuple[pd.DataFrame, Path, dict]:
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -252,10 +286,10 @@ def load_or_update_daily_data(
             local = None
 
     try:
-        remote = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
+        remote, source, source_symbol = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
-            return _last_year_only(local), csv_path
+            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol}
         raise
 
     if local is not None and not local.empty:
@@ -269,4 +303,4 @@ def load_or_update_daily_data(
 
     if persist:
         merged.to_csv(csv_path, index=False)
-    return merged, csv_path
+    return merged, csv_path, {"source": source, "symbol": source_symbol}

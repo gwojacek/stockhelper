@@ -102,7 +102,7 @@ def run_level_selector(raw_args=None):
     else:
         symbol = existing.get("name", args.target.upper())
 
-    df, data_path = load_or_update_daily_data(
+    df, data_path, fetch_info = load_or_update_daily_data(
         symbol=symbol,
         instrument_type=instrument_type,
         persist=True,
@@ -120,6 +120,8 @@ def run_level_selector(raw_args=None):
             "config_path": None,
             "data_path": str(data_path),
             "chart_path": None,
+            "data_source": fetch_info.get("source"),
+            "data_symbol": fetch_info.get("symbol"),
             "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
@@ -184,4 +186,6 @@ def run_level_selector(raw_args=None):
         "config_path": str(path),
         "data_path": str(data_path),
         "chart_path": str(chart_path),
+        "data_source": fetch_info.get("source"),
+        "data_symbol": fetch_info.get("symbol"),
     }

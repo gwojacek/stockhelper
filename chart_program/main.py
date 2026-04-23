@@ -49,6 +49,8 @@ def main() -> int:
     from chart_program.level_selector import run_level_selector
 
     result = run_level_selector(forwarded)
+    if isinstance(result, dict) and result.get("data_symbol"):
+        print(f"Candle source: {result.get('data_source')} | ticker: {result.get('data_symbol')}")
     if isinstance(result, dict) and result.get("message"):
         print(result["message"])
     else:

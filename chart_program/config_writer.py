@@ -124,8 +124,7 @@ def write_or_update_config(instrument_type: str, config_path: Path, values: dict
     values = dict(values)
     values["risk_levels"] = DEFAULT_RISK_LEVELS
     if "spread_multiplier" in values:
-        values["spread_expression"] = f"{values['spread_multiplier']} * pip_value"
-        values["spread"] = values["spread_expression"]
+        values["spread"] = values["spread_multiplier"]
 
     if config_path.exists():
         content = config_path.read_text(encoding="utf-8")

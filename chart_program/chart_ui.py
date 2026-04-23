@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html
 from flask import request
-from werkzeug.serving import make_server
+from werkzeug.serving import WSGIRequestHandler, make_server
 
 SELECTION_SEQUENCE = [
     "high",
@@ -238,6 +238,10 @@ class ChartLevelSelectorUI:
     def run(self):
         app = Dash(__name__)
         server_holder: dict[str, object] = {}
+
+        class QuietRequestHandler(WSGIRequestHandler):
+            def log(self, type, message, *args):  # noqa: A003
+                return
 
         @app.server.route("/shutdown", methods=["GET", "POST"])
         def _shutdown_app():
@@ -637,7 +641,7 @@ class ChartLevelSelectorUI:
         )
 
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
-        server = make_server("127.0.0.1", 8050, app.server, threaded=True)
+        server = make_server("127.0.0.1", 8050, app.server, threaded=True, request_handler=QuietRequestHandler)
         server_holder["server"] = server
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
