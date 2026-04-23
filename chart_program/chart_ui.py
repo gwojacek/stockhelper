@@ -5,11 +5,13 @@ from uuid import uuid4
 import os
 import threading
 import webbrowser
+from urllib.request import urlopen
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html
+from flask import request
 
 SELECTION_SEQUENCE = [
     "high",
@@ -148,7 +150,7 @@ class ChartLevelSelectorUI:
                     x=[obj.get("x0"), obj.get("x1")],
                     y=[obj.get("y0"), obj.get("y1")],
                     mode="lines+text",
-                    line={"color": obj.get("color", LINE_COLORS["gold"]), "width": 2},
+                    line={"color": obj.get("color", LINE_COLORS["gold"]), "width": 1.2},
                     text=["", obj.get("label", "OBJECT")],
                     textposition="top center",
                     name=obj.get("label", "OBJECT"),
@@ -218,9 +220,11 @@ class ChartLevelSelectorUI:
     def run(self):
         app = Dash(__name__)
 
-        @app.server.route("/shutdown", methods=["POST"])
+        @app.server.route("/shutdown", methods=["GET", "POST"])
         def _shutdown_app():
-            threading.Timer(0.2, lambda: os._exit(0)).start()
+            shutdown = request.environ.get("werkzeug.server.shutdown")
+            if shutdown:
+                shutdown()
             return "ok"
 
         is_stock = self.instrument_type == "stock"
@@ -305,6 +309,7 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="fib-anchor", data=None),
                 dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
                 dcc.Store(id="finished-store", data=False),
+                dcc.Store(id="close-tab-signal", data=0),
                 html.Script("window.addEventListener('beforeunload', () => {navigator.sendBeacon('/shutdown');});"),
             ],
         )
@@ -503,7 +508,7 @@ class ChartLevelSelectorUI:
                 lines.append(html.Div(f"Active button: {LABELS.get(active_field, active_field)}"))
             for field in SELECTION_SEQUENCE:
                 value = levels_store.get(field)
-                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.5f}'}"))
+                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.2f}'}"))
 
             obj_options = [{"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")} for obj in objects_store]
 
@@ -562,9 +567,27 @@ class ChartLevelSelectorUI:
                     }
                 )
                 self.values = levels_store
-                threading.Timer(0.8, lambda: os._exit(0)).start()
+                threading.Timer(0.4, lambda: urlopen("http://127.0.0.1:8050/shutdown")).start()
                 return "Saved. Closing app...", True
             return "", False
+
+        app.clientside_callback(
+            """
+            function(n, current) {
+                if (n && n > 0) {
+                    try {
+                        window.open('', '_self');
+                        window.close();
+                    } catch (e) {}
+                }
+                return n || current || 0;
+            }
+            """,
+            Output("close-tab-signal", "data"),
+            Input("finish-btn", "n_clicks"),
+            State("close-tab-signal", "data"),
+            prevent_initial_call=True,
+        )
 
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
         app.run(debug=False, dev_tools_silence_routes_logging=True)
