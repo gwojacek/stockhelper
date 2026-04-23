@@ -176,7 +176,7 @@ class ChartLevelSelectorUI:
         for obj in (objects or []):
             obj_type = obj.get("type")
             is_fib_618 = obj_type == "fib" and "61.8%" in str(obj.get("label", ""))
-            line_width = 1.8 if is_fib_618 else (1.2 if obj_type == "fib" else 1.2)
+            line_width = 2.0 if is_fib_618 else (1.6 if obj_type == "fib" else 1.2)
             line_color = "#fde047" if is_fib_618 else obj.get("color", LINE_COLORS["gold"])
             fig.add_trace(
                 go.Scatter(
@@ -509,6 +509,7 @@ class ChartLevelSelectorUI:
                 retrace_levels = [0.0, 0.618, 1.0]
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
+                x_common_end = x_right + abs(x_end - x_start) * 3
 
                 for r in retrace_levels:
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
@@ -516,14 +517,13 @@ class ChartLevelSelectorUI:
                     base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.2f})"
                     x_level_start = x_start + (x_end - x_start) * (1 - r)
-                    x_level_end = x_level_start + abs(x_end - x_start) * 3
                     objects_store.append(
                         {
                             "id": str(uuid4()),
                             "type": "fib",
                             "label": label,
                             "x0": x_level_start,
-                            "x1": x_level_end,
+                            "x1": x_common_end,
                             "y0": y_val,
                             "y1": y_val,
                             "price": y_val,
