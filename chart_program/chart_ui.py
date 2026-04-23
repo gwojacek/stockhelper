@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, ctx, dcc, html
+from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 from flask import request
 from werkzeug.serving import WSGIRequestHandler, make_server
 
@@ -260,7 +260,7 @@ class ChartLevelSelectorUI:
             shutdown = request.environ.get("werkzeug.server.shutdown")
             if shutdown:
                 shutdown()
-            elif self._finished and server_holder.get("server") is not None:
+            elif server_holder.get("server") is not None:
                 threading.Timer(0.1, lambda: server_holder["server"].shutdown()).start()
             return "ok"
 
@@ -590,6 +590,41 @@ class ChartLevelSelectorUI:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
                         return f"D:{d_txt}  O:{row['Open']:.2f}  H:{row['High']:.2f}  L:{row['Low']:.2f}  C:{row['Close']:.2f}"
             return "D:---- -- --  O:--  H:--  L:--  C:--"
+
+        @app.callback(
+            Output("candle-chart", "figure", allow_duplicate=True),
+            Input("candle-chart", "hoverData"),
+            State("candle-chart", "figure"),
+            prevent_initial_call=True,
+        )
+        def hover_price_label(hover_data, figure):
+            if not figure or not hover_data or not hover_data.get("points"):
+                return no_update
+            point = hover_data["points"][0]
+            price = self._extract_price(point)
+            if price is None:
+                return no_update
+
+            fig = go.Figure(figure)
+            fig.update_layout(
+                annotations=[
+                    dict(
+                        x=1.0,
+                        xref="paper",
+                        y=price,
+                        yref="y",
+                        xanchor="left",
+                        yanchor="middle",
+                        text=f"{price:.2f}",
+                        showarrow=False,
+                        bgcolor="#111827",
+                        bordercolor="#60a5fa",
+                        borderwidth=1,
+                        font={"color": "#e5e7eb", "size": 12},
+                    )
+                ]
+            )
+            return fig
 
         @app.callback(
             Output("result-box", "children"),
