@@ -103,7 +103,8 @@ class ChartLevelSelectorUI:
                 z=z,
                 showscale=False,
                 opacity=0.001,
-                hovertemplate="Price: %{y:.2f}<extra></extra>",
+                hoverinfo="none",
+                hovertemplate=None,
                 name="cursor_capture",
             )
         )
@@ -166,20 +167,29 @@ class ChartLevelSelectorUI:
             plot_bgcolor="#111827",
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
-        tickvals, ticktext = self._monthly_ticks()
         fig.update_xaxes(
             showspikes=True,
-            spikemode="across",
+            spikemode="toaxis+across",
             spikesnap="cursor",
+            spikedash="dash",
+            spikethickness=1,
             showline=True,
-            type="category",
-            tickmode="array",
-            tickvals=tickvals,
-            ticktext=ticktext,
+            type="date",
+            tickformat="%Y-%m-%d",
+            dtick="M1",
             tickangle=0,
             ticklabelposition="outside",
+            range=[self.df["Date"].min(), self.df["Date"].max()],
         )
-        fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", showline=True, side="right")
+        fig.update_yaxes(
+            showspikes=True,
+            spikemode="toaxis+across",
+            spikesnap="cursor",
+            spikedash="dash",
+            spikethickness=1,
+            showline=True,
+            side="right",
+        )
         return fig
 
     @staticmethod
@@ -499,10 +509,10 @@ class ChartLevelSelectorUI:
                 if idx is not None:
                     row = self.df.iloc[idx]
                     d = pd.to_datetime(row["Date"], errors="coerce")
-                    d_txt = d.strftime("%d/%m/%Y") if not pd.isna(d) else str(row["Date"])
                     if price is not None:
-                        return f"D:{d_txt}  O:{row['Open']:.2f}  H:{row['High']:.2f}  L:{row['Low']:.2f}  C:{row['Close']:.2f}  |  P:{price:.2f}"
-            return "D:--/--/----  O:--  H:--  L:--  C:--  |  P:--"
+                        d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
+                        return f"D:{d_txt}  O:{row['Open']:.2f}  H:{row['High']:.2f}  L:{row['Low']:.2f}  C:{row['Close']:.2f}"
+            return "D:---- -- --  O:--  H:--  L:--  C:--"
 
         @app.callback(
             Output("result-box", "children"),
