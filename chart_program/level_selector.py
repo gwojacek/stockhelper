@@ -95,13 +95,23 @@ def run_level_selector(raw_args=None):
     df, data_path = load_or_update_daily_data(
         symbol=symbol,
         instrument_type=instrument_type,
-        persist=False,
+        persist=True,
         api_key=args.api_key,
         data_source=args.data_source,
     )
 
     ui = ChartLevelSelectorUI(symbol=symbol, dataframe=df, instrument_type=instrument_type, preset_values=existing)
     selected = ui.run()
+
+
+    if not selected.get("__finished__"):
+        return {
+            "instrument_type": instrument_type,
+            "config_path": None,
+            "data_path": str(data_path),
+            "chart_path": None,
+            "message": "No changes saved (Finish was not clicked). Downloaded data was cached.",
+        }
 
     values = {
         "instrument_type": instrument_type,
@@ -123,7 +133,8 @@ def run_level_selector(raw_args=None):
                 "position_type": selected.get("position_type", args.position_type or "long"),
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
                 "pip_value": selected.get("pip_value", args.pip_value),
-                "spread": selected.get("spread", args.spread),
+                "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
+                "spread_multiplier": selected.get("spread_multiplier", args.spread),
             }
         )
     else:
@@ -133,7 +144,8 @@ def run_level_selector(raw_args=None):
                 "position_type": selected.get("position_type", args.position_type or "long"),
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
                 "pip_value": selected.get("pip_value", args.pip_value),
-                "spread": selected.get("spread", args.spread),
+                "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
+                "spread_multiplier": selected.get("spread_multiplier", args.spread),
                 "pip_size": selected.get("pip_size", args.pip_size),
             }
         )

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from uuid import uuid4
+import os
+import threading
+import webbrowser
 
 import numpy as np
 import pandas as pd
@@ -175,7 +178,7 @@ class ChartLevelSelectorUI:
             spikedash="dash",
             spikethickness=1,
             showline=True,
-            type="date",
+            type="category",
             tickmode="array",
             tickvals=tickvals,
             ticktext=ticktext,
@@ -273,11 +276,11 @@ class ChartLevelSelectorUI:
                         html.Label("Capital", style={"marginTop": "8px", "display": "block"}),
                         dcc.Input(id="capital", type="number", value=self.values.get("capital") or 255000, style=self._input_style()),
                         html.Label("Lot cost", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
-                        dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost", 0), style=self._input_style(), disabled=is_stock),
+                        dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost") if self.values.get("lot_cost") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
                         html.Label("Pip value", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
-                        dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value", 0), style=self._input_style(), disabled=is_stock),
-                        html.Label("Spread", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
-                        dcc.Input(id="spread", type="number", value=self.values.get("spread", 0), style=self._input_style(), disabled=is_stock),
+                        dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value") if self.values.get("pip_value") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
+                        html.Label("Spread multiplier (spread = Multiplier * pip_value)", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        dcc.Input(id="spread-mult", type="number", value=self.values.get("spread_multiplier") if self.values.get("spread_multiplier") not in (0, None) else None, placeholder="e.g. 9", style=self._input_style(), disabled=is_stock),
                         html.Label("Pip size", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if (is_stock or is_commodity) else 1}),
                         dcc.Input(id="pip-size", type="number", value=self.values.get("pip_size", 0.0001), style=self._input_style(), disabled=(is_stock or is_commodity)),
                         html.H4("Drawn objects", style={"marginTop": "14px"}),
@@ -295,6 +298,7 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="line-anchor", data=None),
                 dcc.Store(id="fib-anchor", data=None),
                 dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
+                dcc.Store(id="finished-store", data=False),
             ],
         )
 
@@ -369,7 +373,7 @@ class ChartLevelSelectorUI:
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
-            if clicked_object_id:
+            if clicked_object_id and active_tool != "level":
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, clicked_object_id
 
             price = self._extract_price(point)
@@ -522,18 +526,19 @@ class ChartLevelSelectorUI:
 
         @app.callback(
             Output("result-box", "children"),
+            Output("finished-store", "data"),
             Input("finish-btn", "n_clicks"),
             State("levels-store", "data"),
             State("position-type", "value"),
             State("capital", "value"),
             State("lot-cost", "value"),
             State("pip-value", "value"),
-            State("spread", "value"),
+            State("spread-mult", "value"),
             State("pip-size", "value"),
             State("objects-store", "data"),
             prevent_initial_call=True,
         )
-        def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread, pip_size, objects_store):
+        def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread_mult, pip_size, objects_store):
             if n_clicks > 0:
                 levels_store = levels_store or {}
                 levels_store.update(
@@ -542,16 +547,20 @@ class ChartLevelSelectorUI:
                         "capital": round((capital or 255000), 2),
                         "lot_cost": round((lot_cost or 0), 2),
                         "pip_value": round((pip_value or 0), 2),
-                        "spread": round((spread or 0), 2),
+                        "spread_multiplier": round((spread_mult or 0), 2),
+                        "spread": round((spread_mult or 0) * (pip_value or 0), 2),
                         "pip_size": pip_size or 0.0001,
                         "drawn_objects": objects_store or [],
+                        "__finished__": True,
                     }
                 )
                 self.values = levels_store
-                return "Values captured. Close window to continue saving."
-            return ""
+                threading.Timer(0.8, lambda: os._exit(0)).start()
+                return "Saved. Closing app...", True
+            return "", False
 
-        app.run(debug=False)
+        threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
+        app.run(debug=False, dev_tools_silence_routes_logging=True)
         return self.values
 
     def save_chart_snapshot(self, levels: dict, file_path: Path):
