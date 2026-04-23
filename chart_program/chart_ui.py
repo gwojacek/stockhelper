@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 import os
+import signal
 import threading
 import webbrowser
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,7 @@ class ChartLevelSelectorUI:
         self.df = dataframe.dropna(subset=["Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
         self.instrument_type = instrument_type
         self.values = preset_values or {}
+        self._finished = False
 
     def _resolve_candle_index(self, date_value):
         if self.df.empty:
@@ -143,6 +145,23 @@ class ChartLevelSelectorUI:
                     showlegend=True,
                 )
             )
+            if field == "entry" and date is not None:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[date],
+                        y=[price],
+                        mode="markers",
+                        marker={
+                            "size": 9,
+                            "symbol": "square",
+                            "color": level_colors.get(field, "#22c55e"),
+                            "line": {"width": 1, "color": "#e5e7eb"},
+                        },
+                        name="ENTRY point",
+                        hovertemplate="ENTRY click: %{y:.2f}<extra></extra>",
+                        showlegend=True,
+                    )
+                )
 
         for obj in (objects or []):
             fig.add_trace(
@@ -225,6 +244,8 @@ class ChartLevelSelectorUI:
             shutdown = request.environ.get("werkzeug.server.shutdown")
             if shutdown:
                 shutdown()
+            elif self._finished:
+                threading.Timer(0.1, lambda: os.kill(os.getpid(), signal.SIGINT)).start()
             return "ok"
 
         is_stock = self.instrument_type == "stock"
@@ -567,7 +588,14 @@ class ChartLevelSelectorUI:
                     }
                 )
                 self.values = levels_store
-                threading.Timer(0.4, lambda: urlopen("http://127.0.0.1:8050/shutdown")).start()
+                self._finished = True
+                def trigger_shutdown():
+                    try:
+                        req = Request("http://127.0.0.1:8050/shutdown", method="POST")
+                        urlopen(req, timeout=1)
+                    except Exception:
+                        pass
+                threading.Timer(0.4, trigger_shutdown).start()
                 return "Saved. Closing app...", True
             return "", False
 
@@ -590,7 +618,10 @@ class ChartLevelSelectorUI:
         )
 
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
-        app.run(debug=False, dev_tools_silence_routes_logging=True)
+        try:
+            app.run(debug=False, dev_tools_silence_routes_logging=True)
+        except KeyboardInterrupt:
+            pass
         return self.values
 
     def save_chart_snapshot(self, levels: dict, file_path: Path):
