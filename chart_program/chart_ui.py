@@ -178,12 +178,14 @@ class ChartLevelSelectorUI:
             spikedash="dash",
             spikethickness=1,
             showline=True,
-            type="category",
+            type="date",
             tickmode="array",
             tickvals=tickvals,
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
+            range=[self.df["Date"].min(), self.df["Date"].max()],
+            rangebreaks=[dict(bounds=["sat", "mon"])],
         )
         fig.update_yaxes(
             showspikes=True,
