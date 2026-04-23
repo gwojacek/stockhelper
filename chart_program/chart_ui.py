@@ -519,6 +519,8 @@ class ChartLevelSelectorUI:
                     base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.2f})"
                     x_level_start = x_start + (x_end - x_start) * (1 - r)
+                    if abs(r - 0.618) < 1e-9:
+                        x_level_start = x_end
                     objects_store.append(
                         {
                             "id": str(uuid4()),
