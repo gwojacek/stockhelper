@@ -167,6 +167,7 @@ class ChartLevelSelectorUI:
             plot_bgcolor="#111827",
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
+        tickvals, ticktext = self._monthly_ticks()
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -175,8 +176,9 @@ class ChartLevelSelectorUI:
             spikethickness=1,
             showline=True,
             type="date",
-            tickformat="%Y-%m-%d",
-            dtick="M1",
+            tickmode="array",
+            tickvals=tickvals,
+            ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
             range=[self.df["Date"].min(), self.df["Date"].max()],
@@ -245,7 +247,7 @@ class ChartLevelSelectorUI:
                                 ),
                             ],
                         ),
-                        html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600"}),
+                        html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
                         dcc.Graph(
                             id="candle-chart",
                             figure=self._build_figure(self.values, {}, []),
@@ -398,26 +400,30 @@ class ChartLevelSelectorUI:
 
                 y_start = round(fib_anchor["y"], 2)
                 y_end = round(price, 2)
-                start_idx = self._resolve_candle_index(fib_anchor["x"])
-                end_idx = self._resolve_candle_index(date)
-                left_idx = min(start_idx, end_idx) if start_idx is not None and end_idx is not None else 0
-                x0 = self.df.iloc[left_idx]["Date"]
-                x1 = self.df.iloc[-1]["Date"]
+                x_start = pd.to_datetime(fib_anchor["x"], errors="coerce")
+                x_end = pd.to_datetime(date, errors="coerce")
+                x_right = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 y_618 = y_start + (y_end - y_start) * 0.618
 
-                fib_lines = [
-                    (f"FIB 100% ({y_start:.5f})", y_start),
-                    (f"FIB 61.8% ({y_618:.5f})", y_618),
-                    (f"FIB 0% ({y_end:.5f})", y_end),
-                ]
-                for label, y_val in fib_lines:
+                if pd.isna(x_start) or pd.isna(x_end) or x_start == x_end:
+                    x_start = pd.to_datetime(self.df.iloc[0]["Date"], errors="coerce")
+                    x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
+
+                ratios = [("FIB 100%", 1.0, y_start), ("FIB 61.8%", 0.618, y_618), ("FIB 0%", 0.0, y_end)]
+                for base_label, ratio, y_val in ratios:
+                    if y_end == y_start:
+                        t = 0.0
+                    else:
+                        t = (y_val - y_start) / (y_end - y_start)
+                    x_level = x_start + (x_end - x_start) * t
+                    label = f"{base_label} ({y_val:.2f})"
                     objects_store.append(
                         {
                             "id": str(uuid4()),
                             "type": "fib",
                             "label": label,
-                            "x0": x0,
-                            "x1": x1,
+                            "x0": x_level,
+                            "x1": x_right,
                             "y0": y_val,
                             "y1": y_val,
                             "price": y_val,
