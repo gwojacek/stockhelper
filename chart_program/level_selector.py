@@ -114,6 +114,57 @@ def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
     return cleaned[:1].upper() + cleaned[1:] if cleaned else key
 
 
+EMERGING_FX = {"PLN", "HUF", "CZK", "TRY", "ZAR", "MXN", "BRL", "CLP", "INR", "THB", "ILS", "RON"}
+COMMODITY_CONTRACT_SIZE = {
+    "GOLD": 100,
+    "XAUUSD": 100,
+    "XAU/USD": 100,
+}
+
+
+def _fx_to_pln_rate(currency: str, data_source: str, api_key: str | None) -> float:
+    curr = (currency or "").upper().replace("/", "")
+    if curr == "PLN":
+        return 1.0
+    pair = f"{curr}/PLN"
+    df, _, _ = load_or_update_daily_data(symbol=pair, instrument_type="forex", persist=False, api_key=api_key, data_source=data_source)
+    close = float(df.iloc[-1]["Close"])
+    return close
+
+
+def _compute_margin_defaults(instrument_type: str, symbol: str, price: float, data_source: str, api_key: str | None):
+    if price <= 0:
+        return None, None
+
+    if instrument_type == "commodity":
+        normalized = (symbol or "").upper().replace(" ", "")
+        contract_size = COMMODITY_CONTRACT_SIZE.get(normalized, 100)
+        leverage = 20
+        margin_currency_to_pln = _fx_to_pln_rate("USD", data_source, api_key)
+        pip_size = 0.01
+        quote_to_pln = margin_currency_to_pln
+    elif instrument_type == "forex":
+        pair = (symbol or "").upper()
+        compact = pair.replace("/", "")
+        if len(compact) < 6:
+            return None, None
+        base = compact[:3]
+        quote = compact[3:6]
+        contract_size = 100000
+        leverage = 20 if (base in EMERGING_FX or quote in EMERGING_FX) else 30
+        margin_currency_to_pln = _fx_to_pln_rate(base, data_source, api_key)
+        pip_size = _infer_forex_pip_size(pair)
+        quote_to_pln = _fx_to_pln_rate(quote, data_source, api_key)
+    else:
+        return None, None
+
+    notional_value = price * contract_size
+    deposit_margin = notional_value / leverage
+    lot_cost = deposit_margin * margin_currency_to_pln
+    pip_value = (contract_size * pip_size) * quote_to_pln
+    return round(lot_cost, 2), round(pip_value, 2)
+
+
 def run_level_selector(raw_args=None):
     args = _parse_args(raw_args)
 
@@ -163,6 +214,20 @@ def run_level_selector(raw_args=None):
         api_key=args.api_key,
         data_source=args.data_source,
     )
+
+    if instrument_type in ("commodity", "forex"):
+        last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
+        lot_cost_auto, pip_value_auto = _compute_margin_defaults(
+            instrument_type=instrument_type,
+            symbol=symbol,
+            price=last_close,
+            data_source=args.data_source,
+            api_key=args.api_key,
+        )
+        if lot_cost_auto is not None:
+            existing["lot_cost"] = lot_cost_auto
+        if pip_value_auto is not None:
+            existing["pip_value"] = pip_value_auto
 
     ui = ChartLevelSelectorUI(
         symbol=symbol,
