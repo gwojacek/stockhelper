@@ -116,21 +116,21 @@ def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
 
 EMERGING_FX = {"PLN", "HUF", "CZK", "TRY", "ZAR", "MXN", "BRL", "CLP", "INR", "THB", "ILS", "RON"}
 COMMODITY_SPECS = {
-    "GOLD": {"contract_size": 100, "pip_size": 0.01},
-    "XAUUSD": {"contract_size": 100, "pip_size": 0.01},
-    "XAU/USD": {"contract_size": 100, "pip_size": 0.01},
-    "SILVER": {"contract_size": 5000, "pip_size": 0.01},
-    "XAGUSD": {"contract_size": 5000, "pip_size": 0.01},
-    "COCOA": {"contract_size": 10, "pip_size": 1.0},
-    "CC.F": {"contract_size": 10, "pip_size": 1.0},
-    "COFFEE": {"contract_size": 37500, "pip_size": 0.01},
-    "KC.F": {"contract_size": 37500, "pip_size": 0.01},
-    "SUGAR": {"contract_size": 112000, "pip_size": 0.0001},
-    "SB.F": {"contract_size": 112000, "pip_size": 0.0001},
-    "COTTON": {"contract_size": 50000, "pip_size": 0.0001},
-    "CT.F": {"contract_size": 50000, "pip_size": 0.0001},
-    "WHEAT": {"contract_size": 5000, "pip_size": 0.25},
-    "ZW.F": {"contract_size": 5000, "pip_size": 0.25},
+    "GOLD": {"contract_size": 100, "pip_size": 0.01, "leverage": 20},
+    "XAUUSD": {"contract_size": 100, "pip_size": 0.01, "leverage": 20},
+    "XAU/USD": {"contract_size": 100, "pip_size": 0.01, "leverage": 20},
+    "SILVER": {"contract_size": 5000, "pip_size": 0.01, "leverage": 10},
+    "XAGUSD": {"contract_size": 5000, "pip_size": 0.01, "leverage": 10},
+    "COCOA": {"contract_size": 10, "pip_size": 0.001, "leverage": 10},
+    "CC.F": {"contract_size": 10, "pip_size": 0.001, "leverage": 10},
+    "COFFEE": {"contract_size": 37500, "pip_size": 0.01, "leverage": 10},
+    "KC.F": {"contract_size": 37500, "pip_size": 0.01, "leverage": 10},
+    "SUGAR": {"contract_size": 112000, "pip_size": 0.0001, "leverage": 10},
+    "SB.F": {"contract_size": 112000, "pip_size": 0.0001, "leverage": 10},
+    "COTTON": {"contract_size": 50000, "pip_size": 0.0001, "leverage": 10},
+    "CT.F": {"contract_size": 50000, "pip_size": 0.0001, "leverage": 10},
+    "WHEAT": {"contract_size": 5000, "pip_size": 0.25, "leverage": 10},
+    "ZW.F": {"contract_size": 5000, "pip_size": 0.25, "leverage": 10},
 }
 
 
@@ -159,9 +159,9 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
                 spec = COMMODITY_SPECS[key]
                 break
         if spec is None:
-            spec = {"contract_size": 100, "pip_size": 0.01}
+            spec = {"contract_size": 100, "pip_size": 0.01, "leverage": 10}
         contract_size = spec["contract_size"]
-        leverage = 20
+        leverage = spec["leverage"]
         margin_currency_to_pln = _fx_to_pln_rate("USD", data_source, api_key)
         pip_size = spec["pip_size"]
         quote_to_pln = margin_currency_to_pln
