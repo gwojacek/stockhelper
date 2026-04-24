@@ -30,6 +30,7 @@ COMMODITY_YAHOO_MAP = {
     "SOYBEAN": "ZS=F",
     "SOYOIL": "ZL=F",
     "COPPER": "HG=F",
+    "ALUMINIUM": "ALI=F",
     "PLATINUM": "PL=F",
     "PALLADIUM": "PA=F",
     "WTI": "CL=F",
@@ -293,7 +294,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
         return df, "stooq", candidate
 
-    yahoo_error = None
+    primary_error = None
     try:
         if instrument_type == "commodity":
             df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
@@ -301,7 +302,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate
     except ValueError as exc:
-        yahoo_error = exc
+        primary_error = exc
 
     try:
         if instrument_type == "commodity":
@@ -310,7 +311,9 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
         return df, "stooq", candidate
     except ValueError as stooq_exc:
-        raise ValueError(f"Yahoo failed: {yahoo_error} ; Stooq failed: {stooq_exc}") from stooq_exc
+        if instrument_type == "commodity":
+            raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {stooq_exc}") from stooq_exc
+        raise ValueError(f"Yahoo failed: {primary_error} ; Stooq failed: {stooq_exc}") from stooq_exc
 
 
 def load_or_update_daily_data(

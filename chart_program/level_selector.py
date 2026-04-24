@@ -115,6 +115,36 @@ def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
 
 
 EMERGING_FX = {"PLN", "HUF", "CZK", "TRY", "ZAR", "MXN", "BRL", "CLP", "INR", "THB", "ILS", "RON"}
+COMMODITY_BROKER_DEFAULTS = {
+    "COCOA": {"lot_cost": 12379.74, "pip_value": 36.19},
+    "COFFEE": {"lot_cost": 218982.66, "pip_value": 7238.10},
+    "CORN": {"lot_cost": 84096.38, "pip_value": 1809.58},
+    "COTTON": {"lot_cost": 14326.01, "pip_value": 1809.58},
+    "SOYBEAN": {"lot_cost": 127757.99, "pip_value": 1085.78},
+    "SOYOIL": {"lot_cost": 15439.26, "pip_value": 2171.73},
+    "SOYBEAN_OIL": {"lot_cost": 15439.26, "pip_value": 2171.73},
+    "SUGAR": {"lot_cost": 5671.09, "pip_value": 4053.34},
+    "WHEAT": {"lot_cost": 89524.98, "pip_value": 1447.54},
+    "GASOLINE": {"lot_cost": 49926.79, "pip_value": 15.20},
+    "LSGASOIL": {"lot_cost": 41536.61, "pip_value": 361.86},
+    "NATGAS": {"lot_cost": 29202.51, "pip_value": 108556.50},
+    "NATURAL_GAS": {"lot_cost": 29202.51, "pip_value": 108556.50},
+    "OIL.WTI": {"lot_cost": 34226.14, "pip_value": 3618.85},
+    "WTI": {"lot_cost": 34226.14, "pip_value": 3618.85},
+    "OIL": {"lot_cost": 35631.20, "pip_value": 3618.75},
+    "ALUMINIUM": {"lot_cost": 65265.96, "pip_value": 180.94},
+    "COPPER": {"lot_cost": 144260.73, "pip_value": 108.56},
+    "NICKEL": {"lot_cost": 67963.47, "pip_value": 36.18},
+    "ZINC": {"lot_cost": 63049.75, "pip_value": 180.92},
+    "GOLD": {"lot_cost": 85171.26, "pip_value": 361.86},
+    "XAUUSD": {"lot_cost": 85171.26, "pip_value": 361.86},
+    "XAU/USD": {"lot_cost": 85171.26, "pip_value": 361.86},
+    "PALLADIUM": {"lot_cost": 53950.45, "pip_value": 361.87},
+    "PLATINUM": {"lot_cost": 108511.94, "pip_value": 542.72},
+    "SILVER": {"lot_cost": 137626.31, "pip_value": 18100.75},
+    "XAGUSD": {"lot_cost": 137626.31, "pip_value": 18100.75},
+}
+
 COMMODITY_SPECS = {
     "GOLD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 1.0, "leverage": 20},
     "XAUUSD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 1.0, "leverage": 20},
@@ -179,6 +209,10 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
             (symbol or "").upper().replace(" ", ""),
             (source_ticker or "").upper().replace(" ", ""),
         ]
+        for key in candidates:
+            fixed = COMMODITY_BROKER_DEFAULTS.get(key)
+            if fixed:
+                return round(fixed["lot_cost"], 2), round(fixed["pip_value"], 2)
         spec = None
         for key in candidates:
             if key in COMMODITY_SPECS:
@@ -200,6 +234,7 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
         base = compact[:3]
         quote = compact[3:6]
         contract_size = 100000
+        pip_contract_size = contract_size
         leverage = 20 if (base in EMERGING_FX or quote in EMERGING_FX) else 30
         margin_currency_to_pln = _fx_to_pln_rate(base, data_source, api_key)
         pip_size = _infer_forex_pip_size(pair)
