@@ -23,9 +23,12 @@ def _format_value(value):
 
 def _build_template(instrument_type: str, values: dict) -> str:
     risk_levels = values.get("risk_levels", DEFAULT_RISK_LEVELS)
+    filename = values.get("filename", "")
 
     if instrument_type == "stock":
         return f'''from dataclasses import dataclass
+
+filename = "{filename}"
 
 
 @dataclass
@@ -45,6 +48,8 @@ class TradingConfig:
 
     if instrument_type == "commodity":
         return f'''from dataclasses import dataclass
+
+filename = "{filename}"
 
 
 @dataclass
@@ -69,6 +74,8 @@ class TradingConfig:
 '''
 
     return f'''from dataclasses import dataclass
+
+filename = "{filename}"
 
 
 @dataclass
@@ -96,7 +103,22 @@ class TradingConfig:
 
 def _update_existing_text(content: str, values: dict) -> str:
     updated = content
+    filename_value = values.get("filename")
+    if filename_value:
+        filename_line = f'filename = "{filename_value}"'
+        if re.search(r"^filename\s*=\s*['\"].*['\"]\s*$", updated, flags=re.MULTILINE):
+            updated = re.sub(r"^filename\s*=\s*['\"].*['\"]\s*$", filename_line, updated, flags=re.MULTILINE)
+        else:
+            import_line_match = re.search(r"^from\s+dataclasses\s+import\s+dataclass\s*$", updated, flags=re.MULTILINE)
+            if import_line_match:
+                insert_at = import_line_match.end()
+                updated = updated[:insert_at] + f"\n\n{filename_line}" + updated[insert_at:]
+            else:
+                updated = filename_line + "\n\n" + updated
+
     for key, value in values.items():
+        if key == "filename":
+            continue
         pattern = rf"^(\s*{re.escape(key)}\s*:\s*[^=]+?=\s*).*$"
         rendered_value = value if key == "spread" and isinstance(value, str) and "pip_value" in value else _format_value(value)
         replacement = rf"\g<1>{rendered_value}"
@@ -123,6 +145,7 @@ def resolve_config_path(instrument_type: str, target_name: str) -> Path:
 def write_or_update_config(instrument_type: str, config_path: Path, values: dict) -> Path:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     values = dict(values)
+    values["filename"] = config_path.stem
     values["risk_levels"] = DEFAULT_RISK_LEVELS
     if "spread_multiplier" in values:
         values["spread"] = values["spread_multiplier"]
