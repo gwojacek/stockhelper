@@ -115,10 +115,22 @@ def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
 
 
 EMERGING_FX = {"PLN", "HUF", "CZK", "TRY", "ZAR", "MXN", "BRL", "CLP", "INR", "THB", "ILS", "RON"}
-COMMODITY_CONTRACT_SIZE = {
-    "GOLD": 100,
-    "XAUUSD": 100,
-    "XAU/USD": 100,
+COMMODITY_SPECS = {
+    "GOLD": {"contract_size": 100, "pip_size": 0.01},
+    "XAUUSD": {"contract_size": 100, "pip_size": 0.01},
+    "XAU/USD": {"contract_size": 100, "pip_size": 0.01},
+    "SILVER": {"contract_size": 5000, "pip_size": 0.01},
+    "XAGUSD": {"contract_size": 5000, "pip_size": 0.01},
+    "COCOA": {"contract_size": 10, "pip_size": 1.0},
+    "CC.F": {"contract_size": 10, "pip_size": 1.0},
+    "COFFEE": {"contract_size": 37500, "pip_size": 0.01},
+    "KC.F": {"contract_size": 37500, "pip_size": 0.01},
+    "SUGAR": {"contract_size": 112000, "pip_size": 0.0001},
+    "SB.F": {"contract_size": 112000, "pip_size": 0.0001},
+    "COTTON": {"contract_size": 50000, "pip_size": 0.0001},
+    "CT.F": {"contract_size": 50000, "pip_size": 0.0001},
+    "WHEAT": {"contract_size": 5000, "pip_size": 0.25},
+    "ZW.F": {"contract_size": 5000, "pip_size": 0.25},
 }
 
 
@@ -132,16 +144,26 @@ def _fx_to_pln_rate(currency: str, data_source: str, api_key: str | None) -> flo
     return close
 
 
-def _compute_margin_defaults(instrument_type: str, symbol: str, price: float, data_source: str, api_key: str | None):
+def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: str | None, price: float, data_source: str, api_key: str | None):
     if price <= 0:
         return None, None
 
     if instrument_type == "commodity":
-        normalized = (symbol or "").upper().replace(" ", "")
-        contract_size = COMMODITY_CONTRACT_SIZE.get(normalized, 100)
+        candidates = [
+            (symbol or "").upper().replace(" ", ""),
+            (source_ticker or "").upper().replace(" ", ""),
+        ]
+        spec = None
+        for key in candidates:
+            if key in COMMODITY_SPECS:
+                spec = COMMODITY_SPECS[key]
+                break
+        if spec is None:
+            spec = {"contract_size": 100, "pip_size": 0.01}
+        contract_size = spec["contract_size"]
         leverage = 20
         margin_currency_to_pln = _fx_to_pln_rate("USD", data_source, api_key)
-        pip_size = 0.01
+        pip_size = spec["pip_size"]
         quote_to_pln = margin_currency_to_pln
     elif instrument_type == "forex":
         pair = (symbol or "").upper()
@@ -220,6 +242,7 @@ def run_level_selector(raw_args=None):
         lot_cost_auto, pip_value_auto = _compute_margin_defaults(
             instrument_type=instrument_type,
             symbol=symbol,
+            source_ticker=fetch_info.get("symbol"),
             price=last_close,
             data_source=args.data_source,
             api_key=args.api_key,
