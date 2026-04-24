@@ -83,6 +83,8 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         mapped = COMMODITY_YAHOO_MAP.get(cleaned)
         if mapped:
             candidates.append(mapped)
+        if cleaned.endswith(".F") and "=" not in cleaned:
+            candidates.append(cleaned.replace(".F", "=F"))
         candidates.append(cleaned)
     else:
         candidates.append(cleaned)

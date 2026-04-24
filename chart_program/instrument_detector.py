@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 INSTRUMENT_DIR_TO_TYPE = {
@@ -23,12 +24,6 @@ def detect_from_config_path(config_path: Path | None) -> str | None:
 
 def detect_from_symbol(symbol_or_pair: str) -> str:
     cleaned = symbol_or_pair.strip().upper()
-    if "/" in cleaned:
-        return "forex"
-
-    if any(cleaned.endswith(suffix) for suffix in (".WA", ".US", ".L", ".DE", ".PL")):
-        return "stock"
-
     known_commodity_tokens = {
         "GOLD",
         "XAUUSD",
@@ -38,6 +33,7 @@ def detect_from_symbol(symbol_or_pair: str) -> str:
         "XAG/USD",
         "COFFEE",
         "WHEAT",
+        "ZW.F",
         "SUGAR",
         "COCOA",
         "NATURAL_GAS",
@@ -49,6 +45,15 @@ def detect_from_symbol(symbol_or_pair: str) -> str:
     }
     if cleaned in known_commodity_tokens:
         return "commodity"
+
+    if "/" in cleaned:
+        return "forex"
+
+    if re.fullmatch(r"[A-Z0-9_]+\.F", cleaned):
+        return "commodity"
+
+    if any(cleaned.endswith(suffix) for suffix in (".WA", ".US", ".L", ".DE", ".PL")):
+        return "stock"
 
     if cleaned.isalpha() and len(cleaned) == 6:
         return "forex"

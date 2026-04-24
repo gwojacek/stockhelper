@@ -408,11 +408,23 @@ class ChartLevelSelectorUI:
                             ],
                         ),
                         html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
-                        dcc.Checklist(
-                            id="ichimoku-toggle",
-                            options=[{"label": " Show Ichimoku Cloud", "value": "on"}],
-                            value=["on"],
-                            style={"marginBottom": "6px"},
+                        html.Div(
+                            style={
+                                "marginBottom": "8px",
+                                "padding": "8px 10px",
+                                "border": "1px solid #38bdf8",
+                                "borderRadius": "8px",
+                                "background": "#082f49",
+                                "fontWeight": "700",
+                            },
+                            children=[
+                                dcc.Checklist(
+                                    id="ichimoku-toggle",
+                                    options=[{"label": " Show Ichimoku Cloud", "value": "on"}],
+                                    value=["on"],
+                                    style={"fontSize": "15px"},
+                                ),
+                            ],
                         ),
                         dcc.Graph(
                             id="candle-chart",

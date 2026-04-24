@@ -123,14 +123,14 @@ COMMODITY_SPECS = {
     "XAGUSD": {"contract_size": 5000, "pip_contract_size": 5000, "pip_size": 0.01, "leverage": 10},
     "COCOA": {"contract_size": 10, "pip_contract_size": 10000, "pip_size": 0.001, "leverage": 10},
     "CC.F": {"contract_size": 10, "pip_contract_size": 10000, "pip_size": 0.001, "leverage": 10},
-    "COFFEE": {"contract_size": 37500, "pip_size": 0.01, "leverage": 10},
-    "KC.F": {"contract_size": 37500, "pip_size": 0.01, "leverage": 10},
+    "COFFEE": {"contract_size": 2000, "pip_contract_size": 200000, "pip_size": 0.01, "leverage": 10},
+    "KC.F": {"contract_size": 2000, "pip_contract_size": 200000, "pip_size": 0.01, "leverage": 10},
     "SUGAR": {"contract_size": 112000, "pip_size": 0.0001, "leverage": 10},
     "SB.F": {"contract_size": 112000, "pip_size": 0.0001, "leverage": 10},
     "COTTON": {"contract_size": 50000, "pip_size": 0.0001, "leverage": 10},
     "CT.F": {"contract_size": 50000, "pip_size": 0.0001, "leverage": 10},
-    "WHEAT": {"contract_size": 5000, "pip_size": 0.25, "leverage": 10},
-    "ZW.F": {"contract_size": 5000, "pip_size": 0.25, "leverage": 10},
+    "WHEAT": {"contract_size": 400, "pip_contract_size": 1600, "pip_size": 0.25, "leverage": 10},
+    "ZW.F": {"contract_size": 400, "pip_contract_size": 1600, "pip_size": 0.25, "leverage": 10},
 }
 
 
