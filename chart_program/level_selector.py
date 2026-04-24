@@ -116,13 +116,13 @@ def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
 
 EMERGING_FX = {"PLN", "HUF", "CZK", "TRY", "ZAR", "MXN", "BRL", "CLP", "INR", "THB", "ILS", "RON"}
 COMMODITY_SPECS = {
-    "GOLD": {"contract_size": 100, "pip_size": 0.01, "leverage": 20},
-    "XAUUSD": {"contract_size": 100, "pip_size": 0.01, "leverage": 20},
-    "XAU/USD": {"contract_size": 100, "pip_size": 0.01, "leverage": 20},
-    "SILVER": {"contract_size": 5000, "pip_size": 0.01, "leverage": 10},
-    "XAGUSD": {"contract_size": 5000, "pip_size": 0.01, "leverage": 10},
-    "COCOA": {"contract_size": 10, "pip_size": 0.001, "leverage": 10},
-    "CC.F": {"contract_size": 10, "pip_size": 0.001, "leverage": 10},
+    "GOLD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 0.01, "leverage": 20},
+    "XAUUSD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 0.01, "leverage": 20},
+    "XAU/USD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 0.01, "leverage": 20},
+    "SILVER": {"contract_size": 5000, "pip_contract_size": 5000, "pip_size": 0.01, "leverage": 10},
+    "XAGUSD": {"contract_size": 5000, "pip_contract_size": 5000, "pip_size": 0.01, "leverage": 10},
+    "COCOA": {"contract_size": 10, "pip_contract_size": 10000, "pip_size": 0.001, "leverage": 10},
+    "CC.F": {"contract_size": 10, "pip_contract_size": 10000, "pip_size": 0.001, "leverage": 10},
     "COFFEE": {"contract_size": 37500, "pip_size": 0.01, "leverage": 10},
     "KC.F": {"contract_size": 37500, "pip_size": 0.01, "leverage": 10},
     "SUGAR": {"contract_size": 112000, "pip_size": 0.0001, "leverage": 10},
@@ -159,8 +159,9 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
                 spec = COMMODITY_SPECS[key]
                 break
         if spec is None:
-            spec = {"contract_size": 100, "pip_size": 0.01, "leverage": 10}
+            spec = {"contract_size": 100, "pip_contract_size": 100, "pip_size": 0.01, "leverage": 10}
         contract_size = spec["contract_size"]
+        pip_contract_size = spec.get("pip_contract_size", contract_size)
         leverage = spec["leverage"]
         margin_currency_to_pln = _fx_to_pln_rate("USD", data_source, api_key)
         pip_size = spec["pip_size"]
@@ -183,7 +184,7 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
     notional_value = price * contract_size
     deposit_margin = notional_value / leverage
     lot_cost = deposit_margin * margin_currency_to_pln
-    pip_value = (contract_size * pip_size) * quote_to_pln
+    pip_value = (pip_contract_size * pip_size) * quote_to_pln
     return round(lot_cost, 2), round(pip_value, 2)
 
 
@@ -228,6 +229,8 @@ def run_level_selector(raw_args=None):
         symbol = existing.get("symbol", args.target.upper() if "." in args.target else f"{args.target.upper()}.WA")
     else:
         symbol = existing.get("name", args.target.upper())
+        if symbol.upper() in {"GOLD", "XAU/USD", "XAUUSD"}:
+            symbol = "XAUUSD"
 
     df, data_path, fetch_info = load_or_update_daily_data(
         symbol=symbol,
