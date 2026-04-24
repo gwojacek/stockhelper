@@ -144,6 +144,42 @@ COMMODITY_BROKER_DEFAULTS = {
     "SILVER": {"lot_cost": 137626.31, "pip_value": 18100.75},
     "XAGUSD": {"lot_cost": 137626.31, "pip_value": 18100.75},
 }
+COMMODITY_TICKER_ALIASES = {
+    "GC=F": "GOLD",
+    "SI=F": "SILVER",
+    "PA=F": "PALLADIUM",
+    "PL=F": "PLATINUM",
+    "CC=F": "COCOA",
+    "KC=F": "COFFEE",
+    "SB=F": "SUGAR",
+    "CT=F": "COTTON",
+    "ZC=F": "CORN",
+    "ZW=F": "WHEAT",
+    "ZS=F": "SOYBEAN",
+    "ZL=F": "SOYOIL",
+    "CL=F": "OIL.WTI",
+    "BZ=F": "OIL",
+    "RB=F": "GASOLINE",
+    "NG=F": "NATGAS",
+    "HG=F": "COPPER",
+    "ALI=F": "ALUMINIUM",
+    "CC.F": "COCOA",
+    "KC.F": "COFFEE",
+    "SB.F": "SUGAR",
+    "CT.F": "COTTON",
+    "ZC.F": "CORN",
+    "ZW.F": "WHEAT",
+    "ZS.F": "SOYBEAN",
+    "ZL.F": "SOYOIL",
+    "CL.F": "OIL.WTI",
+    "CB.F": "OIL",
+    "RB.F": "GASOLINE",
+    "NG.F": "NATGAS",
+    "QS.F": "LSGASOIL",
+    "ALI.F": "ALUMINIUM",
+    "NI.F": "NICKEL",
+    "ZN.F": "ZINC",
+}
 
 COMMODITY_SPECS = {
     "GOLD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 1.0, "leverage": 20},
@@ -209,6 +245,16 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
             (symbol or "").upper().replace(" ", ""),
             (source_ticker or "").upper().replace(" ", ""),
         ]
+        expanded_candidates = list(candidates)
+        for key in candidates:
+            aliased = COMMODITY_TICKER_ALIASES.get(key)
+            if aliased:
+                expanded_candidates.append(aliased)
+            if key.endswith(".F"):
+                expanded_candidates.append(key.replace(".F", "=F"))
+            if key.endswith("=F"):
+                expanded_candidates.append(key.replace("=F", ".F"))
+        candidates = [c for c in expanded_candidates if c]
         for key in candidates:
             fixed = COMMODITY_BROKER_DEFAULTS.get(key)
             if fixed:
@@ -239,6 +285,10 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
         margin_currency_to_pln = _fx_to_pln_rate(base, data_source, api_key)
         pip_size = _infer_forex_pip_size(pair)
         quote_to_pln = _fx_to_pln_rate(quote, data_source, api_key)
+        deposit_margin = contract_size / leverage
+        lot_cost = deposit_margin * margin_currency_to_pln
+        pip_value = (pip_contract_size * pip_size) * quote_to_pln
+        return round(lot_cost, 2), round(pip_value, 2)
     else:
         return None, None
 
