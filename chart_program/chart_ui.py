@@ -133,23 +133,56 @@ class ChartLevelSelectorUI:
                 if j < len(x_all) and pd.notna(val):
                     span_b[j] = float(val)
 
-            fig.add_trace(go.Scatter(x=dates, y=tenkan, mode="lines", name="Tenkan-sen", line={"color": "#60a5fa", "width": 1.5}))
-            fig.add_trace(go.Scatter(x=dates, y=kijun, mode="lines", name="Kijun-sen", line={"color": "#f59e0b", "width": 1.5}))
+            fig.add_trace(go.Scatter(x=dates, y=tenkan, mode="lines", name="Tenkan-sen", line={"color": "#60a5fa", "width": 1.1}))
+            fig.add_trace(go.Scatter(x=dates, y=kijun, mode="lines", name="Kijun-sen", line={"color": "#f59e0b", "width": 1.9}))
             fig.add_trace(go.Scatter(x=x_all, y=span_a, mode="lines", name="Senkou Span A", line={"color": "#22c55e", "width": 1.2}))
             fig.add_trace(go.Scatter(x=x_all, y=span_b, mode="lines", name="Senkou Span B", line={"color": "#ef4444", "width": 1.2}))
 
-            bull_a = [a if (not np.isnan(a) and not np.isnan(b) and a >= b) else np.nan for a, b in zip(span_a, span_b)]
-            bull_b = [b if (not np.isnan(a) and not np.isnan(b) and a >= b) else np.nan for a, b in zip(span_a, span_b)]
-            bear_a = [a if (not np.isnan(a) and not np.isnan(b) and a < b) else np.nan for a, b in zip(span_a, span_b)]
-            bear_b = [b if (not np.isnan(a) and not np.isnan(b) and a < b) else np.nan for a, b in zip(span_a, span_b)]
+            valid_idx = [i for i, (a, b) in enumerate(zip(span_a, span_b)) if not np.isnan(a) and not np.isnan(b)]
+            cloud_segments = []
+            if valid_idx:
+                seg_start = valid_idx[0]
+                prev_i = valid_idx[0]
+                prev_sign = 1 if span_a[prev_i] >= span_b[prev_i] else -1
+                for i in valid_idx[1:]:
+                    sign = 1 if span_a[i] >= span_b[i] else -1
+                    if i != prev_i + 1 or sign != prev_sign:
+                        cloud_segments.append((seg_start, prev_i, prev_sign))
+                        seg_start = i
+                    prev_i = i
+                    prev_sign = sign
+                cloud_segments.append((seg_start, prev_i, prev_sign))
 
-            fig.add_trace(go.Scatter(x=x_all, y=bull_a, mode="lines", line={"width": 0}, showlegend=False, hoverinfo="skip"))
-            fig.add_trace(go.Scatter(x=x_all, y=bull_b, mode="lines", fill="tonexty", fillcolor="rgba(34,197,94,0.22)", line={"width": 0}, name="Ichimoku Bull Cloud", hoverinfo="skip"))
-            fig.add_trace(go.Scatter(x=x_all, y=bear_a, mode="lines", line={"width": 0}, showlegend=False, hoverinfo="skip"))
-            fig.add_trace(go.Scatter(x=x_all, y=bear_b, mode="lines", fill="tonexty", fillcolor="rgba(239,68,68,0.22)", line={"width": 0}, name="Ichimoku Bear Cloud", hoverinfo="skip"))
+            bull_added = False
+            bear_added = False
+            for start_i, end_i, sign in cloud_segments:
+                x_seg = x_all[start_i : end_i + 1]
+                a_seg = span_a[start_i : end_i + 1]
+                b_seg = span_b[start_i : end_i + 1]
+                if len(x_seg) < 2:
+                    continue
+                fill_color = "rgba(34,197,94,0.22)" if sign > 0 else "rgba(239,68,68,0.22)"
+                show_name = "Ichimoku Bull Cloud" if sign > 0 else "Ichimoku Bear Cloud"
+                show_legend = (sign > 0 and not bull_added) or (sign < 0 and not bear_added)
+                fig.add_trace(go.Scatter(x=x_seg, y=a_seg, mode="lines", line={"width": 0}, showlegend=False, hoverinfo="skip"))
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_seg,
+                        y=b_seg,
+                        mode="lines",
+                        fill="tonexty",
+                        fillcolor=fill_color,
+                        line={"width": 0},
+                        name=show_name,
+                        showlegend=show_legend,
+                        hoverinfo="skip",
+                    )
+                )
+                bull_added = bull_added or (sign > 0)
+                bear_added = bear_added or (sign < 0)
 
             chikou = closes.shift(-26)
-            fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "#a78bfa", "width": 1.1}))
+            fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "#a78bfa", "width": 1.1, "dash": "dot"}))
 
         # Transparent heatmap overlay for precise XY cursor price picking.
         y_min = float(self.df["Low"].min())
