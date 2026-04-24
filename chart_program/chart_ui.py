@@ -133,8 +133,8 @@ class ChartLevelSelectorUI:
                 if j < len(x_all) and pd.notna(val):
                     span_b[j] = float(val)
 
-            fig.add_trace(go.Scatter(x=dates, y=tenkan, mode="lines", name="Tenkan-sen", line={"color": "#60a5fa", "width": 1.1}))
-            fig.add_trace(go.Scatter(x=dates, y=kijun, mode="lines", name="Kijun-sen", line={"color": "#f59e0b", "width": 1.9}))
+            fig.add_trace(go.Scatter(x=dates, y=tenkan, mode="lines", name="Tenkan-sen", line={"color": "#ef4444", "width": 1.0}))
+            fig.add_trace(go.Scatter(x=dates, y=kijun, mode="lines", name="Kijun-sen", line={"color": "#3b82f6", "width": 1.7}))
             fig.add_trace(go.Scatter(x=x_all, y=span_a, mode="lines", name="Senkou Span A", line={"color": "#22c55e", "width": 1.2}))
             fig.add_trace(go.Scatter(x=x_all, y=span_b, mode="lines", name="Senkou Span B", line={"color": "#ef4444", "width": 1.2}))
 
@@ -182,7 +182,7 @@ class ChartLevelSelectorUI:
                 bear_added = bear_added or (sign < 0)
 
             chikou = closes.shift(-26)
-            fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "#a78bfa", "width": 1.1, "dash": "dot"}))
+            fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "rgba(250, 204, 21, 0.58)", "width": 1.1, "dash": "dot"}))
 
         # Transparent heatmap overlay for precise XY cursor price picking.
         y_min = float(self.df["Low"].min())
