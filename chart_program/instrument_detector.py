@@ -31,7 +31,11 @@ def detect_from_symbol(symbol_or_pair: str) -> str:
 
     known_commodity_tokens = {
         "GOLD",
+        "XAUUSD",
+        "XAU/USD",
         "SILVER",
+        "XAGUSD",
+        "XAG/USD",
         "COFFEE",
         "WHEAT",
         "SUGAR",

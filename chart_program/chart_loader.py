@@ -17,7 +17,11 @@ DATA_DIR_BY_INSTRUMENT = {
 
 COMMODITY_YAHOO_MAP = {
     "GOLD": "GC=F",
+    "XAUUSD": "GC=F",
+    "XAU/USD": "GC=F",
     "SILVER": "SI=F",
+    "XAGUSD": "SI=F",
+    "XAG/USD": "SI=F",
     "COFFEE": "KC=F",
     "COCOA": "CC=F",
     "SUGAR": "SB=F",
