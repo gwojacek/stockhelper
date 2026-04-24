@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 DEFAULT_RISK_LEVELS = (0.005, 0.03, 0.025, 0.02, 0.015, 0.01)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 CONFIG_SUBDIR_BY_INSTRUMENT = {
     "stock": "stocks",
@@ -116,7 +117,7 @@ def _update_existing_text(content: str, values: dict) -> str:
 def resolve_config_path(instrument_type: str, target_name: str) -> Path:
     subdir = CONFIG_SUBDIR_BY_INSTRUMENT[instrument_type]
     safe_name = target_name.lower().replace("/", "").replace(".", "_")
-    return Path("configs") / subdir / f"{safe_name}.py"
+    return PROJECT_ROOT / "configs" / subdir / f"{safe_name}.py"
 
 
 def write_or_update_config(instrument_type: str, config_path: Path, values: dict) -> Path:

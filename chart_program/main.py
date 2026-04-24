@@ -3,7 +3,7 @@ import argparse
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Standalone chart-based level selection tool")
+    parser = argparse.ArgumentParser(prog="chart_program", description="Standalone chart-based level selection tool")
     parser.add_argument("target", nargs="?", help="Symbol, pair, or config slug (e.g. jsw, coffee_long, AUD/USD)")
     parser.add_argument("--config", help="Explicit config file path")
     parser.add_argument("--instrument", choices=["stock", "commodity", "forex"], help="Force instrument type")
