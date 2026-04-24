@@ -103,6 +103,17 @@ def _infer_forex_pip_size(pair: str) -> float:
     return 0.01 if "JPY" in pair_upper else 0.0001
 
 
+def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
+    overrides = {
+        "ENA.WA": "Enea",
+    }
+    key = (symbol or "").upper()
+    if key in overrides:
+        return overrides[key]
+    cleaned = (fallback_target or "").replace("_", " ").strip()
+    return cleaned[:1].upper() + cleaned[1:] if cleaned else key
+
+
 def run_level_selector(raw_args=None):
     args = _parse_args(raw_args)
 
@@ -189,7 +200,7 @@ def run_level_selector(raw_args=None):
     }
 
     if instrument_type == "stock":
-        values.update({"name": args.target.lower(), "symbol": symbol})
+        values.update({"name": _resolve_stock_name(symbol, args.target), "symbol": symbol})
     elif instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"

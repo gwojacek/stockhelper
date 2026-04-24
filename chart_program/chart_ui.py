@@ -91,6 +91,7 @@ class ChartLevelSelectorUI:
         return dates[left], dates[right]
 
     def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None):
+        show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", True))
         fig = go.Figure(
             data=[
                 go.Candlestick(
@@ -105,6 +106,50 @@ class ChartLevelSelectorUI:
                 )
             ]
         )
+
+        if show_ichimoku and len(self.df) >= 52:
+            dates = pd.to_datetime(self.df["Date"], errors="coerce")
+            highs = pd.to_numeric(self.df["High"], errors="coerce")
+            lows = pd.to_numeric(self.df["Low"], errors="coerce")
+            closes = pd.to_numeric(self.df["Close"], errors="coerce")
+
+            tenkan = (highs.rolling(9).max() + lows.rolling(9).min()) / 2
+            kijun = (highs.rolling(26).max() + lows.rolling(26).min()) / 2
+            span_a_base = (tenkan + kijun) / 2
+            span_b_base = (highs.rolling(52).max() + lows.rolling(52).min()) / 2
+
+            last_date = dates.iloc[-1]
+            future_dates = list(pd.bdate_range(last_date + pd.Timedelta(days=1), periods=26)) if not pd.isna(last_date) else []
+            x_all = list(dates) + future_dates
+
+            span_a = [np.nan] * len(x_all)
+            span_b = [np.nan] * len(x_all)
+            for i, val in enumerate(span_a_base):
+                j = i + 26
+                if j < len(x_all) and pd.notna(val):
+                    span_a[j] = float(val)
+            for i, val in enumerate(span_b_base):
+                j = i + 26
+                if j < len(x_all) and pd.notna(val):
+                    span_b[j] = float(val)
+
+            fig.add_trace(go.Scatter(x=dates, y=tenkan, mode="lines", name="Tenkan-sen", line={"color": "#60a5fa", "width": 1.5}))
+            fig.add_trace(go.Scatter(x=dates, y=kijun, mode="lines", name="Kijun-sen", line={"color": "#f59e0b", "width": 1.5}))
+            fig.add_trace(go.Scatter(x=x_all, y=span_a, mode="lines", name="Senkou Span A", line={"color": "#22c55e", "width": 1.2}))
+            fig.add_trace(go.Scatter(x=x_all, y=span_b, mode="lines", name="Senkou Span B", line={"color": "#ef4444", "width": 1.2}))
+
+            bull_a = [a if (not np.isnan(a) and not np.isnan(b) and a >= b) else np.nan for a, b in zip(span_a, span_b)]
+            bull_b = [b if (not np.isnan(a) and not np.isnan(b) and a >= b) else np.nan for a, b in zip(span_a, span_b)]
+            bear_a = [a if (not np.isnan(a) and not np.isnan(b) and a < b) else np.nan for a, b in zip(span_a, span_b)]
+            bear_b = [b if (not np.isnan(a) and not np.isnan(b) and a < b) else np.nan for a, b in zip(span_a, span_b)]
+
+            fig.add_trace(go.Scatter(x=x_all, y=bull_a, mode="lines", line={"width": 0}, showlegend=False, hoverinfo="skip"))
+            fig.add_trace(go.Scatter(x=x_all, y=bull_b, mode="lines", fill="tonexty", fillcolor="rgba(34,197,94,0.22)", line={"width": 0}, name="Ichimoku Bull Cloud", hoverinfo="skip"))
+            fig.add_trace(go.Scatter(x=x_all, y=bear_a, mode="lines", line={"width": 0}, showlegend=False, hoverinfo="skip"))
+            fig.add_trace(go.Scatter(x=x_all, y=bear_b, mode="lines", fill="tonexty", fillcolor="rgba(239,68,68,0.22)", line={"width": 0}, name="Ichimoku Bear Cloud", hoverinfo="skip"))
+
+            chikou = closes.shift(-26)
+            fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "#a78bfa", "width": 1.1}))
 
         # Transparent heatmap overlay for precise XY cursor price picking.
         y_min = float(self.df["Low"].min())
@@ -209,6 +254,8 @@ class ChartLevelSelectorUI:
         )
         tickvals, ticktext = self._monthly_ticks()
         x_max = pd.to_datetime(self.df["Date"].max(), errors="coerce")
+        if show_ichimoku and len(self.df) > 0:
+            x_max = pd.to_datetime(self.df["Date"].iloc[-1], errors="coerce") + pd.tseries.offsets.BDay(26)
         for obj in (objects or []):
             x1 = pd.to_datetime(obj.get("x1"), errors="coerce")
             if not pd.isna(x1) and (pd.isna(x_max) or x1 > x_max):
@@ -328,6 +375,12 @@ class ChartLevelSelectorUI:
                             ],
                         ),
                         html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
+                        dcc.Checklist(
+                            id="ichimoku-toggle",
+                            options=[{"label": " Show Ichimoku Cloud", "value": "on"}],
+                            value=["on"],
+                            style={"marginBottom": "6px"},
+                        ),
                         dcc.Graph(
                             id="candle-chart",
                             figure=self._build_figure(self.values, initial_level_points, initial_objects),
@@ -596,11 +649,13 @@ class ChartLevelSelectorUI:
             Input("objects-store", "data"),
             Input("active-field", "data"),
             Input("active-tool", "data"),
+            Input("ichimoku-toggle", "value"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool, ichimoku_toggle):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
+            levels_store["__show_ichimoku__"] = bool(ichimoku_toggle and "on" in ichimoku_toggle)
             fig = self._build_figure(levels_store, level_points, objects_store)
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
