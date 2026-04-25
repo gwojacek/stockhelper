@@ -386,6 +386,8 @@ class ChartLevelSelectorUI:
         is_stock = self.instrument_type == "stock"
         is_commodity = self.instrument_type == "commodity"
         ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", True))
+        currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
+        currency_fee_eligible = bool((self.values or {}).get("__currency_fee_eligible__", False))
 
         button_row = html.Div(
             [html.Button(LABELS[field], id=f"btn-{field}", n_clicks=0, className="level-btn") for field in SELECTION_SEQUENCE],
@@ -459,6 +461,20 @@ class ChartLevelSelectorUI:
                         ),
                         html.Label("Capital", style={"marginTop": "8px", "display": "block"}),
                         dcc.Input(id="capital", type="number", value=self.values.get("capital") or 255000, style=self._input_style()),
+                        html.Button(
+                            f"FX conversion fee 1%: {'ON' if currency_fee_on else 'OFF'}",
+                            id="currency-fee-toggle",
+                            n_clicks=0,
+                            style={
+                                "marginTop": "8px",
+                                "width": "100%",
+                                "padding": "8px",
+                                "display": "block" if currency_fee_eligible else "none",
+                                "background": "#2563eb" if currency_fee_on else "#1f2937",
+                                "color": "white" if currency_fee_on else "#e5e7eb",
+                                "border": "1px solid #334155",
+                            },
+                        ),
                         html.Label("Lot cost", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost") if self.values.get("lot_cost") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
                         html.Label("Pip value", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
@@ -698,10 +714,33 @@ class ChartLevelSelectorUI:
             return f"Ichimoku: {'ON' if new_value else 'OFF'}", levels_store
 
         @app.callback(
+            Output("currency-fee-toggle", "children"),
+            Output("currency-fee-toggle", "style"),
+            Output("levels-store", "data", allow_duplicate=True),
+            Input("currency-fee-toggle", "n_clicks"),
+            State("currency-fee-toggle", "style"),
+            State("levels-store", "data"),
+            prevent_initial_call=True,
+        )
+        def toggle_currency_fee(_, current_style, levels_store):
+            levels_store = levels_store or {}
+            current = bool(levels_store.get("apply_currency_conversion_fee", False))
+            new_value = not current
+            levels_store["apply_currency_conversion_fee"] = new_value
+            style = dict(current_style or {})
+            style["background"] = "#2563eb" if new_value else "#1f2937"
+            style["color"] = "white" if new_value else "#e5e7eb"
+            return f"FX conversion fee 1%: {'ON' if new_value else 'OFF'}", style, levels_store
+
+        @app.callback(
             Output("candle-chart", "figure"),
             Output("values-panel", "children"),
             Output("object-picker", "options"),
             [Output(f"btn-{field}", "style") for field in SELECTION_SEQUENCE],
+            Output("tool-line", "style"),
+            Output("tool-fib", "style"),
+            Output("tool-half", "style"),
+            Output("ichimoku-toggle-btn", "style"),
             Input("levels-store", "data"),
             Input("level-points-store", "data"),
             Input("objects-store", "data"),
@@ -757,7 +796,14 @@ class ChartLevelSelectorUI:
                 else:
                     btn_styles.append({"background": "#1f2937", "color": "#e5e7eb", "border": "1px solid #334155", "padding": "8px"})
 
-            return fig, lines, obj_options, *btn_styles
+            tool_active_style = {"background": "#2563eb", "color": "white", "border": "1px solid #2563eb"}
+            tool_idle_style = {"background": "#1f2937", "color": "#e5e7eb", "border": "1px solid #334155"}
+            line_style = tool_active_style if active_tool == "line" else tool_idle_style
+            fib_style = tool_active_style if active_tool == "fib" else tool_idle_style
+            half_style = tool_active_style if active_tool == "half" else tool_idle_style
+            ichimoku_style = tool_active_style if levels_store.get("__show_ichimoku__", True) else tool_idle_style
+
+            return fig, lines, obj_options, *btn_styles, line_style, fib_style, half_style, ichimoku_style
 
         @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
         def hover_info(hover_data):

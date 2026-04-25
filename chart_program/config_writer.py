@@ -36,6 +36,8 @@ class TradingConfig:
     name: str = "{values["name"]}"
     symbol: str = "{values["symbol"]}"
     instrument_type: str = "stock"
+    apply_currency_conversion_fee: bool = {values.get("apply_currency_conversion_fee", False)}
+    currency_conversion_fee_pct: float = {values.get("currency_conversion_fee_pct", 0.01)}
     capital: float = {values.get("capital", 0)}
     entry: float = {values["entry"]}
     stop_loss: float = {values["stop_loss"]}
@@ -83,6 +85,8 @@ class TradingConfig:
     instrument_type: str = "forex"
     position_type: str = "{values.get("position_type", "long")}"
     pair: str = "{values["pair"]}"
+    apply_currency_conversion_fee: bool = {values.get("apply_currency_conversion_fee", False)}
+    currency_conversion_fee_pct: float = {values.get("currency_conversion_fee_pct", 0.01)}
 
     capital: float = {values.get("capital", 0)}
 

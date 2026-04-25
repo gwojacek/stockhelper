@@ -5,6 +5,9 @@ from colorama import Fore, Style
 
 class ForexStrategy(BaseStrategy):
     def calculate(self):
+        conversion_fee_enabled = bool(getattr(self.config, "apply_currency_conversion_fee", False))
+        conversion_fee_pct = float(getattr(self.config, "currency_conversion_fee_pct", 0.01) or 0.01)
+
         for risk in self.config.risk_levels:
             self.results[risk] = calculator.calculate_position_size(
                 entry=self.config.entry,
@@ -18,6 +21,9 @@ class ForexStrategy(BaseStrategy):
                 position_type=self.config.position_type,
                 instrument_type="forex",
             )
+            if conversion_fee_enabled:
+                self.results[risk]["potential_loss"] = round(self.results[risk]["potential_loss"] * (1 + conversion_fee_pct), 2)
+                self.results[risk]["risk_percent"] = round((self.results[risk]["potential_loss"] / self.config.capital) * 100, 2)
 
         self.take_profit = risk_manager.calculate_take_profit(
             self.config.entry,
@@ -31,6 +37,8 @@ class ForexStrategy(BaseStrategy):
         # Convert price difference into pips by dividing by pip_size
         pips_reward = abs(self.take_profit - self.config.entry) / self.config.pip_size
         self.profit = pips_reward * max_lots * self.config.pip_value
+        if conversion_fee_enabled:
+            self.profit = self.profit * (1 - conversion_fee_pct)
 
         self.profit_pct = (self.profit / self.config.capital) * 100
 

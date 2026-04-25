@@ -75,6 +75,7 @@ Each generated config includes:
   - `Name/Ticker` display
   - selected values
   - manual fields (`capital`, `lot_cost`, `pip_value`, `spread`)
+  - `FX conversion fee 1%` toggle (default ON for foreign stocks and forex pairs without PLN)
   - drawn object management
 
 ### Drawing behavior

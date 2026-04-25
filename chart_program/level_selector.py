@@ -104,6 +104,16 @@ def _infer_forex_pip_size(pair: str) -> float:
     return 0.01 if "JPY" in pair_upper else 0.0001
 
 
+def _default_currency_conversion_fee(instrument_type: str, symbol: str) -> bool:
+    cleaned = (symbol or "").upper().strip()
+    if instrument_type == "stock":
+        return not cleaned.endswith(".WA") and not cleaned.endswith(".PL")
+    if instrument_type == "forex":
+        compact = cleaned.replace("/", "")
+        return "PLN" not in compact
+    return False
+
+
 def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
     overrides = {
         "ENA.WA": "Enea",
@@ -351,6 +361,12 @@ def run_level_selector(raw_args=None):
         if symbol.upper() in {"GOLD", "XAU/USD", "XAUUSD"}:
             symbol = "XAUUSD"
 
+    if instrument_type in ("stock", "forex"):
+        if "apply_currency_conversion_fee" not in existing:
+            existing["apply_currency_conversion_fee"] = _default_currency_conversion_fee(instrument_type, symbol)
+        existing["currency_conversion_fee_pct"] = float(existing.get("currency_conversion_fee_pct", 0.01) or 0.01)
+        existing["__currency_fee_eligible__"] = _default_currency_conversion_fee(instrument_type, symbol)
+
     df, data_path, fetch_info = load_or_update_daily_data(
         symbol=symbol,
         instrument_type=instrument_type,
@@ -410,7 +426,14 @@ def run_level_selector(raw_args=None):
     }
 
     if instrument_type == "stock":
-        values.update({"name": _resolve_stock_name(symbol, base_target), "symbol": symbol})
+        values.update(
+            {
+                "name": _resolve_stock_name(symbol, base_target),
+                "symbol": symbol,
+                "apply_currency_conversion_fee": bool(selected.get("apply_currency_conversion_fee", existing.get("apply_currency_conversion_fee", False))),
+                "currency_conversion_fee_pct": float(selected.get("currency_conversion_fee_pct", existing.get("currency_conversion_fee_pct", 0.01))),
+            }
+        )
     elif instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
@@ -438,6 +461,8 @@ def run_level_selector(raw_args=None):
                 "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
                 "spread_multiplier": selected.get("spread_multiplier", args.spread),
                 "pip_size": auto_pip_size,
+                "apply_currency_conversion_fee": bool(selected.get("apply_currency_conversion_fee", existing.get("apply_currency_conversion_fee", False))),
+                "currency_conversion_fee_pct": float(selected.get("currency_conversion_fee_pct", existing.get("currency_conversion_fee_pct", 0.01))),
             }
         )
 
