@@ -705,12 +705,78 @@ class ChartLevelSelectorUI:
             Input("objects-store", "data"),
             Input("active-field", "data"),
             Input("active-tool", "data"),
+            Input("line-anchor", "data"),
+            Input("fib-anchor", "data"),
+            Input("candle-chart", "hoverData"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor, hover_data):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
-            fig = self._build_figure(levels_store, level_points, objects_store)
+            draw_objects = list(objects_store)
+
+            hover_point = None
+            if hover_data and hover_data.get("points"):
+                first = hover_data["points"][0]
+                hover_price = self._extract_price(first)
+                hover_date = first.get("x")
+                if hover_price is not None and hover_date is not None:
+                    hover_point = {"x": hover_date, "y": round(float(hover_price), 2)}
+
+            if active_tool == "line" and line_anchor and hover_point:
+                draw_objects.append(
+                    {
+                        "id": "__preview_line__",
+                        "type": "line",
+                        "label": "LINE (preview)",
+                        "x0": line_anchor.get("x"),
+                        "y0": line_anchor.get("y"),
+                        "x1": hover_point["x"],
+                        "y1": hover_point["y"],
+                        "color": "#f59e0b",
+                    }
+                )
+
+            if active_tool == "fib" and fib_anchor and hover_point:
+                fib_hi = max(float(fib_anchor.get("y", 0.0)), hover_point["y"])
+                fib_lo = min(float(fib_anchor.get("y", 0.0)), hover_point["y"])
+                fib_618 = fib_lo + 0.618 * (fib_hi - fib_lo)
+                draw_objects.extend(
+                    [
+                        {
+                            "id": "__preview_fib_top__",
+                            "type": "fib",
+                            "label": "Fib 100% (preview)",
+                            "x0": fib_anchor.get("x"),
+                            "y0": fib_hi,
+                            "x1": hover_point["x"],
+                            "y1": fib_hi,
+                            "color": "#60a5fa",
+                        },
+                        {
+                            "id": "__preview_fib_618__",
+                            "type": "fib",
+                            "label": "Fib 61.8% (preview)",
+                            "x0": fib_anchor.get("x"),
+                            "y0": fib_618,
+                            "x1": hover_point["x"],
+                            "y1": fib_618,
+                            "color": "#ffffff",
+                        },
+                        {
+                            "id": "__preview_fib_low__",
+                            "type": "fib",
+                            "label": "Fib 0% (preview)",
+                            "x0": fib_anchor.get("x"),
+                            "y0": fib_lo,
+                            "x1": hover_point["x"],
+                            "y1": fib_lo,
+                            "color": "#60a5fa",
+                        },
+                    ]
+                )
+
+            fig = self._build_figure(levels_store, level_points, draw_objects)
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":
