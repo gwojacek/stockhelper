@@ -55,6 +55,9 @@ class StockStrategy(BaseStrategy):
 
     def calculate(self):
         """Liczy pozycje, max kapitał i metryki płynności (w PLN)."""
+        conversion_fee_enabled = bool(getattr(self.config, "apply_currency_conversion_fee", False))
+        conversion_fee_pct = float(getattr(self.config, "currency_conversion_fee_pct", 0.01) or 0.01)
+
         self.used_default_turnover = False
         self.currency_pair_used = "PLNPLN=X"
         self.fx_rate_to_pln = 1.0
@@ -124,6 +127,9 @@ class StockStrategy(BaseStrategy):
                 risk,
                 self.config.max_capital,
             )
+            if conversion_fee_enabled:
+                self.results[risk]["potential_loss"] = round(self.results[risk]["potential_loss"] * (1 + conversion_fee_pct), 2)
+                self.results[risk]["risk_percent"] = round((self.results[risk]["potential_loss"] / self.config.capital) * 100, 2)
 
         self.profit = 0.0
         self.profit_pct = 0.0
@@ -142,6 +148,8 @@ class StockStrategy(BaseStrategy):
                 * (self.take_profit_display - self.config.entry)
                 * self.fx_rate_to_pln
             )
+            if conversion_fee_enabled:
+                self.profit = self.profit * (1 - conversion_fee_pct)
             self.profit_pct = (self.profit / self.config.capital) * 100
 
         self.check_zr_ratio = None

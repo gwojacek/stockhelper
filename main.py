@@ -30,4 +30,3 @@ if __name__ == "__main__":
     # analyze(CCC)
     analyze(Lockhead_Martin_long)
     # analyze(sugar_long)
-
