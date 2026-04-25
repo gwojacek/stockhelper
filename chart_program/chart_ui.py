@@ -258,23 +258,25 @@ class ChartLevelSelectorUI:
 
         for obj in (objects or []):
             obj_type = obj.get("type")
+            is_preview_line = obj_type == "preview_line"
             is_fib_618 = obj_type == "fib" and "61.8%" in str(obj.get("label", ""))
             line_width = 2.0 if is_fib_618 else (1.6 if obj_type == "fib" else 1.2)
-            line_color = "#ffffff" if is_fib_618 else obj.get("color", LINE_COLORS["gold"])
-            mode = "lines+text+markers" if is_fib_618 else "lines+text"
+            line_color = "#94a3b8" if is_preview_line else ("#ffffff" if is_fib_618 else obj.get("color", LINE_COLORS["gold"]))
+            mode = "lines" if is_preview_line else ("lines+text+markers" if is_fib_618 else "lines+text")
             fig.add_trace(
                 go.Scatter(
                     x=[obj.get("x0"), obj.get("x1")],
                     y=[obj.get("y0"), obj.get("y1")],
                     mode=mode,
-                    line={"color": line_color, "width": line_width},
+                    line={"color": line_color, "width": line_width, "dash": "dot" if is_preview_line else "solid"},
                     marker={"size": 5, "color": line_color} if is_fib_618 else None,
-                    text=["", obj.get("label", "OBJECT")],
+                    text=[] if is_preview_line else ["", obj.get("label", "OBJECT")],
                     textposition="top center",
-                    name=obj.get("label", "OBJECT"),
-                    customdata=[obj.get("id"), obj.get("id")],
-                    hovertemplate=f"{obj.get('label', 'OBJECT')}: %{{y:.5f}}<extra></extra>",
-                    showlegend=True,
+                    name="Line preview" if is_preview_line else obj.get("label", "OBJECT"),
+                    customdata=None if is_preview_line else [obj.get("id"), obj.get("id")],
+                    hovertemplate=None if is_preview_line else f"{obj.get('label', 'OBJECT')}: %{{y:.5f}}<extra></extra>",
+                    hoverinfo="skip" if is_preview_line else None,
+                    showlegend=not is_preview_line,
                 )
             )
 
@@ -727,53 +729,14 @@ class ChartLevelSelectorUI:
                 draw_objects.append(
                     {
                         "id": "__preview_line__",
-                        "type": "line",
-                        "label": "LINE (preview)",
+                        "type": "preview_line",
+                        "label": "",
                         "x0": line_anchor.get("x"),
                         "y0": line_anchor.get("y"),
                         "x1": hover_point["x"],
                         "y1": hover_point["y"],
                         "color": "#f59e0b",
                     }
-                )
-
-            if active_tool == "fib" and fib_anchor and hover_point:
-                fib_hi = max(float(fib_anchor.get("y", 0.0)), hover_point["y"])
-                fib_lo = min(float(fib_anchor.get("y", 0.0)), hover_point["y"])
-                fib_618 = fib_lo + 0.618 * (fib_hi - fib_lo)
-                draw_objects.extend(
-                    [
-                        {
-                            "id": "__preview_fib_top__",
-                            "type": "fib",
-                            "label": "Fib 100% (preview)",
-                            "x0": fib_anchor.get("x"),
-                            "y0": fib_hi,
-                            "x1": hover_point["x"],
-                            "y1": fib_hi,
-                            "color": "#60a5fa",
-                        },
-                        {
-                            "id": "__preview_fib_618__",
-                            "type": "fib",
-                            "label": "Fib 61.8% (preview)",
-                            "x0": fib_anchor.get("x"),
-                            "y0": fib_618,
-                            "x1": hover_point["x"],
-                            "y1": fib_618,
-                            "color": "#ffffff",
-                        },
-                        {
-                            "id": "__preview_fib_low__",
-                            "type": "fib",
-                            "label": "Fib 0% (preview)",
-                            "x0": fib_anchor.get("x"),
-                            "y0": fib_lo,
-                            "x1": hover_point["x"],
-                            "y1": fib_lo,
-                            "color": "#60a5fa",
-                        },
-                    ]
                 )
 
             fig = self._build_figure(levels_store, level_points, draw_objects)

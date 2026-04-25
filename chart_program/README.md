@@ -81,7 +81,7 @@ Each generated config includes:
 
 - You can pan/zoom with mouse and wheel.
 - Line/Fib points are selected via chart clicks.
-- Line and Fib tools now show a live preview after first anchor and before second click.
+- Line tool now shows a live preview after first anchor and before second click.
 - The chart x-range is padded before/after available candles so lines can be drawn beyond the raw candle window.
 
 ---
