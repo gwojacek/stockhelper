@@ -92,6 +92,12 @@ COMMODITY_DISPLAY_NAME = {
     "NATURAL_GAS": "Natural Gas",
 }
 
+STOCK_DISPLAY_NAME_OVERRIDES = {
+    "MBR.WA": "Mobruk",
+    "ALGT.US": "Allegiant Travel Company",
+    "ALGT": "Allegiant Travel Company",
+}
+
 
 def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
@@ -115,6 +121,8 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         candidates.append(cleaned)
     else:
         candidates.append(cleaned)
+        if cleaned.endswith(".US"):
+            candidates.append(cleaned[:-3])
 
     deduped = []
     for candidate in candidates:
@@ -362,4 +370,6 @@ def load_or_update_daily_data(
         preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
         if preferred_stooq_symbol:
             display_symbol = preferred_stooq_symbol.upper()
+    elif instrument_type == "stock":
+        display_name = STOCK_DISPLAY_NAME_OVERRIDES.get(display_symbol, STOCK_DISPLAY_NAME_OVERRIDES.get(symbol.strip().upper(), symbol.upper()))
     return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name}

@@ -24,6 +24,8 @@ def detect_from_config_path(config_path: Path | None) -> str | None:
 
 def detect_from_symbol(symbol_or_pair: str) -> str:
     cleaned = symbol_or_pair.strip().upper()
+    if cleaned.endswith(" CFD"):
+        return "commodity"
     known_commodity_tokens = {
         "GOLD",
         "XAUUSD",

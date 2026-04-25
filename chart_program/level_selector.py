@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 from chart_program.chart_loader import load_or_update_daily_data
@@ -106,6 +107,9 @@ def _infer_forex_pip_size(pair: str) -> float:
 def _resolve_stock_name(symbol: str, fallback_target: str) -> str:
     overrides = {
         "ENA.WA": "Enea",
+        "MBR.WA": "Mobruk",
+        "ALGT.US": "Allegiant Travel Company",
+        "ALGT": "Allegiant Travel Company",
     }
     key = (symbol or "").upper()
     if key in overrides:
@@ -301,9 +305,12 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
 
 def run_level_selector(raw_args=None):
     args = _parse_args(raw_args)
+    target_input = (args.target or "").strip()
+    cfd_forced = bool(re.search(r"\s+CFD$", target_input, flags=re.IGNORECASE))
+    base_target = re.sub(r"\s+CFD$", "", target_input, flags=re.IGNORECASE).strip()
 
     maybe_config_path = Path(args.config) if args.config else None
-    instrument_type = args.instrument or detect_instrument_type(args.target, maybe_config_path)
+    instrument_type = args.instrument or ("commodity" if cfd_forced else detect_instrument_type(base_target, maybe_config_path))
 
     target_base_slug = None
     inferred_position = None
@@ -311,7 +318,7 @@ def run_level_selector(raw_args=None):
     if maybe_config_path:
         config_path = maybe_config_path
     else:
-        target_slug = args.target
+        target_slug = base_target
         if instrument_type in ("commodity", "forex"):
             lowered = target_slug.lower()
             suffix_pos = "long"
@@ -335,11 +342,12 @@ def run_level_selector(raw_args=None):
         existing.update(session_state)
 
     if instrument_type == "forex":
-        symbol = existing.get("pair", args.target if "/" in args.target else f"{args.target[:3].upper()}/{args.target[3:6].upper()}")
+        symbol = existing.get("pair", base_target if "/" in base_target else f"{base_target[:3].upper()}/{base_target[3:6].upper()}")
     elif instrument_type == "stock":
-        symbol = existing.get("symbol", args.target.upper() if "." in args.target else f"{args.target.upper()}.WA")
+        symbol = existing.get("symbol", base_target.upper() if "." in base_target else f"{base_target.upper()}.WA")
     else:
-        symbol = existing.get("name", args.target.upper())
+        symbol = existing.get("name", base_target.upper())
+        symbol = re.sub(r"\s+CFD$", "", symbol, flags=re.IGNORECASE).strip()
         if symbol.upper() in {"GOLD", "XAU/USD", "XAUUSD"}:
             symbol = "XAUUSD"
 
@@ -402,7 +410,7 @@ def run_level_selector(raw_args=None):
     }
 
     if instrument_type == "stock":
-        values.update({"name": _resolve_stock_name(symbol, args.target), "symbol": symbol})
+        values.update({"name": _resolve_stock_name(symbol, base_target), "symbol": symbol})
     elif instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"

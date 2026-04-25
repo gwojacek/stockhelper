@@ -189,7 +189,12 @@ class ChartLevelSelectorUI:
         y_max = float(self.df["High"].max())
         y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
         y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 1200)
+        x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
+        x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
+        pad_days = 90
         x_grid = list(self.df["Date"])
+        if not pd.isna(x_min_data) and not pd.isna(x_max_data):
+            x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
         z = np.zeros((len(y_grid), len(x_grid)))
         fig.add_trace(
             go.Heatmap(
@@ -293,6 +298,9 @@ class ChartLevelSelectorUI:
             x1 = pd.to_datetime(obj.get("x1"), errors="coerce")
             if not pd.isna(x1) and (pd.isna(x_max) or x1 > x_max):
                 x_max = x1
+        x_min = pd.to_datetime(self.df["Date"].min(), errors="coerce")
+        if not pd.isna(x_min):
+            x_min = x_min - pd.tseries.offsets.BDay(90)
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -306,7 +314,7 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            range=[self.df["Date"].min(), x_max if not pd.isna(x_max) else self.df["Date"].max()],
+            range=[x_min if not pd.isna(x_min) else self.df["Date"].min(), (x_max + pd.tseries.offsets.BDay(90)) if not pd.isna(x_max) else self.df["Date"].max()],
             rangebreaks=[dict(bounds=["sat", "mon"])],
         )
         fig.update_yaxes(
@@ -443,7 +451,7 @@ class ChartLevelSelectorUI:
                     children=[
                         html.H4(f"Instrument: {self.instrument_type.upper()}"),
                         html.Div(
-                            f"Symbol/Name: {self.source_name or self.symbol}"
+                            f"Name/Ticker: {self.source_name or self.symbol}"
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
                             style={"marginBottom": "12px"},
                         ),
