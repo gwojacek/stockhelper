@@ -383,6 +383,7 @@ class ChartLevelSelectorUI:
 
         is_stock = self.instrument_type == "stock"
         is_commodity = self.instrument_type == "commodity"
+        ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", True))
 
         button_row = html.Div(
             [html.Button(LABELS[field], id=f"btn-{field}", n_clicks=0, className="level-btn") for field in SELECTION_SEQUENCE],
@@ -403,6 +404,12 @@ class ChartLevelSelectorUI:
                                 html.Button("Line tool", id="tool-line", n_clicks=0),
                                 html.Button("Fib 61.8", id="tool-fib", n_clicks=0),
                                 html.Button("Half→SL", id="tool-half", n_clicks=0),
+                                html.Button(
+                                    f"Ichimoku: {'ON' if ichimoku_on else 'OFF'}",
+                                    id="ichimoku-toggle-btn",
+                                    n_clicks=0,
+                                    style={"fontWeight": "700"},
+                                ),
                                 html.Button("Reset all", id="reset-all", n_clicks=0, style={"marginLeft": "auto"}),
                                 html.Div(
                                     style={"display": "flex", "gap": "6px", "alignItems": "center"},
@@ -416,24 +423,6 @@ class ChartLevelSelectorUI:
                             ],
                         ),
                         html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
-                        html.Div(
-                            style={
-                                "marginBottom": "8px",
-                                "padding": "8px 10px",
-                                "border": "1px solid #38bdf8",
-                                "borderRadius": "8px",
-                                "background": "#082f49",
-                                "fontWeight": "700",
-                            },
-                            children=[
-                                dcc.Checklist(
-                                    id="ichimoku-toggle",
-                                    options=[{"label": " Show Ichimoku Cloud", "value": "on"}],
-                                    value=["on"],
-                                    style={"fontSize": "15px"},
-                                ),
-                            ],
-                        ),
                         dcc.Graph(
                             id="candle-chart",
                             figure=self._build_figure(self.values, initial_level_points, initial_objects),
@@ -693,6 +682,20 @@ class ChartLevelSelectorUI:
             return [obj for obj in objects_store if obj.get("id") != selected_id]
 
         @app.callback(
+            Output("ichimoku-toggle-btn", "children"),
+            Output("levels-store", "data", allow_duplicate=True),
+            Input("ichimoku-toggle-btn", "n_clicks"),
+            State("levels-store", "data"),
+            prevent_initial_call=True,
+        )
+        def toggle_ichimoku(_, levels_store):
+            levels_store = levels_store or {}
+            current = bool(levels_store.get("__show_ichimoku__", True))
+            new_value = not current
+            levels_store["__show_ichimoku__"] = new_value
+            return f"Ichimoku: {'ON' if new_value else 'OFF'}", levels_store
+
+        @app.callback(
             Output("candle-chart", "figure"),
             Output("values-panel", "children"),
             Output("object-picker", "options"),
@@ -702,13 +705,11 @@ class ChartLevelSelectorUI:
             Input("objects-store", "data"),
             Input("active-field", "data"),
             Input("active-tool", "data"),
-            Input("ichimoku-toggle", "value"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool, ichimoku_toggle):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
-            levels_store["__show_ichimoku__"] = bool(ichimoku_toggle and "on" in ichimoku_toggle)
             fig = self._build_figure(levels_store, level_points, objects_store)
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]

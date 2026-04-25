@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import StringIO
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlencode
@@ -92,13 +93,6 @@ COMMODITY_DISPLAY_NAME = {
     "NATURAL_GAS": "Natural Gas",
 }
 
-STOCK_DISPLAY_NAME_OVERRIDES = {
-    "MBR.WA": "Mobruk",
-    "ALGT.US": "Allegiant Travel Company",
-    "ALGT": "Allegiant Travel Company",
-}
-
-
 def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
 
@@ -120,9 +114,9 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
             candidates.append(cleaned.replace(".F", "=F"))
         candidates.append(cleaned)
     else:
-        candidates.append(cleaned)
         if cleaned.endswith(".US"):
             candidates.append(cleaned[:-3])
+        candidates.append(cleaned)
 
     deduped = []
     for candidate in candidates:
@@ -131,7 +125,7 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
-def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str]:
+def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str, str | None]:
     try:
         import yfinance as yf
     except ImportError as exc:
@@ -140,7 +134,9 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
     errors = []
     for candidate in _yahoo_symbol_candidates(symbol, instrument_type):
         try:
-            hist = yf.Ticker(candidate).history(period="max", interval="1d", auto_adjust=False)
+            ticker = yf.Ticker(candidate)
+            with StringIO() as sink, redirect_stderr(sink), redirect_stdout(sink):
+                hist = ticker.history(period="max", interval="1d", auto_adjust=False)
             if hist is None or hist.empty:
                 errors.append(f"{candidate}: empty data")
                 continue
@@ -171,7 +167,14 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
                 errors.append(f"{candidate}: no valid OHLC rows")
                 continue
 
-            return _last_year_only(df), candidate
+            display_name = None
+            if instrument_type == "stock":
+                try:
+                    info = ticker.info if hasattr(ticker, "info") else {}
+                    display_name = info.get("longName") or info.get("shortName")
+                except Exception:
+                    display_name = None
+            return _last_year_only(df), candidate, display_name
         except Exception as exc:
             errors.append(f"{candidate}: {exc}")
 
@@ -294,30 +297,30 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
-def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str]:
+def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None]:
     if data_source == "yahoo":
-        df, candidate = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name
     if data_source == "stooq":
         df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-        return df, "stooq", candidate
+        return df, "stooq", candidate, None
 
     primary_error = None
     try:
         if instrument_type == "commodity":
             df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-            return df, "stooq", candidate
-        df, candidate = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate
+            return df, "stooq", candidate, None
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name
     except ValueError as exc:
         primary_error = exc
 
     try:
         if instrument_type == "commodity":
-            df, candidate = _yahoo_download(symbol, instrument_type)
-            return df, "yahoo", candidate
+            df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+            return df, "yahoo", candidate, display_name
         df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-        return df, "stooq", candidate
+        return df, "stooq", candidate, None
     except ValueError as stooq_exc:
         if instrument_type == "commodity":
             raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {stooq_exc}") from stooq_exc
@@ -346,7 +349,7 @@ def load_or_update_daily_data(
             local = None
 
     try:
-        remote, source, source_symbol = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
+        remote, source, source_symbol, source_name = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
             return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title()}
@@ -371,5 +374,5 @@ def load_or_update_daily_data(
         if preferred_stooq_symbol:
             display_symbol = preferred_stooq_symbol.upper()
     elif instrument_type == "stock":
-        display_name = STOCK_DISPLAY_NAME_OVERRIDES.get(display_symbol, STOCK_DISPLAY_NAME_OVERRIDES.get(symbol.strip().upper(), symbol.upper()))
+        display_name = source_name or symbol.upper()
     return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name}
