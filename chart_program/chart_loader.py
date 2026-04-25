@@ -110,6 +110,8 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         mapped = COMMODITY_YAHOO_MAP.get(cleaned)
         if mapped:
             candidates.append(mapped)
+        if cleaned.endswith(".US"):
+            candidates.append(cleaned[:-3])
         if cleaned.endswith(".F") and "=" not in cleaned:
             candidates.append(cleaned.replace(".F", "=F"))
         candidates.append(cleaned)
@@ -199,6 +201,8 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         mapped = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
         if mapped:
             candidates.append(mapped)
+        if cleaned.endswith(".us"):
+            candidates.append(cleaned[:-3])
         candidates.append(cleaned)
         if cleaned.isalpha():
             candidates.append(f"{cleaned}.f")
