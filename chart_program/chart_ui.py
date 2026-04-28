@@ -252,6 +252,9 @@ class ChartLevelSelectorUI:
             x0, x1 = self._date_window(date)
             if x0 is None:
                 continue
+            if field in ("high", "low"):
+                x0 = self.df["Date"].iloc[0]
+                x1 = self.df["Date"].iloc[-1]
             fig.add_trace(
                 go.Scatter(
                     x=[x0, x1],
