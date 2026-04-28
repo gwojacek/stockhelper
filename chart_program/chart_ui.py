@@ -100,6 +100,12 @@ class ChartLevelSelectorUI:
                 prev = label_key
         return tickvals, ticktext
 
+    def _has_weekend_data(self) -> bool:
+        dates = pd.to_datetime(self.df["Date"], errors="coerce")
+        if dates.empty:
+            return False
+        return bool((dates.dt.weekday >= 5).any())
+
     def _date_window(self, date_value, size: int = 5):
         dates = list(self.df["Date"])
         idx = self._resolve_candle_index(date_value)
@@ -112,6 +118,7 @@ class ChartLevelSelectorUI:
     def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None, active_tool: str = "level"):
         display_precision = self._precision_for_price()
         show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", False))
+        has_weekend_data = self._has_weekend_data()
         fig = go.Figure(
             data=[
                 go.Candlestick(
@@ -139,7 +146,11 @@ class ChartLevelSelectorUI:
             span_b_base = (highs.rolling(52).max() + lows.rolling(52).min()) / 2
 
             last_date = dates.iloc[-1]
-            future_dates = list(pd.bdate_range(last_date + pd.Timedelta(days=1), periods=26)) if not pd.isna(last_date) else []
+            if not pd.isna(last_date):
+                date_builder = pd.date_range if has_weekend_data else pd.bdate_range
+                future_dates = list(date_builder(last_date + pd.Timedelta(days=1), periods=26))
+            else:
+                future_dates = []
             x_all = list(dates) + future_dates
 
             span_a = [np.nan] * len(x_all)
@@ -219,7 +230,10 @@ class ChartLevelSelectorUI:
         pad_days = 10
         x_grid = list(self.df["Date"])
         if not pd.isna(x_min_data) and not pd.isna(x_max_data):
-            x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
+            if has_weekend_data:
+                x_grid = list(pd.date_range(x_min_data - pd.Timedelta(days=pad_days), x_max_data + pd.Timedelta(days=pad_days)))
+            else:
+                x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
         z = np.zeros((len(y_grid), len(x_grid)))
         fig.add_trace(
             go.Heatmap(
@@ -252,9 +266,6 @@ class ChartLevelSelectorUI:
             x0, x1 = self._date_window(date)
             if x0 is None:
                 continue
-            if field in ("high", "low"):
-                x0 = self.df["Date"].iloc[0]
-                x1 = self.df["Date"].iloc[-1]
             fig.add_trace(
                 go.Scatter(
                     x=[x0, x1],
@@ -334,7 +345,7 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            rangebreaks=[dict(bounds=["sat", "mon"])],
+            rangebreaks=[] if has_weekend_data else [dict(bounds=["sat", "mon"])],
         )
         fig.update_yaxes(
             showspikes=True,
