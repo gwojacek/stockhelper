@@ -56,6 +56,10 @@ class ChartLevelSelectorUI:
         self._finished = False
         self.source_ticker = source_ticker
         self.source_name = source_name
+        self.price_precision = 3 if "DOGE" in str(symbol).upper() else 2
+
+    def _round_price(self, value: float) -> float:
+        return round(float(value), self.price_precision)
 
     def _resolve_candle_index(self, date_value):
         if self.df.empty:
@@ -233,7 +237,7 @@ class ChartLevelSelectorUI:
                     y=[price, price],
                     mode="lines",
                     line={"color": level_colors.get(field, "gray"), "width": 3},
-                    name=f"{LABELS[field]}: {price:.2f}",
+                    name=f"{LABELS[field]}: {price:.{self.price_precision}f}",
                     hoverinfo="name",
                     showlegend=True,
                 )
@@ -251,7 +255,7 @@ class ChartLevelSelectorUI:
                             "line": {"width": 1, "color": "#e5e7eb"},
                         },
                         name="ENTRY point",
-                        hovertemplate="ENTRY click: %{y:.2f}<extra></extra>",
+                        hovertemplate=f"ENTRY click: %{{y:.{self.price_precision}f}}<extra></extra>",
                         showlegend=True,
                     )
                 )
@@ -590,7 +594,7 @@ class ChartLevelSelectorUI:
 
             if active_tool == "line":
                 if line_anchor is None:
-                    return levels_store, level_points, objects_store, {"x": date, "y": round(price, 2)}, fib_anchor, half_anchor, None
+                    return levels_store, level_points, objects_store, {"x": date, "y": self._round_price(price)}, fib_anchor, half_anchor, None
                 objects_store.append(
                     {
                         "id": str(uuid4()),
@@ -599,7 +603,7 @@ class ChartLevelSelectorUI:
                         "x0": line_anchor["x"],
                         "y0": line_anchor["y"],
                         "x1": date,
-                        "y1": round(price, 2),
+                        "y1": self._round_price(price),
                         "color": color or LINE_COLORS["gold"],
                     }
                 )
@@ -607,10 +611,10 @@ class ChartLevelSelectorUI:
 
             if active_tool == "fib":
                 if fib_anchor is None:
-                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": round(price, 2)}, half_anchor, None
+                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": self._round_price(price)}, half_anchor, None
 
-                y_start = round(fib_anchor["y"], 2)
-                y_end = round(price, 2)
+                y_start = self._round_price(fib_anchor["y"])
+                y_end = self._round_price(price)
                 x_start = pd.to_datetime(fib_anchor["x"], errors="coerce")
                 x_end = pd.to_datetime(date, errors="coerce")
                 x_right = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
@@ -626,9 +630,9 @@ class ChartLevelSelectorUI:
 
                 for r in retrace_levels:
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
-                    y_val = round(y_end - delta * r, 2)
+                    y_val = self._round_price(y_end - delta * r)
                     base_label = f"FIB {pct}"
-                    label = f"{base_label} ({y_val:.2f})"
+                    label = f"{base_label} ({y_val:.{self.price_precision}f})"
                     x_level_start = x_start + (x_end - x_start) * (1 - r)
                     if abs(r - 0.618) < 1e-9:
                         x_level_start = x_end
@@ -648,10 +652,10 @@ class ChartLevelSelectorUI:
                 return levels_store, level_points, objects_store, line_anchor, None, half_anchor, None
 
             if active_tool == "half":
-                current_price = round(price, 2)
+                current_price = self._round_price(price)
                 if half_anchor is None:
                     return levels_store, level_points, objects_store, line_anchor, fib_anchor, {"x": date, "y": current_price}, None
-                midpoint = round((half_anchor["y"] + current_price) / 2.0, 2)
+                midpoint = self._round_price((half_anchor["y"] + current_price) / 2.0)
                 idx = self._resolve_candle_index(date)
                 resolved_date = self.df.iloc[idx]["Date"] if idx is not None else date
                 levels_store["stop_loss"] = midpoint
@@ -663,7 +667,7 @@ class ChartLevelSelectorUI:
                 idx = self._resolve_candle_index(date)
                 if idx is not None:
                     row = self.df.iloc[idx]
-                    selected = round(float(row["High"]), 2) if active_field == "high" else round(float(row["Low"]), 2)
+                    selected = self._round_price(float(row["High"])) if active_field == "high" else self._round_price(float(row["Low"]))
                     resolved_date = self.df.iloc[idx]["Date"]
                     offset = max((float(row["High"]) - float(row["Low"])) * 0.03, 0.01)
                     plot_price = selected + offset if active_field == "high" else selected - offset
@@ -672,14 +676,14 @@ class ChartLevelSelectorUI:
                     resolved_date = date
                     plot_price = None
             else:
-                selected = round(price, 2)
+                selected = self._round_price(price)
                 idx = self._resolve_candle_index(date)
                 resolved_date = self.df.iloc[idx]["Date"] if idx is not None else date
                 plot_price = selected
 
             if selected is not None:
                 levels_store[active_field] = selected
-                level_points[active_field] = {"price": selected, "plot_price": round(plot_price, 2), "date": resolved_date}
+                level_points[active_field] = {"price": selected, "plot_price": self._round_price(plot_price), "date": resolved_date}
 
             self.values = dict(levels_store)
             self.values["drawn_objects"] = objects_store
@@ -762,7 +766,7 @@ class ChartLevelSelectorUI:
                 hover_price = self._extract_price(first)
                 hover_date = first.get("x")
                 if hover_price is not None and hover_date is not None:
-                    hover_point = {"x": hover_date, "y": round(float(hover_price), 2)}
+                    hover_point = {"x": hover_date, "y": self._round_price(float(hover_price))}
 
             if active_tool == "line" and line_anchor and hover_point:
                 draw_objects.append(
@@ -785,7 +789,7 @@ class ChartLevelSelectorUI:
                 lines.append(html.Div(f"Active button: {LABELS.get(active_field, active_field)}"))
             for field in SELECTION_SEQUENCE:
                 value = levels_store.get(field)
-                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.2f}'}"))
+                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self.price_precision}f}'}"))
 
             obj_options = [{"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")} for obj in objects_store]
 
@@ -819,8 +823,15 @@ class ChartLevelSelectorUI:
                     d = pd.to_datetime(row["Date"], errors="coerce")
                     if price is not None:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
-                        curr_txt = f"  CURSOR:{cursor_price:.2f}" if cursor_price is not None else "  CURSOR:--"
-                        return f"D:{d_txt}  O:{row['Open']:.2f}  H:{row['High']:.2f}  L:{row['Low']:.2f}  C:{row['Close']:.2f}{curr_txt}"
+                        curr_txt = f"  CURSOR:{cursor_price:.{self.price_precision}f}" if cursor_price is not None else "  CURSOR:--"
+                        return (
+                            f"D:{d_txt}"
+                            f"  O:{row['Open']:.{self.price_precision}f}"
+                            f"  H:{row['High']:.{self.price_precision}f}"
+                            f"  L:{row['Low']:.{self.price_precision}f}"
+                            f"  C:{row['Close']:.{self.price_precision}f}"
+                            f"{curr_txt}"
+                        )
             curr_txt = "  CURSOR:--"
             return f"D:---- -- --  O:--  H:--  L:--  C:--{curr_txt}"
 
