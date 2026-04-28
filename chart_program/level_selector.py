@@ -237,6 +237,9 @@ COMMODITY_SPECS = {
     "HG=F": {"contract_size": 30, "pip_contract_size": 30, "pip_size": 1.0, "leverage": 10},
     "NICKEL": {"contract_size": 10, "pip_contract_size": 10, "pip_size": 1.0, "leverage": 10},
     "ZINC": {"contract_size": 50, "pip_contract_size": 50, "pip_size": 1.0, "leverage": 10},
+    # Crypto CFDs (XTB-like): 1 BTC lot, but 300 DOGE minimum lot.
+    "BTC": {"contract_size": 1, "pip_contract_size": 1, "pip_size": 1.0, "leverage": 2},
+    "DOGE": {"contract_size": 300, "pip_contract_size": 300, "pip_size": 1.0, "leverage": 2},
 }
 
 
