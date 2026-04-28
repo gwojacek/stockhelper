@@ -293,9 +293,9 @@ class ChartLevelSelectorUI:
                     text=[] if is_preview_line else ["", obj.get("label", "OBJECT")],
                     textposition="top center",
                     name="Line preview" if is_preview_line else obj.get("label", "OBJECT"),
-                    customdata=None if is_preview_line else [obj.get("id"), obj.get("id")],
-                    hovertemplate=None if is_preview_line else f"{obj.get('label', 'OBJECT')}: %{{y:.5f}}<extra></extra>",
-                    hoverinfo="skip" if is_preview_line else None,
+                    customdata=None if is_preview_line else None,
+                    hovertemplate=None,
+                    hoverinfo="skip",
                     showlegend=not is_preview_line,
                 )
             )
@@ -304,7 +304,7 @@ class ChartLevelSelectorUI:
             title=f"{self.symbol} ({self.instrument_type}) - Daily (1Y)",
             xaxis_rangeslider_visible=False,
             hovermode="closest",
-            dragmode=False if active_tool in {"line", "fib", "half"} else "pan",
+            dragmode="pan",
             template="plotly_dark",
             uirevision="keep_zoom",
             margin={"l": 24, "r": 24, "t": 45, "b": 45},
@@ -313,12 +313,6 @@ class ChartLevelSelectorUI:
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
         tickvals, ticktext = self._monthly_ticks()
-        x_max = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        if show_ichimoku and len(self.df) > 0:
-            x_max = pd.to_datetime(self.df["Date"].iloc[-1], errors="coerce") + pd.tseries.offsets.BDay(26)
-        x_min = pd.to_datetime(self.df["Date"].min(), errors="coerce")
-        if not pd.isna(x_min):
-            x_min = x_min - pd.tseries.offsets.BDay(90)
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -332,7 +326,6 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            range=[x_min if not pd.isna(x_min) else self.df["Date"].min(), (x_max + pd.tseries.offsets.BDay(90)) if not pd.isna(x_max) else self.df["Date"].max()],
             rangebreaks=[dict(bounds=["sat", "mon"])],
         )
         fig.update_yaxes(
@@ -344,11 +337,6 @@ class ChartLevelSelectorUI:
             showline=True,
             side="right",
         )
-        y_min = pd.to_numeric(self.df["Low"], errors="coerce").min()
-        y_max = pd.to_numeric(self.df["High"], errors="coerce").max()
-        if not pd.isna(y_min) and not pd.isna(y_max):
-            pad = (y_max - y_min) * 0.05 if y_max > y_min else 0.5
-            fig.update_yaxes(range=[y_min - pad, y_max + pad])
         return fig
 
     @staticmethod
@@ -590,7 +578,7 @@ class ChartLevelSelectorUI:
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
-            if clicked_object_id and active_tool != "level":
+            if clicked_object_id and active_tool == "level":
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, clicked_object_id
 
             price = self._extract_price(point)
