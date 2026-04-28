@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
+from dash import Dash, Input, Output, State, ctx, dcc, html
 from flask import request
 from werkzeug.serving import WSGIRequestHandler, make_server
 
@@ -111,7 +111,7 @@ class ChartLevelSelectorUI:
 
     def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None, active_tool: str = "level"):
         display_precision = self._precision_for_price()
-        show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", True))
+        show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", False))
         fig = go.Figure(
             data=[
                 go.Candlestick(
@@ -208,10 +208,10 @@ class ChartLevelSelectorUI:
         y_min = float(self.df["Low"].min())
         y_max = float(self.df["High"].max())
         y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 300)
+        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 180)
         x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
         x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        pad_days = 30
+        pad_days = 10
         x_grid = list(self.df["Date"])
         if not pd.isna(x_min_data) and not pd.isna(x_max_data):
             x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
@@ -316,10 +316,6 @@ class ChartLevelSelectorUI:
         x_max = pd.to_datetime(self.df["Date"].max(), errors="coerce")
         if show_ichimoku and len(self.df) > 0:
             x_max = pd.to_datetime(self.df["Date"].iloc[-1], errors="coerce") + pd.tseries.offsets.BDay(26)
-        for obj in (objects or []):
-            x1 = pd.to_datetime(obj.get("x1"), errors="coerce")
-            if not pd.isna(x1) and (pd.isna(x_max) or x1 > x_max):
-                x_max = x1
         x_min = pd.to_datetime(self.df["Date"].min(), errors="coerce")
         if not pd.isna(x_min):
             x_min = x_min - pd.tseries.offsets.BDay(90)
@@ -350,12 +346,6 @@ class ChartLevelSelectorUI:
         )
         y_min = pd.to_numeric(self.df["Low"], errors="coerce").min()
         y_max = pd.to_numeric(self.df["High"], errors="coerce").max()
-        for obj in (objects or []):
-            for key in ("y0", "y1"):
-                y_val = pd.to_numeric(pd.Series([obj.get(key)]), errors="coerce").iloc[0]
-                if not pd.isna(y_val):
-                    y_min = y_val if pd.isna(y_min) else min(y_min, y_val)
-                    y_max = y_val if pd.isna(y_max) else max(y_max, y_val)
         if not pd.isna(y_min) and not pd.isna(y_max):
             pad = (y_max - y_min) * 0.05 if y_max > y_min else 0.5
             fig.update_yaxes(range=[y_min - pad, y_max + pad])
@@ -405,7 +395,7 @@ class ChartLevelSelectorUI:
 
         is_stock = self.instrument_type == "stock"
         is_commodity = self.instrument_type == "commodity"
-        ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", True))
+        ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", False))
         currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
         currency_fee_eligible = bool((self.values or {}).get("__currency_fee_eligible__", False))
 
@@ -685,7 +675,8 @@ class ChartLevelSelectorUI:
                     row = self.df.iloc[idx]
                     selected = self._round_price(float(row["High"])) if active_field == "high" else self._round_price(float(row["Low"]))
                     resolved_date = self.df.iloc[idx]["Date"]
-                    offset = max((float(row["High"]) - float(row["Low"])) * 0.03, 0.01)
+                    tick = 10 ** (-self._precision_for_price(selected))
+                    offset = max((float(row["High"]) - float(row["Low"])) * 0.03, tick * 2)
                     plot_price = selected + offset if active_field == "high" else selected - offset
                 else:
                     selected = None
@@ -728,7 +719,7 @@ class ChartLevelSelectorUI:
         )
         def toggle_ichimoku(_, levels_store):
             levels_store = levels_store or {}
-            current = bool(levels_store.get("__show_ichimoku__", True))
+            current = bool(levels_store.get("__show_ichimoku__", False))
             new_value = not current
             levels_store["__show_ichimoku__"] = new_value
             return f"Ichimoku: {'ON' if new_value else 'OFF'}", levels_store
@@ -798,12 +789,51 @@ class ChartLevelSelectorUI:
             line_style = tool_active_style if active_tool == "line" else tool_idle_style
             fib_style = tool_active_style if active_tool == "fib" else tool_idle_style
             half_style = tool_active_style if active_tool == "half" else tool_idle_style
-            ichimoku_style = tool_active_style if levels_store.get("__show_ichimoku__", True) else tool_idle_style
+            ichimoku_style = tool_active_style if levels_store.get("__show_ichimoku__", False) else tool_idle_style
 
             return fig, lines, obj_options, *btn_styles, line_style, fib_style, half_style, ichimoku_style
 
 
-        @app.callback(
+        app.clientside_callback(
+            """
+            function(hoverData, figure, activeTool, lineAnchor) {
+                if (!figure) {
+                    return window.dash_clientside.no_update;
+                }
+                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
+                if (activeTool !== 'line' || !lineAnchor) {
+                    if (baseData.length === (figure.data || []).length) {
+                        return window.dash_clientside.no_update;
+                    }
+                    return {...figure, data: baseData};
+                }
+
+                let hoverPoint = null;
+                if (hoverData && hoverData.points && hoverData.points.length > 0) {
+                    const first = hoverData.points[0];
+                    const rawY = first.y ?? first.close ?? first.high ?? first.low ?? first.open;
+                    if (rawY !== null && rawY !== undefined && first.x !== null && first.x !== undefined) {
+                        hoverPoint = {x: first.x, y: Number(rawY)};
+                    }
+                }
+
+                if (!hoverPoint) {
+                    return {...figure, data: baseData};
+                }
+
+                const preview = {
+                    type: 'scatter',
+                    x: [lineAnchor.x, hoverPoint.x],
+                    y: [lineAnchor.y, hoverPoint.y],
+                    mode: 'lines',
+                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                    name: 'Line preview',
+                    hoverinfo: 'skip',
+                    showlegend: false,
+                };
+                return {...figure, data: [...baseData, preview]};
+            }
+            """,
             Output("candle-chart", "figure", allow_duplicate=True),
             Input("candle-chart", "hoverData"),
             State("candle-chart", "figure"),
@@ -811,32 +841,6 @@ class ChartLevelSelectorUI:
             State("line-anchor", "data"),
             prevent_initial_call=True,
         )
-        def draw_line_preview(hover_data, figure, active_tool, line_anchor):
-            if active_tool != "line" or not line_anchor or not figure:
-                return no_update
-            hover_point = None
-            if hover_data and hover_data.get("points"):
-                first = hover_data["points"][0]
-                hover_price = self._extract_price(first)
-                hover_date = first.get("x")
-                if hover_price is not None and hover_date is not None:
-                    hover_point = {"x": hover_date, "y": self._round_price(float(hover_price))}
-            data = [trace for trace in (figure.get("data") or []) if trace.get("name") != "Line preview"]
-            if hover_point is not None:
-                data.append(
-                    {
-                        "type": "scatter",
-                        "x": [line_anchor.get("x"), hover_point["x"]],
-                        "y": [line_anchor.get("y"), hover_point["y"]],
-                        "mode": "lines",
-                        "line": {"color": "#94a3b8", "width": 1.2, "dash": "dot"},
-                        "name": "Line preview",
-                        "hoverinfo": "skip",
-                        "showlegend": False,
-                    }
-                )
-            figure["data"] = data
-            return figure
 
         @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
         def hover_info(hover_data):
