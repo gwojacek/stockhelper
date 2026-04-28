@@ -58,6 +58,8 @@ def detect_from_symbol(symbol_or_pair: str) -> str:
         "US500",
         "US100",
         "WIG20",
+        "BTC",
+        "DOGE",
     }
     if cleaned in known_commodity_tokens:
         return "commodity"

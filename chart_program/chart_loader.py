@@ -39,6 +39,8 @@ COMMODITY_YAHOO_MAP = {
     "OIL": "BZ=F",
     "CRUDE_OIL": "CL=F",
     "NATURAL_GAS": "NG=F",
+    "BTC": "BTC-USD",
+    "DOGE": "DOGE-USD",
 }
 
 COMMODITY_STOOQ_MAP = {
@@ -91,6 +93,8 @@ COMMODITY_DISPLAY_NAME = {
     "ZINC": "Zinc",
     "CRUDE_OIL_BRENT": "Crude Oil Brent",
     "NATURAL_GAS": "Natural Gas",
+    "BTC": "Bitcoin",
+    "DOGE": "Dogecoin",
 }
 
 def _sanitize_symbol_for_filename(symbol: str) -> str:
