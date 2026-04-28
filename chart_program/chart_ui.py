@@ -666,7 +666,8 @@ class ChartLevelSelectorUI:
                     selected = self._round_price(float(row["High"])) if active_field == "high" else self._round_price(float(row["Low"]))
                     resolved_date = self.df.iloc[idx]["Date"]
                     tick = 10 ** (-self._precision_for_price(selected))
-                    offset = max((float(row["High"]) - float(row["Low"])) * 0.03, tick * 2)
+                    candle_span = abs(float(row["High"]) - float(row["Low"]))
+                    offset = max(candle_span * 0.12, tick * 8, abs(selected) * 0.002)
                     plot_price = selected + offset if active_field == "high" else selected - offset
                 else:
                     selected = None
