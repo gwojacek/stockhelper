@@ -208,7 +208,12 @@ class ChartLevelSelectorUI:
         y_min = float(self.df["Low"].min())
         y_max = float(self.df["High"].max())
         y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 180)
+        y_low = y_min - y_pad
+        y_high = y_max + y_pad
+        precision_tick = 10 ** (-self._precision_for_price((y_min + y_max) / 2.0))
+        target_steps = int((y_high - y_low) / precision_tick) if precision_tick > 0 else 0
+        grid_points = max(400, min(2200, target_steps))
+        y_grid = np.linspace(y_low, y_high, grid_points)
         x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
         x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
         pad_days = 10
