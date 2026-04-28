@@ -56,10 +56,25 @@ class ChartLevelSelectorUI:
         self._finished = False
         self.source_ticker = source_ticker
         self.source_name = source_name
-        self.price_precision = 3 if "DOGE" in str(symbol).upper() else 2
+        self.price_precision = 2
+
+    def _precision_for_price(self, value: float | None = None) -> int:
+        if value is None:
+            if not self.df.empty:
+                value = pd.to_numeric(pd.Series([self.df["Close"].iloc[-1]]), errors="coerce").iloc[0]
+            else:
+                value = 0
+        try:
+            abs_value = abs(float(value))
+        except (TypeError, ValueError):
+            return self.price_precision
+        if abs_value < 1:
+            return 4
+        return self.price_precision
 
     def _round_price(self, value: float) -> float:
-        return round(float(value), self.price_precision)
+        precision = self._precision_for_price(value)
+        return round(float(value), precision)
 
     def _resolve_candle_index(self, date_value):
         if self.df.empty:
@@ -85,6 +100,12 @@ class ChartLevelSelectorUI:
                 prev = label_key
         return tickvals, ticktext
 
+    def _has_weekend_data(self) -> bool:
+        dates = pd.to_datetime(self.df["Date"], errors="coerce")
+        if dates.empty:
+            return False
+        return bool((dates.dt.weekday >= 5).any())
+
     def _date_window(self, date_value, size: int = 5):
         dates = list(self.df["Date"])
         idx = self._resolve_candle_index(date_value)
@@ -94,8 +115,10 @@ class ChartLevelSelectorUI:
         right = min(len(dates) - 1, idx + size)
         return dates[left], dates[right]
 
-    def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None):
-        show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", True))
+    def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None, active_tool: str = "level"):
+        display_precision = self._precision_for_price()
+        show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", False))
+        has_weekend_data = self._has_weekend_data()
         fig = go.Figure(
             data=[
                 go.Candlestick(
@@ -123,7 +146,11 @@ class ChartLevelSelectorUI:
             span_b_base = (highs.rolling(52).max() + lows.rolling(52).min()) / 2
 
             last_date = dates.iloc[-1]
-            future_dates = list(pd.bdate_range(last_date + pd.Timedelta(days=1), periods=26)) if not pd.isna(last_date) else []
+            if not pd.isna(last_date):
+                date_builder = pd.date_range if has_weekend_data else pd.bdate_range
+                future_dates = list(date_builder(last_date + pd.Timedelta(days=1), periods=26))
+            else:
+                future_dates = []
             x_all = list(dates) + future_dates
 
             span_a = [np.nan] * len(x_all)
@@ -192,13 +219,21 @@ class ChartLevelSelectorUI:
         y_min = float(self.df["Low"].min())
         y_max = float(self.df["High"].max())
         y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 1200)
+        y_low = y_min - y_pad
+        y_high = y_max + y_pad
+        precision_tick = 10 ** (-self._precision_for_price((y_min + y_max) / 2.0))
+        target_steps = int((y_high - y_low) / precision_tick) if precision_tick > 0 else 0
+        grid_points = max(400, min(2200, target_steps))
+        y_grid = np.linspace(y_low, y_high, grid_points)
         x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
         x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        pad_days = 90
+        pad_days = 10
         x_grid = list(self.df["Date"])
         if not pd.isna(x_min_data) and not pd.isna(x_max_data):
-            x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
+            if has_weekend_data:
+                x_grid = list(pd.date_range(x_min_data - pd.Timedelta(days=pad_days), x_max_data + pd.Timedelta(days=pad_days)))
+            else:
+                x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
         z = np.zeros((len(y_grid), len(x_grid)))
         fig.add_trace(
             go.Heatmap(
@@ -237,7 +272,7 @@ class ChartLevelSelectorUI:
                     y=[price, price],
                     mode="lines",
                     line={"color": level_colors.get(field, "gray"), "width": 3},
-                    name=f"{LABELS[field]}: {price:.{self.price_precision}f}",
+                    name=f"{LABELS[field]}: {price:.{display_precision}f}",
                     hoverinfo="name",
                     showlegend=True,
                 )
@@ -255,7 +290,7 @@ class ChartLevelSelectorUI:
                             "line": {"width": 1, "color": "#e5e7eb"},
                         },
                         name="ENTRY point",
-                        hovertemplate=f"ENTRY click: %{{y:.{self.price_precision}f}}<extra></extra>",
+                        hovertemplate=f"ENTRY click: %{{y:.{display_precision}f}}<extra></extra>",
                         showlegend=True,
                     )
                 )
@@ -277,9 +312,9 @@ class ChartLevelSelectorUI:
                     text=[] if is_preview_line else ["", obj.get("label", "OBJECT")],
                     textposition="top center",
                     name="Line preview" if is_preview_line else obj.get("label", "OBJECT"),
-                    customdata=None if is_preview_line else [obj.get("id"), obj.get("id")],
-                    hovertemplate=None if is_preview_line else f"{obj.get('label', 'OBJECT')}: %{{y:.5f}}<extra></extra>",
-                    hoverinfo="skip" if is_preview_line else None,
+                    customdata=None if is_preview_line else None,
+                    hovertemplate=None,
+                    hoverinfo="skip",
                     showlegend=not is_preview_line,
                 )
             )
@@ -297,16 +332,6 @@ class ChartLevelSelectorUI:
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
         tickvals, ticktext = self._monthly_ticks()
-        x_max = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        if show_ichimoku and len(self.df) > 0:
-            x_max = pd.to_datetime(self.df["Date"].iloc[-1], errors="coerce") + pd.tseries.offsets.BDay(26)
-        for obj in (objects or []):
-            x1 = pd.to_datetime(obj.get("x1"), errors="coerce")
-            if not pd.isna(x1) and (pd.isna(x_max) or x1 > x_max):
-                x_max = x1
-        x_min = pd.to_datetime(self.df["Date"].min(), errors="coerce")
-        if not pd.isna(x_min):
-            x_min = x_min - pd.tseries.offsets.BDay(90)
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -320,8 +345,7 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            range=[x_min if not pd.isna(x_min) else self.df["Date"].min(), (x_max + pd.tseries.offsets.BDay(90)) if not pd.isna(x_max) else self.df["Date"].max()],
-            rangebreaks=[dict(bounds=["sat", "mon"])],
+            rangebreaks=[] if has_weekend_data else [dict(bounds=["sat", "mon"])],
         )
         fig.update_yaxes(
             showspikes=True,
@@ -332,17 +356,6 @@ class ChartLevelSelectorUI:
             showline=True,
             side="right",
         )
-        y_min = pd.to_numeric(self.df["Low"], errors="coerce").min()
-        y_max = pd.to_numeric(self.df["High"], errors="coerce").max()
-        for obj in (objects or []):
-            for key in ("y0", "y1"):
-                y_val = pd.to_numeric(pd.Series([obj.get(key)]), errors="coerce").iloc[0]
-                if not pd.isna(y_val):
-                    y_min = y_val if pd.isna(y_min) else min(y_min, y_val)
-                    y_max = y_val if pd.isna(y_max) else max(y_max, y_val)
-        if not pd.isna(y_min) and not pd.isna(y_max):
-            pad = (y_max - y_min) * 0.05 if y_max > y_min else 0.5
-            fig.update_yaxes(range=[y_min - pad, y_max + pad])
         return fig
 
     @staticmethod
@@ -389,7 +402,7 @@ class ChartLevelSelectorUI:
 
         is_stock = self.instrument_type == "stock"
         is_commodity = self.instrument_type == "commodity"
-        ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", True))
+        ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", False))
         currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
         currency_fee_eligible = bool((self.values or {}).get("__currency_fee_eligible__", False))
 
@@ -433,7 +446,7 @@ class ChartLevelSelectorUI:
                         html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
                         dcc.Graph(
                             id="candle-chart",
-                            figure=self._build_figure(self.values, initial_level_points, initial_objects),
+                            figure=self._build_figure(self.values, initial_level_points, initial_objects, active_tool="level"),
                             style={"height": "82vh"},
                             config={
                                 "scrollZoom": True,
@@ -584,7 +597,7 @@ class ChartLevelSelectorUI:
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
-            if clicked_object_id and active_tool != "level":
+            if clicked_object_id and active_tool == "level":
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, clicked_object_id
 
             price = self._extract_price(point)
@@ -624,6 +637,7 @@ class ChartLevelSelectorUI:
 
                 delta = y_end - y_start
                 retrace_levels = [0.0, 0.618, 1.0]
+                fib_group_id = str(uuid4())
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
                 x_common_end = x_right + abs(x_end - x_start) * 3
@@ -647,6 +661,7 @@ class ChartLevelSelectorUI:
                             "y1": y_val,
                             "price": y_val,
                             "color": color or LINE_COLORS["gold"],
+                            "group_id": fib_group_id,
                         }
                     )
                 return levels_store, level_points, objects_store, line_anchor, None, half_anchor, None
@@ -669,7 +684,9 @@ class ChartLevelSelectorUI:
                     row = self.df.iloc[idx]
                     selected = self._round_price(float(row["High"])) if active_field == "high" else self._round_price(float(row["Low"]))
                     resolved_date = self.df.iloc[idx]["Date"]
-                    offset = max((float(row["High"]) - float(row["Low"])) * 0.03, 0.01)
+                    tick = 10 ** (-self._precision_for_price(selected))
+                    candle_span = abs(float(row["High"]) - float(row["Low"]))
+                    offset = max(candle_span * 0.12, tick * 8, abs(selected) * 0.002)
                     plot_price = selected + offset if active_field == "high" else selected - offset
                 else:
                     selected = None
@@ -701,6 +718,9 @@ class ChartLevelSelectorUI:
             objects_store = objects_store or []
             if not selected_id:
                 return objects_store
+            if str(selected_id).startswith("fib-group:"):
+                fib_group_id = str(selected_id).split(":", 1)[1]
+                return [obj for obj in objects_store if obj.get("group_id") != fib_group_id]
             return [obj for obj in objects_store if obj.get("id") != selected_id]
 
         @app.callback(
@@ -712,7 +732,7 @@ class ChartLevelSelectorUI:
         )
         def toggle_ichimoku(_, levels_store):
             levels_store = levels_store or {}
-            current = bool(levels_store.get("__show_ichimoku__", True))
+            current = bool(levels_store.get("__show_ichimoku__", False))
             new_value = not current
             levels_store["__show_ichimoku__"] = new_value
             return f"Ichimoku: {'ON' if new_value else 'OFF'}", levels_store
@@ -752,46 +772,33 @@ class ChartLevelSelectorUI:
             Input("active-tool", "data"),
             Input("line-anchor", "data"),
             Input("fib-anchor", "data"),
-            Input("candle-chart", "hoverData"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor, hover_data):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
             draw_objects = list(objects_store)
 
-            hover_point = None
-            if hover_data and hover_data.get("points"):
-                first = hover_data["points"][0]
-                hover_price = self._extract_price(first)
-                hover_date = first.get("x")
-                if hover_price is not None and hover_date is not None:
-                    hover_point = {"x": hover_date, "y": self._round_price(float(hover_price))}
-
-            if active_tool == "line" and line_anchor and hover_point:
-                draw_objects.append(
-                    {
-                        "id": "__preview_line__",
-                        "type": "preview_line",
-                        "label": "",
-                        "x0": line_anchor.get("x"),
-                        "y0": line_anchor.get("y"),
-                        "x1": hover_point["x"],
-                        "y1": hover_point["y"],
-                        "color": "#f59e0b",
-                    }
-                )
-
-            fig = self._build_figure(levels_store, level_points, draw_objects)
+            fig = self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":
                 lines.append(html.Div(f"Active button: {LABELS.get(active_field, active_field)}"))
             for field in SELECTION_SEQUENCE:
                 value = levels_store.get(field)
-                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self.price_precision}f}'}"))
+                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self._precision_for_price(value)}f}'}"))
 
-            obj_options = [{"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")} for obj in objects_store]
+            obj_options = []
+            seen_fib_groups = set()
+            for obj in objects_store:
+                if obj.get("type") == "fib" and obj.get("group_id"):
+                    group_id = obj.get("group_id")
+                    if group_id in seen_fib_groups:
+                        continue
+                    seen_fib_groups.add(group_id)
+                    obj_options.append({"label": f"FIB ({group_id[:8]})", "value": f"fib-group:{group_id}"})
+                    continue
+                obj_options.append({"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")})
 
             btn_styles = []
             for field in SELECTION_SEQUENCE:
@@ -805,9 +812,58 @@ class ChartLevelSelectorUI:
             line_style = tool_active_style if active_tool == "line" else tool_idle_style
             fib_style = tool_active_style if active_tool == "fib" else tool_idle_style
             half_style = tool_active_style if active_tool == "half" else tool_idle_style
-            ichimoku_style = tool_active_style if levels_store.get("__show_ichimoku__", True) else tool_idle_style
+            ichimoku_style = tool_active_style if levels_store.get("__show_ichimoku__", False) else tool_idle_style
 
             return fig, lines, obj_options, *btn_styles, line_style, fib_style, half_style, ichimoku_style
+
+
+        app.clientside_callback(
+            """
+            function(hoverData, figure, activeTool, lineAnchor) {
+                if (!figure) {
+                    return window.dash_clientside.no_update;
+                }
+                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
+                if (activeTool !== 'line' || !lineAnchor) {
+                    if (baseData.length === (figure.data || []).length) {
+                        return window.dash_clientside.no_update;
+                    }
+                    return {...figure, data: baseData};
+                }
+
+                let hoverPoint = null;
+                if (hoverData && hoverData.points && hoverData.points.length > 0) {
+                    const first = hoverData.points[0];
+                    const rawY = first.y ?? first.close ?? first.high ?? first.low ?? first.open;
+                    if (rawY !== null && rawY !== undefined && first.x !== null && first.x !== undefined) {
+                        hoverPoint = {x: first.x, y: Number(rawY)};
+                    }
+                }
+
+                if (!hoverPoint) {
+                    return {...figure, data: baseData};
+                }
+
+                const preview = {
+                    type: 'scatter',
+                    x: [lineAnchor.x, hoverPoint.x],
+                    y: [lineAnchor.y, hoverPoint.y],
+                    mode: 'lines',
+                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                    name: 'Line preview',
+                    hoverinfo: 'skip',
+                    showlegend: false,
+                };
+                return {...figure, data: [...baseData, preview]};
+            }
+            """,
+            Output("candle-chart", "figure", allow_duplicate=True),
+            Input("candle-chart", "hoverData"),
+            State("candle-chart", "figure"),
+            State("active-tool", "data"),
+            State("line-anchor", "data"),
+            prevent_initial_call=True,
+        )
 
         @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
         def hover_info(hover_data):
@@ -823,13 +879,13 @@ class ChartLevelSelectorUI:
                     d = pd.to_datetime(row["Date"], errors="coerce")
                     if price is not None:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
-                        curr_txt = f"  CURSOR:{cursor_price:.{self.price_precision}f}" if cursor_price is not None else "  CURSOR:--"
+                        curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
                         return (
                             f"D:{d_txt}"
-                            f"  O:{row['Open']:.{self.price_precision}f}"
-                            f"  H:{row['High']:.{self.price_precision}f}"
-                            f"  L:{row['Low']:.{self.price_precision}f}"
-                            f"  C:{row['Close']:.{self.price_precision}f}"
+                            f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
+                            f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
+                            f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
+                            f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}"
                             f"{curr_txt}"
                         )
             curr_txt = "  CURSOR:--"
