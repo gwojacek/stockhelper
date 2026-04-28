@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, ctx, dcc, html
+from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 from flask import request
 from werkzeug.serving import WSGIRequestHandler, make_server
 
@@ -56,10 +56,25 @@ class ChartLevelSelectorUI:
         self._finished = False
         self.source_ticker = source_ticker
         self.source_name = source_name
-        self.price_precision = 3 if "DOGE" in str(symbol).upper() else 2
+        self.price_precision = 2
+
+    def _precision_for_price(self, value: float | None = None) -> int:
+        if value is None:
+            if not self.df.empty:
+                value = pd.to_numeric(pd.Series([self.df["Close"].iloc[-1]]), errors="coerce").iloc[0]
+            else:
+                value = 0
+        try:
+            abs_value = abs(float(value))
+        except (TypeError, ValueError):
+            return self.price_precision
+        if abs_value < 1:
+            return 4
+        return self.price_precision
 
     def _round_price(self, value: float) -> float:
-        return round(float(value), self.price_precision)
+        precision = self._precision_for_price(value)
+        return round(float(value), precision)
 
     def _resolve_candle_index(self, date_value):
         if self.df.empty:
@@ -94,7 +109,8 @@ class ChartLevelSelectorUI:
         right = min(len(dates) - 1, idx + size)
         return dates[left], dates[right]
 
-    def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None):
+    def _build_figure(self, current_values: dict, level_points: dict, objects: list[dict] | None = None, active_tool: str = "level"):
+        display_precision = self._precision_for_price()
         show_ichimoku = bool((current_values or {}).get("__show_ichimoku__", True))
         fig = go.Figure(
             data=[
@@ -192,10 +208,10 @@ class ChartLevelSelectorUI:
         y_min = float(self.df["Low"].min())
         y_max = float(self.df["High"].max())
         y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 1200)
+        y_grid = np.linspace(y_min - y_pad, y_max + y_pad, 300)
         x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
         x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        pad_days = 90
+        pad_days = 30
         x_grid = list(self.df["Date"])
         if not pd.isna(x_min_data) and not pd.isna(x_max_data):
             x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
@@ -237,7 +253,7 @@ class ChartLevelSelectorUI:
                     y=[price, price],
                     mode="lines",
                     line={"color": level_colors.get(field, "gray"), "width": 3},
-                    name=f"{LABELS[field]}: {price:.{self.price_precision}f}",
+                    name=f"{LABELS[field]}: {price:.{display_precision}f}",
                     hoverinfo="name",
                     showlegend=True,
                 )
@@ -255,7 +271,7 @@ class ChartLevelSelectorUI:
                             "line": {"width": 1, "color": "#e5e7eb"},
                         },
                         name="ENTRY point",
-                        hovertemplate=f"ENTRY click: %{{y:.{self.price_precision}f}}<extra></extra>",
+                        hovertemplate=f"ENTRY click: %{{y:.{display_precision}f}}<extra></extra>",
                         showlegend=True,
                     )
                 )
@@ -288,7 +304,7 @@ class ChartLevelSelectorUI:
             title=f"{self.symbol} ({self.instrument_type}) - Daily (1Y)",
             xaxis_rangeslider_visible=False,
             hovermode="closest",
-            dragmode="pan",
+            dragmode=False if active_tool in {"line", "fib", "half"} else "pan",
             template="plotly_dark",
             uirevision="keep_zoom",
             margin={"l": 24, "r": 24, "t": 45, "b": 45},
@@ -433,7 +449,7 @@ class ChartLevelSelectorUI:
                         html.Div(id="cursor-box", style={"marginBottom": "8px", "fontFamily": "monospace", "fontSize": "16px", "fontWeight": "600", "textAlign": "center"}),
                         dcc.Graph(
                             id="candle-chart",
-                            figure=self._build_figure(self.values, initial_level_points, initial_objects),
+                            figure=self._build_figure(self.values, initial_level_points, initial_objects, active_tool="level"),
                             style={"height": "82vh"},
                             config={
                                 "scrollZoom": True,
@@ -752,44 +768,21 @@ class ChartLevelSelectorUI:
             Input("active-tool", "data"),
             Input("line-anchor", "data"),
             Input("fib-anchor", "data"),
-            Input("candle-chart", "hoverData"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor, hover_data):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
             draw_objects = list(objects_store)
 
-            hover_point = None
-            if hover_data and hover_data.get("points"):
-                first = hover_data["points"][0]
-                hover_price = self._extract_price(first)
-                hover_date = first.get("x")
-                if hover_price is not None and hover_date is not None:
-                    hover_point = {"x": hover_date, "y": self._round_price(float(hover_price))}
-
-            if active_tool == "line" and line_anchor and hover_point:
-                draw_objects.append(
-                    {
-                        "id": "__preview_line__",
-                        "type": "preview_line",
-                        "label": "",
-                        "x0": line_anchor.get("x"),
-                        "y0": line_anchor.get("y"),
-                        "x1": hover_point["x"],
-                        "y1": hover_point["y"],
-                        "color": "#f59e0b",
-                    }
-                )
-
-            fig = self._build_figure(levels_store, level_points, draw_objects)
+            fig = self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":
                 lines.append(html.Div(f"Active button: {LABELS.get(active_field, active_field)}"))
             for field in SELECTION_SEQUENCE:
                 value = levels_store.get(field)
-                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self.price_precision}f}'}"))
+                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self._precision_for_price(value)}f}'}"))
 
             obj_options = [{"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")} for obj in objects_store]
 
@@ -809,6 +802,42 @@ class ChartLevelSelectorUI:
 
             return fig, lines, obj_options, *btn_styles, line_style, fib_style, half_style, ichimoku_style
 
+
+        @app.callback(
+            Output("candle-chart", "figure", allow_duplicate=True),
+            Input("candle-chart", "hoverData"),
+            State("candle-chart", "figure"),
+            State("active-tool", "data"),
+            State("line-anchor", "data"),
+            prevent_initial_call=True,
+        )
+        def draw_line_preview(hover_data, figure, active_tool, line_anchor):
+            if active_tool != "line" or not line_anchor or not figure:
+                return no_update
+            hover_point = None
+            if hover_data and hover_data.get("points"):
+                first = hover_data["points"][0]
+                hover_price = self._extract_price(first)
+                hover_date = first.get("x")
+                if hover_price is not None and hover_date is not None:
+                    hover_point = {"x": hover_date, "y": self._round_price(float(hover_price))}
+            data = [trace for trace in (figure.get("data") or []) if trace.get("name") != "Line preview"]
+            if hover_point is not None:
+                data.append(
+                    {
+                        "type": "scatter",
+                        "x": [line_anchor.get("x"), hover_point["x"]],
+                        "y": [line_anchor.get("y"), hover_point["y"]],
+                        "mode": "lines",
+                        "line": {"color": "#94a3b8", "width": 1.2, "dash": "dot"},
+                        "name": "Line preview",
+                        "hoverinfo": "skip",
+                        "showlegend": False,
+                    }
+                )
+            figure["data"] = data
+            return figure
+
         @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
         def hover_info(hover_data):
             cursor_price = None
@@ -823,13 +852,13 @@ class ChartLevelSelectorUI:
                     d = pd.to_datetime(row["Date"], errors="coerce")
                     if price is not None:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
-                        curr_txt = f"  CURSOR:{cursor_price:.{self.price_precision}f}" if cursor_price is not None else "  CURSOR:--"
+                        curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
                         return (
                             f"D:{d_txt}"
-                            f"  O:{row['Open']:.{self.price_precision}f}"
-                            f"  H:{row['High']:.{self.price_precision}f}"
-                            f"  L:{row['Low']:.{self.price_precision}f}"
-                            f"  C:{row['Close']:.{self.price_precision}f}"
+                            f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
+                            f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
+                            f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
+                            f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}"
                             f"{curr_txt}"
                         )
             curr_txt = "  CURSOR:--"
