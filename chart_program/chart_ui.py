@@ -618,6 +618,7 @@ class ChartLevelSelectorUI:
 
                 delta = y_end - y_start
                 retrace_levels = [0.0, 0.618, 1.0]
+                fib_group_id = str(uuid4())
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
                 x_common_end = x_right + abs(x_end - x_start) * 3
@@ -641,6 +642,7 @@ class ChartLevelSelectorUI:
                             "y1": y_val,
                             "price": y_val,
                             "color": color or LINE_COLORS["gold"],
+                            "group_id": fib_group_id,
                         }
                     )
                 return levels_store, level_points, objects_store, line_anchor, None, half_anchor, None
@@ -696,6 +698,9 @@ class ChartLevelSelectorUI:
             objects_store = objects_store or []
             if not selected_id:
                 return objects_store
+            if str(selected_id).startswith("fib-group:"):
+                fib_group_id = str(selected_id).split(":", 1)[1]
+                return [obj for obj in objects_store if obj.get("group_id") != fib_group_id]
             return [obj for obj in objects_store if obj.get("id") != selected_id]
 
         @app.callback(
@@ -763,7 +768,17 @@ class ChartLevelSelectorUI:
                 value = levels_store.get(field)
                 lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self._precision_for_price(value)}f}'}"))
 
-            obj_options = [{"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")} for obj in objects_store]
+            obj_options = []
+            seen_fib_groups = set()
+            for obj in objects_store:
+                if obj.get("type") == "fib" and obj.get("group_id"):
+                    group_id = obj.get("group_id")
+                    if group_id in seen_fib_groups:
+                        continue
+                    seen_fib_groups.add(group_id)
+                    obj_options.append({"label": f"FIB ({group_id[:8]})", "value": f"fib-group:{group_id}"})
+                    continue
+                obj_options.append({"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")})
 
             btn_styles = []
             for field in SELECTION_SEQUENCE:
