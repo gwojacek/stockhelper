@@ -385,7 +385,13 @@ class ChartLevelSelectorUI:
 
     @staticmethod
     def _input_style():
-        return {"width": "100%", "color": "black", "background": "white"}
+        return {
+            "width": "100%",
+            "color": "black",
+            "background": "white",
+            "fontSize": "16px",
+            "padding": "6px 8px",
+        }
 
     def run(self):
         app = Dash(__name__)
