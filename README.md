@@ -74,15 +74,22 @@ Strategies run calculations across a set of risk levels (default tuple is common
 
 If you already run this repository locally, keep using your current environment.
 
-### Install (example)
+### Install with Poetry (recommended)
+
+```bash
+poetry install
+poetry shell
+```
+
+### Install with venv + pip (fallback)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install pandas numpy yfinance plotly dash flask tabulate tenacity colorama
 ```
 
-> If `requirements.txt` is not maintained in your branch, install dependencies currently used by your workflow manually.
+> If you want to pin/update dependencies, run `poetry lock` and commit `poetry.lock`.
 
 ---
 
