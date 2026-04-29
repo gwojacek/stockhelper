@@ -11,6 +11,8 @@ from urllib.request import Request, urlopen
 import pandas as pd
 
 
+STOOQ_DEFAULT_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
+
 DATA_DIR_BY_INSTRUMENT = {
     "stock": Path("data/stocks"),
     "commodity": Path("data/commodities"),
@@ -249,6 +251,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     normalized = "\n".join(lines[header_index:])
     df = pd.read_csv(StringIO(normalized), sep=separator, on_bad_lines="skip")
 
+    df.columns = [str(c).strip().title() for c in df.columns]
     required_columns = {"Date", "Open", "High", "Low", "Close"}
     if not required_columns.issubset(df.columns):
         raise ValueError("CSV is missing required OHLC columns.")
