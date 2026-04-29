@@ -748,6 +748,8 @@ class ChartLevelSelectorUI:
             if selected is not None:
                 levels_store[active_field] = selected
                 level_points[active_field] = {"price": selected, "plot_price": self._round_price(plot_price), "date": resolved_date}
+                if active_field == "stop_loss":
+                    levels_store["__half_points__"] = []
 
             self.values = dict(levels_store)
             self.values["drawn_objects"] = objects_store
