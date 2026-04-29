@@ -88,6 +88,29 @@ pip install -r requirements.txt
 
 ## Running analysis directly
 
+
+## Super-short commands (auto-dispatch)
+
+Use the new launcher script:
+
+```bash
+python run ena
+python run eurusd_long
+python run cocoa_short
+```
+
+It auto-detects instrument type and runs:
+- stocks -> `main_stock.py`
+- forex/commodities -> `main.py`
+
+To open chart mode directly:
+
+```bash
+python run -c ena
+python run -c eurusd_long
+```
+
+
 ### Stocks
 
 Run with a generated or existing stock config:
