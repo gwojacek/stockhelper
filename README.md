@@ -99,7 +99,7 @@ python run eurusd_long
 python run cocoa_short
 ```
 
-It auto-detects instrument type and runs:
+It first checks existing files in `configs/stocks`, `configs/forex`, and `configs/commodities` (case-insensitive normalized matching), then falls back to symbol-based detection. It runs:
 - stocks -> `main_stock.py`
 - forex/commodities -> `main.py`
 
