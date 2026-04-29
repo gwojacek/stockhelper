@@ -316,7 +316,7 @@ class ChartLevelSelectorUI:
                         x=half_x,
                         y=half_y,
                         mode="markers",
-                        marker={"size": 4, "symbol": "circle", "color": "#ef4444", "line": {"width": 0}},
+                        marker={"size": 4, "symbol": "square", "color": "#a855f7", "line": {"width": 0}},
                         name="Half→SL points",
                         hovertemplate=f"Half point: %{{y:.{display_precision}f}}<extra></extra>",
                         showlegend=True,
