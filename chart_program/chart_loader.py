@@ -305,34 +305,34 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
-def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None]:
+def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name
+        return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
     if data_source == "stooq":
         df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-        return df, "stooq", candidate, None
+        return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
     primary_error = None
     try:
         if instrument_type == "commodity":
             df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-            return df, "stooq", candidate, None
+            return df, "stooq", candidate, None, "Stooq succeeded as primary commodity source."
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name
+        return df, "yahoo", candidate, display_name, "Yahoo succeeded as primary source for this instrument."
     except ValueError as exc:
         primary_error = exc
 
     try:
         if instrument_type == "commodity":
             df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-            return df, "yahoo", candidate, display_name
+            return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
         df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-        return df, "stooq", candidate, None
-    except ValueError as stooq_exc:
+        return df, "stooq", candidate, None, f"Yahoo failed, fallback to Stooq: {primary_error}"
+    except ValueError as secondary_exc:
         if instrument_type == "commodity":
-            raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {stooq_exc}") from stooq_exc
-        raise ValueError(f"Yahoo failed: {primary_error} ; Stooq failed: {stooq_exc}") from stooq_exc
+            raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {secondary_exc}") from secondary_exc
+        raise ValueError(f"Yahoo failed: {primary_error} ; Stooq failed: {secondary_exc}") from secondary_exc
 
 
 def load_or_update_daily_data(
@@ -357,10 +357,10 @@ def load_or_update_daily_data(
             local = None
 
     try:
-        remote, source, source_symbol, source_name = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
+        remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
-            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title()}
+            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
         raise
 
     if local is not None and not local.empty:
@@ -383,4 +383,4 @@ def load_or_update_daily_data(
             display_symbol = preferred_stooq_symbol.upper()
     elif instrument_type == "stock":
         display_name = source_name or symbol.upper()
-    return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name}
+    return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name, "fallback_reason": fallback_reason}

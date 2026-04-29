@@ -68,7 +68,15 @@ def main() -> int:
     result = run_level_selector(forwarded)
     if isinstance(result, dict) and result.get("data_symbol"):
         src_name = result.get("data_name") or target
-        print(f"Candle source: {result.get('data_source')} | Name: {src_name} | Ticker: {result.get('data_symbol')}")
+        source = result.get("data_source")
+        reason = result.get("data_fallback_reason")
+        print(f"Candle source: {source} | Name: {src_name} | Ticker: {result.get('data_symbol')}")
+        if reason:
+            print(f"Source note: {reason}")
+        elif source == "stooq":
+            print("Source note: Stooq returned valid data (primary source in this flow).")
+        elif source == "yahoo":
+            print("Source note: Yahoo was used as configured/available source.")
     if isinstance(result, dict) and result.get("message"):
         print(result["message"])
     else:
