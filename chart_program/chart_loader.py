@@ -243,6 +243,14 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
             header_index = i
             separator = ";"
             break
+        if line_lower.startswith("data,otwarcie,najwyzszy,najnizszy,zamkniecie"):
+            header_index = i
+            separator = ","
+            break
+        if line_lower.startswith("data;otwarcie;najwyzszy;najnizszy;zamkniecie"):
+            header_index = i
+            separator = ";"
+            break
 
     if header_index is None:
         preview = " | ".join(line.strip() for line in lines[:5])
@@ -251,6 +259,14 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     normalized = "\n".join(lines[header_index:])
     df = pd.read_csv(StringIO(normalized), sep=separator, on_bad_lines="skip")
 
+    df = df.rename(columns={
+        "Data": "Date",
+        "Otwarcie": "Open",
+        "Najwyzszy": "High",
+        "Najnizszy": "Low",
+        "Zamkniecie": "Close",
+        "Wolumen": "Volume",
+    })
     df.columns = [str(c).strip().title() for c in df.columns]
     required_columns = {"Date", "Open", "High", "Low", "Close"}
     if not required_columns.issubset(df.columns):
