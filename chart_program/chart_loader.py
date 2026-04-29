@@ -48,9 +48,15 @@ COMMODITY_YAHOO_MAP = {
 
 COMMODITY_STOOQ_MAP = {
     "GOLD": "xauusd",
+    "XAUUSD": "xauusd",
+    "XAU/USD": "xauusd",
     "SILVER": "xagusd",
+    "XAGUSD": "xagusd",
+    "XAG/USD": "xagusd",
     "PLATINUM": "pl.f",
     "PALLADIUM": "xpdusd",
+    "XPDUSD": "xpdusd",
+    "XPD/USD": "xpdusd",
     "COFFEE": "kc.f",
     "COCOA": "cc.f",
     "SUGAR": "sb.f",
