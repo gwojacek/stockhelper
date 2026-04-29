@@ -21,23 +21,35 @@ def _match_in_dir(directory: Path, target: str) -> list[Path]:
     return [p for p in directory.glob("*.py") if _normalize_key(p.stem).startswith(key)]
 
 
-def _detect_by_existing_config(target: str) -> str | None:
+def _resolve_existing_config_path(target: str) -> Path | None:
     groups = [
-        ("stock", PROJECT_ROOT / "configs" / "stocks"),
-        ("forex", PROJECT_ROOT / "configs" / "forex"),
-        ("commodity", PROJECT_ROOT / "configs" / "commodities"),
+        PROJECT_ROOT / "configs" / "stocks",
+        PROJECT_ROOT / "configs" / "forex",
+        PROJECT_ROOT / "configs" / "commodities",
     ]
-    found: list[tuple[str, Path]] = []
-    for instrument_type, directory in groups:
+    found: list[Path] = []
+    for directory in groups:
         matches = _match_in_dir(directory, target)
         if len(matches) == 1:
-            found.append((instrument_type, matches[0]))
+            found.append(matches[0])
         elif len(matches) > 1:
-            # ambiguous inside one class: still treat as found class and let downstream runner report specifics
-            found.append((instrument_type, matches[0]))
+            found.append(matches[0])
 
     if len(found) == 1:
-        return found[0][0]
+        return found[0]
+    return None
+
+
+def _instrument_type_from_path(path: Path | None) -> str | None:
+    if not path:
+        return None
+    parts = [p.lower() for p in path.parts]
+    if "stocks" in parts:
+        return "stock"
+    if "forex" in parts:
+        return "forex"
+    if "commodities" in parts:
+        return "commodity"
     return None
 
 
@@ -46,22 +58,28 @@ def _resolve_runner(instrument_type: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        prog="run",
-        description="Ultra-short launcher: auto-picks main_stock/main by symbol; -c opens chart_program.",
-    )
+    parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
     parser.add_argument("target", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
     args = parser.parse_args()
 
     target = args.target.strip()
+    resolved_path = _resolve_existing_config_path(target)
 
     if args.chart:
-        cmd = [sys.executable, "-m", "chart_program", target]
+        if resolved_path:
+            chart_target = resolved_path.stem
+            cmd = [sys.executable, "-m", "chart_program", chart_target, "--config", str(resolved_path)]
+            instrument_type = _instrument_type_from_path(resolved_path)
+            if instrument_type:
+                cmd.extend(["--instrument", instrument_type])
+        else:
+            cmd = [sys.executable, "-m", "chart_program", target]
     else:
-        instrument_type = _detect_by_existing_config(target) or detect_instrument_type(target, None)
+        instrument_type = _instrument_type_from_path(resolved_path) or detect_instrument_type(target, None)
         runner = _resolve_runner(instrument_type)
-        cmd = [sys.executable, str(PROJECT_ROOT / runner), target]
+        arg = str(resolved_path) if resolved_path else target
+        cmd = [sys.executable, str(PROJECT_ROOT / runner), arg]
 
     return subprocess.call(cmd)
 
