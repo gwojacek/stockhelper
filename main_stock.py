@@ -11,6 +11,10 @@ from core.factory import StrategyFactory
 DEFAULT_STOCK_CONFIG = "BFT"
 
 
+def _normalize_config_key(value: str) -> str:
+    return "".join(ch for ch in (value or "").lower() if ch.isalnum())
+
+
 def analyze(config_module):
     strategy = StrategyFactory.create(config_module.TradingConfig())
     strategy.calculate()
@@ -34,26 +38,33 @@ def _resolve_stock_config_path(config_input: str) -> Path:
     if candidate.suffix == ".py" and candidate.exists():
         return candidate
 
-    normalized = config_input.strip().lower().replace(".py", "")
-    slug_path = PROJECT_ROOT / "configs" / "stocks" / f"{normalized}.py"
-    if slug_path.exists():
-        return slug_path
-
     stock_dir = PROJECT_ROOT / "configs" / "stocks"
-    matches = sorted(stock_dir.glob(f"{normalized}*.py"))
-    if len(matches) == 1:
-        return matches[0]
+    raw = (config_input or "").strip().replace(".py", "")
+    normalized_input = _normalize_config_key(raw)
 
-    if len(matches) > 1:
-        candidates = ", ".join(m.stem for m in matches)
+    exact_matches = [
+        path for path in stock_dir.glob("*.py") if _normalize_config_key(path.stem) == normalized_input
+    ]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+
+    prefix_matches = [
+        path for path in stock_dir.glob("*.py") if _normalize_config_key(path.stem).startswith(normalized_input)
+    ]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+
+    if len(exact_matches) > 1 or len(prefix_matches) > 1:
+        ambiguous = exact_matches if len(exact_matches) > 1 else prefix_matches
+        candidates = ", ".join(sorted(p.stem for p in ambiguous))
         raise FileNotFoundError(
             f"Ambiguous stock config '{config_input}'. Matches: {candidates}. "
-            "Please pass a full slug/path."
+            "Please pass a full path."
         )
 
     raise FileNotFoundError(
         f"Stock config not found: {config_input}. "
-        f"Tried explicit path and {slug_path} and prefix match in {stock_dir}"
+        f"Searched in {stock_dir} using case-insensitive and normalized matching."
     )
 
 def main() -> int:
