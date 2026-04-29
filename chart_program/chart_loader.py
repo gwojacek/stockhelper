@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 import pandas as pd
 
@@ -224,8 +224,7 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
 
 
 def _download_text(url: str) -> str:
-    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(req, timeout=20) as response:
+    with urlopen(url, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
@@ -274,21 +273,16 @@ def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = Non
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
         effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
-        urls = [
-            _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl"),
-                        _stooq_url(candidate, domain="stooq.pl"),
-            _stooq_url(candidate, domain="stooq.com"),
-        ]
+        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl")
 
-        for url in urls:
-            try:
-                text = _download_text(url)
-                df = _parse_stooq_csv_text(text)
-                if not df.empty:
-                    return df, candidate
-                errors.append(f"{candidate}: empty data from {url}")
-            except (URLError, ValueError, pd.errors.ParserError) as exc:
-                errors.append(f"{candidate}: {exc} | url={url}")
+        try:
+            text = _download_text(url)
+            df = _parse_stooq_csv_text(text)
+            if not df.empty:
+                return df, candidate
+            errors.append(f"{candidate}: empty data from {url}")
+        except (URLError, ValueError, pd.errors.ParserError) as exc:
+            errors.append(f"{candidate}: {exc} | url={url}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
