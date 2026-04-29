@@ -48,6 +48,7 @@ class ChartLevelSelectorUI:
         preset_values: dict | None = None,
         source_ticker: str | None = None,
         source_name: str | None = None,
+        source_provider: str | None = None,
     ):
         self.symbol = symbol
         self.df = dataframe.dropna(subset=["Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
@@ -56,6 +57,7 @@ class ChartLevelSelectorUI:
         self._finished = False
         self.source_ticker = source_ticker
         self.source_name = source_name
+        self.source_provider = (source_provider or "unknown").upper()
         self.price_precision = 3 if instrument_type == "forex" else 2
 
     def _precision_for_price(self, value: float | None = None) -> int:
@@ -99,6 +101,15 @@ class ChartLevelSelectorUI:
                 ticktext.append(d.strftime("%Y") if d.month == 1 else d.strftime("%b"))
                 prev = label_key
         return tickvals, ticktext
+
+    def _missing_trading_days(self):
+        dates = pd.to_datetime(self.df["Date"], errors="coerce").dropna()
+        if dates.empty:
+            return []
+        observed = set(dates.dt.normalize())
+        full = pd.date_range(dates.min(), dates.max(), freq="B")
+        missing = [d.strftime("%Y-%m-%d") for d in full if d not in observed]
+        return missing
 
     def _has_weekend_data(self) -> bool:
         dates = pd.to_datetime(self.df["Date"], errors="coerce")
@@ -332,6 +343,7 @@ class ChartLevelSelectorUI:
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
         tickvals, ticktext = self._monthly_ticks()
+        missing_business_days = self._missing_trading_days()
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -345,7 +357,7 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            rangebreaks=[] if has_weekend_data else [dict(bounds=["sat", "mon"])],
+            rangebreaks=([dict(values=missing_business_days)] if missing_business_days else []) if has_weekend_data else [dict(bounds=["sat", "mon"]), dict(values=missing_business_days)],
         )
         fig.update_yaxes(
             showspikes=True,
@@ -459,12 +471,13 @@ class ChartLevelSelectorUI:
                 html.Div(
                     style={"borderLeft": "1px solid #1f2937", "padding": "16px", "background": "#0b1220", "overflowY": "auto"},
                     children=[
-                        html.H4(f"Instrument: {self.instrument_type.upper()}"),
                         html.Div(
                             f"Name/Ticker: {self.source_name or self.symbol}"
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
-                            style={"marginBottom": "12px"},
+                            style={"marginBottom": "8px", "fontWeight": "800", "fontSize": "20px", "color": "#f8fafc"},
                         ),
+                        html.H4(f"Instrument: {self.instrument_type.upper()}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
+                        html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd", "fontSize": "16px"}),
                         html.H4("Selected values", style={"marginTop": 0}),
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),

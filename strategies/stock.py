@@ -7,6 +7,7 @@ from utilities.yahoo_finance import (
     get_avg_daily_turnover_yahoo,
     get_daily_turnovers_yahoo,
     get_fx_to_pln_rate_yahoo,
+    get_last_turnover_source,
     get_symbol_currency_yahoo,
 )
 
@@ -62,6 +63,7 @@ class StockStrategy(BaseStrategy):
         self.currency_pair_used = "PLNPLN=X"
         self.fx_rate_to_pln = 1.0
         self.stock_currency = "PLN"
+        self.turnover_data_source = "unknown"
 
         try:
             avg_daily_turnover = get_avg_daily_turnover_yahoo(
@@ -71,6 +73,7 @@ class StockStrategy(BaseStrategy):
                 self.config.symbol, period="20d"
             )
             self.stock_currency = get_symbol_currency_yahoo(self.config.symbol)
+            self.turnover_data_source = get_last_turnover_source()
             self.currency_pair_used, self.fx_rate_to_pln = get_fx_to_pln_rate_yahoo(
                 self.stock_currency
             )
@@ -90,6 +93,7 @@ class StockStrategy(BaseStrategy):
             self.currency_pair_used = "PLNPLN=X"
             self.fx_rate_to_pln = 1.0
             self.stock_currency = "PLN"
+            self.turnover_data_source = "default"
             self.used_default_turnover = True
 
         avg_daily_turnover_pln = avg_daily_turnover * self.fx_rate_to_pln
@@ -187,6 +191,7 @@ class StockStrategy(BaseStrategy):
             print(
                 f"FX conversion used: {self.currency_pair_used} = {self.fx_rate_to_pln:.4f} (daily turnover converted from {self.stock_currency} to PLN)"
             )
+        print(f"Turnover data source: {self.turnover_data_source}")
         print(f"GDP multiplier used ({country_code}/PL): {gdp_multiplier:.4f}x")
 
         if self.config.max_capital < min_capital_ichimoku:

@@ -3,12 +3,15 @@ from __future__ import annotations
 from io import StringIO
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 import pandas as pd
 
+
+STOOQ_DEFAULT_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 
 DATA_DIR_BY_INSTRUMENT = {
     "stock": Path("data/stocks"),
@@ -45,9 +48,15 @@ COMMODITY_YAHOO_MAP = {
 
 COMMODITY_STOOQ_MAP = {
     "GOLD": "xauusd",
+    "XAUUSD": "xauusd",
+    "XAU/USD": "xauusd",
     "SILVER": "xagusd",
+    "XAGUSD": "xagusd",
+    "XAG/USD": "xagusd",
     "PLATINUM": "pl.f",
     "PALLADIUM": "xpdusd",
+    "XPDUSD": "xpdusd",
+    "XPD/USD": "xpdusd",
     "COFFEE": "kc.f",
     "COCOA": "cc.f",
     "SUGAR": "sb.f",
@@ -221,8 +230,7 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
 
 
 def _download_text(url: str) -> str:
-    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(req, timeout=20) as response:
+    with urlopen(url, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
@@ -231,7 +239,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     header_index = None
     separator = ","
     for i, raw_line in enumerate(lines):
-        line = raw_line.strip()
+        line = raw_line.strip().lstrip("﻿")
         line_lower = line.lower()
         if line_lower.startswith("date,open,high,low,close"):
             header_index = i
@@ -241,13 +249,31 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
             header_index = i
             separator = ";"
             break
+        if line_lower.startswith("data,otwarcie,najwyzszy,najnizszy,zamkniecie"):
+            header_index = i
+            separator = ","
+            break
+        if line_lower.startswith("data;otwarcie;najwyzszy;najnizszy;zamkniecie"):
+            header_index = i
+            separator = ";"
+            break
 
     if header_index is None:
-        raise ValueError("Stooq response does not contain expected CSV header.")
+        preview = " | ".join(line.strip() for line in lines[:5])
+        raise ValueError(f"Stooq response does not contain expected CSV header. Preview: {preview[:400]}")
 
     normalized = "\n".join(lines[header_index:])
     df = pd.read_csv(StringIO(normalized), sep=separator, on_bad_lines="skip")
 
+    df = df.rename(columns={
+        "Data": "Date",
+        "Otwarcie": "Open",
+        "Najwyzszy": "High",
+        "Najnizszy": "Low",
+        "Zamkniecie": "Close",
+        "Wolumen": "Volume",
+    })
+    df.columns = [str(c).strip().title() for c in df.columns]
     required_columns = {"Date", "Open", "High", "Low", "Close"}
     if not required_columns.issubset(df.columns):
         raise ValueError("CSV is missing required OHLC columns.")
@@ -258,7 +284,9 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
 
 
 def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
-    query = {"s": symbol, "i": "d"}
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=364)
+    query = {"s": symbol, "i": "d", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")}
     if api_key and param_name:
         query[param_name] = api_key
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
@@ -267,29 +295,17 @@ def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None =
 def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
-        urls = [
-            _stooq_url(candidate, domain="stooq.pl"),
-            _stooq_url(candidate, domain="stooq.com"),
-        ]
-        if api_key:
-            urls.extend(
-                [
-                    _stooq_url(candidate, api_key=api_key, param_name="apikey", domain="stooq.pl"),
-                    _stooq_url(candidate, api_key=api_key, param_name="api_key", domain="stooq.pl"),
-                    _stooq_url(candidate, api_key=api_key, param_name="apikey", domain="stooq.com"),
-                    _stooq_url(candidate, api_key=api_key, param_name="api_key", domain="stooq.com"),
-                ]
-            )
+        effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
+        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl")
 
-        for url in urls:
-            try:
-                text = _download_text(url)
-                df = _parse_stooq_csv_text(text)
-                if not df.empty:
-                    return df, candidate
-                errors.append(f"{candidate}: empty data from {url}")
-            except (URLError, ValueError, pd.errors.ParserError) as exc:
-                errors.append(f"{candidate}: {exc}")
+        try:
+            text = _download_text(url)
+            df = _parse_stooq_csv_text(text)
+            if not df.empty:
+                return df, candidate
+            errors.append(f"{candidate}: empty data from {url}")
+        except (URLError, ValueError, pd.errors.ParserError) as exc:
+            errors.append(f"{candidate}: {exc} | url={url}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
@@ -305,34 +321,26 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
-def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None]:
+def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name
+        return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
     if data_source == "stooq":
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-        return df, "stooq", candidate, None
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
     primary_error = None
     try:
-        if instrument_type == "commodity":
-            df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-            return df, "stooq", candidate, None
-        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
 
     try:
-        if instrument_type == "commodity":
-            df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-            return df, "yahoo", candidate, display_name
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
-        return df, "stooq", candidate, None
-    except ValueError as stooq_exc:
-        if instrument_type == "commodity":
-            raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {stooq_exc}") from stooq_exc
-        raise ValueError(f"Yahoo failed: {primary_error} ; Stooq failed: {stooq_exc}") from stooq_exc
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
+    except ValueError as secondary_exc:
+        raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {secondary_exc}") from secondary_exc
 
 
 def load_or_update_daily_data(
@@ -357,10 +365,10 @@ def load_or_update_daily_data(
             local = None
 
     try:
-        remote, source, source_symbol, source_name = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
+        remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
         if local is not None and not local.empty:
-            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title()}
+            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
         raise
 
     if local is not None and not local.empty:
@@ -383,4 +391,4 @@ def load_or_update_daily_data(
             display_symbol = preferred_stooq_symbol.upper()
     elif instrument_type == "stock":
         display_name = source_name or symbol.upper()
-    return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name}
+    return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name, "fallback_reason": fallback_reason}

@@ -400,6 +400,7 @@ def run_level_selector(raw_args=None):
         preset_values=existing,
         source_ticker=fetch_info.get("symbol"),
         source_name=fetch_info.get("name"),
+        source_provider=fetch_info.get("source"),
     )
     selected = ui.run()
     _save_session_state(config_path, selected)
@@ -414,6 +415,7 @@ def run_level_selector(raw_args=None):
             "data_source": fetch_info.get("source"),
             "data_symbol": fetch_info.get("symbol"),
             "data_name": fetch_info.get("name"),
+            "data_fallback_reason": fetch_info.get("fallback_reason"),
             "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
@@ -503,4 +505,5 @@ def run_level_selector(raw_args=None):
         "data_source": fetch_info.get("source"),
         "data_symbol": fetch_info.get("symbol"),
         "data_name": fetch_info.get("name"),
+        "data_fallback_reason": fetch_info.get("fallback_reason"),
     }
