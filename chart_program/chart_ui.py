@@ -385,7 +385,13 @@ class ChartLevelSelectorUI:
 
     @staticmethod
     def _input_style():
-        return {"width": "100%", "color": "black", "background": "white"}
+        return {
+            "width": "100%",
+            "color": "black",
+            "background": "white",
+            "fontSize": "16px",
+            "padding": "6px 8px",
+        }
 
     def run(self):
         app = Dash(__name__)
@@ -413,6 +419,8 @@ class ChartLevelSelectorUI:
             return "ok"
 
         is_stock = self.instrument_type == "stock"
+        has_saved_levels = any((self.values or {}).get(field) is not None for field in SELECTION_SEQUENCE)
+        initial_active_field = None if has_saved_levels else "high"
         is_commodity = self.instrument_type == "commodity"
         ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", False))
         currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
@@ -521,7 +529,7 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="levels-store", data=self.values),
                 dcc.Store(id="level-points-store", data=initial_level_points),
                 dcc.Store(id="objects-store", data=initial_objects),
-                dcc.Store(id="active-field", data="entry"),
+                dcc.Store(id="active-field", data=initial_active_field),
                 dcc.Store(id="active-tool", data="level"),
                 dcc.Store(id="line-anchor", data=None),
                 dcc.Store(id="fib-anchor", data=None),
@@ -617,6 +625,9 @@ class ChartLevelSelectorUI:
             price = self._extract_price(point)
             date = point.get("x")
             if price is None:
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, None
+
+            if active_tool == "level" and active_field not in SELECTION_SEQUENCE:
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, None
 
             if active_tool == "line":
@@ -824,7 +835,8 @@ class ChartLevelSelectorUI:
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":
-                lines.append(html.Div(f"Active button: {LABELS.get(active_field, active_field)}"))
+                active_label = LABELS.get(active_field, "NONE") if active_field else "NONE"
+                lines.append(html.Div(f"Active button: {active_label}"))
             for field in SELECTION_SEQUENCE:
                 value = levels_store.get(field)
                 lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self._precision_for_price(value)}f}'}"))
