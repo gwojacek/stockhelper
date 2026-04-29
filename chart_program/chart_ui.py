@@ -261,7 +261,7 @@ class ChartLevelSelectorUI:
             point = (level_points or {}).get(field)
             if not point:
                 continue
-            price = point.get("plot_price", point.get("price"))
+            price = point.get("price", point.get("plot_price"))
             date = point.get("date")
             x0, x1 = self._date_window(date)
             if x0 is None:
