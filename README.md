@@ -105,11 +105,13 @@ If you run without config argument, the default demo config is used (`BFT`).
 ### Commodities / Forex
 
 ```bash
-python main.py --config configs/commodities/gold_short.py
-python main.py --config configs/forex/eurusd_long.py
+python -m main cocoa_short
+python -m main eurusd_long
 ```
 
-If you run without `--config`, `main.py` uses a default demo commodity config.
+You can also pass full paths, e.g. `python -m main configs/commodities/Cocoa_short.py`.
+
+If you run without config argument, `main.py` uses a default demo commodity config.
 
 ---
 
