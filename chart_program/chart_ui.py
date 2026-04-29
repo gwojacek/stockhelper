@@ -102,6 +102,15 @@ class ChartLevelSelectorUI:
                 prev = label_key
         return tickvals, ticktext
 
+    def _missing_trading_days(self):
+        dates = pd.to_datetime(self.df["Date"], errors="coerce").dropna()
+        if dates.empty:
+            return []
+        observed = set(dates.dt.normalize())
+        full = pd.date_range(dates.min(), dates.max(), freq="B")
+        missing = [d.strftime("%Y-%m-%d") for d in full if d not in observed]
+        return missing
+
     def _has_weekend_data(self) -> bool:
         dates = pd.to_datetime(self.df["Date"], errors="coerce")
         if dates.empty:
@@ -334,6 +343,7 @@ class ChartLevelSelectorUI:
             legend={"orientation": "h", "y": 1.02, "x": 0},
         )
         tickvals, ticktext = self._monthly_ticks()
+        missing_business_days = self._missing_trading_days()
         fig.update_xaxes(
             showspikes=True,
             spikemode="toaxis+across",
@@ -347,7 +357,7 @@ class ChartLevelSelectorUI:
             ticktext=ticktext,
             tickangle=0,
             ticklabelposition="outside",
-            rangebreaks=[] if has_weekend_data else [dict(bounds=["sat", "mon"])],
+            rangebreaks=([dict(values=missing_business_days)] if missing_business_days else []) if has_weekend_data else [dict(bounds=["sat", "mon"]), dict(values=missing_business_days)],
         )
         fig.update_yaxes(
             showspikes=True,
