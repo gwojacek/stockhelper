@@ -208,8 +208,9 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
                 candidates.append(f"{left}.pl")
             candidates.append(left)
         else:
-            candidates.append(cleaned)
+            # Prefer Warsaw listing symbol first for local stock slugs (e.g. "cog" -> "cog.pl").
             candidates.append(f"{cleaned}.pl")
+            candidates.append(cleaned)
     elif instrument_type == "commodity":
         mapped = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
         if mapped:
@@ -282,6 +283,45 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
     return _last_year_only(df)
 
+def _stooq_live_quote_url(symbol: str, domain: str = "stooq.pl") -> str:
+    query = {"s": symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"}
+    return f"https://{domain}/q/l/?{urlencode(query)}"
+
+
+def _merge_stooq_current_quote(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    url = _stooq_live_quote_url(symbol)
+    text = _download_text(url)
+    quote_df = pd.read_csv(StringIO(text), sep=",", on_bad_lines="skip")
+    quote_df.columns = [str(c).strip().title() for c in quote_df.columns]
+    required = {"Date", "Open", "High", "Low", "Close"}
+    if not required.issubset(set(quote_df.columns)) or quote_df.empty:
+        return df
+
+    quote_row = quote_df.iloc[0].copy()
+    quote_date = pd.to_datetime(quote_row.get("Date"), errors="coerce")
+    if pd.isna(quote_date):
+        return df
+
+    live_row = {
+        "Date": quote_date,
+        "Open": pd.to_numeric(quote_row.get("Open"), errors="coerce"),
+        "High": pd.to_numeric(quote_row.get("High"), errors="coerce"),
+        "Low": pd.to_numeric(quote_row.get("Low"), errors="coerce"),
+        "Close": pd.to_numeric(quote_row.get("Close"), errors="coerce"),
+    }
+    if any(pd.isna(live_row[c]) for c in ["Open", "High", "Low", "Close"]):
+        return df
+
+    if "Volume" in df.columns:
+        live_row["Volume"] = pd.to_numeric(quote_row.get("Volume"), errors="coerce")
+
+    result = df.copy()
+    result["Date"] = pd.to_datetime(result["Date"], errors="coerce")
+    result = result[result["Date"].dt.date != quote_date.date()]
+    result = pd.concat([result, pd.DataFrame([live_row])], ignore_index=True)
+    result = result.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    return _last_year_only(result)
+
 
 def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
     end = datetime.now(timezone.utc).date()
@@ -302,6 +342,10 @@ def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = Non
             text = _download_text(url)
             df = _parse_stooq_csv_text(text)
             if not df.empty:
+                try:
+                    df = _merge_stooq_current_quote(df, candidate)
+                except Exception:
+                    pass
                 return df, candidate
             errors.append(f"{candidate}: empty data from {url}")
         except (URLError, ValueError, pd.errors.ParserError) as exc:
