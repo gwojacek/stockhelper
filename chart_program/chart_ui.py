@@ -306,6 +306,23 @@ class ChartLevelSelectorUI:
                     )
                 )
 
+        half_points = current_values.get("__half_points__", []) if isinstance(current_values, dict) else []
+        if half_points:
+            half_x = [pt.get("date") for pt in half_points if pt.get("date") is not None]
+            half_y = [pt.get("price") for pt in half_points if pt.get("date") is not None and pt.get("price") is not None]
+            if half_x and half_y and len(half_x) == len(half_y):
+                fig.add_trace(
+                    go.Scatter(
+                        x=half_x,
+                        y=half_y,
+                        mode="markers",
+                        marker={"size": 4, "symbol": "square", "color": "#a855f7", "line": {"width": 0}},
+                        name="Half→SL points",
+                        hovertemplate=f"Half point: %{{y:.{display_precision}f}}<extra></extra>",
+                        showlegend=True,
+                    )
+                )
+
         for obj in (objects or []):
             obj_type = obj.get("type")
             is_preview_line = obj_type == "preview_line"
@@ -694,12 +711,17 @@ class ChartLevelSelectorUI:
             if active_tool == "half":
                 current_price = self._round_price(price)
                 if half_anchor is None:
+                    levels_store["__half_points__"] = [{"date": date, "price": current_price}]
                     return levels_store, level_points, objects_store, line_anchor, fib_anchor, {"x": date, "y": current_price}, None
                 midpoint = self._round_price((half_anchor["y"] + current_price) / 2.0)
                 idx = self._resolve_candle_index(date)
                 resolved_date = self.df.iloc[idx]["Date"] if idx is not None else date
                 levels_store["stop_loss"] = midpoint
                 level_points["stop_loss"] = {"price": midpoint, "plot_price": midpoint, "date": resolved_date}
+                levels_store["__half_points__"] = [
+                    {"date": half_anchor.get("x"), "price": half_anchor.get("y")},
+                    {"date": resolved_date, "price": current_price},
+                ]
                 self.values = levels_store
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, None, None
 
@@ -726,6 +748,8 @@ class ChartLevelSelectorUI:
             if selected is not None:
                 levels_store[active_field] = selected
                 level_points[active_field] = {"price": selected, "plot_price": self._round_price(plot_price), "date": resolved_date}
+                if active_field == "stop_loss":
+                    levels_store["__half_points__"] = []
 
             self.values = dict(levels_store)
             self.values["drawn_objects"] = objects_store
