@@ -245,7 +245,8 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
             break
 
     if header_index is None:
-        raise ValueError("Stooq response does not contain expected CSV header.")
+        preview = " | ".join(line.strip() for line in lines[:5])
+        raise ValueError(f"Stooq response does not contain expected CSV header. Preview: {preview[:400]}")
 
     normalized = "\n".join(lines[header_index:])
     df = pd.read_csv(StringIO(normalized), sep=separator, on_bad_lines="skip")
