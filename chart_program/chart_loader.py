@@ -310,13 +310,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
     if data_source == "stooq":
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
     primary_error = None
     try:
         if instrument_type == "commodity":
-            df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+            df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
             return df, "stooq", candidate, None, "Stooq succeeded as primary commodity source."
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo succeeded as primary source for this instrument."
@@ -327,7 +327,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         if instrument_type == "commodity":
             df, candidate, display_name = _yahoo_download(symbol, instrument_type)
             return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
         return df, "stooq", candidate, None, f"Yahoo failed, fallback to Stooq: {primary_error}"
     except ValueError as secondary_exc:
         if instrument_type == "commodity":

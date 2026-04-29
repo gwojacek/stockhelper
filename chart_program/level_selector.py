@@ -400,6 +400,7 @@ def run_level_selector(raw_args=None):
         preset_values=existing,
         source_ticker=fetch_info.get("symbol"),
         source_name=fetch_info.get("name"),
+        source_provider=fetch_info.get("source"),
     )
     selected = ui.run()
     _save_session_state(config_path, selected)

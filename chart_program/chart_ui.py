@@ -48,6 +48,7 @@ class ChartLevelSelectorUI:
         preset_values: dict | None = None,
         source_ticker: str | None = None,
         source_name: str | None = None,
+        source_provider: str | None = None,
     ):
         self.symbol = symbol
         self.df = dataframe.dropna(subset=["Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
@@ -56,6 +57,7 @@ class ChartLevelSelectorUI:
         self._finished = False
         self.source_ticker = source_ticker
         self.source_name = source_name
+        self.source_provider = (source_provider or "unknown").upper()
         self.price_precision = 3 if instrument_type == "forex" else 2
 
     def _precision_for_price(self, value: float | None = None) -> int:
@@ -463,8 +465,9 @@ class ChartLevelSelectorUI:
                         html.Div(
                             f"Name/Ticker: {self.source_name or self.symbol}"
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
-                            style={"marginBottom": "12px"},
+                            style={"marginBottom": "6px"},
                         ),
+                        html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd"}),
                         html.H4("Selected values", style={"marginTop": 0}),
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),
