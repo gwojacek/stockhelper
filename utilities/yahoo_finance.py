@@ -1,17 +1,56 @@
+import io
+from datetime import datetime, timedelta, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
+import pandas as pd
 import yfinance as yf
-from urllib.error import HTTPError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
-RETRY_EXCEPTIONS = (HTTPError, ValueError, ConnectionError, TimeoutError, Exception)
+RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
+STOOQ_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 
 
 def _before_sleep_log(retry_state):
-    """Loguje informację o ponowieniu próby pobrania danych."""
     print(
         f"Retry {retry_state.attempt_number} for {retry_state.fn.__name__} "
         f"after error: {retry_state.outcome.exception()}"
     )
+
+
+def _period_to_date_range(period: str) -> tuple[str, str]:
+    days = int(period.rstrip("d"))
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=days * 2)
+    return start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+
+
+def _stooq_symbol_candidates(symbol: str) -> list[str]:
+    normalized = (symbol or "").strip()
+    if not normalized:
+        return []
+
+    candidates = [normalized.lower()]
+    upper_symbol = normalized.upper()
+    if upper_symbol.endswith(".WA"):
+        candidates.append(upper_symbol[:-3].lower())
+    return list(dict.fromkeys(candidates))
+
+
+def _fetch_stooq_history(symbol: str, period: str) -> pd.DataFrame:
+    d1, d2 = _period_to_date_range(period)
+    for candidate in _stooq_symbol_candidates(symbol):
+        params = {"s": candidate, "i": "d", "d1": d1, "d2": d2, "apikey": STOOQ_API_KEY}
+        url = f"https://stooq.pl/q/d/l/?{urlencode(params)}"
+        with urlopen(url, timeout=15) as response:
+            csv_text = response.read().decode("utf-8", errors="replace")
+        df = pd.read_csv(io.StringIO(csv_text))
+        expected_cols = {"Open", "High", "Low", "Close", "Volume"}
+        if expected_cols.issubset(df.columns) and not df.empty:
+            return df
+    raise ValueError(f"Brak danych Stooq dla symbolu {symbol}")
 
 
 @retry(
@@ -22,11 +61,17 @@ def _before_sleep_log(retry_state):
     before_sleep=_before_sleep_log,
 )
 def get_daily_turnovers_yahoo(symbol: str, period: str = "20d") -> list[float]:
-    """Pobiera listę dziennych obrotów (wartości) dla podanego okresu."""
-    stock = yf.Ticker(symbol)
-    hist = stock.history(period=period)
+    """Pobiera listę dziennych obrotów, preferując Stooq, z fallbackiem do Yahoo."""
+    hist = None
+    try:
+        hist = _fetch_stooq_history(symbol, period=period)
+        print(f"Pobrano dane ze Stooq dla {symbol}")
+    except Exception as stooq_error:
+        print(f"Stooq niedostępny dla {symbol}: {stooq_error}. Fallback do Yahoo.")
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period=period)
 
-    if hist.empty:
+    if hist is None or hist.empty:
         raise ValueError(f"Brak danych dla symbolu {symbol}")
 
     hist["AveragePrice"] = (hist["Open"] + hist["Close"] + hist["High"] + hist["Low"]) / 4
@@ -35,13 +80,11 @@ def get_daily_turnovers_yahoo(symbol: str, period: str = "20d") -> list[float]:
 
 
 def get_avg_daily_turnover_yahoo(symbol: str, period: str = "10d") -> float:
-    """Pobiera średni dzienny obrót (wartość) dla danego symbolu."""
     daily_turnovers = get_daily_turnovers_yahoo(symbol, period=period)
     return float(sum(daily_turnovers) / len(daily_turnovers))
 
 
 def get_symbol_currency_yahoo(symbol: str) -> str:
-    """Zwraca walutę notowania symbolu (np. PLN, USD)."""
     stock = yf.Ticker(symbol)
     currency = ""
     try:
@@ -57,7 +100,6 @@ def get_symbol_currency_yahoo(symbol: str) -> str:
 
 
 def get_fx_to_pln_rate_yahoo(currency: str) -> tuple[str, float]:
-    """Zwraca parę FX i kurs do przeliczenia danej waluty na PLN."""
     currency = currency.upper()
     if currency == "PLN":
         return "PLNPLN=X", 1.0
