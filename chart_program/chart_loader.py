@@ -3,6 +3,7 @@ from __future__ import annotations
 from io import StringIO
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -258,7 +259,9 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
 
 
 def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
-    query = {"s": symbol, "i": "d"}
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=364)
+    query = {"s": symbol, "i": "d", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")}
     if api_key and param_name:
         query[param_name] = api_key
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
@@ -267,19 +270,13 @@ def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None =
 def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
+        effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
         urls = [
+            _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl"),
+            _stooq_url(candidate, api_key=effective_api_key, param_name="api_key", domain="stooq.pl"),
             _stooq_url(candidate, domain="stooq.pl"),
             _stooq_url(candidate, domain="stooq.com"),
         ]
-        if api_key:
-            urls.extend(
-                [
-                    _stooq_url(candidate, api_key=api_key, param_name="apikey", domain="stooq.pl"),
-                    _stooq_url(candidate, api_key=api_key, param_name="api_key", domain="stooq.pl"),
-                    _stooq_url(candidate, api_key=api_key, param_name="apikey", domain="stooq.com"),
-                    _stooq_url(candidate, api_key=api_key, param_name="api_key", domain="stooq.com"),
-                ]
-            )
 
         for url in urls:
             try:
