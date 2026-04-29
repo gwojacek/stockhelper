@@ -208,8 +208,9 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
                 candidates.append(f"{left}.pl")
             candidates.append(left)
         else:
-            candidates.append(cleaned)
+            # Prefer Warsaw listing symbol first for local stock slugs (e.g. "cog" -> "cog.pl").
             candidates.append(f"{cleaned}.pl")
+            candidates.append(cleaned)
     elif instrument_type == "commodity":
         mapped = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
         if mapped:
