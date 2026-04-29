@@ -1,0 +1,20 @@
+{
+  "high": 5595.44,
+  "low": 28.78,
+  "entry": 31.077,
+  "stop_loss": 30.04,
+  "position_type": "short",
+  "capital": 250000,
+  "lot_cost": 85171.26,
+  "pip_value": 361.86,
+  "spread": 604.725,
+  "name": "Gold",
+  "drawn_objects": [],
+  "level_points": {
+    "high": {
+      "price": 5595.44,
+      "plot_price": 5653.77,
+      "date": "2026-01-29 00:00:00"
+    }
+  }
+}

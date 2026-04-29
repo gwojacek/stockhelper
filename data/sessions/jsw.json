@@ -1,0 +1,12 @@
+{
+  "high": 25.4,
+  "low": 20.29,
+  "entry": 24.0,
+  "stop_loss": 22.94,
+  "capital": 241000,
+  "symbol": "JSW.WA",
+  "name": "jsw",
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false
+}

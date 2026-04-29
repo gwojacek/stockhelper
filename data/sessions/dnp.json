@@ -1,0 +1,14 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "high": 41.78,
+  "drawn_objects": [],
+  "level_points": {
+    "high": {
+      "price": 41.78,
+      "plot_price": 41.86,
+      "date": "2026-03-17 00:00:00"
+    }
+  }
+}

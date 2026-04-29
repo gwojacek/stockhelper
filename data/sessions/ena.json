@@ -1,0 +1,47 @@
+{
+  "high": 24.72,
+  "low": 23.08,
+  "entry": 22.82,
+  "stop_loss": 21.75,
+  "check_zr_value_fibo_or_elevation": null,
+  "line_cross_value": 22.36,
+  "capital": 255000,
+  "symbol": "ENA.WA",
+  "name": "Enea",
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "drawn_objects": [],
+  "level_points": {
+    "low": {
+      "price": 23.08,
+      "plot_price": 23.0,
+      "date": "2026-04-20 00:00:00"
+    },
+    "high": {
+      "price": 24.72,
+      "plot_price": 24.84,
+      "date": "2026-02-27T00:00:00"
+    },
+    "entry": {
+      "price": 22.82,
+      "plot_price": 22.82,
+      "date": "2026-04-28T00:00:00"
+    },
+    "stop_loss": {
+      "price": 21.75,
+      "plot_price": 21.75,
+      "date": "2026-04-28T00:00:00"
+    },
+    "line_cross_value": {
+      "price": 22.36,
+      "plot_price": 22.36,
+      "date": "2026-04-28T00:00:00"
+    }
+  },
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false
+}

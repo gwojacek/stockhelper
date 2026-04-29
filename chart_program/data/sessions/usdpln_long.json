@@ -1,0 +1,77 @@
+{
+  "high": 3.73,
+  "low": 3.49,
+  "entry": 3.6,
+  "stop_loss": 3.56,
+  "position_type": "long",
+  "capital": 242000,
+  "lot_cost": 18120.25,
+  "pip_value": 10,
+  "pip_size": 0.0001,
+  "spread": 130,
+  "pair": "USD/PLN",
+  "drawn_objects": [
+    {
+      "id": "a4f069d0-e151-4061-a382-2c018c6929d2",
+      "type": "fib",
+      "label": "FIB 0% (3.75)",
+      "x0": "2026-03-27T00:00:00",
+      "x1": "2026-06-26T00:00:00",
+      "y0": 3.75,
+      "y1": 3.75,
+      "price": 3.75,
+      "color": "#facc15"
+    },
+    {
+      "id": "7b9eb583-bcf3-40b5-8350-ebd2be192779",
+      "type": "fib",
+      "label": "FIB 61.8% (3.64)",
+      "x0": "2026-03-27T00:00:00",
+      "x1": "2026-06-26T00:00:00",
+      "y0": 3.64,
+      "y1": 3.64,
+      "price": 3.64,
+      "color": "#facc15"
+    },
+    {
+      "id": "b7e2855f-3718-4962-a361-074e54702e5a",
+      "type": "fib",
+      "label": "FIB 100% (3.57)",
+      "x0": "2026-04-17T00:00:00",
+      "x1": "2026-06-26T00:00:00",
+      "y0": 3.57,
+      "y1": 3.57,
+      "price": 3.57,
+      "color": "#facc15"
+    }
+  ],
+  "level_points": {
+    "high": {
+      "price": 3.73,
+      "plot_price": 3.74,
+      "date": "2026-03-03 00:00:00"
+    },
+    "low": {
+      "price": 3.49,
+      "plot_price": 3.48,
+      "date": "2026-01-28T00:00:00"
+    },
+    "entry": {
+      "price": 3.6,
+      "plot_price": 3.6,
+      "date": "2026-04-20T00:00:00"
+    },
+    "stop_loss": {
+      "price": 3.56,
+      "plot_price": 3.56,
+      "date": "2026-04-17T00:00:00"
+    },
+    "check_zr_value_fibo_or_elevation": {
+      "price": 3.64,
+      "plot_price": 3.64,
+      "date": "2026-04-24T00:00:00"
+    }
+  },
+  "check_zr_value_fibo_or_elevation": 3.64,
+  "spread_multiplier": 13
+}

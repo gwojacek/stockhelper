@@ -1,0 +1,35 @@
+{
+  "high": 159.21,
+  "low": 152.33,
+  "entry": 156.56,
+  "stop_loss": 157.35,
+  "position_type": "short",
+  "capital": 255000,
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "drawn_objects": [],
+  "level_points": {
+    "high": {
+      "price": 159.21,
+      "plot_price": 159.26,
+      "date": "2026-01-23T00:00:00"
+    },
+    "low": {
+      "price": 152.33,
+      "plot_price": 152.29,
+      "date": "2026-01-28T00:00:00"
+    },
+    "entry": {
+      "price": 156.56,
+      "plot_price": 156.56,
+      "date": "2026-02-09T00:00:00"
+    },
+    "stop_loss": {
+      "price": 157.35,
+      "plot_price": 157.35,
+      "date": "2026-02-09T00:00:00"
+    }
+  }
+}

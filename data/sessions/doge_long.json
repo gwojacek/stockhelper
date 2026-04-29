@@ -1,0 +1,17 @@
+{
+  "high": 0.3056,
+  "low": 0.1762,
+  "drawn_objects": [],
+  "level_points": {
+    "high": {
+      "price": 0.3056,
+      "plot_price": 0.3095,
+      "date": "2025-09-13T00:00:00"
+    },
+    "low": {
+      "price": 0.1762,
+      "plot_price": 0.1744,
+      "date": "2025-10-17 00:00:00"
+    }
+  }
+}

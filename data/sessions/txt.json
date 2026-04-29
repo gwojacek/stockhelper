@@ -1,0 +1,78 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "high": 61.95,
+  "low": 35.5,
+  "stop_loss": 37.99,
+  "entry": 39.12,
+  "check_zr_value_fibo_or_elevation": 52,
+  "position_type": "long",
+  "capital": 255000,
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "drawn_objects": [
+    {
+      "id": "252a718a-1e45-4d88-9423-3fe39cd6c6d5",
+      "type": "fib",
+      "label": "FIB 0% (35.45)",
+      "x0": "2026-02-17T00:00:00",
+      "x1": "2027-12-01T00:00:00",
+      "y0": 35.45,
+      "y1": 35.45,
+      "price": 35.45,
+      "color": "#facc15"
+    },
+    {
+      "id": "b0d40c54-9d79-4f7f-9e86-e650229686f2",
+      "type": "fib",
+      "label": "FIB 61.8% (51.89)",
+      "x0": "2026-02-17T00:00:00",
+      "x1": "2027-12-01T00:00:00",
+      "y0": 51.89,
+      "y1": 51.89,
+      "price": 51.89,
+      "color": "#facc15"
+    },
+    {
+      "id": "1b89156b-2b6e-4cc7-b68d-930969dfeebe",
+      "type": "fib",
+      "label": "FIB 100% (62.06)",
+      "x0": "2025-08-07T00:00:00",
+      "x1": "2027-12-01T00:00:00",
+      "y0": 62.06,
+      "y1": 62.06,
+      "price": 62.06,
+      "color": "#facc15"
+    }
+  ],
+  "level_points": {
+    "high": {
+      "price": 61.95,
+      "plot_price": 62.06,
+      "date": "2025-07-31T00:00:00"
+    },
+    "low": {
+      "price": 35.5,
+      "plot_price": 35.45,
+      "date": "2026-02-24T00:00:00"
+    },
+    "stop_loss": {
+      "price": 37.99,
+      "plot_price": 37.99,
+      "date": "2026-04-24T00:00:00"
+    },
+    "entry": {
+      "price": 39.12,
+      "plot_price": 39.12,
+      "date": "2026-04-28T00:00:00"
+    },
+    "check_zr_value_fibo_or_elevation": {
+      "price": 52,
+      "plot_price": 52,
+      "date": "2026-04-28T00:00:00"
+    }
+  }
+}

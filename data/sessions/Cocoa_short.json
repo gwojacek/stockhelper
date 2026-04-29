@@ -1,0 +1,25 @@
+{
+  "high": 6166,
+  "low": 2798.0,
+  "entry": 5843,
+  "stop_loss": 6220,
+  "position_type": "short",
+  "capital": 235000,
+  "lot_cost": 12379.74,
+  "pip_value": 36.19,
+  "spread": 330.3,
+  "name": "COCOA",
+  "drawn_objects": [],
+  "level_points": {
+    "high": {
+      "price": 6166,
+      "plot_price": 6192.64,
+      "date": "2026-01-06T00:00:00"
+    },
+    "low": {
+      "price": 2798.0,
+      "plot_price": 2792.4,
+      "date": "2026-02-27 00:00:00"
+    }
+  }
+}

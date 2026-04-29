@@ -1,0 +1,12 @@
+{
+  "high": 519,
+  "low": 400,
+  "entry": 444,
+  "stop_loss": 422,
+  "position_type": "long",
+  "capital": 250000,
+  "lot_cost": 144260.73,
+  "pip_value": 108.56,
+  "spread": 1906.21,
+  "name": "Copper"
+}
