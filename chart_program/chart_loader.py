@@ -276,8 +276,7 @@ def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = Non
         effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
         urls = [
             _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl"),
-            _stooq_url(candidate, api_key=effective_api_key, param_name="api_key", domain="stooq.pl"),
-            _stooq_url(candidate, domain="stooq.pl"),
+                        _stooq_url(candidate, domain="stooq.pl"),
             _stooq_url(candidate, domain="stooq.com"),
         ]
 
