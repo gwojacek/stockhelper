@@ -2,6 +2,7 @@ import argparse
 from importlib import util
 from pathlib import Path
 
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 from core.factory import StrategyFactory
@@ -38,9 +39,21 @@ def _resolve_stock_config_path(config_input: str) -> Path:
     if slug_path.exists():
         return slug_path
 
+    stock_dir = PROJECT_ROOT / "configs" / "stocks"
+    matches = sorted(stock_dir.glob(f"{normalized}*.py"))
+    if len(matches) == 1:
+        return matches[0]
+
+    if len(matches) > 1:
+        candidates = ", ".join(m.stem for m in matches)
+        raise FileNotFoundError(
+            f"Ambiguous stock config '{config_input}'. Matches: {candidates}. "
+            "Please pass a full slug/path."
+        )
+
     raise FileNotFoundError(
         f"Stock config not found: {config_input}. "
-        f"Tried explicit path and {slug_path}"
+        f"Tried explicit path and {slug_path} and prefix match in {stock_dir}"
     )
 
 def main() -> int:

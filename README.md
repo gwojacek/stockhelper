@@ -93,10 +93,12 @@ pip install -r requirements.txt
 Run with a generated or existing stock config:
 
 ```bash
-python main_stock.py bft
+python -m mainstock bft
 ```
 
-You can also pass a full path (`python main_stock.py configs/stocks/bft.py`).
+You can also pass a full path (`python -m mainstock configs/stocks/bft.py`).
+
+Prefix matching is supported if unambiguous (e.g. `python -m mainstock ena` -> `configs/stocks/enea.py`).
 
 If you run without config argument, the default demo config is used (`BFT`).
 
