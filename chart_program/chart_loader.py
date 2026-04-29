@@ -325,24 +325,16 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     primary_error = None
     try:
-        if instrument_type in {"commodity", "forex"}:
-            df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
-            return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
-        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name, "Yahoo succeeded as primary source for stock."
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
 
     try:
-        if instrument_type in {"commodity", "forex"}:
-            df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-            return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
-        return df, "stooq", candidate, None, f"Yahoo failed, fallback to Stooq: {primary_error}"
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
     except ValueError as secondary_exc:
-        if instrument_type == "commodity":
-            raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {secondary_exc}") from secondary_exc
-        raise ValueError(f"Yahoo failed: {primary_error} ; Stooq failed: {secondary_exc}") from secondary_exc
+        raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {secondary_exc}") from secondary_exc
 
 
 def load_or_update_daily_data(
