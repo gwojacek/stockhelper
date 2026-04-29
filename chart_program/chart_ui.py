@@ -461,13 +461,13 @@ class ChartLevelSelectorUI:
                 html.Div(
                     style={"borderLeft": "1px solid #1f2937", "padding": "16px", "background": "#0b1220", "overflowY": "auto"},
                     children=[
-                        html.H4(f"Instrument: {self.instrument_type.upper()}"),
                         html.Div(
                             f"Name/Ticker: {self.source_name or self.symbol}"
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
-                            style={"marginBottom": "6px"},
+                            style={"marginBottom": "8px", "fontWeight": "800", "fontSize": "20px", "color": "#f8fafc"},
                         ),
-                        html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd"}),
+                        html.H4(f"Instrument: {self.instrument_type.upper()}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
+                        html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd", "fontSize": "16px"}),
                         html.H4("Selected values", style={"marginTop": 0}),
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),
