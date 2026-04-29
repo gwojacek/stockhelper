@@ -93,10 +93,12 @@ pip install -r requirements.txt
 Run with a generated or existing stock config:
 
 ```bash
-python main_stock.py --config configs/stocks/bft.py
+python main_stock.py bft
 ```
 
-If you run without `--config`, the default demo config is used (`BFT`).
+You can also pass a full path (`python main_stock.py configs/stocks/bft.py`).
+
+If you run without config argument, the default demo config is used (`BFT`).
 
 ### Commodities / Forex
 
