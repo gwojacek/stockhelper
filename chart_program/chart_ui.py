@@ -515,6 +515,7 @@ class ChartLevelSelectorUI:
                 dcc.Store(id="half-anchor", data=None),
                 dcc.Store(id="line-color-store", data=LINE_COLORS["gold"]),
                 dcc.Store(id="finished-store", data=False),
+                dcc.Store(id="viewport-store", data=None),
                 dcc.Store(id="close-tab-signal", data=0),
                 dcc.Store(id="heartbeat-store", data=0),
                 dcc.Interval(id="heartbeat-interval", interval=1000, n_intervals=0),
@@ -757,6 +758,26 @@ class ChartLevelSelectorUI:
             return f"FX conversion fee 1%: {'ON' if new_value else 'OFF'}", style, levels_store
 
         @app.callback(
+            Output("viewport-store", "data"),
+            Input("candle-chart", "relayoutData"),
+            State("viewport-store", "data"),
+            prevent_initial_call=True,
+        )
+        def keep_viewport(relayout_data, current_view):
+            if not isinstance(relayout_data, dict):
+                return current_view
+            updated = dict(current_view or {})
+            x0 = relayout_data.get("xaxis.range[0]")
+            x1 = relayout_data.get("xaxis.range[1]")
+            y0 = relayout_data.get("yaxis.range[0]")
+            y1 = relayout_data.get("yaxis.range[1]")
+            if x0 is not None and x1 is not None:
+                updated["x_range"] = [x0, x1]
+            if y0 is not None and y1 is not None:
+                updated["y_range"] = [y0, y1]
+            return updated
+
+        @app.callback(
             Output("candle-chart", "figure"),
             Output("values-panel", "children"),
             Output("object-picker", "options"),
@@ -772,9 +793,9 @@ class ChartLevelSelectorUI:
             Input("active-tool", "data"),
             Input("line-anchor", "data"),
             Input("fib-anchor", "data"),
-            State("candle-chart", "relayoutData"),
+            State("viewport-store", "data"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor, relayout_data):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor, viewport):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
@@ -782,15 +803,11 @@ class ChartLevelSelectorUI:
 
             fig = self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
 
-            if isinstance(relayout_data, dict):
-                x0 = relayout_data.get("xaxis.range[0]")
-                x1 = relayout_data.get("xaxis.range[1]")
-                y0 = relayout_data.get("yaxis.range[0]")
-                y1 = relayout_data.get("yaxis.range[1]")
-                if x0 is not None and x1 is not None:
-                    fig.update_xaxes(range=[x0, x1])
-                if y0 is not None and y1 is not None:
-                    fig.update_yaxes(range=[y0, y1])
+            if isinstance(viewport, dict):
+                if viewport.get("x_range"):
+                    fig.update_xaxes(range=viewport["x_range"])
+                if viewport.get("y_range"):
+                    fig.update_yaxes(range=viewport["y_range"])
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":
