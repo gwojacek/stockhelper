@@ -56,7 +56,7 @@ class ChartLevelSelectorUI:
         self._finished = False
         self.source_ticker = source_ticker
         self.source_name = source_name
-        self.price_precision = 2
+        self.price_precision = 3 if instrument_type == "forex" else 2
 
     def _precision_for_price(self, value: float | None = None) -> int:
         if value is None:

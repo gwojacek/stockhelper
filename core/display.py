@@ -11,6 +11,8 @@ class DisplayHandler:
 
     def _get_pip_decimals(self):
         if hasattr(self.config, "pip_size"):
+            if getattr(self.config, "instrument_type", "") == "forex":
+                return 3
             return 4 if self.config.pip_size < 0.001 else 2
         return 2
 
@@ -30,7 +32,7 @@ class DisplayHandler:
         for risk, data in results.items():
             position_value = data.get("lots", data.get("shares", 0))
             if "lots" in data:
-                lot_decimals = 3 if getattr(self.config, "instrument_type", "") == "commodity" else 2
+                lot_decimals = 3 if getattr(self.config, "instrument_type", "") in {"commodity", "forex"} else 2
             else:
                 lot_decimals = 0
             row = [

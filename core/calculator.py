@@ -16,7 +16,7 @@ def calculate_position_size(
     max_loss = capital * risk_percent
     lots = 0.0
     position_multiplier = 1 if position_type == "long" else -1
-    lot_step = 0.001 if instrument_type == "commodity" else 0.01
+    lot_step = 0.001 if instrument_type in {"commodity", "forex"} else 0.01
     lot_precision = 3 if lot_step < 0.01 else 2
 
     while True:
