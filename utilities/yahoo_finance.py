@@ -11,6 +11,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
 STOOQ_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
+LAST_TURNOVER_SOURCE = "unknown"
 
 
 def _before_sleep_log(retry_state):
@@ -62,12 +63,15 @@ def _fetch_stooq_history(symbol: str, period: str) -> pd.DataFrame:
 )
 def get_daily_turnovers_yahoo(symbol: str, period: str = "20d") -> list[float]:
     """Pobiera listę dziennych obrotów, preferując Stooq, z fallbackiem do Yahoo."""
+    global LAST_TURNOVER_SOURCE
     hist = None
     try:
         hist = _fetch_stooq_history(symbol, period=period)
+        LAST_TURNOVER_SOURCE = "stooq"
         print(f"Pobrano dane ze Stooq dla {symbol}")
     except Exception as stooq_error:
         print(f"Stooq niedostępny dla {symbol}: {stooq_error}. Fallback do Yahoo.")
+        LAST_TURNOVER_SOURCE = "yahoo"
         stock = yf.Ticker(symbol)
         hist = stock.history(period=period)
 
@@ -113,3 +117,8 @@ def get_fx_to_pln_rate_yahoo(currency: str) -> tuple[str, float]:
             return pair, rate
 
     raise ValueError(f"Brak kursu FX dla waluty {currency} do PLN")
+
+
+def get_last_turnover_source() -> str:
+    """Zwraca źródło ostatnio pobranych danych obrotu: stooq/yahoo/unknown."""
+    return LAST_TURNOVER_SOURCE
