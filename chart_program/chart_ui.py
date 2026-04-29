@@ -772,14 +772,25 @@ class ChartLevelSelectorUI:
             Input("active-tool", "data"),
             Input("line-anchor", "data"),
             Input("fib-anchor", "data"),
+            State("candle-chart", "relayoutData"),
         )
-        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor):
+        def redraw(levels_store, level_points, objects_store, active_field, active_tool, line_anchor, fib_anchor, relayout_data):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
             draw_objects = list(objects_store)
 
             fig = self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
+
+            if isinstance(relayout_data, dict):
+                x0 = relayout_data.get("xaxis.range[0]")
+                x1 = relayout_data.get("xaxis.range[1]")
+                y0 = relayout_data.get("yaxis.range[0]")
+                y1 = relayout_data.get("yaxis.range[1]")
+                if x0 is not None and x1 is not None:
+                    fig.update_xaxes(range=[x0, x1])
+                if y0 is not None and y1 is not None:
+                    fig.update_yaxes(range=[y0, y1])
 
             lines = [html.Div(f"Mode: {active_tool.upper()}")]
             if active_tool == "level":

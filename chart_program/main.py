@@ -1,4 +1,7 @@
 import argparse
+import subprocess
+import sys
+from pathlib import Path
 
 
 
@@ -15,7 +18,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pip-size", type=float, default=0.0001)
     parser.add_argument("--api-key", help="Optional API key passed to data provider")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
+    parser.add_argument("--no-run-after-save", action="store_true", help="Do not run analysis script after saving config")
     return parser
+
+
+def _run_analysis_script(result: dict) -> None:
+    config_path = result.get("config_path")
+    instrument_type = result.get("instrument_type")
+    if not config_path or instrument_type not in {"stock", "commodity", "forex"}:
+        return
+
+    script = "main_stock.py" if instrument_type == "stock" else "main.py"
+    script_path = Path(__file__).resolve().parent.parent / script
+    cmd = [sys.executable, str(script_path), "--config", config_path]
+    print(f"Running analysis: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
 
 
 def main() -> int:
@@ -56,6 +73,10 @@ def main() -> int:
         print(result["message"])
     else:
         print("Chart workflow completed:", result)
+
+    if isinstance(result, dict) and result.get("config_path") and not args.no_run_after_save:
+        _run_analysis_script(result)
+
     return 0
 
 
