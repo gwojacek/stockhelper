@@ -234,7 +234,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     header_index = None
     separator = ","
     for i, raw_line in enumerate(lines):
-        line = raw_line.strip()
+        line = raw_line.strip().lstrip("﻿")
         line_lower = line.lower()
         if line_lower.startswith("date,open,high,low,close"):
             header_index = i
