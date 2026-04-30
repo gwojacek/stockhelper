@@ -138,6 +138,9 @@ class ChartLevelSelectorUI:
                     high=self.df["High"],
                     low=self.df["Low"],
                     close=self.df["Close"],
+                    customdata=np.column_stack([
+                        pd.to_numeric(self.df["Close"].shift(1), errors="coerce").to_numpy(),
+                    ]),
                     name="Daily",
                     hoverinfo="skip",
                     hovertemplate=None,
@@ -940,45 +943,41 @@ class ChartLevelSelectorUI:
             prevent_initial_call=True,
         )
 
-        @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
-        def hover_info(hover_data):
-            cursor_price = None
-            if hover_data and hover_data.get("points"):
-                point = hover_data["points"][0]
-                price = self._extract_price(point)
-                cursor_price = price
-                date = point.get("x")
-                idx = self._resolve_candle_index(date)
-                if idx is not None:
-                    row = self.df.iloc[idx]
-                    d = pd.to_datetime(row["Date"], errors="coerce")
-                    if price is not None:
-                        d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
-                        curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
-                        day_pct = None
-                        try:
-                            c = float(row["Close"])
-                            if idx > 0:
-                                prev_close = float(self.df.iloc[idx - 1]["Close"])
-                                if prev_close != 0:
-                                    day_pct = ((c - prev_close) / prev_close) * 100.0
-                        except Exception:
-                            day_pct = None
-                        day_pct_txt = f"  DAY:{day_pct:+.2f}%" if day_pct is not None else "  DAY:--"
-                        day_color = "#22c55e" if (day_pct or 0) >= 0 else "#ef4444"
-                        return html.Span(
-                            [
-                                f"D:{d_txt}"
-                                f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
-                                f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
-                                f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
-                                f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}",
-                                html.Span(day_pct_txt, style={"color": day_color, "fontWeight": "800"}),
-                                curr_txt,
-                            ]
-                        )
-            curr_txt = "  CURSOR:--"
-            return f"D:---- -- --  O:--  H:--  L:--  C:--  DAY:--{curr_txt}"
+        app.clientside_callback(
+            """
+            function(hoverData) {
+                const empty = 'D:---- -- --  O:--  H:--  L:--  C:--  DAY:--  CURSOR:--';
+                if (!hoverData || !hoverData.points || hoverData.points.length === 0) {
+                    return empty;
+                }
+                const point = hoverData.points[0] || {};
+                const x = point.x ?? '---- -- --';
+                const o = Number(point.open);
+                const h = Number(point.high);
+                const l = Number(point.low);
+                const c = Number(point.close);
+                const y = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open);
+                if (![o, h, l, c].every(Number.isFinite)) {
+                    return empty;
+                }
+
+                const precision = Math.abs(c) < 1 ? 4 : 2;
+                let day = 'DAY:--';
+                if (Array.isArray(point.customdata) && Number.isFinite(Number(point.customdata[0]))) {
+                    const prevClose = Number(point.customdata[0]);
+                    if (prevClose !== 0) {
+                        const pct = ((c - prevClose) / prevClose) * 100;
+                        day = `DAY:${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+                    }
+                }
+                const cursorTxt = Number.isFinite(y) ? y.toFixed(Math.abs(y) < 1 ? 4 : precision) : '--';
+                return `D:${x}  O:${o.toFixed(precision)}  H:${h.toFixed(precision)}  L:${l.toFixed(precision)}  C:${c.toFixed(precision)}  ${day}  CURSOR:${cursorTxt}`;
+            }
+            """,
+            Output("cursor-box", "children"),
+            Input("candle-chart", "hoverData"),
+            prevent_initial_call=False,
+        )
 
         app.clientside_callback(
             """
