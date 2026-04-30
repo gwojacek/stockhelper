@@ -68,6 +68,8 @@ def detect_from_symbol(symbol_or_pair: str) -> str:
         "AU200.CASH",
         "CHN.CASH",
         "JP225",
+        "NKX",
+        "^NKX",
         "W20",
         "WIG20",
         "UK100",
