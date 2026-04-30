@@ -906,7 +906,6 @@ class ChartLevelSelectorUI:
             """
             function(hoverData, figure, activeTool, lineAnchor) {
                 if (!figure || activeTool !== 'line' || !lineAnchor) {
-                    window.__line_preview_last = null;
                     return window.dash_clientside.no_update;
                 }
                 if (!hoverData || !hoverData.points || hoverData.points.length === 0) {
@@ -917,32 +916,31 @@ class ChartLevelSelectorUI:
                 if (rawY === null || rawY === undefined || first.x === null || first.x === undefined) {
                     return window.dash_clientside.no_update;
                 }
-                const hoverPoint = {x: first.x, y: Number(rawY)};
-                if (!Number.isFinite(hoverPoint.y)) return window.dash_clientside.no_update;
+                const y = Number(rawY);
+                if (!Number.isFinite(y)) return window.dash_clientside.no_update;
 
                 const now = Date.now();
                 const last = window.__line_preview_last || null;
-                if (last && now - last.ts < 24) return window.dash_clientside.no_update;
-                window.__line_preview_last = {x: hoverPoint.x, y: hoverPoint.y, ts: now};
+                if (last && now - last.ts < 16) return window.dash_clientside.no_update;
+                window.__line_preview_last = {x: first.x, y, ts: now};
 
-                const data = Array.isArray(figure.data) ? [...figure.data] : [];
-                const previewIdx = data.findIndex((trace) => trace && trace.name === "Line preview");
-                const previewTrace = {
-                    type: 'scatter',
-                    x: [lineAnchor.x, hoverPoint.x],
-                    y: [lineAnchor.y, hoverPoint.y],
-                    mode: 'lines',
+                const layout = {...(figure.layout || {})};
+                const shapes = Array.isArray(layout.shapes) ? [...layout.shapes] : [];
+                const filtered = shapes.filter((s) => !(s && s.meta === 'line_preview'));
+                filtered.push({
+                    type: 'line',
+                    xref: 'x',
+                    yref: 'y',
+                    x0: lineAnchor.x,
+                    y0: lineAnchor.y,
+                    x1: first.x,
+                    y1: y,
                     line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                    name: 'Line preview',
-                    hoverinfo: 'skip',
-                    showlegend: false,
-                };
-                if (previewIdx >= 0) {
-                    data[previewIdx] = previewTrace;
-                } else {
-                    data.push(previewTrace);
-                }
-                return { ...figure, data };
+                    layer: 'above',
+                    meta: 'line_preview',
+                });
+                layout.shapes = filtered;
+                return {...figure, layout};
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
