@@ -223,6 +223,8 @@ def _best_effort_display_name(symbol: str, instrument_type: str, source_symbol: 
                     )
                     if not any(token in lowered for token in trusted_tokens):
                         continue
+                if candidate.startswith("^") and name.endswith(" P"):
+                    name = name[:-2].strip()
                 return name
         except Exception:
             continue

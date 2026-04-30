@@ -962,16 +962,26 @@ class ChartLevelSelectorUI:
                     if price is not None:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
                         curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
+                        day_pct = None
+                        try:
+                            o = float(row["Open"])
+                            c = float(row["Close"])
+                            if o != 0:
+                                day_pct = ((c - o) / o) * 100.0
+                        except Exception:
+                            day_pct = None
+                        day_pct_txt = f"  DAY:{day_pct:+.2f}%" if day_pct is not None else "  DAY:--"
                         return (
                             f"D:{d_txt}"
                             f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
                             f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
                             f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
                             f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}"
+                            f"{day_pct_txt}"
                             f"{curr_txt}"
                         )
             curr_txt = "  CURSOR:--"
-            return f"D:---- -- --  O:--  H:--  L:--  C:--{curr_txt}"
+            return f"D:---- -- --  O:--  H:--  L:--  C:--  DAY:--{curr_txt}"
 
         app.clientside_callback(
             """
