@@ -909,6 +909,7 @@ class ChartLevelSelectorUI:
                     return window.dash_clientside.no_update;
                 }
                 if (activeTool !== 'line' || !lineAnchor) {
+                    window.__line_preview_last = null;
                     return window.dash_clientside.no_update;
                 }
 
@@ -923,6 +924,16 @@ class ChartLevelSelectorUI:
                 if (!hoverPoint || !Number.isFinite(hoverPoint.y)) {
                     return window.dash_clientside.no_update;
                 }
+
+                const now = Date.now();
+                const last = window.__line_preview_last || null;
+                if (last && String(last.x) === String(hoverPoint.x) && Math.abs(last.y - hoverPoint.y) < 1e-9) {
+                    return window.dash_clientside.no_update;
+                }
+                if (last && now - last.ts < 28) {
+                    return window.dash_clientside.no_update;
+                }
+                window.__line_preview_last = {x: hoverPoint.x, y: hoverPoint.y, ts: now};
 
                 const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
                 const preview = {
@@ -960,6 +971,15 @@ class ChartLevelSelectorUI:
                 if (!(idx >= 0 && idx < candle.x.length)) {
                     const xKey = String(point.x ?? '');
                     idx = candle.x.findIndex((v) => String(v) === xKey);
+                }
+                if (!(idx >= 0 && idx < candle.x.length)) {
+                    const px = Date.parse(String(point.x ?? ''));
+                    if (Number.isFinite(px)) {
+                        idx = candle.x.findIndex((v) => {
+                            const cx = Date.parse(String(v));
+                            return Number.isFinite(cx) && Math.abs(cx - px) < 86400000;
+                        });
+                    }
                 }
                 if (!(idx >= 0 && idx < candle.x.length)) return empty;
 
