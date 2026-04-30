@@ -158,6 +158,29 @@ COMMODITY_BROKER_DEFAULTS = {
     "SILVER": {"lot_cost": 137626.31, "pip_value": 18100.75},
     "XAGUSD": {"lot_cost": 137626.31, "pip_value": 18100.75},
 }
+INDEX_BROKER_DEFAULTS = {
+    "BRACOMP": {"lot_cost": 136461.58, "pip_value": 7.28, "spread_multiplier": 75.0},
+    "US500": {"lot_cost": 65323.11, "pip_value": 182.08, "spread_multiplier": 0.7},
+    "MEXCOMP": {"lot_cost": 73245.18, "pip_value": 10.92, "spread_multiplier": 131.0},
+    "VIX": {"lot_cost": 58874.96, "pip_value": 14565.40, "spread_multiplier": 0.2},
+    "US30": {"lot_cost": 44540.05, "pip_value": 18.21, "spread_multiplier": 3.0},
+    "US100": {"lot_cost": 99716.59, "pip_value": 72.83, "spread_multiplier": 1.54},
+    "HK.CASH": {"lot_cost": 46948.38, "pip_value": 18.21, "spread_multiplier": 9.0},
+    "SG20CASH": {"lot_cost": 16149.96, "pip_value": 364.13, "spread_multiplier": 0.25},
+    "AU200.CASH": {"lot_cost": 28375.68, "pip_value": 65.06, "spread_multiplier": 6.0},
+    "CHN.CASH": {"lot_cost": 31609.69, "pip_value": 36.41, "spread_multiplier": 9.0},
+    "JP225": {"lot_cost": 33892.18, "pip_value": 11.43, "spread_multiplier": 16.0},
+    "W20": {"lot_cost": 6854.00, "pip_value": 20.00, "spread_multiplier": 2.7},
+    "WIG20": {"lot_cost": 6854.00, "pip_value": 20.00, "spread_multiplier": 2.7},
+    "UK100": {"lot_cost": 25364.12, "pip_value": 49.18, "spread_multiplier": 2.1},
+    "ITA40": {"lot_cost": 100279.33, "pip_value": 21.30, "spread_multiplier": 23.0},
+    "DE40": {"lot_cost": 128369.90, "pip_value": 106.48, "spread_multiplier": 1.7},
+    "FRA40": {"lot_cost": 16953.20, "pip_value": 42.59, "spread_multiplier": 1.9},
+    "NED25": {"lot_cost": 85112.27, "pip_value": 851.77, "spread_multiplier": 0.21},
+    "SUI20": {"lot_cost": 94820.75, "pip_value": 72.83, "spread_multiplier": 5.0},
+    "SPA35": {"lot_cost": 74994.09, "pip_value": 42.59, "spread_multiplier": 8.0},
+    "EU50": {"lot_cost": 12273.00, "pip_value": 43.00, "spread_multiplier": 2.8},
+}
 COMMODITY_TICKER_ALIASES = {
     "GC=F": "GOLD",
     "SI=F": "SILVER",
@@ -193,7 +216,72 @@ COMMODITY_TICKER_ALIASES = {
     "ALI.F": "ALUMINIUM",
     "NI.F": "NICKEL",
     "ZN.F": "ZINC",
+    "^BVP": "BRACOMP",
+    "^SPX": "US500",
+    "^IPC": "MEXCOMP",
+    "VI.C": "VIX",
+    "^DJI": "US30",
+    "^NDX": "US100",
+    "^HSI": "HK.CASH",
+    "^STI": "SG20CASH",
+    "^AOR": "AU200.CASH",
+    "0EL.C": "CHN.CASH",
+    "^NKX": "JP225",
+    "^UKX": "UK100",
+    "^FMIB": "ITA40",
+    "^DAX": "DE40",
+    "^CAC": "FRA40",
+    "^AEX": "NED25",
+    "^SMI": "SUI20",
+    "^IBEX": "SPA35",
+    "FX.F": "EU50",
 }
+
+
+def _commodity_candidates(symbol: str, source_ticker: str | None) -> list[str]:
+    candidates = [
+        (symbol or "").upper().replace(" ", ""),
+        (source_ticker or "").upper().replace(" ", ""),
+    ]
+    expanded = list(candidates)
+    for key in candidates:
+        aliased = COMMODITY_TICKER_ALIASES.get(key)
+        if aliased:
+            expanded.append(aliased)
+        if key.endswith(".F"):
+            expanded.append(key.replace(".F", "=F"))
+        if key.endswith("=F"):
+            expanded.append(key.replace("=F", ".F"))
+    return [c for c in expanded if c]
+
+
+def _index_defaults(symbol: str, source_ticker: str | None) -> dict | None:
+    for key in _commodity_candidates(symbol, source_ticker):
+        default = INDEX_BROKER_DEFAULTS.get(key)
+        if default:
+            return default
+    return None
+
+
+def _display_identity(symbol: str, source_ticker: str | None, searched_target: str, resolved_name: str | None) -> tuple[str | None, str | None]:
+    searched = (searched_target or "").strip().upper()
+    canonical = (source_ticker or "").upper() or (symbol or "").upper()
+    canonical_alias = COMMODITY_TICKER_ALIASES.get(canonical)
+
+    if resolved_name:
+        lookup = searched or canonical_alias or canonical
+        if canonical == lookup and canonical_alias:
+            return resolved_name, f"{canonical} / {canonical_alias}"
+        if canonical == lookup:
+            return resolved_name, canonical
+        return resolved_name, f"{canonical} / {lookup}"
+    for key in _commodity_candidates(symbol, source_ticker):
+        canonical = (source_ticker or "").upper() or key
+        lookup = searched or key
+        if canonical == lookup:
+            return None, canonical
+        return None, f"{canonical} / {lookup}"
+    return None, source_ticker
 
 COMMODITY_SPECS = {
     "GOLD": {"contract_size": 100, "pip_contract_size": 100, "pip_size": 1.0, "leverage": 20},
@@ -258,20 +346,7 @@ def _compute_margin_defaults(instrument_type: str, symbol: str, source_ticker: s
         return None, None
 
     if instrument_type == "commodity":
-        candidates = [
-            (symbol or "").upper().replace(" ", ""),
-            (source_ticker or "").upper().replace(" ", ""),
-        ]
-        expanded_candidates = list(candidates)
-        for key in candidates:
-            aliased = COMMODITY_TICKER_ALIASES.get(key)
-            if aliased:
-                expanded_candidates.append(aliased)
-            if key.endswith(".F"):
-                expanded_candidates.append(key.replace(".F", "=F"))
-            if key.endswith("=F"):
-                expanded_candidates.append(key.replace("=F", ".F"))
-        candidates = [c for c in expanded_candidates if c]
+        candidates = _commodity_candidates(symbol, source_ticker)
         for key in candidates:
             fixed = COMMODITY_BROKER_DEFAULTS.get(key)
             if fixed:
@@ -392,14 +467,22 @@ def run_level_selector(raw_args=None):
             existing["lot_cost"] = lot_cost_auto
         if pip_value_auto is not None:
             existing["pip_value"] = pip_value_auto
+        index_defaults = _index_defaults(symbol, fetch_info.get("symbol"))
+        if index_defaults:
+            existing["lot_cost"] = round(index_defaults["lot_cost"], 2)
+            existing["pip_value"] = round(index_defaults["pip_value"], 2)
+            existing["spread_multiplier"] = round(index_defaults["spread_multiplier"], 4)
+            existing["spread"] = round(existing["spread_multiplier"] * existing["pip_value"], 2)
+
+    display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 
     ui = ChartLevelSelectorUI(
         symbol=symbol,
         dataframe=df,
         instrument_type=instrument_type,
         preset_values=existing,
-        source_ticker=fetch_info.get("symbol"),
-        source_name=fetch_info.get("name"),
+        source_ticker=display_ticker,
+        source_name=display_name or fetch_info.get("name"),
         source_provider=fetch_info.get("source"),
     )
     selected = ui.run()
@@ -431,14 +514,14 @@ def run_level_selector(raw_args=None):
     }
 
     if instrument_type == "stock":
-        values.update(
-            {
-                "name": _resolve_stock_name(symbol, base_target),
-                "symbol": symbol,
-                "apply_currency_conversion_fee": bool(selected.get("apply_currency_conversion_fee", existing.get("apply_currency_conversion_fee", False))),
-                "currency_conversion_fee_pct": float(selected.get("currency_conversion_fee_pct", existing.get("currency_conversion_fee_pct", 0.01))),
-            }
-        )
+        values.update({"name": _resolve_stock_name(symbol, base_target), "symbol": symbol})
+        if _default_currency_conversion_fee("stock", symbol):
+            values.update(
+                {
+                    "apply_currency_conversion_fee": bool(selected.get("apply_currency_conversion_fee", existing.get("apply_currency_conversion_fee", False))),
+                    "currency_conversion_fee_pct": float(selected.get("currency_conversion_fee_pct", existing.get("currency_conversion_fee_pct", 0.01))),
+                }
+            )
     elif instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"

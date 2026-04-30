@@ -439,6 +439,11 @@ class ChartLevelSelectorUI:
         has_saved_levels = any((self.values or {}).get(field) is not None for field in SELECTION_SEQUENCE)
         initial_active_field = None if has_saved_levels else "high"
         is_commodity = self.instrument_type == "commodity"
+        index_like_tokens = ("^", "DE40", "US500", "US100", "US30", "JP225", "WIG20", "UK100", "EU50", "DAX", "CAC", "AEX", "SMI", "IBEX")
+        source_ticker_upper = (self.source_ticker or "").upper()
+        symbol_upper = (self.symbol or "").upper()
+        is_index_like = is_commodity and any(token in source_ticker_upper or token in symbol_upper for token in index_like_tokens)
+        instrument_label = "COMMODITY/INDEX" if is_index_like else self.instrument_type.upper()
         ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", False))
         currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
         currency_fee_eligible = bool((self.values or {}).get("__currency_fee_eligible__", False))
@@ -501,7 +506,7 @@ class ChartLevelSelectorUI:
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
                             style={"marginBottom": "8px", "fontWeight": "800", "fontSize": "20px", "color": "#f8fafc"},
                         ),
-                        html.H4(f"Instrument: {self.instrument_type.upper()}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
+                        html.H4(f"Instrument: {instrument_label}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
                         html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd", "fontSize": "16px"}),
                         html.H4("Selected values", style={"marginTop": 0}),
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
@@ -901,12 +906,6 @@ class ChartLevelSelectorUI:
                     return window.dash_clientside.no_update;
                 }
                 const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
-                if (activeTool !== 'line' || !lineAnchor) {
-                    if (baseData.length === (figure.data || []).length) {
-                        return window.dash_clientside.no_update;
-                    }
-                    return {...figure, data: baseData};
-                }
 
                 let hoverPoint = null;
                 if (hoverData && hoverData.points && hoverData.points.length > 0) {
@@ -917,21 +916,20 @@ class ChartLevelSelectorUI:
                     }
                 }
 
-                if (!hoverPoint) {
-                    return {...figure, data: baseData};
+                const extras = [];
+                if (activeTool === 'line' && lineAnchor && hoverPoint) {
+                    extras.push({
+                        type: 'scatter',
+                        x: [lineAnchor.x, hoverPoint.x],
+                        y: [lineAnchor.y, hoverPoint.y],
+                        mode: 'lines',
+                        line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                        name: 'Line preview',
+                        hoverinfo: 'skip',
+                        showlegend: false,
+                    });
                 }
-
-                const preview = {
-                    type: 'scatter',
-                    x: [lineAnchor.x, hoverPoint.x],
-                    y: [lineAnchor.y, hoverPoint.y],
-                    mode: 'lines',
-                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                    name: 'Line preview',
-                    hoverinfo: 'skip',
-                    showlegend: false,
-                };
-                return {...figure, data: [...baseData, preview]};
+                return {...figure, data: [...baseData, ...extras]};
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
@@ -957,16 +955,30 @@ class ChartLevelSelectorUI:
                     if price is not None:
                         d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
                         curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
-                        return (
-                            f"D:{d_txt}"
-                            f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
-                            f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
-                            f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
-                            f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}"
-                            f"{curr_txt}"
+                        day_pct = None
+                        try:
+                            c = float(row["Close"])
+                            if idx > 0:
+                                prev_close = float(self.df.iloc[idx - 1]["Close"])
+                                if prev_close != 0:
+                                    day_pct = ((c - prev_close) / prev_close) * 100.0
+                        except Exception:
+                            day_pct = None
+                        day_pct_txt = f"  DAY:{day_pct:+.2f}%" if day_pct is not None else "  DAY:--"
+                        day_color = "#22c55e" if (day_pct or 0) >= 0 else "#ef4444"
+                        return html.Span(
+                            [
+                                f"D:{d_txt}"
+                                f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
+                                f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
+                                f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
+                                f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}",
+                                html.Span(day_pct_txt, style={"color": day_color, "fontWeight": "800"}),
+                                curr_txt,
+                            ]
                         )
             curr_txt = "  CURSOR:--"
-            return f"D:---- -- --  O:--  H:--  L:--  C:--{curr_txt}"
+            return f"D:---- -- --  O:--  H:--  L:--  C:--  DAY:--{curr_txt}"
 
         app.clientside_callback(
             """

@@ -77,6 +77,13 @@ def main() -> int:
             cmd = [sys.executable, "-m", "chart_program", target]
     else:
         instrument_type = _instrument_type_from_path(resolved_path) or detect_instrument_type(target, None)
+        if resolved_path is None:
+            print(
+                f"Instrument config not found: {target}. "
+                f"Please use `python run -c {target}` and finish chart workflow, "
+                "or create a config manually."
+            )
+            return 1
         runner = _resolve_runner(instrument_type)
         arg = str(resolved_path) if resolved_path else target
         cmd = [sys.executable, str(PROJECT_ROOT / runner), arg]

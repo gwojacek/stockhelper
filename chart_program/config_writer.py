@@ -26,6 +26,14 @@ def _build_template(instrument_type: str, values: dict) -> str:
     filename = values.get("filename", "")
 
     if instrument_type == "stock":
+        symbol = (values.get("symbol") or "").upper()
+        include_fee_fields = not (symbol.endswith(".WA") or symbol.endswith(".PL"))
+        fee_lines = ""
+        if include_fee_fields:
+            fee_lines = (
+                f'    apply_currency_conversion_fee: bool = {values.get("apply_currency_conversion_fee", False)}\n'
+                f'    currency_conversion_fee_pct: float = {values.get("currency_conversion_fee_pct", 0.01)}\n'
+            )
         return f'''from dataclasses import dataclass
 
 filename = "{filename}"
@@ -36,9 +44,7 @@ class TradingConfig:
     name: str = "{values["name"]}"
     symbol: str = "{values["symbol"]}"
     instrument_type: str = "stock"
-    apply_currency_conversion_fee: bool = {values.get("apply_currency_conversion_fee", False)}
-    currency_conversion_fee_pct: float = {values.get("currency_conversion_fee_pct", 0.01)}
-    capital: float = {values.get("capital", 0)}
+{fee_lines}    capital: float = {values.get("capital", 0)}
     entry: float = {values["entry"]}
     stop_loss: float = {values["stop_loss"]}
     high: float = {values["high"]}

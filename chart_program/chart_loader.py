@@ -44,6 +44,33 @@ COMMODITY_YAHOO_MAP = {
     "NATURAL_GAS": "NG=F",
     "BTC": "BTC-USD",
     "DOGE": "DOGE-USD",
+    "BRACOMP": "^BVP",
+    "US500": "^SPX",
+    "MEXCOMP": "^IPC",
+    "VIX": "^VIX",
+    "US30": "^DJI",
+    "US100": "^NDX",
+    "HK.CASH": "^HSI",
+    "SG20CASH": "^STI",
+    "AU200.CASH": "^AORD",
+    "CHN.CASH": "000001.SS",
+    "JP225": "^NKX",
+    "NKX": "^NKX",
+    "W20": "WIG20",
+    "WIG20": "WIG20",
+    "UK100": "^FTSE",
+    "ITA40": "FTSEMIB.MI",
+    "DE40": "^GDAXI",
+    "DAX": "^GDAXI",
+    "FRA40": "^FCHI",
+    "CAC": "^FCHI",
+    "NED25": "^AEX",
+    "AEX": "^AEX",
+    "SUI20": "^SSMI",
+    "SMI": "^SSMI",
+    "SPA35": "^IBEX",
+    "IBEX": "^IBEX",
+    "EU50": "^STOXX50E",
 }
 
 COMMODITY_STOOQ_MAP = {
@@ -76,6 +103,33 @@ COMMODITY_STOOQ_MAP = {
     "ZINC": "zn.f",
     "CRUDE_OIL_BRENT": "cb.f",
     "NATURAL_GAS": "ng.f",
+    "BRACOMP": "^bvp",
+    "US500": "^spx",
+    "MEXCOMP": "^ipc",
+    "VIX": "vi.c",
+    "US30": "^dji",
+    "US100": "^ndx",
+    "HK.CASH": "^hsi",
+    "SG20CASH": "^sti",
+    "AU200.CASH": "^aor",
+    "CHN.CASH": "0el.c",
+    "JP225": "^nkx",
+    "NKX": "^nkx",
+    "W20": "wig20",
+    "WIG20": "wig20",
+    "UK100": "^ukx",
+    "ITA40": "^fmib",
+    "DE40": "^dax",
+    "DAX": "^dax",
+    "FRA40": "^cac",
+    "CAC": "^cac",
+    "NED25": "^aex",
+    "AEX": "^aex",
+    "SUI20": "^smi",
+    "SMI": "^smi",
+    "SPA35": "^ibex",
+    "IBEX": "^ibex",
+    "EU50": "fx.f",
 }
 
 COMMODITY_DISPLAY_NAME = {
@@ -105,6 +159,76 @@ COMMODITY_DISPLAY_NAME = {
     "BTC": "Bitcoin",
     "DOGE": "Dogecoin",
 }
+
+
+def _humanize_symbol(symbol: str) -> str:
+    raw = (symbol or "").strip().replace("^", "")
+    if not raw:
+        return ""
+    cleaned = raw.replace("_", " ").replace(".", " ").replace("/", " ").replace("-", " ")
+    parts = [p for p in cleaned.split() if p]
+    if not parts:
+        return raw.upper()
+    return " ".join(part.upper() if part.isupper() and len(part) <= 4 else part.title() for part in parts)
+
+
+def _best_effort_display_name(symbol: str, instrument_type: str, source_symbol: str | None) -> str | None:
+    if instrument_type == "stock":
+        return None
+    try:
+        import yfinance as yf
+    except Exception:
+        return None
+
+    lookup_candidates: list[str] = []
+    normalized_symbol = (symbol or "").strip().upper()
+    normalized_source = (source_symbol or "").strip().upper()
+    if normalized_source:
+        lookup_candidates.append(normalized_source)
+    mapped = COMMODITY_YAHOO_MAP.get(normalized_symbol)
+    if mapped:
+        lookup_candidates.append(mapped)
+    if normalized_symbol:
+        lookup_candidates.append(normalized_symbol)
+
+    seen = set()
+    for candidate in lookup_candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            ticker = yf.Ticker(candidate)
+            info = ticker.info if hasattr(ticker, "info") else {}
+            name = (info.get("longName") or info.get("shortName") or "").strip()
+            if name:
+                if candidate.startswith("^"):
+                    lowered = name.lower()
+                    trusted_tokens = (
+                        "index",
+                        "nikkei",
+                        "s&p",
+                        "dow",
+                        "dax",
+                        "cac",
+                        "ibex",
+                        "ftse",
+                        "stoxx",
+                        "hang seng",
+                        "nasdaq",
+                        "vix",
+                        "wig",
+                        "mib",
+                        "aex",
+                        "smi",
+                    )
+                    if not any(token in lowered for token in trusted_tokens):
+                        continue
+                if candidate.startswith("^") and name.endswith(" P"):
+                    name = name[:-2].strip()
+                return name
+        except Exception:
+            continue
+    return None
 
 def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
@@ -426,10 +550,15 @@ def load_or_update_daily_data(
 
     if persist:
         merged.to_csv(csv_path, index=False)
-    display_name = symbol.title()
+    display_name = _humanize_symbol(symbol)
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
-        display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), symbol.title())
+        display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), _humanize_symbol(symbol))
+        enriched_name = source_name or _best_effort_display_name(symbol, instrument_type, source_symbol)
+        if enriched_name:
+            display_name = enriched_name
+        elif str(source_symbol).startswith("^"):
+            display_name = str(source_symbol).replace("^", "").upper()
         preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
         if preferred_stooq_symbol:
             display_symbol = preferred_stooq_symbol.upper()
