@@ -43,6 +43,7 @@ filename = "{filename}"
 class TradingConfig:
     name: str = "{values["name"]}"
     symbol: str = "{values["symbol"]}"
+    market_data_source: str = "{values.get("market_data_source", "auto")}"
     instrument_type: str = "stock"
 {fee_lines}    capital: float = {values.get("capital", 0)}
     entry: float = {values["entry"]}

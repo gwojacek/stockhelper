@@ -169,8 +169,9 @@ class StockStrategy(BaseStrategy):
         disp = DisplayHandler(self.config)
         header_symbol = getattr(self.config, "symbol", self.config.name).upper()
         disp.show_header(f"{header_symbol} Stock")
-        if self.turnover_data_source:
-            print(f"Data source: {self.turnover_data_source.capitalize()}")
+        preferred_source = getattr(self.config, "market_data_source", None) or self.turnover_data_source
+        if preferred_source:
+            print(f"Data source: {preferred_source.capitalize()}")
         if self.stock_currency != "PLN":
             pair = self.currency_pair_used.replace("=X", "")
             print(f"FX: {pair} = {self.fx_rate_to_pln:.4f}")
@@ -242,6 +243,7 @@ class StockStrategy(BaseStrategy):
             self.profit,
             self.profit_pct,
             stop_loss=self.config.stop_loss,
+            include_entry_stop=False,
         )
         disp.show_warning(ratio)
         if notes:

@@ -54,15 +54,16 @@ class DisplayHandler:
     def _get_currency(self):
         return "PLN" if hasattr(self.config, "pip_value") else "zł"
 
-    def show_take_profit(self, entry, tp, ratio, profit, profit_pct, stop_loss=None):
+    def show_take_profit(self, entry, tp, ratio, profit, profit_pct, stop_loss=None, include_entry_stop=True):
         print(f"\n{Fore.BLUE}--- Position Analysis ---{Style.RESET_ALL}")
-        print(
-            f"Entry Price: {Fore.YELLOW}{entry:.{self.pip_decimals}f}{Style.RESET_ALL}"
-        )
-        if stop_loss is not None:
+        if include_entry_stop:
             print(
-                f"Stop_loss: {Fore.RED}{stop_loss:.{self.pip_decimals}f}{Style.RESET_ALL}"
+                f"Entry Price: {Fore.YELLOW}{entry:.{self.pip_decimals}f}{Style.RESET_ALL}"
             )
+            if stop_loss is not None:
+                print(
+                    f"Stop_loss: {Fore.RED}{stop_loss:.{self.pip_decimals}f}{Style.RESET_ALL}"
+                )
         print(f"Take Profit: {Fore.GREEN}{tp:.{self.pip_decimals}f}{Style.RESET_ALL}")
         print(f"Z/R Ratio: {Fore.MAGENTA}{ratio:.2f}:1{Style.RESET_ALL}")
         print(
