@@ -60,6 +60,7 @@ This makes setups versionable and reproducible.
 ### 4) Currency handling for foreign stocks
 - If **FX conversion fee is enabled** for a foreign stock, StockHelper sizes the position with round-trip conversion fees included (buy + sell at stop), and prints how much the position was reduced because of fees.
 - If **FX conversion fee is disabled**, StockHelper assumes you already hold the instrument currency (e.g. USD). In that case stock table money values are shown in the instrument currency instead of PLN.
+- In that OFF mode, account capital is internally translated from PLN to instrument currency using current FX so risk percentages stay consistent (no artificial 3-4x position inflation).
 
 ### 2) Strategy factory
 `core.factory.StrategyFactory` picks the right strategy implementation based on `instrument_type` from the config.

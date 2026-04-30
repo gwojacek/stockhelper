@@ -102,6 +102,11 @@ class StockStrategy(BaseStrategy):
         ]
         use_native_currency = self.stock_currency != "PLN" and not conversion_fee_enabled
         self.pricing_fx_rate = 1.0 if use_native_currency else self.fx_rate_to_pln
+        self.capital_for_position = (
+            self.config.capital / self.fx_rate_to_pln
+            if use_native_currency and self.fx_rate_to_pln > 0
+            else self.config.capital
+        )
         self.config.display_currency = self.stock_currency if use_native_currency else "zł"
 
         self.entry_pln = self.config.entry * self.pricing_fx_rate
@@ -132,7 +137,7 @@ class StockStrategy(BaseStrategy):
             baseline_result = calculator.calculate_stock_position(
                 self.entry_pln,
                 self.stop_loss_pln,
-                self.config.capital,
+                self.capital_for_position,
                 risk,
                 self.config.max_capital,
                 conversion_fee_pct=0.0,
@@ -140,7 +145,7 @@ class StockStrategy(BaseStrategy):
             self.results[risk] = calculator.calculate_stock_position(
                 self.entry_pln,
                 self.stop_loss_pln,
-                self.config.capital,
+                self.capital_for_position,
                 risk,
                 self.config.max_capital,
                 conversion_fee_pct=conversion_fee_pct if conversion_fee_enabled else 0.0,
