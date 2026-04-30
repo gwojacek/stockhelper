@@ -905,7 +905,7 @@ class ChartLevelSelectorUI:
                 if (!figure) {
                     return window.dash_clientside.no_update;
                 }
-                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview' && trace.name !== 'Hover candle');
+                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
 
                 let hoverPoint = null;
                 if (hoverData && hoverData.points && hoverData.points.length > 0) {
@@ -917,19 +917,6 @@ class ChartLevelSelectorUI:
                 }
 
                 const extras = [];
-                if (hoverPoint && Number.isFinite(hoverPoint.y)) {
-                    extras.push({
-                        type: 'scatter',
-                        x: [hoverPoint.x, hoverPoint.x],
-                        y: [hoverPoint.y * 0.998, hoverPoint.y * 1.002],
-                        mode: 'lines',
-                        line: {color: 'rgba(56,189,248,0.85)', width: 4},
-                        name: 'Hover candle',
-                        hoverinfo: 'skip',
-                        showlegend: false,
-                    });
-                }
-
                 if (activeTool === 'line' && lineAnchor && hoverPoint) {
                     extras.push({
                         type: 'scatter',
@@ -970,10 +957,11 @@ class ChartLevelSelectorUI:
                         curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
                         day_pct = None
                         try:
-                            o = float(row["Open"])
                             c = float(row["Close"])
-                            if o != 0:
-                                day_pct = ((c - o) / o) * 100.0
+                            if idx > 0:
+                                prev_close = float(self.df.iloc[idx - 1]["Close"])
+                                if prev_close != 0:
+                                    day_pct = ((c - prev_close) / prev_close) * 100.0
                         except Exception:
                             day_pct = None
                         day_pct_txt = f"  DAY:{day_pct:+.2f}%" if day_pct is not None else "  DAY:--"
