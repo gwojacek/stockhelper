@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, ctx, dcc, html
+from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 from flask import request
 from werkzeug.serving import WSGIRequestHandler, make_server
 
@@ -858,9 +858,10 @@ class ChartLevelSelectorUI:
             objects_store = objects_store or []
             draw_objects = list(objects_store)
 
-            fig = self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
+            skip_figure_update = ctx.triggered_id == "active-field"
+            fig = no_update if skip_figure_update else self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
 
-            if isinstance(viewport, dict):
+            if not skip_figure_update and isinstance(viewport, dict):
                 if viewport.get("x_range"):
                     fig.update_xaxes(range=viewport["x_range"])
                 if viewport.get("y_range"):
