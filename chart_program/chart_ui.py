@@ -229,39 +229,6 @@ class ChartLevelSelectorUI:
             chikou = closes.shift(-26)
             fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "rgba(250, 204, 21, 0.58)", "width": 1.1, "dash": "dot"}))
 
-        # Transparent heatmap overlay for precise XY cursor price picking.
-        y_min = float(self.df["Low"].min())
-        y_max = float(self.df["High"].max())
-        y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_low = y_min - y_pad
-        y_high = y_max + y_pad
-        precision_tick = 10 ** (-self._precision_for_price((y_min + y_max) / 2.0))
-        target_steps = int((y_high - y_low) / precision_tick) if precision_tick > 0 else 0
-        grid_points = max(400, min(2200, target_steps))
-        y_grid = np.linspace(y_low, y_high, grid_points)
-        x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
-        x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        pad_days = 10
-        x_grid = list(self.df["Date"])
-        if not pd.isna(x_min_data) and not pd.isna(x_max_data):
-            if has_weekend_data:
-                x_grid = list(pd.date_range(x_min_data - pd.Timedelta(days=pad_days), x_max_data + pd.Timedelta(days=pad_days)))
-            else:
-                x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
-        z = np.zeros((len(y_grid), len(x_grid)))
-        fig.add_trace(
-            go.Heatmap(
-                x=x_grid,
-                y=y_grid,
-                z=z,
-                showscale=False,
-                opacity=0.001,
-                hoverinfo="none",
-                hovertemplate=None,
-                name="cursor_capture",
-            )
-        )
-
         level_colors = {
             "high": "#d946ef",
             "low": "#14b8a6",
@@ -349,6 +316,40 @@ class ChartLevelSelectorUI:
                     showlegend=not is_preview_line,
                 )
             )
+
+        # Transparent heatmap overlay for precise XY cursor price picking.
+        y_min = float(self.df["Low"].min())
+        y_max = float(self.df["High"].max())
+        y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
+        y_low = y_min - y_pad
+        y_high = y_max + y_pad
+        precision_tick = 10 ** (-self._precision_for_price((y_min + y_max) / 2.0))
+        target_steps = int((y_high - y_low) / precision_tick) if precision_tick > 0 else 0
+        grid_points = max(400, min(2200, target_steps))
+        y_grid = np.linspace(y_low, y_high, grid_points)
+        x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
+        x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
+        pad_days = 10
+        x_grid = list(self.df["Date"])
+        if not pd.isna(x_min_data) and not pd.isna(x_max_data):
+            if has_weekend_data:
+                x_grid = list(pd.date_range(x_min_data - pd.Timedelta(days=pad_days), x_max_data + pd.Timedelta(days=pad_days)))
+            else:
+                x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
+        z = np.zeros((len(y_grid), len(x_grid)))
+        fig.add_trace(
+            go.Heatmap(
+                x=x_grid,
+                y=y_grid,
+                z=z,
+                showscale=False,
+                opacity=0.001,
+                hoverinfo="none",
+                hovertemplate=None,
+                name="cursor_capture",
+            )
+        )
+
 
         fig.update_layout(
             title=f"{self.symbol} ({self.instrument_type}) - Daily (1Y)",
