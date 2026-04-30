@@ -945,30 +945,44 @@ class ChartLevelSelectorUI:
 
         app.clientside_callback(
             """
-            function(hoverData) {
+            function(hoverData, figure) {
                 const empty = 'D:---- -- --  O:--  H:--  L:--  C:--  DAY:--  CURSOR:--';
-                if (!hoverData || !hoverData.points || hoverData.points.length === 0) {
+                if (!hoverData || !hoverData.points || hoverData.points.length === 0 || !figure || !figure.data) {
                     return empty;
                 }
+
                 const point = hoverData.points[0] || {};
-                const x = point.x ?? '---- -- --';
-                const o = Number(point.open);
-                const h = Number(point.high);
-                const l = Number(point.low);
-                const c = Number(point.close);
+                const x = point.x;
                 const y = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open);
+                if (x === undefined || x === null) {
+                    return empty;
+                }
+
+                const candle = (figure.data || []).find((trace) => trace && trace.type === 'candlestick' && trace.name === 'Daily');
+                if (!candle || !Array.isArray(candle.x)) {
+                    return empty;
+                }
+
+                const idx = candle.x.findIndex((v) => String(v) === String(x));
+                if (idx < 0) {
+                    return empty;
+                }
+
+                const o = Number((candle.open || [])[idx]);
+                const h = Number((candle.high || [])[idx]);
+                const l = Number((candle.low || [])[idx]);
+                const c = Number((candle.close || [])[idx]);
                 if (![o, h, l, c].every(Number.isFinite)) {
                     return empty;
                 }
 
                 const precision = Math.abs(c) < 1 ? 4 : 2;
                 let day = 'DAY:--';
-                if (Array.isArray(point.customdata) && Number.isFinite(Number(point.customdata[0]))) {
-                    const prevClose = Number(point.customdata[0]);
-                    if (prevClose !== 0) {
-                        const pct = ((c - prevClose) / prevClose) * 100;
-                        day = `DAY:${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-                    }
+                const cd = (candle.customdata || [])[idx];
+                const prevClose = Array.isArray(cd) ? Number(cd[0]) : Number(cd);
+                if (Number.isFinite(prevClose) && prevClose !== 0) {
+                    const pct = ((c - prevClose) / prevClose) * 100;
+                    day = `DAY:${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                 }
                 const cursorTxt = Number.isFinite(y) ? y.toFixed(Math.abs(y) < 1 ? 4 : precision) : '--';
                 return `D:${x}  O:${o.toFixed(precision)}  H:${h.toFixed(precision)}  L:${l.toFixed(precision)}  C:${c.toFixed(precision)}  ${day}  CURSOR:${cursorTxt}`;
@@ -976,6 +990,7 @@ class ChartLevelSelectorUI:
             """,
             Output("cursor-box", "children"),
             Input("candle-chart", "hoverData"),
+            State("candle-chart", "figure"),
             prevent_initial_call=False,
         )
 
