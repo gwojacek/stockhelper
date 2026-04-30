@@ -122,8 +122,17 @@ class StockStrategy(BaseStrategy):
             self.config, "check_zr_value_fibo_or_elevation", None
         )
         self.take_profit_display = None
+        self.fx_fee_reduction_pct = 0.0
 
         for risk in self.config.risk_levels:
+            baseline_result = calculator.calculate_stock_position(
+                self.entry_pln,
+                self.stop_loss_pln,
+                self.config.capital,
+                risk,
+                self.config.max_capital,
+                conversion_fee_pct=0.0,
+            )
             self.results[risk] = calculator.calculate_stock_position(
                 self.entry_pln,
                 self.stop_loss_pln,
@@ -132,6 +141,13 @@ class StockStrategy(BaseStrategy):
                 self.config.max_capital,
                 conversion_fee_pct=conversion_fee_pct if conversion_fee_enabled else 0.0,
             )
+            if conversion_fee_enabled and risk == min(self.config.risk_levels):
+                baseline_shares = baseline_result["shares"]
+                fee_shares = self.results[risk]["shares"]
+                if baseline_shares > 0:
+                    self.fx_fee_reduction_pct = max(
+                        0.0, ((baseline_shares - fee_shares) / baseline_shares) * 100
+                    )
 
         self.profit = 0.0
         self.profit_pct = 0.0
@@ -173,6 +189,10 @@ class StockStrategy(BaseStrategy):
         if self.stock_currency != "PLN":
             pair = self.currency_pair_used.replace("=X", "")
             print(f"FX: {pair} = {self.fx_rate_to_pln:.4f}")
+        if self.fx_fee_reduction_pct > 0:
+            print(
+                f"{Fore.YELLOW}Position size reduced by {self.fx_fee_reduction_pct:.2f}% due to FX conversion fees.{Style.RESET_ALL}"
+            )
 
         if getattr(self, "used_default_turnover", False):
             default_info = f"{Fore.RED}(użyto domyślnej wartości){Style.RESET_ALL}"
