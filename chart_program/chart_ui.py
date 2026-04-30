@@ -904,49 +904,9 @@ class ChartLevelSelectorUI:
 
         app.clientside_callback(
             """
-            function(hoverData, figure, activeTool, lineAnchor) {
-                if (!figure) {
-                    return window.dash_clientside.no_update;
-                }
-                if (activeTool !== 'line' || !lineAnchor) {
-                    window.__line_preview_last = null;
-                    return window.dash_clientside.no_update;
-                }
-
-                let hoverPoint = null;
-                if (hoverData && hoverData.points && hoverData.points.length > 0) {
-                    const first = hoverData.points[0];
-                    const rawY = first.y ?? first.close ?? first.high ?? first.low ?? first.open;
-                    if (rawY !== null && rawY !== undefined && first.x !== null && first.x !== undefined) {
-                        hoverPoint = {x: first.x, y: Number(rawY)};
-                    }
-                }
-                if (!hoverPoint || !Number.isFinite(hoverPoint.y)) {
-                    return window.dash_clientside.no_update;
-                }
-
-                const now = Date.now();
-                const last = window.__line_preview_last || null;
-                if (last && String(last.x) === String(hoverPoint.x) && Math.abs(last.y - hoverPoint.y) < 1e-9) {
-                    return window.dash_clientside.no_update;
-                }
-                if (last && now - last.ts < 28) {
-                    return window.dash_clientside.no_update;
-                }
-                window.__line_preview_last = {x: hoverPoint.x, y: hoverPoint.y, ts: now};
-
-                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
-                const preview = {
-                    type: 'scatter',
-                    x: [lineAnchor.x, hoverPoint.x],
-                    y: [lineAnchor.y, hoverPoint.y],
-                    mode: 'lines',
-                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                    name: 'Line preview',
-                    hoverinfo: 'skip',
-                    showlegend: false,
-                };
-                return {...figure, data: [...baseData, preview]};
+            function() {
+                // Disabled live preview to keep line tool click interactions responsive.
+                return window.dash_clientside.no_update;
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
@@ -981,7 +941,17 @@ class ChartLevelSelectorUI:
                         });
                     }
                 }
-                if (!(idx >= 0 && idx < candle.x.length)) return empty;
+                if (!(idx >= 0 && idx < candle.x.length)) {
+                    const xo = point.x ?? '---- -- --';
+                    const oo = Number(point.open), hh = Number(point.high), ll = Number(point.low), cc = Number(point.close);
+                    const yy = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open);
+                    if ([oo, hh, ll, cc].every(Number.isFinite)) {
+                        const p = Math.abs(cc) < 1 ? 4 : 2;
+                        const ct = Number.isFinite(yy) ? yy.toFixed(Math.abs(yy) < 1 ? 4 : p) : '--';
+                        return `D:${xo}  O:${oo.toFixed(p)}  H:${hh.toFixed(p)}  L:${ll.toFixed(p)}  C:${cc.toFixed(p)}  DAY:--  CURSOR:${ct}`;
+                    }
+                    return empty;
+                }
 
                 const x = candle.x[idx];
                 const o = Number((candle.open || [])[idx]);
