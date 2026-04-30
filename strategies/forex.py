@@ -20,10 +20,8 @@ class ForexStrategy(BaseStrategy):
                 pip_size=self.config.pip_size,
                 position_type=self.config.position_type,
                 instrument_type="forex",
+                conversion_fee_pct=conversion_fee_pct if conversion_fee_enabled else 0.0,
             )
-            if conversion_fee_enabled:
-                self.results[risk]["potential_loss"] = round(self.results[risk]["potential_loss"] * (1 + conversion_fee_pct), 2)
-                self.results[risk]["risk_percent"] = round((self.results[risk]["potential_loss"] / self.config.capital) * 100, 2)
 
         self.take_profit = risk_manager.calculate_take_profit(
             self.config.entry,

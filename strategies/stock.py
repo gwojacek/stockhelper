@@ -100,13 +100,22 @@ class StockStrategy(BaseStrategy):
         daily_turnovers_20d_pln = [
             turnover * self.fx_rate_to_pln for turnover in daily_turnovers_20d
         ]
-        self.entry_pln = self.config.entry * self.fx_rate_to_pln
-        self.stop_loss_pln = self.config.stop_loss * self.fx_rate_to_pln
-        self.high_pln = self.config.high * self.fx_rate_to_pln
-        self.low_pln = self.config.low * self.fx_rate_to_pln
+        use_native_currency = self.stock_currency != "PLN" and not conversion_fee_enabled
+        self.pricing_fx_rate = 1.0 if use_native_currency else self.fx_rate_to_pln
+        self.capital_for_position = (
+            self.config.capital / self.fx_rate_to_pln
+            if use_native_currency and self.fx_rate_to_pln > 0
+            else self.config.capital
+        )
+        self.config.display_currency = self.stock_currency if use_native_currency else "zł"
+
+        self.entry_pln = self.config.entry * self.pricing_fx_rate
+        self.stop_loss_pln = self.config.stop_loss * self.pricing_fx_rate
+        self.high_pln = self.config.high * self.pricing_fx_rate
+        self.low_pln = self.config.low * self.pricing_fx_rate
 
         # Obliczenie max_capital jako 1% średniego dziennego obrotu
-        self.config.max_capital = avg_daily_turnover_pln * 0.01
+        self.config.max_capital = (avg_daily_turnover if use_native_currency else avg_daily_turnover_pln) * 0.01
 
         # Ichimoku używa tego samego max_capital (z 10d), ale ma osobny safeguard płynności 20d
         self.liquidity_threshold_ichimoku = self._get_liquidity_threshold()
@@ -122,18 +131,32 @@ class StockStrategy(BaseStrategy):
             self.config, "check_zr_value_fibo_or_elevation", None
         )
         self.take_profit_display = None
+        self.fx_fee_reduction_pct = 0.0
 
         for risk in self.config.risk_levels:
+            baseline_result = calculator.calculate_stock_position(
+                self.entry_pln,
+                self.stop_loss_pln,
+                self.capital_for_position,
+                risk,
+                self.config.max_capital,
+                conversion_fee_pct=0.0,
+            )
             self.results[risk] = calculator.calculate_stock_position(
                 self.entry_pln,
                 self.stop_loss_pln,
-                self.config.capital,
+                self.capital_for_position,
                 risk,
                 self.config.max_capital,
+                conversion_fee_pct=conversion_fee_pct if conversion_fee_enabled else 0.0,
             )
-            if conversion_fee_enabled:
-                self.results[risk]["potential_loss"] = round(self.results[risk]["potential_loss"] * (1 + conversion_fee_pct), 2)
-                self.results[risk]["risk_percent"] = round((self.results[risk]["potential_loss"] / self.config.capital) * 100, 2)
+            if conversion_fee_enabled and risk == min(self.config.risk_levels):
+                baseline_shares = baseline_result["shares"]
+                fee_shares = self.results[risk]["shares"]
+                if baseline_shares > 0:
+                    self.fx_fee_reduction_pct = max(
+                        0.0, ((baseline_shares - fee_shares) / baseline_shares) * 100
+                    )
 
         self.profit = 0.0
         self.profit_pct = 0.0
@@ -165,10 +188,20 @@ class StockStrategy(BaseStrategy):
             )
 
     def display_results(self):
-        """Wyświetla tabelę wyników, warningi i analizę take-profit."""
+        """Wyświetla skrócone podsumowanie tabeli i metryk ryzyka."""
         disp = DisplayHandler(self.config)
-        disp.show_header(f"{self.config.name} Stock")
-        disp.show_results(self.results)
+        header_symbol = getattr(self.config, "symbol", self.config.name).upper()
+        disp.show_header(f"{header_symbol} Stock")
+        preferred_source = getattr(self.config, "market_data_source", None) or self.turnover_data_source
+        if preferred_source:
+            print(f"Data source: {preferred_source.capitalize()}")
+        if self.stock_currency != "PLN":
+            pair = self.currency_pair_used.replace("=X", "")
+            print(f"FX: {pair} = {self.fx_rate_to_pln:.4f}")
+        if self.fx_fee_reduction_pct > 0:
+            print(
+                f"{Fore.YELLOW}Position size reduced by {self.fx_fee_reduction_pct:.2f}% due to FX conversion fees.{Style.RESET_ALL}"
+            )
 
         if getattr(self, "used_default_turnover", False):
             default_info = f"{Fore.RED}(użyto domyślnej wartości){Style.RESET_ALL}"
@@ -180,19 +213,20 @@ class StockStrategy(BaseStrategy):
         gdp_multiplier = self._get_gdp_multiplier()
         country_code = self._get_country_code()
 
-        print(
-            f"\nCalculated Max Capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}"
-        )
+        if gdp_multiplier > 1:
+            print(f"{Fore.RED}GDP multiplier {country_code}/PL: {gdp_multiplier:.4f}x{Style.RESET_ALL}")
+
+        print()
+        disp.show_results(self.results)
+
+        print(f"\n{Fore.BLUE}---Basics---{Style.RESET_ALL}")
+        print(f"Max capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}")
+        print(f"Entry: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}")
+        print(f"Stop loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}")
         if self.config.max_capital < min_capital:
             print(
                 f"{Fore.RED}{Style.BRIGHT}WARNING: Calculated Max Capital is below minimum {min_capital:,.0f} PLN (GDP-adjusted)!{Style.RESET_ALL}"
             )
-        if self.stock_currency != "PLN":
-            print(
-                f"FX conversion used: {self.currency_pair_used} = {self.fx_rate_to_pln:.4f} (daily turnover converted from {self.stock_currency} to PLN)"
-            )
-        print(f"Turnover data source: {self.turnover_data_source}")
-        print(f"GDP multiplier used ({country_code}/PL): {gdp_multiplier:.4f}x")
 
         if self.config.max_capital < min_capital_ichimoku:
             print(
@@ -205,13 +239,11 @@ class StockStrategy(BaseStrategy):
 
         notes: list[str] = []
         if self.check_zr_ratio is not None:
-            print(f"\n{Fore.BLUE}--- Additional Z/R Check ---{Style.RESET_ALL}")
-            print(
-                f"Additional Z/R check (check_zr_value_fibo_or_elevation): {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}"
-            )
+            print(f"\n{Fore.BLUE}--- Z/R---{Style.RESET_ALL}")
+            print(f"Z/R check: {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}")
             if self.check_zr_ratio <= 4:
                 print(
-                    f"{Fore.RED}WARNING: Additional Z/R ratio is <= 4:1 for check_zr_value_fibo_or_elevation.{Style.RESET_ALL}"
+                    f"{Fore.RED}WARNING: Z/R ratio is <= 4:1.{Style.RESET_ALL}"
                 )
         else:
             notes.append(
@@ -219,14 +251,8 @@ class StockStrategy(BaseStrategy):
             )
 
         if self.take_profit_display is None:
-            print(
-                f"\nEntry Price: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}"
-            )
-            print(
-                f"Stop_loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}"
-            )
             notes.append(
-                "Take Profit was not calculated because optional line_cross_value is not set in TradingConfig."
+                "Take Profit not calculated because line_cross_value is not set."
             )
             if notes:
                 print(f"\n{Fore.BLUE}--- Notes ---{Style.RESET_ALL}")
@@ -244,6 +270,7 @@ class StockStrategy(BaseStrategy):
             self.profit,
             self.profit_pct,
             stop_loss=self.config.stop_loss,
+            include_entry_stop=False,
         )
         disp.show_warning(ratio)
         if notes:

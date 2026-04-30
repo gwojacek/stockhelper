@@ -12,6 +12,7 @@ def calculate_position_size(
     pip_size: float = 1.0,
     position_type: str = "long",
     instrument_type: str = "commodity",
+    conversion_fee_pct: float = 0.0,
 ) -> dict:
     max_loss = capital * risk_percent
     lots = 0.0
@@ -25,7 +26,11 @@ def calculate_position_size(
         pips = abs(price_diff / pip_size)
         spread_cost = spread * lots
         loss = round(pips * pip_value * lots, 2)
-        total_loss = round(loss + spread_cost, 2)
+        entry_notional = lots * lot_cost
+        stop_ratio = abs(stop_loss / entry) if entry else 0.0
+        stop_notional = entry_notional * stop_ratio
+        conversion_fees = (entry_notional + stop_notional) * conversion_fee_pct
+        total_loss = round(loss + spread_cost + conversion_fees, 2)
 
         # If the loss or required capital exceed limits, step back one increment
         if total_loss > max_loss or lots * lot_cost > capital:
@@ -34,7 +39,11 @@ def calculate_position_size(
             spread_cost = spread * lots
 
             loss = round(pips * pip_value * lots, 2)
-            total_loss = round(loss + spread_cost, 2)
+            entry_notional = lots * lot_cost
+            stop_ratio = abs(stop_loss / entry) if entry else 0.0
+            stop_notional = entry_notional * stop_ratio
+            conversion_fees = (entry_notional + stop_notional) * conversion_fee_pct
+            total_loss = round(loss + spread_cost + conversion_fees, 2)
             break
 
     return {
@@ -51,6 +60,7 @@ def calculate_stock_position(
     capital: float,
     risk_percent: float,
     max_capital: float,
+    conversion_fee_pct: float = 0.0,
 ) -> dict:
     if not math.isfinite(entry) or entry <= 0:
         raise ValueError(f"Invalid entry price for stock position calculation: {entry}")
@@ -64,12 +74,16 @@ def calculate_stock_position(
         raise ValueError(
             f"Invalid max_capital for stock position calculation: {max_capital}"
         )
+    if not math.isfinite(conversion_fee_pct) or conversion_fee_pct < 0:
+        raise ValueError(f"Invalid conversion_fee_pct: {conversion_fee_pct}")
 
     loss_per_share = entry - stop_loss
+    fx_fee_per_share = (entry + stop_loss) * conversion_fee_pct
+    effective_loss_per_share = loss_per_share + fx_fee_per_share
     max_loss = risk_percent * capital
 
     max_shares = [
-        int(max_loss / loss_per_share) if loss_per_share > 0 else 0,
+        int(max_loss / effective_loss_per_share) if effective_loss_per_share > 0 else 0,
         int(capital / entry),
         int(max_capital / entry),
     ]
@@ -79,6 +93,6 @@ def calculate_stock_position(
     return {
         "shares": shares,
         "capital_used": shares * entry,
-        "potential_loss": shares * loss_per_share,
-        "risk_percent": (shares * loss_per_share / capital) * 100,
+        "potential_loss": shares * effective_loss_per_share,
+        "risk_percent": (shares * effective_loss_per_share / capital) * 100,
     }

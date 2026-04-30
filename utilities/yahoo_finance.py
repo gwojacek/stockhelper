@@ -10,6 +10,13 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
 STOOQ_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 LAST_TURNOVER_SOURCE = "unknown"
+
+
+def _normalize_yahoo_symbol(symbol: str) -> str:
+    cleaned = (symbol or "").strip().upper()
+    if cleaned.endswith(".US"):
+        return cleaned[:-3]
+    return cleaned
 def _before_sleep_log(retry_state):
     print(
         f"Retry {retry_state.attempt_number} for {retry_state.fn.__name__} "
@@ -98,11 +105,9 @@ def get_daily_turnovers_yahoo(symbol: str, period: str = "20d") -> list[float]:
     try:
         hist = _fetch_stooq_history(symbol, period=period)
         LAST_TURNOVER_SOURCE = "stooq"
-        print(f"Pobrano dane ze Stooq dla {symbol}")
     except Exception as stooq_error:
-        print(f"Stooq niedostępny dla {symbol}: {stooq_error}. Fallback do Yahoo.")
         LAST_TURNOVER_SOURCE = "yahoo"
-        stock = yf.Ticker(symbol)
+        stock = yf.Ticker(_normalize_yahoo_symbol(symbol))
         hist = stock.history(period=period)
     if hist is None or hist.empty:
         raise ValueError(f"Brak danych dla symbolu {symbol}")
@@ -113,7 +118,7 @@ def get_avg_daily_turnover_yahoo(symbol: str, period: str = "10d") -> float:
     daily_turnovers = get_daily_turnovers_yahoo(symbol, period=period)
     return float(sum(daily_turnovers) / len(daily_turnovers))
 def get_symbol_currency_yahoo(symbol: str) -> str:
-    stock = yf.Ticker(symbol)
+    stock = yf.Ticker(_normalize_yahoo_symbol(symbol))
     currency = ""
     try:
         currency = (stock.fast_info.get("currency") or "").upper()

@@ -514,7 +514,13 @@ def run_level_selector(raw_args=None):
     }
 
     if instrument_type == "stock":
-        values.update({"name": _resolve_stock_name(symbol, base_target), "symbol": symbol})
+        values.update(
+            {
+                "name": _resolve_stock_name(symbol, base_target),
+                "symbol": symbol,
+                "market_data_source": (fetch_info.get("source") or args.data_source or "auto"),
+            }
+        )
         if _default_currency_conversion_fee("stock", symbol):
             values.update(
                 {
