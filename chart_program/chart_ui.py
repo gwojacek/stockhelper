@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, ctx, dcc, html
+from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 from flask import request
 from werkzeug.serving import WSGIRequestHandler, make_server
 
@@ -138,6 +138,9 @@ class ChartLevelSelectorUI:
                     high=self.df["High"],
                     low=self.df["Low"],
                     close=self.df["Close"],
+                    customdata=np.column_stack([
+                        pd.to_numeric(self.df["Close"].shift(1), errors="coerce").to_numpy(),
+                    ]),
                     name="Daily",
                     hoverinfo="skip",
                     hovertemplate=None,
@@ -226,39 +229,6 @@ class ChartLevelSelectorUI:
             chikou = closes.shift(-26)
             fig.add_trace(go.Scatter(x=dates, y=chikou, mode="lines", name="Chikou Span", line={"color": "rgba(250, 204, 21, 0.58)", "width": 1.1, "dash": "dot"}))
 
-        # Transparent heatmap overlay for precise XY cursor price picking.
-        y_min = float(self.df["Low"].min())
-        y_max = float(self.df["High"].max())
-        y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
-        y_low = y_min - y_pad
-        y_high = y_max + y_pad
-        precision_tick = 10 ** (-self._precision_for_price((y_min + y_max) / 2.0))
-        target_steps = int((y_high - y_low) / precision_tick) if precision_tick > 0 else 0
-        grid_points = max(400, min(2200, target_steps))
-        y_grid = np.linspace(y_low, y_high, grid_points)
-        x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
-        x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        pad_days = 10
-        x_grid = list(self.df["Date"])
-        if not pd.isna(x_min_data) and not pd.isna(x_max_data):
-            if has_weekend_data:
-                x_grid = list(pd.date_range(x_min_data - pd.Timedelta(days=pad_days), x_max_data + pd.Timedelta(days=pad_days)))
-            else:
-                x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
-        z = np.zeros((len(y_grid), len(x_grid)))
-        fig.add_trace(
-            go.Heatmap(
-                x=x_grid,
-                y=y_grid,
-                z=z,
-                showscale=False,
-                opacity=0.001,
-                hoverinfo="none",
-                hovertemplate=None,
-                name="cursor_capture",
-            )
-        )
-
         level_colors = {
             "high": "#d946ef",
             "low": "#14b8a6",
@@ -346,6 +316,40 @@ class ChartLevelSelectorUI:
                     showlegend=not is_preview_line,
                 )
             )
+
+        # Transparent heatmap overlay for precise XY cursor price picking.
+        y_min = float(self.df["Low"].min())
+        y_max = float(self.df["High"].max())
+        y_pad = (y_max - y_min) * 0.05 if y_max > y_min else 1.0
+        y_low = y_min - y_pad
+        y_high = y_max + y_pad
+        precision_tick = 10 ** (-self._precision_for_price((y_min + y_max) / 2.0))
+        target_steps = int((y_high - y_low) / precision_tick) if precision_tick > 0 else 0
+        grid_points = max(400, min(2200, target_steps))
+        y_grid = np.linspace(y_low, y_high, grid_points)
+        x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
+        x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
+        pad_days = 10
+        x_grid = list(self.df["Date"])
+        if not pd.isna(x_min_data) and not pd.isna(x_max_data):
+            if has_weekend_data:
+                x_grid = list(pd.date_range(x_min_data - pd.Timedelta(days=pad_days), x_max_data + pd.Timedelta(days=pad_days)))
+            else:
+                x_grid = list(pd.bdate_range(x_min_data - pd.tseries.offsets.BDay(pad_days), x_max_data + pd.tseries.offsets.BDay(pad_days)))
+        z = np.zeros((len(y_grid), len(x_grid)))
+        fig.add_trace(
+            go.Heatmap(
+                x=x_grid,
+                y=y_grid,
+                z=z,
+                showscale=False,
+                opacity=0.001,
+                hoverinfo="none",
+                hovertemplate=None,
+                name="cursor_capture",
+            )
+        )
+
 
         fig.update_layout(
             title=f"{self.symbol} ({self.instrument_type}) - Daily (1Y)",
@@ -641,7 +645,7 @@ class ChartLevelSelectorUI:
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
-            if clicked_object_id and active_tool == "level":
+            if clicked_object_id and active_tool == "level" and active_field is None:
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, clicked_object_id
 
             price = self._extract_price(point)
@@ -854,9 +858,10 @@ class ChartLevelSelectorUI:
             objects_store = objects_store or []
             draw_objects = list(objects_store)
 
-            fig = self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
+            skip_figure_update = ctx.triggered_id == "active-field"
+            fig = no_update if skip_figure_update else self._build_figure(levels_store, level_points, draw_objects, active_tool=active_tool)
 
-            if isinstance(viewport, dict):
+            if not skip_figure_update and isinstance(viewport, dict):
                 if viewport.get("x_range"):
                     fig.update_xaxes(range=viewport["x_range"])
                 if viewport.get("y_range"):
@@ -902,34 +907,42 @@ class ChartLevelSelectorUI:
         app.clientside_callback(
             """
             function(hoverData, figure, activeTool, lineAnchor) {
-                if (!figure) {
+                if (!figure || activeTool !== 'line' || !lineAnchor) {
                     return window.dash_clientside.no_update;
                 }
-                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
-
-                let hoverPoint = null;
-                if (hoverData && hoverData.points && hoverData.points.length > 0) {
-                    const first = hoverData.points[0];
-                    const rawY = first.y ?? first.close ?? first.high ?? first.low ?? first.open;
-                    if (rawY !== null && rawY !== undefined && first.x !== null && first.x !== undefined) {
-                        hoverPoint = {x: first.x, y: Number(rawY)};
-                    }
+                if (!hoverData || !hoverData.points || hoverData.points.length === 0) {
+                    return window.dash_clientside.no_update;
                 }
-
-                const extras = [];
-                if (activeTool === 'line' && lineAnchor && hoverPoint) {
-                    extras.push({
-                        type: 'scatter',
-                        x: [lineAnchor.x, hoverPoint.x],
-                        y: [lineAnchor.y, hoverPoint.y],
-                        mode: 'lines',
-                        line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                        name: 'Line preview',
-                        hoverinfo: 'skip',
-                        showlegend: false,
-                    });
+                const first = hoverData.points[0];
+                const rawY = first.y ?? first.close ?? first.high ?? first.low ?? first.open;
+                if (rawY === null || rawY === undefined || first.x === null || first.x === undefined) {
+                    return window.dash_clientside.no_update;
                 }
-                return {...figure, data: [...baseData, ...extras]};
+                const y = Number(rawY);
+                if (!Number.isFinite(y)) return window.dash_clientside.no_update;
+
+                const now = Date.now();
+                const last = window.__line_preview_last || null;
+                if (last && now - last.ts < 16) return window.dash_clientside.no_update;
+                window.__line_preview_last = {x: first.x, y, ts: now};
+
+                const layout = {...(figure.layout || {})};
+                const shapes = Array.isArray(layout.shapes) ? [...layout.shapes] : [];
+                const filtered = shapes.filter((s) => !(s && s.meta === 'line_preview'));
+                filtered.push({
+                    type: 'line',
+                    xref: 'x',
+                    yref: 'y',
+                    x0: lineAnchor.x,
+                    y0: lineAnchor.y,
+                    x1: first.x,
+                    y1: y,
+                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                    layer: 'above',
+                    meta: 'line_preview',
+                });
+                layout.shapes = filtered;
+                return {...figure, layout};
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
