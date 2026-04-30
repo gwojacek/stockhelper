@@ -201,6 +201,28 @@ def _best_effort_display_name(symbol: str, instrument_type: str, source_symbol: 
             info = ticker.info if hasattr(ticker, "info") else {}
             name = (info.get("longName") or info.get("shortName") or "").strip()
             if name:
+                if candidate.startswith("^"):
+                    lowered = name.lower()
+                    trusted_tokens = (
+                        "index",
+                        "nikkei",
+                        "s&p",
+                        "dow",
+                        "dax",
+                        "cac",
+                        "ibex",
+                        "ftse",
+                        "stoxx",
+                        "hang seng",
+                        "nasdaq",
+                        "vix",
+                        "wig",
+                        "mib",
+                        "aex",
+                        "smi",
+                    )
+                    if not any(token in lowered for token in trusted_tokens):
+                        continue
                 return name
         except Exception:
             continue
@@ -533,6 +555,8 @@ def load_or_update_daily_data(
         enriched_name = source_name or _best_effort_display_name(symbol, instrument_type, source_symbol)
         if enriched_name:
             display_name = enriched_name
+        elif str(source_symbol).startswith("^"):
+            display_name = str(source_symbol).replace("^", "").upper()
         preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
         if preferred_stooq_symbol:
             display_symbol = preferred_stooq_symbol.upper()
