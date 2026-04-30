@@ -98,9 +98,7 @@ def get_daily_turnovers_yahoo(symbol: str, period: str = "20d") -> list[float]:
     try:
         hist = _fetch_stooq_history(symbol, period=period)
         LAST_TURNOVER_SOURCE = "stooq"
-        print(f"Pobrano dane ze Stooq dla {symbol}")
     except Exception as stooq_error:
-        print(f"Stooq niedostępny dla {symbol}: {stooq_error}. Fallback do Yahoo.")
         LAST_TURNOVER_SOURCE = "yahoo"
         stock = yf.Ticker(symbol)
         hist = stock.history(period=period)

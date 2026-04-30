@@ -29,7 +29,7 @@ class DisplayHandler:
         ]
 
         table_data = []
-        for risk, data in results.items():
+        for risk, data in sorted(results.items(), key=lambda item: item[0]):
             position_value = data.get("lots", data.get("shares", 0))
             if "lots" in data:
                 lot_decimals = 3 if getattr(self.config, "instrument_type", "") in {"commodity", "forex"} else 2

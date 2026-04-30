@@ -31,7 +31,6 @@ def _run_analysis_script(result: dict) -> None:
     script = "main_stock.py" if instrument_type == "stock" else "main.py"
     script_path = Path(__file__).resolve().parent.parent / script
     cmd = [sys.executable, str(script_path), "--config", config_path]
-    print(f"Running analysis: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
 
@@ -66,21 +65,8 @@ def main() -> int:
     from chart_program.level_selector import run_level_selector
 
     result = run_level_selector(forwarded)
-    if isinstance(result, dict) and result.get("data_symbol"):
-        src_name = result.get("data_name") or target
-        source = result.get("data_source")
-        reason = result.get("data_fallback_reason")
-        print(f"Candle source: {source} | Name: {src_name} | Ticker: {result.get('data_symbol')}")
-        if reason:
-            print(f"Source note: {reason}")
-        elif source == "stooq":
-            print("Source note: Stooq returned valid data (primary source in this flow).")
-        elif source == "yahoo":
-            print("Source note: Yahoo was used as configured/available source.")
     if isinstance(result, dict) and result.get("message"):
         print(result["message"])
-    else:
-        print("Chart workflow completed:", result)
 
     if isinstance(result, dict) and result.get("config_path") and not args.no_run_after_save:
         _run_analysis_script(result)

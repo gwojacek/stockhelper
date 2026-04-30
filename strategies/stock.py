@@ -165,9 +165,15 @@ class StockStrategy(BaseStrategy):
             )
 
     def display_results(self):
-        """Wyświetla tabelę wyników, warningi i analizę take-profit."""
+        """Wyświetla skrócone podsumowanie tabeli i metryk ryzyka."""
         disp = DisplayHandler(self.config)
-        disp.show_header(f"{self.config.name} Stock")
+        header_symbol = getattr(self.config, "symbol", self.config.name).upper()
+        disp.show_header(f"{header_symbol} Stock")
+        if self.turnover_data_source:
+            print(f"Data source: {self.turnover_data_source.capitalize()}")
+        if self.stock_currency != "PLN":
+            pair = self.currency_pair_used.replace("=X", "")
+            print(f"FX: {pair} = {self.fx_rate_to_pln:.4f}")
         disp.show_results(self.results)
 
         if getattr(self, "used_default_turnover", False):
@@ -180,19 +186,13 @@ class StockStrategy(BaseStrategy):
         gdp_multiplier = self._get_gdp_multiplier()
         country_code = self._get_country_code()
 
-        print(
-            f"\nCalculated Max Capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}"
-        )
+        print(f"\n{Fore.BLUE}---Basics---{Style.RESET_ALL}")
+        print(f"Max capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}")
         if self.config.max_capital < min_capital:
             print(
                 f"{Fore.RED}{Style.BRIGHT}WARNING: Calculated Max Capital is below minimum {min_capital:,.0f} PLN (GDP-adjusted)!{Style.RESET_ALL}"
             )
-        if self.stock_currency != "PLN":
-            print(
-                f"FX conversion used: {self.currency_pair_used} = {self.fx_rate_to_pln:.4f} (daily turnover converted from {self.stock_currency} to PLN)"
-            )
-        print(f"Turnover data source: {self.turnover_data_source}")
-        print(f"GDP multiplier used ({country_code}/PL): {gdp_multiplier:.4f}x")
+        print(f"GDP multiplier {country_code}/PL: {gdp_multiplier:.4f}x")
 
         if self.config.max_capital < min_capital_ichimoku:
             print(
@@ -205,13 +205,11 @@ class StockStrategy(BaseStrategy):
 
         notes: list[str] = []
         if self.check_zr_ratio is not None:
-            print(f"\n{Fore.BLUE}--- Additional Z/R Check ---{Style.RESET_ALL}")
-            print(
-                f"Additional Z/R check (check_zr_value_fibo_or_elevation): {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}"
-            )
+            print(f"\n{Fore.BLUE}--- Z/R---{Style.RESET_ALL}")
+            print(f"Z/R check: {Fore.MAGENTA}{self.check_zr_ratio:.2f}:1{Style.RESET_ALL}")
             if self.check_zr_ratio <= 4:
                 print(
-                    f"{Fore.RED}WARNING: Additional Z/R ratio is <= 4:1 for check_zr_value_fibo_or_elevation.{Style.RESET_ALL}"
+                    f"{Fore.RED}WARNING: Z/R ratio is <= 4:1.{Style.RESET_ALL}"
                 )
         else:
             notes.append(
@@ -219,14 +217,10 @@ class StockStrategy(BaseStrategy):
             )
 
         if self.take_profit_display is None:
-            print(
-                f"\nEntry Price: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}"
-            )
-            print(
-                f"Stop_loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}"
-            )
+            print(f"Entry: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}")
+            print(f"Stop loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}")
             notes.append(
-                "Take Profit was not calculated because optional line_cross_value is not set in TradingConfig."
+                "Take Profit not calculated because line_cross_value is not set."
             )
             if notes:
                 print(f"\n{Fore.BLUE}--- Notes ---{Style.RESET_ALL}")
