@@ -174,7 +174,6 @@ class StockStrategy(BaseStrategy):
         if self.stock_currency != "PLN":
             pair = self.currency_pair_used.replace("=X", "")
             print(f"FX: {pair} = {self.fx_rate_to_pln:.4f}")
-        disp.show_results(self.results)
 
         if getattr(self, "used_default_turnover", False):
             default_info = f"{Fore.RED}(użyto domyślnej wartości){Style.RESET_ALL}"
@@ -186,13 +185,20 @@ class StockStrategy(BaseStrategy):
         gdp_multiplier = self._get_gdp_multiplier()
         country_code = self._get_country_code()
 
+        if gdp_multiplier > 1:
+            print(f"{Fore.RED}GDP multiplier {country_code}/PL: {gdp_multiplier:.4f}x{Style.RESET_ALL}")
+
+        print()
+        disp.show_results(self.results)
+
         print(f"\n{Fore.BLUE}---Basics---{Style.RESET_ALL}")
         print(f"Max capital: {self.config.max_capital:,.2f} {disp._get_currency()} {default_info}")
+        print(f"Entry: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}")
+        print(f"Stop loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}")
         if self.config.max_capital < min_capital:
             print(
                 f"{Fore.RED}{Style.BRIGHT}WARNING: Calculated Max Capital is below minimum {min_capital:,.0f} PLN (GDP-adjusted)!{Style.RESET_ALL}"
             )
-        print(f"GDP multiplier {country_code}/PL: {gdp_multiplier:.4f}x")
 
         if self.config.max_capital < min_capital_ichimoku:
             print(
@@ -217,8 +223,6 @@ class StockStrategy(BaseStrategy):
             )
 
         if self.take_profit_display is None:
-            print(f"Entry: {Fore.YELLOW}{self.config.entry:.{disp.pip_decimals}f}{Style.RESET_ALL}")
-            print(f"Stop loss: {Fore.RED}{self.config.stop_loss:.{disp.pip_decimals}f}{Style.RESET_ALL}")
             notes.append(
                 "Take Profit not calculated because line_cross_value is not set."
             )
