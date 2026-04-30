@@ -644,7 +644,7 @@ class ChartLevelSelectorUI:
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
-            if clicked_object_id and active_tool == "level":
+            if clicked_object_id and active_tool == "level" and active_field is None:
                 return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, clicked_object_id
 
             price = self._extract_price(point)
@@ -922,23 +922,27 @@ class ChartLevelSelectorUI:
 
                 const now = Date.now();
                 const last = window.__line_preview_last || null;
-                if (last && now - last.ts < 40) return window.dash_clientside.no_update;
+                if (last && now - last.ts < 24) return window.dash_clientside.no_update;
                 window.__line_preview_last = {x: hoverPoint.x, y: hoverPoint.y, ts: now};
 
-                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
-                return {
-                    ...figure,
-                    data: [...baseData, {
-                        type: 'scatter',
-                        x: [lineAnchor.x, hoverPoint.x],
-                        y: [lineAnchor.y, hoverPoint.y],
-                        mode: 'lines',
-                        line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                        name: 'Line preview',
-                        hoverinfo: 'skip',
-                        showlegend: false,
-                    }]
+                const data = Array.isArray(figure.data) ? [...figure.data] : [];
+                const previewIdx = data.findIndex((trace) => trace && trace.name === "Line preview");
+                const previewTrace = {
+                    type: 'scatter',
+                    x: [lineAnchor.x, hoverPoint.x],
+                    y: [lineAnchor.y, hoverPoint.y],
+                    mode: 'lines',
+                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                    name: 'Line preview',
+                    hoverinfo: 'skip',
+                    showlegend: false,
                 };
+                if (previewIdx >= 0) {
+                    data[previewIdx] = previewTrace;
+                } else {
+                    data.push(previewTrace);
+                }
+                return { ...figure, data };
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
