@@ -905,13 +905,7 @@ class ChartLevelSelectorUI:
                 if (!figure) {
                     return window.dash_clientside.no_update;
                 }
-                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
-                if (activeTool !== 'line' || !lineAnchor) {
-                    if (baseData.length === (figure.data || []).length) {
-                        return window.dash_clientside.no_update;
-                    }
-                    return {...figure, data: baseData};
-                }
+                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview' && trace.name !== 'Hover candle');
 
                 let hoverPoint = null;
                 if (hoverData && hoverData.points && hoverData.points.length > 0) {
@@ -922,21 +916,33 @@ class ChartLevelSelectorUI:
                     }
                 }
 
-                if (!hoverPoint) {
-                    return {...figure, data: baseData};
+                const extras = [];
+                if (hoverPoint && Number.isFinite(hoverPoint.y)) {
+                    extras.push({
+                        type: 'scatter',
+                        x: [hoverPoint.x, hoverPoint.x],
+                        y: [hoverPoint.y * 0.998, hoverPoint.y * 1.002],
+                        mode: 'lines',
+                        line: {color: 'rgba(56,189,248,0.85)', width: 4},
+                        name: 'Hover candle',
+                        hoverinfo: 'skip',
+                        showlegend: false,
+                    });
                 }
 
-                const preview = {
-                    type: 'scatter',
-                    x: [lineAnchor.x, hoverPoint.x],
-                    y: [lineAnchor.y, hoverPoint.y],
-                    mode: 'lines',
-                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                    name: 'Line preview',
-                    hoverinfo: 'skip',
-                    showlegend: false,
-                };
-                return {...figure, data: [...baseData, preview]};
+                if (activeTool === 'line' && lineAnchor && hoverPoint) {
+                    extras.push({
+                        type: 'scatter',
+                        x: [lineAnchor.x, hoverPoint.x],
+                        y: [lineAnchor.y, hoverPoint.y],
+                        mode: 'lines',
+                        line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                        name: 'Line preview',
+                        hoverinfo: 'skip',
+                        showlegend: false,
+                    });
+                }
+                return {...figure, data: [...baseData, ...extras]};
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
@@ -971,14 +977,17 @@ class ChartLevelSelectorUI:
                         except Exception:
                             day_pct = None
                         day_pct_txt = f"  DAY:{day_pct:+.2f}%" if day_pct is not None else "  DAY:--"
-                        return (
-                            f"D:{d_txt}"
-                            f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
-                            f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
-                            f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
-                            f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}"
-                            f"{day_pct_txt}"
-                            f"{curr_txt}"
+                        day_color = "#22c55e" if (day_pct or 0) >= 0 else "#ef4444"
+                        return html.Span(
+                            [
+                                f"D:{d_txt}"
+                                f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
+                                f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
+                                f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
+                                f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}",
+                                html.Span(day_pct_txt, style={"color": day_color, "fontWeight": "800"}),
+                                curr_txt,
+                            ]
                         )
             curr_txt = "  CURSOR:--"
             return f"D:---- -- --  O:--  H:--  L:--  C:--  DAY:--{curr_txt}"
