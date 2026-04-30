@@ -181,11 +181,6 @@ INDEX_BROKER_DEFAULTS = {
     "SPA35": {"lot_cost": 74994.09, "pip_value": 42.59, "spread_multiplier": 8.0},
     "EU50": {"lot_cost": 12273.00, "pip_value": 43.00, "spread_multiplier": 2.8},
 }
-INDEX_DISPLAY_NAMES = {
-    "JP225": "Nikkei 225",
-    "NKX": "Nikkei 225",
-    "^NKX": "Nikkei 225",
-}
 COMMODITY_TICKER_ALIASES = {
     "GC=F": "GOLD",
     "SI=F": "SILVER",
@@ -268,16 +263,20 @@ def _index_defaults(symbol: str, source_ticker: str | None) -> dict | None:
     return None
 
 
-def _display_identity(symbol: str, source_ticker: str | None, searched_target: str) -> tuple[str | None, str | None]:
+def _display_identity(symbol: str, source_ticker: str | None, searched_target: str, resolved_name: str | None) -> tuple[str | None, str | None]:
     searched = (searched_target or "").strip().upper()
+    if resolved_name:
+        canonical = (source_ticker or "").upper() or (symbol or "").upper()
+        lookup = searched or canonical
+        if canonical == lookup:
+            return resolved_name, canonical
+        return resolved_name, f"{canonical} / {lookup}"
     for key in _commodity_candidates(symbol, source_ticker):
-        nice_name = INDEX_DISPLAY_NAMES.get(key)
-        if nice_name:
-            canonical = (source_ticker or "").upper() or key
-            lookup = searched or key
-            if canonical == lookup:
-                return nice_name, canonical
-            return nice_name, f"{canonical} / {lookup}"
+        canonical = (source_ticker or "").upper() or key
+        lookup = searched or key
+        if canonical == lookup:
+            return None, canonical
+        return None, f"{canonical} / {lookup}"
     return None, source_ticker
 
 COMMODITY_SPECS = {
@@ -471,7 +470,7 @@ def run_level_selector(raw_args=None):
             existing["spread_multiplier"] = round(index_defaults["spread_multiplier"], 4)
             existing["spread"] = round(existing["spread_multiplier"] * existing["pip_value"], 2)
 
-    display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target)
+    display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 
     ui = ChartLevelSelectorUI(
         symbol=symbol,
