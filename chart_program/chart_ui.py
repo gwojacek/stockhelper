@@ -439,6 +439,11 @@ class ChartLevelSelectorUI:
         has_saved_levels = any((self.values or {}).get(field) is not None for field in SELECTION_SEQUENCE)
         initial_active_field = None if has_saved_levels else "high"
         is_commodity = self.instrument_type == "commodity"
+        index_like_tokens = ("^", "DE40", "US500", "US100", "US30", "JP225", "WIG20", "UK100", "EU50", "DAX", "CAC", "AEX", "SMI", "IBEX")
+        source_ticker_upper = (self.source_ticker or "").upper()
+        symbol_upper = (self.symbol or "").upper()
+        is_index_like = is_commodity and any(token in source_ticker_upper or token in symbol_upper for token in index_like_tokens)
+        instrument_label = "COMMODITY/INDEX" if is_index_like else self.instrument_type.upper()
         ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", False))
         currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
         currency_fee_eligible = bool((self.values or {}).get("__currency_fee_eligible__", False))
@@ -501,7 +506,7 @@ class ChartLevelSelectorUI:
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
                             style={"marginBottom": "8px", "fontWeight": "800", "fontSize": "20px", "color": "#f8fafc"},
                         ),
-                        html.H4(f"Instrument: {self.instrument_type.upper()}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
+                        html.H4(f"Instrument: {instrument_label}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
                         html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd", "fontSize": "16px"}),
                         html.H4("Selected values", style={"marginTop": 0}),
                         html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),

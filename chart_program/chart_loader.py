@@ -61,10 +61,15 @@ COMMODITY_YAHOO_MAP = {
     "UK100": "^FTSE",
     "ITA40": "FTSEMIB.MI",
     "DE40": "^GDAXI",
+    "DAX": "^GDAXI",
     "FRA40": "^FCHI",
+    "CAC": "^FCHI",
     "NED25": "^AEX",
+    "AEX": "^AEX",
     "SUI20": "^SSMI",
+    "SMI": "^SSMI",
     "SPA35": "^IBEX",
+    "IBEX": "^IBEX",
     "EU50": "^STOXX50E",
 }
 
@@ -115,10 +120,15 @@ COMMODITY_STOOQ_MAP = {
     "UK100": "^ukx",
     "ITA40": "^fmib",
     "DE40": "^dax",
+    "DAX": "^dax",
     "FRA40": "^cac",
+    "CAC": "^cac",
     "NED25": "^aex",
+    "AEX": "^aex",
     "SUI20": "^smi",
+    "SMI": "^smi",
     "SPA35": "^ibex",
+    "IBEX": "^ibex",
     "EU50": "fx.f",
 }
 

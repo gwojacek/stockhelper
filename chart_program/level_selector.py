@@ -265,9 +265,13 @@ def _index_defaults(symbol: str, source_ticker: str | None) -> dict | None:
 
 def _display_identity(symbol: str, source_ticker: str | None, searched_target: str, resolved_name: str | None) -> tuple[str | None, str | None]:
     searched = (searched_target or "").strip().upper()
+    canonical = (source_ticker or "").upper() or (symbol or "").upper()
+    canonical_alias = COMMODITY_TICKER_ALIASES.get(canonical)
+
     if resolved_name:
-        canonical = (source_ticker or "").upper() or (symbol or "").upper()
-        lookup = searched or canonical
+        lookup = searched or canonical_alias or canonical
+        if canonical == lookup and canonical_alias:
+            return resolved_name, f"{canonical} / {canonical_alias}"
         if canonical == lookup:
             return resolved_name, canonical
         return resolved_name, f"{canonical} / {lookup}"
