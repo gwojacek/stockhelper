@@ -904,9 +904,41 @@ class ChartLevelSelectorUI:
 
         app.clientside_callback(
             """
-            function() {
-                // Disabled live preview to keep line tool click interactions responsive.
-                return window.dash_clientside.no_update;
+            function(hoverData, figure, activeTool, lineAnchor) {
+                if (!figure || activeTool !== 'line' || !lineAnchor) {
+                    window.__line_preview_last = null;
+                    return window.dash_clientside.no_update;
+                }
+                if (!hoverData || !hoverData.points || hoverData.points.length === 0) {
+                    return window.dash_clientside.no_update;
+                }
+                const first = hoverData.points[0];
+                const rawY = first.y ?? first.close ?? first.high ?? first.low ?? first.open;
+                if (rawY === null || rawY === undefined || first.x === null || first.x === undefined) {
+                    return window.dash_clientside.no_update;
+                }
+                const hoverPoint = {x: first.x, y: Number(rawY)};
+                if (!Number.isFinite(hoverPoint.y)) return window.dash_clientside.no_update;
+
+                const now = Date.now();
+                const last = window.__line_preview_last || null;
+                if (last && now - last.ts < 40) return window.dash_clientside.no_update;
+                window.__line_preview_last = {x: hoverPoint.x, y: hoverPoint.y, ts: now};
+
+                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
+                return {
+                    ...figure,
+                    data: [...baseData, {
+                        type: 'scatter',
+                        x: [lineAnchor.x, hoverPoint.x],
+                        y: [lineAnchor.y, hoverPoint.y],
+                        mode: 'lines',
+                        line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                        name: 'Line preview',
+                        hoverinfo: 'skip',
+                        showlegend: false,
+                    }]
+                };
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
@@ -917,68 +949,45 @@ class ChartLevelSelectorUI:
             prevent_initial_call=True,
         )
 
-        app.clientside_callback(
-            """
-            function(hoverData, figure) {
-                const empty = 'D:---- -- --  O:--  H:--  L:--  C:--  DAY:--  CURSOR:--';
-                if (!hoverData || !hoverData.points || hoverData.points.length === 0 || !figure || !figure.data) return empty;
-
-                const point = hoverData.points[0] || {};
-                const candle = (figure.data || []).find((trace) => trace && trace.type === 'candlestick' && trace.name === 'Daily');
-                if (!candle || !Array.isArray(candle.x)) return empty;
-
-                let idx = Number.isInteger(point.pointIndex) ? point.pointIndex : (Number.isInteger(point.pointNumber) ? point.pointNumber : -1);
-                if (!(idx >= 0 && idx < candle.x.length)) {
-                    const xKey = String(point.x ?? '');
-                    idx = candle.x.findIndex((v) => String(v) === xKey);
-                }
-                if (!(idx >= 0 && idx < candle.x.length)) {
-                    const px = Date.parse(String(point.x ?? ''));
-                    if (Number.isFinite(px)) {
-                        idx = candle.x.findIndex((v) => {
-                            const cx = Date.parse(String(v));
-                            return Number.isFinite(cx) && Math.abs(cx - px) < 86400000;
-                        });
-                    }
-                }
-                if (!(idx >= 0 && idx < candle.x.length)) {
-                    const xo = point.x ?? '---- -- --';
-                    const oo = Number(point.open), hh = Number(point.high), ll = Number(point.low), cc = Number(point.close);
-                    const yy = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open);
-                    if ([oo, hh, ll, cc].every(Number.isFinite)) {
-                        const p = Math.abs(cc) < 1 ? 4 : 2;
-                        const ct = Number.isFinite(yy) ? yy.toFixed(Math.abs(yy) < 1 ? 4 : p) : '--';
-                        return `D:${xo}  O:${oo.toFixed(p)}  H:${hh.toFixed(p)}  L:${ll.toFixed(p)}  C:${cc.toFixed(p)}  DAY:--  CURSOR:${ct}`;
-                    }
-                    return empty;
-                }
-
-                const x = candle.x[idx];
-                const o = Number((candle.open || [])[idx]);
-                const h = Number((candle.high || [])[idx]);
-                const l = Number((candle.low || [])[idx]);
-                const c = Number((candle.close || [])[idx]);
-                const y = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open ?? c);
-                if (![o, h, l, c].every(Number.isFinite)) return empty;
-
-                const precision = Math.abs(c) < 1 ? 4 : 2;
-                let day = 'DAY:--';
-                const cd = (candle.customdata || [])[idx];
-                const prevClose = Array.isArray(cd) ? Number(cd[0]) : Number(cd);
-                if (Number.isFinite(prevClose) && prevClose !== 0) {
-                    const pct = ((c - prevClose) / prevClose) * 100;
-                    day = `DAY:${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-                }
-
-                const cursorTxt = Number.isFinite(y) ? y.toFixed(Math.abs(y) < 1 ? 4 : precision) : '--';
-                return `D:${x}  O:${o.toFixed(precision)}  H:${h.toFixed(precision)}  L:${l.toFixed(precision)}  C:${c.toFixed(precision)}  ${day}  CURSOR:${cursorTxt}`;
-            }
-            """,
-            Output("cursor-box", "children"),
-            Input("candle-chart", "hoverData"),
-            State("candle-chart", "figure"),
-            prevent_initial_call=False,
-        )
+        @app.callback(Output("cursor-box", "children"), Input("candle-chart", "hoverData"))
+        def hover_info(hover_data):
+            cursor_price = None
+            if hover_data and hover_data.get("points"):
+                point = hover_data["points"][0]
+                price = self._extract_price(point)
+                cursor_price = price
+                date = point.get("x")
+                idx = self._resolve_candle_index(date)
+                if idx is not None:
+                    row = self.df.iloc[idx]
+                    d = pd.to_datetime(row["Date"], errors="coerce")
+                    if price is not None:
+                        d_txt = d.strftime("%Y-%m-%d") if not pd.isna(d) else str(row["Date"])
+                        curr_txt = f"  CURSOR:{cursor_price:.{self._precision_for_price(cursor_price)}f}" if cursor_price is not None else "  CURSOR:--"
+                        day_pct = None
+                        try:
+                            c = float(row["Close"])
+                            if idx > 0:
+                                prev_close = float(self.df.iloc[idx - 1]["Close"])
+                                if prev_close != 0:
+                                    day_pct = ((c - prev_close) / prev_close) * 100.0
+                        except Exception:
+                            day_pct = None
+                        day_pct_txt = f"  DAY:{day_pct:+.2f}%" if day_pct is not None else "  DAY:--"
+                        day_color = "#22c55e" if (day_pct or 0) >= 0 else "#ef4444"
+                        return html.Span(
+                            [
+                                f"D:{d_txt}"
+                                f"  O:{row['Open']:.{self._precision_for_price(row['Open'])}f}"
+                                f"  H:{row['High']:.{self._precision_for_price(row['High'])}f}"
+                                f"  L:{row['Low']:.{self._precision_for_price(row['Low'])}f}"
+                                f"  C:{row['Close']:.{self._precision_for_price(row['Close'])}f}",
+                                html.Span(day_pct_txt, style={"color": day_color, "fontWeight": "800"}),
+                                curr_txt,
+                            ]
+                        )
+            curr_txt = "  CURSOR:--"
+            return f"D:---- -- --  O:--  H:--  L:--  C:--  DAY:--{curr_txt}"
 
         app.clientside_callback(
             """
