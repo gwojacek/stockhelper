@@ -908,7 +908,9 @@ class ChartLevelSelectorUI:
                 if (!figure) {
                     return window.dash_clientside.no_update;
                 }
-                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
+                if (activeTool !== 'line' || !lineAnchor) {
+                    return window.dash_clientside.no_update;
+                }
 
                 let hoverPoint = null;
                 if (hoverData && hoverData.points && hoverData.points.length > 0) {
@@ -918,21 +920,22 @@ class ChartLevelSelectorUI:
                         hoverPoint = {x: first.x, y: Number(rawY)};
                     }
                 }
-
-                const extras = [];
-                if (activeTool === 'line' && lineAnchor && hoverPoint) {
-                    extras.push({
-                        type: 'scatter',
-                        x: [lineAnchor.x, hoverPoint.x],
-                        y: [lineAnchor.y, hoverPoint.y],
-                        mode: 'lines',
-                        line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
-                        name: 'Line preview',
-                        hoverinfo: 'skip',
-                        showlegend: false,
-                    });
+                if (!hoverPoint || !Number.isFinite(hoverPoint.y)) {
+                    return window.dash_clientside.no_update;
                 }
-                return {...figure, data: [...baseData, ...extras]};
+
+                const baseData = (figure.data || []).filter((trace) => trace.name !== 'Line preview');
+                const preview = {
+                    type: 'scatter',
+                    x: [lineAnchor.x, hoverPoint.x],
+                    y: [lineAnchor.y, hoverPoint.y],
+                    mode: 'lines',
+                    line: {color: '#94a3b8', width: 1.2, dash: 'dot'},
+                    name: 'Line preview',
+                    hoverinfo: 'skip',
+                    showlegend: false,
+                };
+                return {...figure, data: [...baseData, preview]};
             }
             """,
             Output("candle-chart", "figure", allow_duplicate=True),
@@ -947,34 +950,26 @@ class ChartLevelSelectorUI:
             """
             function(hoverData, figure) {
                 const empty = 'D:---- -- --  O:--  H:--  L:--  C:--  DAY:--  CURSOR:--';
-                if (!hoverData || !hoverData.points || hoverData.points.length === 0 || !figure || !figure.data) {
-                    return empty;
-                }
+                if (!hoverData || !hoverData.points || hoverData.points.length === 0 || !figure || !figure.data) return empty;
 
                 const point = hoverData.points[0] || {};
-                const x = point.x;
-                const y = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open);
-                if (x === undefined || x === null) {
-                    return empty;
-                }
-
                 const candle = (figure.data || []).find((trace) => trace && trace.type === 'candlestick' && trace.name === 'Daily');
-                if (!candle || !Array.isArray(candle.x)) {
-                    return empty;
-                }
+                if (!candle || !Array.isArray(candle.x)) return empty;
 
-                const idx = candle.x.findIndex((v) => String(v) === String(x));
-                if (idx < 0) {
-                    return empty;
+                let idx = Number.isInteger(point.pointIndex) ? point.pointIndex : (Number.isInteger(point.pointNumber) ? point.pointNumber : -1);
+                if (!(idx >= 0 && idx < candle.x.length)) {
+                    const xKey = String(point.x ?? '');
+                    idx = candle.x.findIndex((v) => String(v) === xKey);
                 }
+                if (!(idx >= 0 && idx < candle.x.length)) return empty;
 
+                const x = candle.x[idx];
                 const o = Number((candle.open || [])[idx]);
                 const h = Number((candle.high || [])[idx]);
                 const l = Number((candle.low || [])[idx]);
                 const c = Number((candle.close || [])[idx]);
-                if (![o, h, l, c].every(Number.isFinite)) {
-                    return empty;
-                }
+                const y = Number(point.y ?? point.close ?? point.high ?? point.low ?? point.open ?? c);
+                if (![o, h, l, c].every(Number.isFinite)) return empty;
 
                 const precision = Math.abs(c) < 1 ? 4 : 2;
                 let day = 'DAY:--';
@@ -984,6 +979,7 @@ class ChartLevelSelectorUI:
                     const pct = ((c - prevClose) / prevClose) * 100;
                     day = `DAY:${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
                 }
+
                 const cursorTxt = Number.isFinite(y) ? y.toFixed(Math.abs(y) < 1 ? 4 : precision) : '--';
                 return `D:${x}  O:${o.toFixed(precision)}  H:${h.toFixed(precision)}  L:${l.toFixed(precision)}  C:${c.toFixed(precision)}  ${day}  CURSOR:${cursorTxt}`;
             }
