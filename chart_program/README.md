@@ -40,6 +40,7 @@ Each generated config includes:
 
 - top-level `filename = "<config_file_stem>"`
 - `TradingConfig` dataclass with selected levels and risk fields.
+- for stocks, `market_data_source` is persisted and later used in stock summary output.
 
 ---
 
@@ -126,3 +127,10 @@ python -m chart_program "algt.us cfd"
 python -m chart_program algt.us --instrument stock
 python -m chart_program "algt.us cfd" --instrument commodity
 ```
+
+---
+
+## 8) Effect of FX fee toggle for foreign stocks
+
+- **ON**: position sizing includes conversion fee on buy + sell-at-stop path, and analysis output shows % reduction in position size caused by conversion fees.
+- **OFF**: analysis assumes you already hold instrument currency, so stock monetary outputs are displayed in instrument currency (e.g. USD) instead of PLN.

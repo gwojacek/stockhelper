@@ -52,6 +52,9 @@ class DisplayHandler:
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
     def _get_currency(self):
+        display_currency = getattr(self.config, "display_currency", None)
+        if display_currency:
+            return display_currency
         return "PLN" if hasattr(self.config, "pip_value") else "zł"
 
     def show_take_profit(self, entry, tp, ratio, profit, profit_pct, stop_loss=None, include_entry_stop=True):

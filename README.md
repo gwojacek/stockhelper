@@ -57,6 +57,10 @@ Each instrument setup is encoded as a Python module with a `TradingConfig` datac
 
 This makes setups versionable and reproducible.
 
+### 4) Currency handling for foreign stocks
+- If **FX conversion fee is enabled** for a foreign stock, StockHelper sizes the position with round-trip conversion fees included (buy + sell at stop), and prints how much the position was reduced because of fees.
+- If **FX conversion fee is disabled**, StockHelper assumes you already hold the instrument currency (e.g. USD). In that case stock table money values are shown in the instrument currency instead of PLN.
+
 ### 2) Strategy factory
 `core.factory.StrategyFactory` picks the right strategy implementation based on `instrument_type` from the config.
 
@@ -226,6 +230,9 @@ python -m chart_program eurusd_long --instrument forex --data-source yahoo
 ### Different spread/pip assumptions
 Edit generated config values (`spread`, `pip_value`, `lot_cost`) and rerun analysis.
 
+### Why stock source may differ from turnover source
+`Data source` shown in stock output follows the chart-selected market source saved in config (`market_data_source`). Liquidity/turnover internals may still fallback between providers.
+
 ---
 
 ## Recommended workflow for new instruments
@@ -243,4 +250,3 @@ Edit generated config values (`spread`, `pip_value`, `lot_cost`) and rerun analy
 - Keep config modules simple and explicit.
 - Prefer adding new instrument setups under `configs/` rather than hardcoding in entry scripts.
 - Keep strategy logic in `strategies/` and calculation primitives in `core/`.
-

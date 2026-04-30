@@ -100,13 +100,17 @@ class StockStrategy(BaseStrategy):
         daily_turnovers_20d_pln = [
             turnover * self.fx_rate_to_pln for turnover in daily_turnovers_20d
         ]
-        self.entry_pln = self.config.entry * self.fx_rate_to_pln
-        self.stop_loss_pln = self.config.stop_loss * self.fx_rate_to_pln
-        self.high_pln = self.config.high * self.fx_rate_to_pln
-        self.low_pln = self.config.low * self.fx_rate_to_pln
+        use_native_currency = self.stock_currency != "PLN" and not conversion_fee_enabled
+        self.pricing_fx_rate = 1.0 if use_native_currency else self.fx_rate_to_pln
+        self.config.display_currency = self.stock_currency if use_native_currency else "zł"
+
+        self.entry_pln = self.config.entry * self.pricing_fx_rate
+        self.stop_loss_pln = self.config.stop_loss * self.pricing_fx_rate
+        self.high_pln = self.config.high * self.pricing_fx_rate
+        self.low_pln = self.config.low * self.pricing_fx_rate
 
         # Obliczenie max_capital jako 1% średniego dziennego obrotu
-        self.config.max_capital = avg_daily_turnover_pln * 0.01
+        self.config.max_capital = (avg_daily_turnover if use_native_currency else avg_daily_turnover_pln) * 0.01
 
         # Ichimoku używa tego samego max_capital (z 10d), ale ma osobny safeguard płynności 20d
         self.liquidity_threshold_ichimoku = self._get_liquidity_threshold()
