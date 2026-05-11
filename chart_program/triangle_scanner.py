@@ -241,8 +241,6 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
     up_touches = len(up_conf_ix) + 2
     dn_touches = len(dn_conf_ix) + 2
-    if len(up_conf_ix) < 2 or len(dn_conf_ix) < 2:
-        return None
 
     tri_type = "symmetrical"
     if abs(upper["slope"]) < 1e-4 and lower["slope"] > 0:
@@ -282,8 +280,8 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if status.startswith("Broken") and line_cross_value is not None:
         tp = calculate_take_profit(line_cross_value, high, low, "long" if direction == "up" else "short", start_value=line_cross_value)
 
-    up_test_dates = [df["Date"].iat[i].date().isoformat() for i in up_conf_ix[:2]]
-    dn_test_dates = [df["Date"].iat[i].date().isoformat() for i in dn_conf_ix[:2]]
+    upper_anchor_dates = sorted([df["Date"].iat[upper["p1"]].date().isoformat(), df["Date"].iat[upper["p2"]].date().isoformat()])
+    lower_anchor_dates = sorted([df["Date"].iat[lower["p1"]].date().isoformat(), df["Date"].iat[lower["p2"]].date().isoformat()])
 
     return {
         "Ticker": "",
@@ -293,17 +291,19 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
         "Data_końca": df["Date"].iat[end].date().isoformat(),
         "Liczba_touch_górą": up_touches,
         "Liczba_touch_dołem": dn_touches,
-        "Data_test_1_góra": up_test_dates[0] if len(up_test_dates) > 0 else "",
-        "Data_test_2_góra": up_test_dates[1] if len(up_test_dates) > 1 else "",
-        "Data_test_1_dół": dn_test_dates[0] if len(dn_test_dates) > 0 else "",
-        "Data_test_2_dół": dn_test_dates[1] if len(dn_test_dates) > 1 else "",
+        "Data_anchor_1_góra": upper_anchor_dates[0],
+        "Data_anchor_2_góra": upper_anchor_dates[1],
+        "Data_anchor_1_dół": lower_anchor_dates[0],
+        "Data_anchor_2_dół": lower_anchor_dates[1],
+        "Liczba_confirmation_górą": len(up_conf_ix),
+        "Liczba_confirmation_dołem": len(dn_conf_ix),
         "Status": status,
         "Data_wybicia": breakout_date.date().isoformat() if breakout_date is not None else "",
         "Cena_wybicia": breakout_price,
         "Line_cross_value": line_cross_value,
         "TP": tp,
         "Wysokość_formacji": high - low,
-        "Siła_formacji": "very_good" if min(up_touches, dn_touches) >= 3 else "good",
+        "Siła_formacji": "very_good" if min(len(up_conf_ix), len(dn_conf_ix)) >= 2 else ("good" if min(len(up_conf_ix), len(dn_conf_ix)) >= 1 else "base"),
     }
 
 
