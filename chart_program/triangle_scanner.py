@@ -100,10 +100,9 @@ def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
     return df.sort_values("Date").reset_index(drop=True)
 
 
-def _local_extrema(df: pd.DataFrame, col: str) -> list[int]:
-    # More selective swing points: strict extrema in a +/-2 candle neighborhood.
+def _local_extrema(df: pd.DataFrame, col: str, radius: int = 2) -> list[int]:
+    # Selective swing points with configurable neighborhood radius.
     idxs: list[int] = []
-    radius = 2
     for i in range(radius, len(df) - radius):
         window = df[col].iloc[i - radius : i + radius + 1]
         mid = df[col].iat[i]
@@ -363,6 +362,29 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
             if best_combo is None or combo["score"] > best_combo["score"]:
                 best_combo = combo
 
+    if best_combo is None:
+        # Fallback pass with denser pivots for broad triangles (helps symbols like KGH).
+        highs_relaxed = _local_extrema(df, "High", radius=1)
+        lows_relaxed = _local_extrema(df, "Low", radius=1)
+        upper_candidates = _collect_boundary_candidates(df, highs_relaxed, "upper", cfg, end=end, limit=8)
+        lower_candidates = _collect_boundary_candidates(df, lows_relaxed, "lower", cfg, end=end, limit=8)
+        for upper in upper_candidates:
+            for lower in lower_candidates:
+                start = max(upper["start"], lower["start"])
+                if end - start < 20:
+                    continue
+                width_start = _line_val(upper["slope"], upper["intercept"], start) - _line_val(lower["slope"], lower["intercept"], start)
+                width_end = _line_val(upper["slope"], upper["intercept"], end) - _line_val(lower["slope"], lower["intercept"], end)
+                if width_start <= 0 or width_end <= 0 or width_end >= width_start:
+                    continue
+                upper_anchor_end = max(upper["p1"], upper["p2"]) + 1
+                lower_anchor_end = max(lower["p1"], lower["p2"]) + 1
+                up_conf_ix = _confirmation_indices(df, upper_anchor_end, upper["slope"], upper["intercept"], "upper", cfg.confirmation_tolerance_pct)
+                dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.confirmation_tolerance_pct)
+                score = len(up_conf_ix) + len(dn_conf_ix)
+                combo = {"upper": upper, "lower": lower, "start": start, "up_conf_ix": up_conf_ix, "dn_conf_ix": dn_conf_ix, "score": score}
+                if best_combo is None or combo["score"] > best_combo["score"]:
+                    best_combo = combo
     if best_combo is None:
         return None
 
