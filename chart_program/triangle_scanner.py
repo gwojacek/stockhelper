@@ -8,9 +8,8 @@ import unicodedata
 import pandas as pd
 
 from core.risk_manager import calculate_take_profit
-from utilities.yahoo_finance import _fetch_stooq_history
+from chart_program.chart_loader import _stooq_download as chart_stooq_download
 
-STOOQ_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 DATA_DIR = Path("chart_program/data/stocks")
 RESULTS_DIR = Path("results/triangles")
 
@@ -84,9 +83,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
             rename[col] = key
     return df.rename(columns=rename)
 def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
-    # Reuse existing stockhelper Stooq loader (supports Polish/English headers, ;/, separators).
-    # The utility accepts a `period` string and internally handles Stooq symbol variants.
-    df = _fetch_stooq_history(f"{symbol}.WA", period=f"{days}d")
+    df, _candidate = chart_stooq_download(f"{symbol}.WA", "stock", api_key=None)
     df = _normalize_columns(df)
     expected_cols = {"Date", "Open", "High", "Low", "Close", "Volume"}
     if not expected_cols.issubset(df.columns):
