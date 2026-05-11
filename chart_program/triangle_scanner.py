@@ -130,6 +130,68 @@ def _count_touches(df: pd.DataFrame, slope: float, intercept: float, side: str, 
     return touches
 
 
+
+
+def _line_window_stats(df: pd.DataFrame, start: int, end: int, slope: float, intercept: float, side: str, tol: float) -> dict:
+    invalid = 0
+    tests = 0
+    for i in range(start, end + 1):
+        line = _line_val(slope, intercept, i)
+        close = df["Close"].iat[i]
+        high = df["High"].iat[i]
+        low = df["Low"].iat[i]
+        if side == "upper":
+            if high > line * (1 + tol):
+                if close <= line:
+                    tests += 1
+                else:
+                    invalid += 1
+        else:
+            if low < line * (1 - tol):
+                if close >= line:
+                    tests += 1
+                else:
+                    invalid += 1
+    line_values = [_line_val(slope, intercept, i) for i in range(start, end + 1)]
+    return {"invalid": invalid, "tests": tests, "line_mean": float(sum(line_values) / len(line_values))}
+
+
+def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: ScannerConfig, start_min: int, end: int) -> dict | None:
+    best = None
+    for i, p1 in enumerate(pivots[:-1]):
+        for p2 in pivots[i + 1 :]:
+            v1 = df["High"].iat[p1] if side == "upper" else df["Low"].iat[p1]
+            v2 = df["High"].iat[p2] if side == "upper" else df["Low"].iat[p2]
+            slope, intercept = _fit_line(p1, v1, p2, v2)
+            if side == "upper" and slope > 0.0001:
+                continue
+            if side == "lower" and slope < -0.0001:
+                continue
+            start = max(start_min, min(p1, p2))
+            if end - start < 20:
+                continue
+            touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), slope, intercept, side, cfg.touch_tolerance_pct)
+            if touches < 2:
+                continue
+            stats = _line_window_stats(df, start, end, slope, intercept, side, cfg.touch_tolerance_pct)
+            candidate = {
+                "p1": p1, "p2": p2, "slope": slope, "intercept": intercept,
+                "start": start, "touches": touches, **stats,
+            }
+            if best is None:
+                best = candidate
+                continue
+            # Prefer fewer invalid penetrations; then higher upper line / lower lower line; then more touches.
+            if candidate["invalid"] < best["invalid"]:
+                best = candidate
+            elif candidate["invalid"] == best["invalid"]:
+                if side == "upper":
+                    better_edge = candidate["line_mean"] > best["line_mean"]
+                else:
+                    better_edge = candidate["line_mean"] < best["line_mean"]
+                if better_edge or (candidate["touches"] > best["touches"]):
+                    best = candidate
+    return best
 def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if len(df) < 60:
         return None
@@ -138,54 +200,31 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if len(highs) < 2 or len(lows) < 2:
         return None
 
-    best = None
-    for hi, h1 in enumerate(highs[:-1]):
-        for h2 in highs[hi + 1 :]:
-            us, ui = _fit_line(h1, df["High"].iat[h1], h2, df["High"].iat[h2])
-            if us > 0.0001:
-                continue
-            for li, l1 in enumerate(lows[:-1]):
-                for l2 in lows[li + 1 :]:
-                    ls, li2 = _fit_line(l1, df["Low"].iat[l1], l2, df["Low"].iat[l2])
-                    if ls < -0.0001:
-                        continue
-                    start = max(min(h1, h2), min(l1, l2))
-                    end = len(df) - 1
-                    if end - start < 20:
-                        continue
-
-                    width_start = _line_val(us, ui, start) - _line_val(ls, li2, start)
-                    width_end = _line_val(us, ui, end) - _line_val(ls, li2, end)
-                    if width_start <= 0 or width_end <= 0 or width_end >= width_start:
-                        continue
-
-                    up_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), us, ui, "upper", cfg.touch_tolerance_pct)
-                    dn_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), ls, li2, "lower", cfg.touch_tolerance_pct)
-                    if up_touches + dn_touches < 3:
-                        continue
-
-                    tri_type = "symmetrical"
-                    if abs(us) < 1e-4 and ls > 0:
-                        tri_type = "ascending"
-                    elif us < 0 and abs(ls) < 1e-4:
-                        tri_type = "descending"
-
-                    score = (end - start) + 5 * (up_touches + dn_touches)
-                    if best is None or score > best["score"]:
-                        best = {
-                            "start": start,
-                            "end": end,
-                            "upper_slope": us,
-                            "upper_i": ui,
-                            "lower_slope": ls,
-                            "lower_i": li2,
-                            "up_touches": up_touches,
-                            "down_touches": dn_touches,
-                            "triangle_type": tri_type,
-                            "score": score,
-                        }
-    if not best:
+    end = len(df) - 1
+    upper = _pick_boundary_line(df, highs, "upper", cfg, start_min=0, end=end)
+    lower = _pick_boundary_line(df, lows, "lower", cfg, start_min=0, end=end)
+    if not upper or not lower:
         return None
+
+    start = max(upper["start"], lower["start"])
+    if end - start < 20:
+        return None
+
+    width_start = _line_val(upper["slope"], upper["intercept"], start) - _line_val(lower["slope"], lower["intercept"], start)
+    width_end = _line_val(upper["slope"], upper["intercept"], end) - _line_val(lower["slope"], lower["intercept"], end)
+    if width_start <= 0 or width_end <= 0 or width_end >= width_start:
+        return None
+
+    up_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
+    dn_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
+    if up_touches + dn_touches < 3:
+        return None
+
+    tri_type = "symmetrical"
+    if abs(upper["slope"]) < 1e-4 and lower["slope"] > 0:
+        tri_type = "ascending"
+    elif upper["slope"] < 0 and abs(lower["slope"]) < 1e-4:
+        tri_type = "descending"
 
     last_i = len(df) - 1
     status = "Active"
@@ -193,53 +232,47 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     breakout_price = None
     line_cross_value = None
     direction = "none"
-    for i in range(max(best["start"], last_i - cfg.breakout_lookback_sessions + 1), len(df)):
+    for i in range(max(start, last_i - cfg.breakout_lookback_sessions + 1), len(df)):
         close = df["Close"].iat[i]
-        upper = _line_val(best["upper_slope"], best["upper_i"], i)
-        lower = _line_val(best["lower_slope"], best["lower_i"], i)
-        if close > upper:
+        upper_line = _line_val(upper["slope"], upper["intercept"], i)
+        lower_line = _line_val(lower["slope"], lower["intercept"], i)
+        if close > upper_line:
             status = "Broken_Up"
             direction = "up"
             breakout_date = df["Date"].iat[i]
             breakout_price = close
-            line_cross_value = upper
+            line_cross_value = upper_line
             break
-        if close < lower:
+        if close < lower_line:
             status = "Broken_Down"
             direction = "down"
             breakout_date = df["Date"].iat[i]
             breakout_price = close
-            line_cross_value = lower
+            line_cross_value = lower_line
             break
 
-    window = df.iloc[best["start"] : best["end"] + 1]
+    window = df.iloc[start : end + 1]
     high = float(window["High"].max())
     low = float(window["Low"].min())
     tp = None
     if status.startswith("Broken") and line_cross_value is not None:
-        tp = calculate_take_profit(
-            line_cross_value,
-            high,
-            low,
-            "long" if direction == "up" else "short",
-            start_value=line_cross_value,
-        )
+        tp = calculate_take_profit(line_cross_value, high, low, "long" if direction == "up" else "short", start_value=line_cross_value)
 
     return {
         "Ticker": "",
-        "Typ_trójkąta": best["triangle_type"],
+        "Typ_trójkąta": tri_type,
         "Kierunek": direction,
-        "Data_startu": df["Date"].iat[best["start"]].date().isoformat(),
-        "Data_końca": df["Date"].iat[best["end"]].date().isoformat(),
-        "Liczba_touch_górą": best["up_touches"],
-        "Liczba_touch_dołem": best["down_touches"],
+        "Data_startu": df["Date"].iat[start].date().isoformat(),
+        "Data_końca": df["Date"].iat[end].date().isoformat(),
+        "Liczba_touch_górą": up_touches,
+        "Liczba_touch_dołem": dn_touches,
         "Status": status,
         "Data_wybicia": breakout_date.date().isoformat() if breakout_date is not None else "",
         "Cena_wybicia": breakout_price,
         "Line_cross_value": line_cross_value,
         "TP": tp,
         "Wysokość_formacji": high - low,
-        "Siła_formacji": "very_good" if min(best["up_touches"], best["down_touches"]) >= 3 else "good",
+        "Siła_formacji": "very_good" if min(up_touches, dn_touches) >= 3 else "good",
     }
 
 
