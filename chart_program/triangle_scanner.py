@@ -10,7 +10,7 @@ import pandas as pd
 from core.risk_manager import calculate_take_profit
 from chart_program.chart_loader import _stooq_download as chart_stooq_download
 
-DATA_DIR = Path("data/stocks")
+DATA_DIR = Path("chart_program/data/stocks")
 RESULTS_DIR = Path("results/triangles")
 
 WIG20_SYMBOLS = [
