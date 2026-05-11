@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import unicodedata
 
 import pandas as pd
 
@@ -55,10 +56,38 @@ TICKER_ALIASES = {
     "SANTANDER": "EBS",
 }
 
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    def _norm(value: str) -> str:
+        ascii_value = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
+        return ascii_value.strip().lower()
+
+    mapping = {
+        "data": "Date",
+        "date": "Date",
+        "otwarcie": "Open",
+        "open": "Open",
+        "najwyzszy": "High",
+        "high": "High",
+        "najnizszy": "Low",
+        "low": "Low",
+        "zamkniecie": "Close",
+        "close": "Close",
+        "wolumen": "Volume",
+        "volume": "Volume",
+    }
+    rename: dict[str, str] = {}
+    for col in df.columns:
+        key = mapping.get(_norm(col))
+        if key:
+            rename[col] = key
+    return df.rename(columns=rename)
 def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
     # Reuse existing stockhelper Stooq loader (supports Polish/English headers, ;/, separators).
     # The utility accepts a `period` string and internally handles Stooq symbol variants.
     df = _fetch_stooq_history(f"{symbol}.WA", period=f"{days}d")
+    df = _normalize_columns(df)
     expected_cols = {"Date", "Open", "High", "Low", "Close", "Volume"}
     if not expected_cols.issubset(df.columns):
         raise ValueError(f"Invalid Stooq columns: {list(df.columns)}")
@@ -230,7 +259,7 @@ def run_scan(target: str, force: bool = False) -> Path:
         cache_path = DATA_DIR / f"{symbol}_WA.csv"
         try:
             if cache_path.exists() and not cfg.force_refresh:
-                df = pd.read_csv(cache_path)
+                df = _normalize_columns(pd.read_csv(cache_path))
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
                 df = df.dropna(subset=["Date"])
             else:
