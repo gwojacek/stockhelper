@@ -152,6 +152,18 @@ def _confirmation_indices(df: pd.DataFrame, start_idx: int, slope: float, interc
             idxs.append(i)
             prev = i
     return idxs
+
+
+def _body_intersections_between_anchors(df: pd.DataFrame, p1: int, p2: int, slope: float, intercept: float) -> int:
+    left, right = sorted((p1, p2))
+    intersections = 0
+    for i in range(left, right + 1):
+        line = _line_val(slope, intercept, i)
+        body_low = min(float(df["Open"].iat[i]), float(df["Close"].iat[i]))
+        body_high = max(float(df["Open"].iat[i]), float(df["Close"].iat[i]))
+        if body_low <= line <= body_high:
+            intersections += 1
+    return intersections
 def _line_window_stats(df: pd.DataFrame, start: int, end: int, slope: float, intercept: float, side: str, tol: float) -> dict:
     invalid = 0
     tests = 0
@@ -208,6 +220,10 @@ def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: Sca
             if end - start < 20:
                 continue
 
+            body_intersections = _body_intersections_between_anchors(df, p1, p2, slope, intercept)
+            if body_intersections > 1:
+                continue
+
             stats = _line_window_stats(df, start, end, slope, intercept, side, cfg.touch_tolerance_pct)
             # Do not accept boundaries broken by end-of-day closes before breakout logic.
             if stats["invalid"] > 0:
@@ -215,7 +231,7 @@ def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: Sca
 
             candidate = {
                 "p1": p1, "p2": p2, "slope": slope, "intercept": intercept,
-                "start": start, "touches": 2 + stats["tests"], **stats,
+                "start": start, "touches": 2 + stats["tests"], "body_intersections": body_intersections, **stats,
             }
             if best is None:
                 best = candidate
@@ -225,7 +241,7 @@ def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: Sca
                 better_edge = candidate["line_mean"] > best["line_mean"]
             else:
                 better_edge = candidate["line_mean"] < best["line_mean"]
-            if better_edge or (candidate["tests"] > best["tests"]):
+            if better_edge or (candidate["body_intersections"] < best["body_intersections"]) or (candidate["tests"] > best["tests"]):
                 best = candidate
     return best
 
