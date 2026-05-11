@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from io import StringIO
 from pathlib import Path
-from urllib.parse import urlencode
-from urllib.request import urlopen
 
 import pandas as pd
 
 from core.risk_manager import calculate_take_profit
+from utilities.yahoo_finance import _fetch_stooq_history
 
 STOOQ_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 DATA_DIR = Path("chart_program/data/stocks")
@@ -31,80 +29,20 @@ class ScannerConfig:
     force_refresh: bool = False
 
 
-def _parse_stooq_csv(csv_text: str) -> pd.DataFrame:
-    lines = csv_text.splitlines()
-    header_index = None
-    separator = ","
-    for idx, raw_line in enumerate(lines):
-        line = raw_line.strip().lstrip("\ufeff")
-        lower = line.lower()
-        if lower.startswith("date,open,high,low,close"):
-            header_index = idx
-            separator = ","
-            break
-        if lower.startswith("date;open;high;low;close"):
-            header_index = idx
-            separator = ";"
-            break
-        if lower.startswith("data,otwarcie,najwyzszy,najnizszy,zamkniecie"):
-            header_index = idx
-            separator = ","
-            break
-        if lower.startswith("data;otwarcie;najwyzszy;najnizszy;zamkniecie"):
-            header_index = idx
-            separator = ";"
-            break
-    if header_index is None:
-        raise ValueError("Missing expected Stooq header")
-
-    df = pd.read_csv(StringIO("\n".join(lines[header_index:])), sep=separator, on_bad_lines="skip")
-    df = df.rename(
-        columns={
-            "date": "Date",
-            "open": "Open",
-            "high": "High",
-            "low": "Low",
-            "close": "Close",
-            "volume": "Volume",
-            "Date": "Date",
-            "Open": "Open",
-            "High": "High",
-            "Low": "Low",
-            "Close": "Close",
-            "Volume": "Volume",
-            "Data": "Date",
-            "Otwarcie": "Open",
-            "Najwyzszy": "High",
-            "Najnizszy": "Low",
-            "Zamkniecie": "Close",
-            "Wolumen": "Volume",
-        }
-    )
+def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
+    # Reuse existing stockhelper Stooq loader (supports Polish/English headers, ;/, separators).
+    # The utility accepts a `period` string and internally handles Stooq symbol variants.
+    df = _fetch_stooq_history(f"{symbol}.WA", period=f"{days}d")
     expected_cols = {"Date", "Open", "High", "Low", "Close", "Volume"}
     if not expected_cols.issubset(df.columns):
         raise ValueError(f"Invalid Stooq columns: {list(df.columns)}")
 
+    df = df.copy()
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     for col in ["Open", "High", "Low", "Close", "Volume"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna(subset=["Date", "Open", "High", "Low", "Close", "Volume"])
     return df.sort_values("Date").reset_index(drop=True)
-
-
-def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
-    end = datetime.now(timezone.utc).date()
-    start = end - timedelta(days=days)
-    params = {
-        "s": f"{symbol.lower()}.pl",
-        "i": "d",
-        "d1": start.strftime("%Y%m%d"),
-        "d2": end.strftime("%Y%m%d"),
-        "apikey": STOOQ_API_KEY,
-    }
-    url = f"https://stooq.pl/q/d/l/?{urlencode(params)}"
-    with urlopen(url, timeout=20) as response:
-        csv_text = response.read().decode("utf-8", errors="replace")
-    return _parse_stooq_csv(csv_text)
 
 
 def _local_extrema(df: pd.DataFrame, col: str) -> list[int]:
