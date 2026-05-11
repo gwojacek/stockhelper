@@ -16,14 +16,14 @@ RESULTS_DIR = Path("results/triangles")
 
 WIG20_SYMBOLS = [
     "ALR", "ALE", "ACP", "CCC", "CDR", "CPS", "DNP", "KTY", "KGH", "KRU",
-    "LPP", "MBK", "OPL", "PEO", "PCO", "PGE", "PKN", "PKO", "PZU", "EBS",
+    "LPP", "MBK", "OPL", "PEO", "PCO", "PGE", "PKN", "PKO", "PZU", "EBP",
 ]
 
 WIG20_LABELS = {
     "ALR": "ALIOR", "ALE": "ALLEGRO", "ACP": "ASSECO", "CCC": "CCC", "CDR": "CDPROJEKT",
     "CPS": "CYFRPLSAT", "DNP": "DINOPL", "KTY": "KETY", "KGH": "KGHM", "KRU": "KRUK",
     "LPP": "LPP", "MBK": "MBANK", "OPL": "ORANGEPL", "PEO": "PEKAO", "PCO": "PEPCO",
-    "PGE": "PGE", "PKN": "PKNORLEN", "PKO": "PKOBP", "PZU": "PZU", "EBS": "ERSTEPL",
+    "PGE": "PGE", "PKN": "PKNORLEN", "PKO": "PKOBP", "PZU": "PZU", "EBP": "ERSTEPL",
 }
 
 
@@ -52,8 +52,8 @@ TICKER_ALIASES = {
     "ASSECO": "ACP",
     "KETY": "KTY",
     "KRUK": "KRU",
-    "ERSTEPL": "EBS",
-    "SANTANDER": "EBS",
+    "ERSTEPL": "EBP",
+    "SANTANDER": "EBP",
 }
 
 
