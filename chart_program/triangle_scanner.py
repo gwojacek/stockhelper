@@ -29,7 +29,7 @@ WIG20_LABELS = {
 @dataclass
 class ScannerConfig:
     touch_tolerance_pct: float = 0.001
-    confirmation_tolerance_pct: float = 0.003
+    confirmation_tolerance_pct: float = 0.006
     breakout_lookback_sessions: int = 5
     liquidity_min_avg_turnover_pln: float = 500_000
     history_days: int = 364
@@ -357,8 +357,6 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
             lower_anchor_end = max(lower["p1"], lower["p2"]) + 1
             up_conf_ix = _confirmation_indices(df, upper_anchor_end, upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
             dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
-            if len(up_conf_ix) + len(dn_conf_ix) == 0:
-                continue
             score = (len(up_conf_ix) + len(dn_conf_ix)) * 20 + min(len(up_conf_ix), len(dn_conf_ix)) * 10 - abs((upper["anchor2"] - lower["anchor2"]))
             combo = {"upper": upper, "lower": lower, "start": start, "up_conf_ix": up_conf_ix, "dn_conf_ix": dn_conf_ix, "score": score}
             if best_combo is None or combo["score"] > best_combo["score"]:
@@ -451,6 +449,13 @@ def run_scan(target: str, force: bool = False) -> Path:
                 df = _normalize_columns(pd.read_csv(cache_path))
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
                 df = df.dropna(subset=["Date"])
+                last_date = df["Date"].max().date() if not df.empty else None
+                today = pd.Timestamp.utcnow().tz_localize(None).date()
+                if last_date is None or (today - last_date).days >= 1:
+                    fresh = _stooq_download(symbol, days=cfg.history_days)
+                    if not fresh.empty:
+                        df = fresh
+                        df.to_csv(cache_path, index=False)
             else:
                 df = _stooq_download(symbol, days=cfg.history_days)
                 df.to_csv(cache_path, index=False)
