@@ -14,12 +14,12 @@ DATA_DIR = Path("chart_program/data/stocks")
 RESULTS_DIR = Path("results/triangles")
 
 WIG20_SYMBOLS = [
-    "ALR", "ALE", "ACP", "CCC", "CDR", "CPS", "DNP", "KTY", "KGH", "KRU",
+    "ALR", "ALE", "ACP", "MDV", "CDR", "CPS", "DNP", "KTY", "KGH", "KRU",
     "LPP", "MBK", "OPL", "PEO", "PCO", "PGE", "PKN", "PKO", "PZU", "EBP",
 ]
 
 WIG20_LABELS = {
-    "ALR": "ALIOR", "ALE": "ALLEGRO", "ACP": "ASSECO", "CCC": "CCC", "CDR": "CDPROJEKT",
+    "ALR": "ALIOR", "ALE": "ALLEGRO", "ACP": "ASSECO", "MDV": "MODIVO", "CDR": "CDPROJEKT",
     "CPS": "CYFRPLSAT", "DNP": "DINOPL", "KTY": "KETY", "KGH": "KGHM", "KRU": "KRUK",
     "LPP": "LPP", "MBK": "MBANK", "OPL": "ORANGEPL", "PEO": "PEKAO", "PCO": "PEPCO",
     "PGE": "PGE", "PKN": "PKNORLEN", "PKO": "PKOBP", "PZU": "PZU", "EBP": "ERSTEPL",
@@ -49,6 +49,8 @@ TICKER_ALIASES = {
     "ALIOR": "ALR",
     "ALLEGRO": "ALE",
     "ASSECO": "ACP",
+    "CCC": "MDV",
+    "MODIVO": "MDV",
     "KETY": "KTY",
     "KRUK": "KRU",
     "ERSTEPL": "EBP",
@@ -136,6 +138,20 @@ def _count_touches(df: pd.DataFrame, slope: float, intercept: float, side: str, 
 
 
 
+
+
+def _confirmation_indices(df: pd.DataFrame, start_idx: int, slope: float, intercept: float, side: str, tol: float) -> list[int]:
+    idxs: list[int] = []
+    prev = -99
+    for i in range(start_idx, len(df)):
+        line = _line_val(slope, intercept, i)
+        close = df["Close"].iat[i]
+        price = df["High"].iat[i] if side == "upper" else df["Low"].iat[i]
+        close_inside = close <= line if side == "upper" else close >= line
+        if line > 0 and close_inside and abs(price - line) / line <= tol and i - prev > 2:
+            idxs.append(i)
+            prev = i
+    return idxs
 def _line_window_stats(df: pd.DataFrame, start: int, end: int, slope: float, intercept: float, side: str, tol: float) -> dict:
     invalid = 0
     tests = 0
@@ -219,9 +235,13 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if width_start <= 0 or width_end <= 0 or width_end >= width_start:
         return None
 
-    up_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
-    dn_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
-    if up_touches < 2 or dn_touches < 2:
+    upper_anchor_end = max(upper["p1"], upper["p2"]) + 1
+    lower_anchor_end = max(lower["p1"], lower["p2"]) + 1
+    up_conf_ix = _confirmation_indices(df, upper_anchor_end, upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
+    dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
+    up_touches = len(up_conf_ix) + 2
+    dn_touches = len(dn_conf_ix) + 2
+    if len(up_conf_ix) < 2 or len(dn_conf_ix) < 2:
         return None
 
     tri_type = "symmetrical"
@@ -262,10 +282,8 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if status.startswith("Broken") and line_cross_value is not None:
         tp = calculate_take_profit(line_cross_value, high, low, "long" if direction == "up" else "short", start_value=line_cross_value)
 
-    up_touch_ix = _touch_indices(df.iloc[start : end + 1].reset_index(drop=True), upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
-    dn_touch_ix = _touch_indices(df.iloc[start : end + 1].reset_index(drop=True), lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
-    up_test_dates = [df["Date"].iat[start + i].date().isoformat() for i in up_touch_ix[:2]]
-    dn_test_dates = [df["Date"].iat[start + i].date().isoformat() for i in dn_touch_ix[:2]]
+    up_test_dates = [df["Date"].iat[i].date().isoformat() for i in up_conf_ix[:2]]
+    dn_test_dates = [df["Date"].iat[i].date().isoformat() for i in dn_conf_ix[:2]]
 
     return {
         "Ticker": "",
@@ -332,4 +350,6 @@ def run_scan(target: str, force: bool = False) -> Path:
     print(f"Saved triangle scan to: {out_path}")
     if not result_df.empty:
         print(result_df.to_string(index=False))
+    else:
+        print("No valid triangles found for selected universe and filters.")
     return out_path
