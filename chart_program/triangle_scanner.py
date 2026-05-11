@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -17,7 +18,7 @@ RESULTS_DIR = Path("results/triangles")
 WIG20_SYMBOLS = [
     "ALIOR", "ALLEGRO", "ASSECO", "CCC", "CDPROJEKT", "CYFRPLSAT", "DINOPL", "KETY",
     "KGHM", "KRUK", "LPP", "MBANK", "ORANGEPL", "PEKAO", "PEPCO", "PGE", "PKNORLEN",
-    "PKOBP", "PZU", "SANTANDER"
+    "PKOBP", "PZU", "SANTANDER",
 ]
 
 
@@ -26,10 +27,71 @@ class ScannerConfig:
     touch_tolerance_pct: float = 0.001
     breakout_lookback_sessions: int = 5
     liquidity_min_avg_turnover_pln: float = 500_000
+    history_days: int = 364
     force_refresh: bool = False
 
 
-def _stooq_download(symbol: str, days: int = 380) -> pd.DataFrame:
+def _parse_stooq_csv(csv_text: str) -> pd.DataFrame:
+    lines = csv_text.splitlines()
+    header_index = None
+    separator = ","
+    for idx, raw_line in enumerate(lines):
+        line = raw_line.strip().lstrip("\ufeff")
+        lower = line.lower()
+        if lower.startswith("date,open,high,low,close"):
+            header_index = idx
+            separator = ","
+            break
+        if lower.startswith("date;open;high;low;close"):
+            header_index = idx
+            separator = ";"
+            break
+        if lower.startswith("data,otwarcie,najwyzszy,najnizszy,zamkniecie"):
+            header_index = idx
+            separator = ","
+            break
+        if lower.startswith("data;otwarcie;najwyzszy;najnizszy;zamkniecie"):
+            header_index = idx
+            separator = ";"
+            break
+    if header_index is None:
+        raise ValueError("Missing expected Stooq header")
+
+    df = pd.read_csv(StringIO("\n".join(lines[header_index:])), sep=separator, on_bad_lines="skip")
+    df = df.rename(
+        columns={
+            "date": "Date",
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume",
+            "Date": "Date",
+            "Open": "Open",
+            "High": "High",
+            "Low": "Low",
+            "Close": "Close",
+            "Volume": "Volume",
+            "Data": "Date",
+            "Otwarcie": "Open",
+            "Najwyzszy": "High",
+            "Najnizszy": "Low",
+            "Zamkniecie": "Close",
+            "Wolumen": "Volume",
+        }
+    )
+    expected_cols = {"Date", "Open", "High", "Low", "Close", "Volume"}
+    if not expected_cols.issubset(df.columns):
+        raise ValueError(f"Invalid Stooq columns: {list(df.columns)}")
+
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["Date", "Open", "High", "Low", "Close", "Volume"])
+    return df.sort_values("Date").reset_index(drop=True)
+
+
+def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
     end = datetime.now(timezone.utc).date()
     start = end - timedelta(days=days)
     params = {
@@ -40,11 +102,9 @@ def _stooq_download(symbol: str, days: int = 380) -> pd.DataFrame:
         "apikey": STOOQ_API_KEY,
     }
     url = f"https://stooq.pl/q/d/l/?{urlencode(params)}"
-    with urlopen(url, timeout=20) as resp:
-        df = pd.read_csv(resp)
-    df = df.rename(columns=str.capitalize)
-    df["Date"] = pd.to_datetime(df["Date"])
-    return df.sort_values("Date").reset_index(drop=True)
+    with urlopen(url, timeout=20) as response:
+        csv_text = response.read().decode("utf-8", errors="replace")
+    return _parse_stooq_csv(csv_text)
 
 
 def _local_extrema(df: pd.DataFrame, col: str) -> list[int]:
@@ -74,10 +134,9 @@ def _count_touches(df: pd.DataFrame, slope: float, intercept: float, side: str, 
     for i in range(len(df)):
         line = _line_val(slope, intercept, i)
         price = df["High"].iat[i] if side == "upper" else df["Low"].iat[i]
-        if abs(price - line) / line <= tol:
-            if i - prev > 2:
-                touches += 1
-                prev = i
+        if line > 0 and abs(price - line) / line <= tol and i - prev > 2:
+            touches += 1
+            prev = i
     return touches
 
 
@@ -90,34 +149,28 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
         return None
 
     best = None
-    for h1 in highs[:-1]:
-        for h2 in highs[highs.index(h1)+1:]:
+    for hi, h1 in enumerate(highs[:-1]):
+        for h2 in highs[hi + 1 :]:
             us, ui = _fit_line(h1, df["High"].iat[h1], h2, df["High"].iat[h2])
             if us > 0.0001:
                 continue
-            for l1 in lows[:-1]:
-                for l2 in lows[lows.index(l1)+1:]:
-                    ls, li = _fit_line(l1, df["Low"].iat[l1], l2, df["Low"].iat[l2])
+            for li, l1 in enumerate(lows[:-1]):
+                for l2 in lows[li + 1 :]:
+                    ls, li2 = _fit_line(l1, df["Low"].iat[l1], l2, df["Low"].iat[l2])
                     if ls < -0.0001:
                         continue
-                    start, end = max(min(h1, h2), min(l1, l2)), min(len(df)-1, len(df)-1)
+                    start = max(min(h1, h2), min(l1, l2))
+                    end = len(df) - 1
                     if end - start < 20:
                         continue
-                    width_start = _line_val(us, ui, start) - _line_val(ls, li, start)
-                    width_end = _line_val(us, ui, end) - _line_val(ls, li, end)
+
+                    width_start = _line_val(us, ui, start) - _line_val(ls, li2, start)
+                    width_end = _line_val(us, ui, end) - _line_val(ls, li2, end)
                     if width_start <= 0 or width_end <= 0 or width_end >= width_start:
                         continue
-                    if abs((df["High"].iat[h1] - _line_val(us, ui, h1)) / df["High"].iat[h1]) > cfg.touch_tolerance_pct:
-                        continue
-                    if abs((df["High"].iat[h2] - _line_val(us, ui, h2)) / df["High"].iat[h2]) > cfg.touch_tolerance_pct:
-                        continue
-                    if abs((df["Low"].iat[l1] - _line_val(ls, li, l1)) / df["Low"].iat[l1]) > cfg.touch_tolerance_pct:
-                        continue
-                    if abs((df["Low"].iat[l2] - _line_val(ls, li, l2)) / df["Low"].iat[l2]) > cfg.touch_tolerance_pct:
-                        continue
 
-                    up_touches = _count_touches(df.iloc[start:end+1].reset_index(drop=True), us, ui, "upper", cfg.touch_tolerance_pct)
-                    dn_touches = _count_touches(df.iloc[start:end+1].reset_index(drop=True), ls, li, "lower", cfg.touch_tolerance_pct)
+                    up_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), us, ui, "upper", cfg.touch_tolerance_pct)
+                    dn_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), ls, li2, "lower", cfg.touch_tolerance_pct)
                     if up_touches + dn_touches < 3:
                         continue
 
@@ -130,9 +183,16 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
                     score = (end - start) + 5 * (up_touches + dn_touches)
                     if best is None or score > best["score"]:
                         best = {
-                            "start": start, "end": end, "upper_slope": us, "upper_i": ui,
-                            "lower_slope": ls, "lower_i": li, "up_touches": up_touches,
-                            "down_touches": dn_touches, "triangle_type": tri_type, "score": score,
+                            "start": start,
+                            "end": end,
+                            "upper_slope": us,
+                            "upper_i": ui,
+                            "lower_slope": ls,
+                            "lower_i": li2,
+                            "up_touches": up_touches,
+                            "down_touches": dn_touches,
+                            "triangle_type": tri_type,
+                            "score": score,
                         }
     if not best:
         return None
@@ -167,22 +227,29 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     low = float(window["Low"].min())
     tp = None
     if status.startswith("Broken") and line_cross_value is not None:
-        tp = calculate_take_profit(line_cross_value, high, low, "long" if direction == "up" else "short", start_value=line_cross_value)
+        tp = calculate_take_profit(
+            line_cross_value,
+            high,
+            low,
+            "long" if direction == "up" else "short",
+            start_value=line_cross_value,
+        )
 
     return {
-        "type": best["triangle_type"],
-        "direction": direction,
-        "start_date": df["Date"].iat[best["start"]].date().isoformat(),
-        "end_date": df["Date"].iat[best["end"]].date().isoformat(),
-        "touches_upper": best["up_touches"],
-        "touches_lower": best["down_touches"],
-        "status": status,
-        "breakout_date": breakout_date.date().isoformat() if breakout_date is not None else "",
-        "breakout_price": breakout_price,
-        "line_cross_value": line_cross_value,
-        "tp": tp,
-        "height": high - low,
-        "strength": "very_good" if min(best["up_touches"], best["down_touches"]) >= 3 else "good",
+        "Ticker": "",
+        "Typ_trójkąta": best["triangle_type"],
+        "Kierunek": direction,
+        "Data_startu": df["Date"].iat[best["start"]].date().isoformat(),
+        "Data_końca": df["Date"].iat[best["end"]].date().isoformat(),
+        "Liczba_touch_górą": best["up_touches"],
+        "Liczba_touch_dołem": best["down_touches"],
+        "Status": status,
+        "Data_wybicia": breakout_date.date().isoformat() if breakout_date is not None else "",
+        "Cena_wybicia": breakout_price,
+        "Line_cross_value": line_cross_value,
+        "TP": tp,
+        "Wysokość_formacji": high - low,
+        "Siła_formacji": "very_good" if min(best["up_touches"], best["down_touches"]) >= 3 else "good",
     }
 
 
@@ -196,24 +263,22 @@ def run_scan(target: str, force: bool = False) -> Path:
 
     for symbol in symbols:
         cache_path = DATA_DIR / f"{symbol}_WA.csv"
-        if cache_path.exists() and not cfg.force_refresh:
-            df = pd.read_csv(cache_path)
-            df["Date"] = pd.to_datetime(df["Date"])
-        else:
-            try:
-                df = _stooq_download(symbol)
+        try:
+            if cache_path.exists() and not cfg.force_refresh:
+                df = pd.read_csv(cache_path)
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+                df = df.dropna(subset=["Date"])
+            else:
+                df = _stooq_download(symbol, days=cfg.history_days)
                 df.to_csv(cache_path, index=False)
-            except Exception as exc:
-                if cache_path.exists():
-                    df = pd.read_csv(cache_path)
-                    df["Date"] = pd.to_datetime(df["Date"] )
-                else:
-                    print(f"Skip {symbol}: data download failed ({exc})")
-                    continue
+        except Exception as exc:
+            print(f"Skip {symbol}: data download failed ({exc})")
+            continue
 
-        df = df[df["Date"] >= (pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=365))]
+        df = df[df["Date"] >= (pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=cfg.history_days))]
         if df.empty:
             continue
+
         avg_turnover = float((((df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4) * df["Volume"]).tail(10).mean())
         if avg_turnover <= cfg.liquidity_min_avg_turnover_pln:
             continue
@@ -221,10 +286,11 @@ def run_scan(target: str, force: bool = False) -> Path:
         triangle = detect_triangle(df.reset_index(drop=True), cfg)
         if triangle is None:
             continue
-        rows.append({"Ticker": symbol, **triangle})
+        triangle["Ticker"] = symbol
+        rows.append(triangle)
 
     result_df = pd.DataFrame(rows)
-    out_path = RESULTS_DIR / f"triangles_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    out_path = RESULTS_DIR / f"triangles_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
     result_df.to_csv(out_path, index=False)
     print(f"Saved triangle scan to: {out_path}")
     if not result_df.empty:
