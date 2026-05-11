@@ -59,9 +59,19 @@ def _resolve_runner(instrument_type: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
-    parser.add_argument("target", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
+    parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
+    parser.add_argument("-search", "--search", dest="search", help="Run triangle scanner for wig20 or single ticker")
+    parser.add_argument("--force", action="store_true", help="Force refresh cache for search mode")
     args = parser.parse_args()
+
+    if args.search:
+        from chart_program.triangle_scanner import run_scan
+        run_scan(args.search, force=args.force)
+        return 0
+
+    if not args.target:
+        parser.error("target is required unless -search is used")
 
     target = args.target.strip()
     resolved_path = _resolve_existing_config_path(target)
