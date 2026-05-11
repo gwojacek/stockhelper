@@ -242,17 +242,28 @@ def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: Sca
                 best = candidate
                 continue
 
+            # Priority: 1) fewer body intersections, 2) latest second anchor, 3) fewer invalids, 4) line edge, 5) tests
+            if candidate["body_intersections"] < best["body_intersections"]:
+                best = candidate
+                continue
+            if candidate["body_intersections"] > best["body_intersections"]:
+                continue
+
+            if candidate["anchor2"] > best["anchor2"]:
+                best = candidate
+                continue
+            if candidate["anchor2"] < best["anchor2"]:
+                continue
+
+            if candidate["invalid"] < best["invalid"]:
+                best = candidate
+                continue
+
             if side == "upper":
                 better_edge = candidate["line_mean"] > best["line_mean"]
             else:
                 better_edge = candidate["line_mean"] < best["line_mean"]
-            later_anchor = candidate["anchor2"] > best["anchor2"]
-            if (
-                (candidate["body_intersections"] < best["body_intersections"])
-                or (later_anchor and candidate["body_intersections"] == best["body_intersections"])
-                or (better_edge and candidate["anchor2"] >= best["anchor2"])
-                or (candidate["tests"] > best["tests"])
-            ):
+            if better_edge or (candidate["tests"] > best["tests"]):
                 best = candidate
     return best
 
