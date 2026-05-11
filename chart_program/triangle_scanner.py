@@ -161,25 +161,33 @@ def _line_window_stats(df: pd.DataFrame, start: int, end: int, slope: float, int
         high = df["High"].iat[i]
         low = df["Low"].iat[i]
         if side == "upper":
-            if high > line * (1 + tol):
-                if close <= line:
-                    tests += 1
-                else:
-                    invalid += 1
+            if close > line:
+                invalid += 1
+            elif high > line * (1 + tol):
+                tests += 1
         else:
-            if low < line * (1 - tol):
-                if close >= line:
-                    tests += 1
-                else:
-                    invalid += 1
+            if close < line:
+                invalid += 1
+            elif low < line * (1 - tol):
+                tests += 1
     line_values = [_line_val(slope, intercept, i) for i in range(start, end + 1)]
     return {"invalid": invalid, "tests": tests, "line_mean": float(sum(line_values) / len(line_values))}
 
 
 def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: ScannerConfig, start_min: int, end: int) -> dict | None:
     best = None
+    if len(pivots) < 2:
+        return None
+
+    # Prefer anchors from extreme swing points only (highest highs for upper, lowest lows for lower).
+    pivot_values = [(idx, float(df["High"].iat[idx] if side == "upper" else df["Low"].iat[idx])) for idx in pivots]
+    pivot_values_sorted = sorted(pivot_values, key=lambda x: x[1], reverse=(side == "upper"))
+    extreme_idxs = {idx for idx, _ in pivot_values_sorted[: min(8, len(pivot_values_sorted))]}
+
     for i, p1 in enumerate(pivots[:-1]):
         for p2 in pivots[i + 1 :]:
+            if p1 not in extreme_idxs and p2 not in extreme_idxs:
+                continue
             v1 = df["High"].iat[p1] if side == "upper" else df["Low"].iat[p1]
             v2 = df["High"].iat[p2] if side == "upper" else df["Low"].iat[p2]
             slope, intercept = _fit_line(p1, v1, p2, v2)
@@ -187,31 +195,40 @@ def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: Sca
                 continue
             if side == "lower" and slope < -0.0001:
                 continue
+
+            # Anchor points must match the candle extreme in tolerance.
+            a1_line = _line_val(slope, intercept, p1)
+            a2_line = _line_val(slope, intercept, p2)
+            if abs(v1 - a1_line) / a1_line > cfg.touch_tolerance_pct:
+                continue
+            if abs(v2 - a2_line) / a2_line > cfg.touch_tolerance_pct:
+                continue
+
             start = max(start_min, min(p1, p2))
             if end - start < 20:
                 continue
-            touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), slope, intercept, side, cfg.touch_tolerance_pct)
-            if touches < 2:
-                continue
+
             stats = _line_window_stats(df, start, end, slope, intercept, side, cfg.touch_tolerance_pct)
+            # Do not accept boundaries broken by end-of-day closes before breakout logic.
+            if stats["invalid"] > 0:
+                continue
+
             candidate = {
                 "p1": p1, "p2": p2, "slope": slope, "intercept": intercept,
-                "start": start, "touches": touches, **stats,
+                "start": start, "touches": 2 + stats["tests"], **stats,
             }
             if best is None:
                 best = candidate
                 continue
-            # Prefer fewer invalid penetrations; then higher upper line / lower lower line; then more touches.
-            if candidate["invalid"] < best["invalid"]:
+
+            if side == "upper":
+                better_edge = candidate["line_mean"] > best["line_mean"]
+            else:
+                better_edge = candidate["line_mean"] < best["line_mean"]
+            if better_edge or (candidate["tests"] > best["tests"]):
                 best = candidate
-            elif candidate["invalid"] == best["invalid"]:
-                if side == "upper":
-                    better_edge = candidate["line_mean"] > best["line_mean"]
-                else:
-                    better_edge = candidate["line_mean"] < best["line_mean"]
-                if better_edge or (candidate["touches"] > best["touches"]):
-                    best = candidate
     return best
+
 def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if len(df) < 60:
         return None
