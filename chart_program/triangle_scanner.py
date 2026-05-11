@@ -118,16 +118,20 @@ def _line_val(slope: float, intercept: float, idx: int) -> float:
     return slope * idx + intercept
 
 
-def _count_touches(df: pd.DataFrame, slope: float, intercept: float, side: str, tol: float) -> int:
-    touches = 0
+
+
+def _touch_indices(df: pd.DataFrame, slope: float, intercept: float, side: str, tol: float) -> list[int]:
+    idxs: list[int] = []
     prev = -99
     for i in range(len(df)):
         line = _line_val(slope, intercept, i)
         price = df["High"].iat[i] if side == "upper" else df["Low"].iat[i]
         if line > 0 and abs(price - line) / line <= tol and i - prev > 2:
-            touches += 1
+            idxs.append(i)
             prev = i
-    return touches
+    return idxs
+def _count_touches(df: pd.DataFrame, slope: float, intercept: float, side: str, tol: float) -> int:
+    return len(_touch_indices(df, slope, intercept, side, tol))
 
 
 
@@ -217,7 +221,7 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
 
     up_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
     dn_touches = _count_touches(df.iloc[start : end + 1].reset_index(drop=True), lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
-    if up_touches + dn_touches < 3:
+    if up_touches < 2 or dn_touches < 2:
         return None
 
     tri_type = "symmetrical"
@@ -258,6 +262,11 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if status.startswith("Broken") and line_cross_value is not None:
         tp = calculate_take_profit(line_cross_value, high, low, "long" if direction == "up" else "short", start_value=line_cross_value)
 
+    up_touch_ix = _touch_indices(df.iloc[start : end + 1].reset_index(drop=True), upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
+    dn_touch_ix = _touch_indices(df.iloc[start : end + 1].reset_index(drop=True), lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
+    up_test_dates = [df["Date"].iat[start + i].date().isoformat() for i in up_touch_ix[:2]]
+    dn_test_dates = [df["Date"].iat[start + i].date().isoformat() for i in dn_touch_ix[:2]]
+
     return {
         "Ticker": "",
         "Typ_trójkąta": tri_type,
@@ -266,6 +275,10 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
         "Data_końca": df["Date"].iat[end].date().isoformat(),
         "Liczba_touch_górą": up_touches,
         "Liczba_touch_dołem": dn_touches,
+        "Data_test_1_góra": up_test_dates[0] if len(up_test_dates) > 0 else "",
+        "Data_test_2_góra": up_test_dates[1] if len(up_test_dates) > 1 else "",
+        "Data_test_1_dół": dn_test_dates[0] if len(dn_test_dates) > 0 else "",
+        "Data_test_2_dół": dn_test_dates[1] if len(dn_test_dates) > 1 else "",
         "Status": status,
         "Data_wybicia": breakout_date.date().isoformat() if breakout_date is not None else "",
         "Cena_wybicia": breakout_price,
