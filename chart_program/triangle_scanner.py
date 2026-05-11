@@ -100,13 +100,18 @@ def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
 
 
 def _local_extrema(df: pd.DataFrame, col: str) -> list[int]:
+    # More selective swing points: strict extrema in a +/-2 candle neighborhood.
     idxs: list[int] = []
-    for i in range(1, len(df) - 1):
-        left, mid, right = df[col].iat[i - 1], df[col].iat[i], df[col].iat[i + 1]
-        if col == "High" and mid >= left and mid >= right:
-            idxs.append(i)
-        if col == "Low" and mid <= left and mid <= right:
-            idxs.append(i)
+    radius = 2
+    for i in range(radius, len(df) - radius):
+        window = df[col].iloc[i - radius : i + radius + 1]
+        mid = df[col].iat[i]
+        if col == "High":
+            if mid == window.max() and (window == mid).sum() == 1:
+                idxs.append(i)
+        else:
+            if mid == window.min() and (window == mid).sum() == 1:
+                idxs.append(i)
     return idxs
 
 
