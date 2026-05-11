@@ -51,6 +51,15 @@ class TriangleCandidate:
 
 class IndexTickerProvider:
     INDEX_SYMBOLS = {"WIG20": "wig20", "MWIG40": "mwig40", "SWIG80": "swig80"}
+    INDEX_FALLBACK_TICKERS = {
+        # Lokalny fallback, żeby `python run -search wig20` działało także
+        # gdy Stooq nie zwraca tabeli komponentów indeksu.
+        # Format: tickery skrócone (bez .WA), zgodne z użyciem w stockhelper.
+        "WIG20": [
+            "ALR", "CCC", "CDR", "CPS", "DNP", "JSW", "KGH", "KTY", "LPP", "MBK",
+            "OPL", "PEO", "PGE", "PKN", "PKO", "PZU", "SPL", "TPE", "XTB", "DVL",
+        ],
+    }
 
     def resolve(self, search_value: str) -> tuple[str, list[str]]:
         key = search_value.strip().upper()
@@ -61,20 +70,20 @@ class IndexTickerProvider:
     def _load_or_fetch_index_tickers(self, index_name: str) -> list[str]:
         INDEX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         cache_path = INDEX_CACHE_DIR / f"{index_name}.csv"
-        today = datetime.now(timezone.utc).date().isoformat()
         if cache_path.exists():
             cached = pd.read_csv(cache_path)
-            if not cached.empty and str(cached.get("date", pd.Series([""])).iloc[0]) == today:
+            if not cached.empty and "ticker" in cached.columns:
                 return sorted(set(cached["ticker"].astype(str).str.upper().tolist()))
         try:
             tickers = self._fetch_index_tickers(index_name)
-            pd.DataFrame({"date": [today] * len(tickers), "ticker": tickers}).to_csv(cache_path, index=False)
+            pd.DataFrame({"ticker": tickers}).to_csv(cache_path, index=False)
             return tickers
         except Exception:
-            if cache_path.exists():
-                cached = pd.read_csv(cache_path)
-                if not cached.empty and "ticker" in cached.columns:
-                    return sorted(set(cached["ticker"].astype(str).str.upper().tolist()))
+            fallback = self.INDEX_FALLBACK_TICKERS.get(index_name, [])
+            if fallback:
+                tickers = sorted(set(t.upper() for t in fallback))
+                pd.DataFrame({"ticker": tickers}).to_csv(cache_path, index=False)
+                return tickers
             raise
 
     def _fetch_index_tickers(self, index_name: str) -> list[str]:
