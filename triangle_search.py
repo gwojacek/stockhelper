@@ -56,8 +56,8 @@ class IndexTickerProvider:
         # gdy Stooq nie zwraca tabeli komponentów indeksu.
         # Format: tickery skrócone (bez .WA), zgodne z użyciem w stockhelper.
         "WIG20": [
-            "ALR", "CCC", "CDR", "CPS", "DNP", "JSW", "KGH", "KTY", "LPP", "MBK",
-            "OPL", "PEO", "PGE", "PKN", "PKO", "PZU", "SPL", "TPE", "XTB", "DVL",
+            "ALE", "ALR", "BDX", "CDR", "DNP", "EBP", "KGH", "KRU", "KTY", "LPP",
+            "MBK", "MDV", "PCO", "PEO", "PGE", "PKN", "PKO", "PZU", "TPE", "ZAB",
         ],
     }
 
