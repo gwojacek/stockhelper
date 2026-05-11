@@ -170,6 +170,21 @@ def _body_intersections_between_anchors(df: pd.DataFrame, p1: int, p2: int, slop
         if body_low <= line <= body_high:
             intersections += 1
     return intersections
+
+
+def _anchor_segment_respects_line(df: pd.DataFrame, p1: int, p2: int, slope: float, intercept: float, side: str, tol: float) -> bool:
+    left, right = sorted((p1, p2))
+    for i in range(left, right + 1):
+        if i in (p1, p2):
+            continue
+        line = _line_val(slope, intercept, i)
+        high = float(df["High"].iat[i])
+        low = float(df["Low"].iat[i])
+        if side == "upper" and high > line * (1 + tol):
+            return False
+        if side == "lower" and low < line * (1 - tol):
+            return False
+    return True
 def _line_window_stats(df: pd.DataFrame, start: int, end: int, slope: float, intercept: float, side: str, tol: float) -> dict:
     invalid = 0
     tests = 0
@@ -295,6 +310,8 @@ def _collect_boundary_candidates(df: pd.DataFrame, pivots: list[int], side: str,
                 continue
             if _body_intersections_between_anchors(df, p1, p2, slope, intercept) > 3:
                 continue
+            if not _anchor_segment_respects_line(df, p1, p2, slope, intercept, side, cfg.touch_tolerance_pct):
+                continue
             stats = _line_window_stats(df, start, end, slope, intercept, side, cfg.touch_tolerance_pct)
             if stats["invalid"] > 0:
                 continue
@@ -340,7 +357,9 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
             lower_anchor_end = max(lower["p1"], lower["p2"]) + 1
             up_conf_ix = _confirmation_indices(df, upper_anchor_end, upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
             dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
-            score = (len(up_conf_ix) + len(dn_conf_ix)) * 10 + min(len(up_conf_ix), len(dn_conf_ix)) * 5 - abs((upper["anchor2"] - lower["anchor2"]))
+            if len(up_conf_ix) + len(dn_conf_ix) == 0:
+                continue
+            score = (len(up_conf_ix) + len(dn_conf_ix)) * 20 + min(len(up_conf_ix), len(dn_conf_ix)) * 10 - abs((upper["anchor2"] - lower["anchor2"]))
             combo = {"upper": upper, "lower": lower, "start": start, "up_conf_ix": up_conf_ix, "dn_conf_ix": dn_conf_ix, "score": score}
             if best_combo is None or combo["score"] > best_combo["score"]:
                 best_combo = combo
@@ -406,8 +425,6 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
         "Data_anchor_2_góra": upper_anchor_dates[1],
         "Data_anchor_1_dół": lower_anchor_dates[0],
         "Data_anchor_2_dół": lower_anchor_dates[1],
-        "Liczba_confirmation_górą": len(up_conf_ix),
-        "Liczba_confirmation_dołem": len(dn_conf_ix),
         "Status": status,
         "Data_wybicia": breakout_date.date().isoformat() if breakout_date is not None else "",
         "Cena_wybicia": line_cross_value if line_cross_value is not None else breakout_price,
