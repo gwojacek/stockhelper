@@ -14,10 +14,16 @@ DATA_DIR = Path("chart_program/data/stocks")
 RESULTS_DIR = Path("results/triangles")
 
 WIG20_SYMBOLS = [
-    "ALIOR", "ALLEGRO", "ASSECO", "CCC", "CDPROJEKT", "CYFRPLSAT", "DINOPL", "KETY",
-    "KGHM", "KRUK", "LPP", "MBANK", "ORANGEPL", "PEKAO", "PEPCO", "PGE", "PKNORLEN",
-    "PKOBP", "PZU", "SANTANDER",
+    "ALR", "ALE", "ACP", "CCC", "CDR", "CPS", "DNP", "KTY", "KGH", "KRU",
+    "LPP", "MBK", "OPL", "PEO", "PCO", "PGE", "PKN", "PKO", "PZU", "EBS",
 ]
+
+WIG20_LABELS = {
+    "ALR": "ALIOR", "ALE": "ALLEGRO", "ACP": "ASSECO", "CCC": "CCC", "CDR": "CDPROJEKT",
+    "CPS": "CYFRPLSAT", "DNP": "DINOPL", "KTY": "KETY", "KGH": "KGHM", "KRU": "KRUK",
+    "LPP": "LPP", "MBK": "MBANK", "OPL": "ORANGEPL", "PEO": "PEKAO", "PCO": "PEPCO",
+    "PGE": "PGE", "PKN": "PKNORLEN", "PKO": "PKOBP", "PZU": "PZU", "EBS": "ERSTEPL",
+}
 
 
 @dataclass
@@ -28,6 +34,26 @@ class ScannerConfig:
     history_days: int = 364
     force_refresh: bool = False
 
+
+TICKER_ALIASES = {
+    "KGHM": "KGH",
+    "CDPROJEKT": "CDR",
+    "CYFRPLSAT": "CPS",
+    "DINOPL": "DNP",
+    "MBANK": "MBK",
+    "ORANGEPL": "OPL",
+    "PEKAO": "PEO",
+    "PEPCO": "PCO",
+    "PKNORLEN": "PKN",
+    "PKOBP": "PKO",
+    "ALIOR": "ALR",
+    "ALLEGRO": "ALE",
+    "ASSECO": "ACP",
+    "KETY": "KTY",
+    "KRUK": "KRU",
+    "ERSTEPL": "EBS",
+    "SANTANDER": "EBS",
+}
 
 def _stooq_download(symbol: str, days: int) -> pd.DataFrame:
     # Reuse existing stockhelper Stooq loader (supports Polish/English headers, ;/, separators).
@@ -193,7 +219,8 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
 
 def run_scan(target: str, force: bool = False) -> Path:
     cfg = ScannerConfig(force_refresh=force)
-    symbols = WIG20_SYMBOLS if target.lower() == "wig20" else [target.upper()]
+    raw_symbols = WIG20_SYMBOLS if target.lower() == "wig20" else [target.upper()]
+    symbols = [TICKER_ALIASES.get(sym, sym) for sym in raw_symbols]
     rows: list[dict] = []
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -224,7 +251,7 @@ def run_scan(target: str, force: bool = False) -> Path:
         triangle = detect_triangle(df.reset_index(drop=True), cfg)
         if triangle is None:
             continue
-        triangle["Ticker"] = symbol
+        triangle["Ticker"] = WIG20_LABELS.get(symbol, symbol)
         rows.append(triangle)
 
     result_df = pd.DataFrame(rows)
