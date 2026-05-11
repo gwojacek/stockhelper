@@ -267,6 +267,49 @@ def _pick_boundary_line(df: pd.DataFrame, pivots: list[int], side: str, cfg: Sca
                 best = candidate
     return best
 
+
+
+def _collect_boundary_candidates(df: pd.DataFrame, pivots: list[int], side: str, cfg: ScannerConfig, end: int, limit: int = 6) -> list[dict]:
+    candidates: list[dict] = []
+    if len(pivots) < 2:
+        return candidates
+
+    pivot_values = [(idx, float(df["High"].iat[idx] if side == "upper" else df["Low"].iat[idx])) for idx in pivots]
+    pivot_values_sorted = sorted(pivot_values, key=lambda x: x[1], reverse=(side == "upper"))
+    extreme_idxs = {idx for idx, _ in pivot_values_sorted[: min(10, len(pivot_values_sorted))]}
+
+    for i, p1 in enumerate(pivots[:-1]):
+        for p2 in pivots[i + 1 :]:
+            if p1 not in extreme_idxs and p2 not in extreme_idxs:
+                continue
+            v1 = df["High"].iat[p1] if side == "upper" else df["Low"].iat[p1]
+            v2 = df["High"].iat[p2] if side == "upper" else df["Low"].iat[p2]
+            slope, intercept = _fit_line(p1, v1, p2, v2)
+            if side == "upper" and slope > 0.0001:
+                continue
+            if side == "lower" and slope < -0.0001:
+                continue
+            start = min(p1, p2)
+            if end - start < 20:
+                continue
+            if _body_intersections_between_anchors(df, p1, p2, slope, intercept) > 1:
+                continue
+            stats = _line_window_stats(df, start, end, slope, intercept, side, cfg.touch_tolerance_pct)
+            if stats["invalid"] > 0:
+                continue
+            candidates.append({
+                "p1": p1, "p2": p2, "slope": slope, "intercept": intercept,
+                "start": start, "anchor2": max(p1, p2), "body_intersections": _body_intersections_between_anchors(df, p1, p2, slope, intercept),
+                **stats,
+            })
+
+    def key(c: dict):
+        edge = c["line_mean"] if side == "upper" else -c["line_mean"]
+        return (c["body_intersections"], -c["anchor2"], c["invalid"], -c["tests"], -edge)
+
+    return sorted(candidates, key=key)[:limit]
+
+
 def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     if len(df) < 60:
         return None
@@ -276,24 +319,39 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
         return None
 
     end = len(df) - 1
-    upper = _pick_boundary_line(df, highs, "upper", cfg, start_min=0, end=end)
-    lower = _pick_boundary_line(df, lows, "lower", cfg, start_min=0, end=end)
-    if not upper or not lower:
+    upper_candidates = _collect_boundary_candidates(df, highs, "upper", cfg, end=end, limit=6)
+    lower_candidates = _collect_boundary_candidates(df, lows, "lower", cfg, end=end, limit=6)
+    if not upper_candidates or not lower_candidates:
         return None
 
-    start = max(upper["start"], lower["start"])
-    if end - start < 20:
+    best_combo = None
+    for upper in upper_candidates:
+        for lower in lower_candidates:
+            start = max(upper["start"], lower["start"])
+            if end - start < 20:
+                continue
+            width_start = _line_val(upper["slope"], upper["intercept"], start) - _line_val(lower["slope"], lower["intercept"], start)
+            width_end = _line_val(upper["slope"], upper["intercept"], end) - _line_val(lower["slope"], lower["intercept"], end)
+            if width_start <= 0 or width_end <= 0 or width_end >= width_start:
+                continue
+
+            upper_anchor_end = max(upper["p1"], upper["p2"]) + 1
+            lower_anchor_end = max(lower["p1"], lower["p2"]) + 1
+            up_conf_ix = _confirmation_indices(df, upper_anchor_end, upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
+            dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
+            score = (len(up_conf_ix) + len(dn_conf_ix)) * 10 + min(len(up_conf_ix), len(dn_conf_ix)) * 5 - abs((upper["anchor2"] - lower["anchor2"]))
+            combo = {"upper": upper, "lower": lower, "start": start, "up_conf_ix": up_conf_ix, "dn_conf_ix": dn_conf_ix, "score": score}
+            if best_combo is None or combo["score"] > best_combo["score"]:
+                best_combo = combo
+
+    if best_combo is None:
         return None
 
-    width_start = _line_val(upper["slope"], upper["intercept"], start) - _line_val(lower["slope"], lower["intercept"], start)
-    width_end = _line_val(upper["slope"], upper["intercept"], end) - _line_val(lower["slope"], lower["intercept"], end)
-    if width_start <= 0 or width_end <= 0 or width_end >= width_start:
-        return None
-
-    upper_anchor_end = max(upper["p1"], upper["p2"]) + 1
-    lower_anchor_end = max(lower["p1"], lower["p2"]) + 1
-    up_conf_ix = _confirmation_indices(df, upper_anchor_end, upper["slope"], upper["intercept"], "upper", cfg.touch_tolerance_pct)
-    dn_conf_ix = _confirmation_indices(df, lower_anchor_end, lower["slope"], lower["intercept"], "lower", cfg.touch_tolerance_pct)
+    upper = best_combo["upper"]
+    lower = best_combo["lower"]
+    start = best_combo["start"]
+    up_conf_ix = best_combo["up_conf_ix"]
+    dn_conf_ix = best_combo["dn_conf_ix"]
     up_touches = len(up_conf_ix) + 2
     dn_touches = len(dn_conf_ix) + 2
 
