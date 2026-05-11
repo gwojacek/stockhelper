@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from io import StringIO
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pandas as pd
 
@@ -66,17 +66,35 @@ class IndexTickerProvider:
             cached = pd.read_csv(cache_path)
             if not cached.empty and str(cached.get("date", pd.Series([""])).iloc[0]) == today:
                 return sorted(set(cached["ticker"].astype(str).str.upper().tolist()))
-        tickers = self._fetch_index_tickers(index_name)
-        pd.DataFrame({"date": [today] * len(tickers), "ticker": tickers}).to_csv(cache_path, index=False)
-        return tickers
+        try:
+            tickers = self._fetch_index_tickers(index_name)
+            pd.DataFrame({"date": [today] * len(tickers), "ticker": tickers}).to_csv(cache_path, index=False)
+            return tickers
+        except Exception:
+            if cache_path.exists():
+                cached = pd.read_csv(cache_path)
+                if not cached.empty and "ticker" in cached.columns:
+                    return sorted(set(cached["ticker"].astype(str).str.upper().tolist()))
+            raise
 
     def _fetch_index_tickers(self, index_name: str) -> list[str]:
-        # Stooq index components endpoint.
         symbol = self.INDEX_SYMBOLS[index_name]
-        query = urlencode({"s": symbol, "i": "0", "l": "1"})
-        url = f"https://stooq.pl/q/i/?{query}"
-        html = urlopen(url, timeout=20).read().decode("utf-8", errors="replace")
-        tables = pd.read_html(html)
+        urls = [
+            f"https://stooq.pl/q/i/?{urlencode({'s': symbol, 'i': '0', 'l': '1'})}",
+            f"https://stooq.com/q/i/?{urlencode({'s': symbol, 'i': '0', 'l': '1'})}",
+        ]
+        errors: list[str] = []
+        tables: list[pd.DataFrame] = []
+        for url in urls:
+            try:
+                req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                html = urlopen(req, timeout=20).read().decode("utf-8", errors="replace")
+                tables = pd.read_html(StringIO(html))
+                if tables:
+                    break
+            except Exception as exc:
+                errors.append(f"{url}: {exc}")
+
         for df in tables:
             cols = [str(c).lower() for c in df.columns]
             if any("ticker" in c or "symbol" in c or "walor" in c for c in cols):
@@ -85,7 +103,8 @@ class IndexTickerProvider:
                     vals = [v.strip().upper() for v in series if v and v.strip() and v.strip().isalpha() and len(v.strip()) <= 6]
                     if len(vals) >= 5:
                         return sorted(set(vals))
-        raise ValueError(f"Nie udało się pobrać tickerów indeksu {index_name} ze Stooqa ({url}).")
+        joined = " | ".join(errors) if errors else "brak tabel z tickerami na stronie"
+        raise ValueError(f"Nie udało się pobrać tickerów indeksu {index_name} ze Stooqa. Próby: {joined}")
 
 
 class TriangleDetector:
