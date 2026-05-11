@@ -29,6 +29,7 @@ WIG20_LABELS = {
 @dataclass
 class ScannerConfig:
     touch_tolerance_pct: float = 0.001
+    confirmation_tolerance_pct: float = 0.003
     breakout_lookback_sessions: int = 5
     liquidity_min_avg_turnover_pln: float = 500_000
     history_days: int = 364
@@ -292,7 +293,7 @@ def _collect_boundary_candidates(df: pd.DataFrame, pivots: list[int], side: str,
             start = min(p1, p2)
             if end - start < 20:
                 continue
-            if _body_intersections_between_anchors(df, p1, p2, slope, intercept) > 1:
+            if _body_intersections_between_anchors(df, p1, p2, slope, intercept) > 3:
                 continue
             stats = _line_window_stats(df, start, end, slope, intercept, side, cfg.touch_tolerance_pct)
             if stats["invalid"] > 0:
@@ -399,9 +400,6 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
     return {
         "Ticker": "",
         "Typ_trójkąta": tri_type,
-        "Kierunek": direction,
-        "Data_startu": df["Date"].iat[start].date().isoformat(),
-        "Data_końca": df["Date"].iat[end].date().isoformat(),
         "Liczba_touch_górą": up_touches,
         "Liczba_touch_dołem": dn_touches,
         "Data_anchor_1_góra": upper_anchor_dates[0],
@@ -412,7 +410,7 @@ def detect_triangle(df: pd.DataFrame, cfg: ScannerConfig) -> dict | None:
         "Liczba_confirmation_dołem": len(dn_conf_ix),
         "Status": status,
         "Data_wybicia": breakout_date.date().isoformat() if breakout_date is not None else "",
-        "Cena_wybicia": breakout_price,
+        "Cena_wybicia": line_cross_value if line_cross_value is not None else breakout_price,
         "Line_cross_value": line_cross_value,
         "TP": tp,
         "Wysokość_formacji": high - low,
