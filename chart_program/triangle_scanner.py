@@ -10,7 +10,7 @@ import pandas as pd
 from core.risk_manager import calculate_take_profit
 from chart_program.chart_loader import _stooq_download as chart_stooq_download
 
-DATA_DIR = Path("chart_program/data/stocks")
+DATA_DIR = Path("data/stocks")
 RESULTS_DIR = Path("results/triangles")
 
 WIG20_SYMBOLS = [
@@ -173,6 +173,7 @@ def _body_intersections_between_anchors(df: pd.DataFrame, p1: int, p2: int, slop
 
 
 def _anchor_segment_respects_line(df: pd.DataFrame, p1: int, p2: int, slope: float, intercept: float, side: str, tol: float) -> bool:
+    tol = max(tol, 0.01)
     left, right = sorted((p1, p2))
     for i in range(left, right + 1):
         if i in (p1, p2):
@@ -308,7 +309,7 @@ def _collect_boundary_candidates(df: pd.DataFrame, pivots: list[int], side: str,
             start = min(p1, p2)
             if end - start < 20:
                 continue
-            if _body_intersections_between_anchors(df, p1, p2, slope, intercept) > 3:
+            if _body_intersections_between_anchors(df, p1, p2, slope, intercept) > 5:
                 continue
             if not _anchor_segment_respects_line(df, p1, p2, slope, intercept, side, cfg.touch_tolerance_pct):
                 continue
