@@ -117,7 +117,26 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
     if run < min_days:
         return None
 
-    start_idx = len(df) - run
+    window_start = len(df) - run
+
+    # Start liczenia: świeca, na której korpus przebił odpowiednią granicę chmury
+    # (dla below: przebicie dolnej linii chmury w dół; dla above: przebicie górnej linii chmury w górę).
+    start_idx = window_start
+    for i in range(window_start, len(df)):
+        prev_i = i - 1
+        if current_side == "below":
+            crossed_now = body_high.iloc[i] < bottom.iloc[i]
+            prev_not_below = True if i == 0 else body_high.iloc[prev_i] >= bottom.iloc[prev_i]
+            if crossed_now and prev_not_below:
+                start_idx = i
+                break
+        else:
+            crossed_now = body_low.iloc[i] > top.iloc[i]
+            prev_not_above = True if i == 0 else body_low.iloc[prev_i] <= top.iloc[prev_i]
+            if crossed_now and prev_not_above:
+                start_idx = i
+                break
+
     start_ts = pd.to_datetime(df.iloc[start_idx]["Date"])
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - start_ts).days + 1) / 30.44
