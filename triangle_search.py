@@ -121,17 +121,17 @@ class TriangleDetector:
         self,
         min_sessions: int = 40,
         breakout_fresh_sessions: int = 5,
-        max_bars: int = 140,
-        anchor_step: int = 3,
-        max_candidates: int = 60000,
+        max_bars: int = 280,
+        anchor_step: int = 1,
+        max_candidates: int = 220000,
     ):
         self.min_sessions = min_sessions
         self.breakout_fresh_sessions = breakout_fresh_sessions
         self.max_bars = max_bars
         self.anchor_step = max(1, anchor_step)
         self.max_candidates = max_candidates
-        self.max_line_break_ratio = 0.08
-        self.min_convergence_ratio = 0.10
+        self.max_line_break_ratio = 0.22
+        self.min_convergence_ratio = 0.02
 
     def find_best(self, df: pd.DataFrame) -> TriangleCandidate | None:
         if len(df) < self.min_sessions:
@@ -177,8 +177,9 @@ class TriangleDetector:
         if convergence_ratio < self.min_convergence_ratio:
             return None
 
-        top_breaks, bottom_breaks, first_breakout = self._boundary_break_stats(data, top, bottom, span_start)
-        observations = max(1, end - span_start + 1)
+        validation_start = max(top.second_idx, bottom.second_idx)
+        top_breaks, bottom_breaks, first_breakout = self._boundary_break_stats(data, top, bottom, validation_start)
+        observations = max(1, end - validation_start + 1)
         if (top_breaks / observations) > self.max_line_break_ratio or (bottom_breaks / observations) > self.max_line_break_ratio:
             return None
 
@@ -222,13 +223,13 @@ class TriangleDetector:
             span=span,
         )
 
-    def _is_swing_high(self, data: pd.DataFrame, idx: int, lookback: int = 3) -> bool:
+    def _is_swing_high(self, data: pd.DataFrame, idx: int, lookback: int = 2) -> bool:
         left = max(0, idx - lookback)
         right = min(len(data) - 1, idx + lookback)
         value = float(data.loc[idx, "High"])
         return value >= float(data.loc[left:right, "High"].max())
 
-    def _is_swing_low(self, data: pd.DataFrame, idx: int, lookback: int = 3) -> bool:
+    def _is_swing_low(self, data: pd.DataFrame, idx: int, lookback: int = 2) -> bool:
         left = max(0, idx - lookback)
         right = min(len(data) - 1, idx + lookback)
         value = float(data.loc[idx, "Low"])
