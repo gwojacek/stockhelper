@@ -124,14 +124,18 @@ class TriangleDetector:
         max_bars: int = 280,
         anchor_step: int = 1,
         max_candidates: int = 220000,
+        max_line_break_ratio: float = 0.22,
+        min_convergence_ratio: float = 0.02,
+        enforce_swings: bool = True,
     ):
         self.min_sessions = min_sessions
         self.breakout_fresh_sessions = breakout_fresh_sessions
         self.max_bars = max_bars
         self.anchor_step = max(1, anchor_step)
         self.max_candidates = max_candidates
-        self.max_line_break_ratio = 0.22
-        self.min_convergence_ratio = 0.02
+        self.max_line_break_ratio = max_line_break_ratio
+        self.min_convergence_ratio = min_convergence_ratio
+        self.enforce_swings = enforce_swings
 
     def find_best(self, df: pd.DataFrame) -> TriangleCandidate | None:
         if len(df) < self.min_sessions:
@@ -150,10 +154,11 @@ class TriangleDetector:
                         checked += 1
                         if checked > self.max_candidates:
                             return best
-                        if not (self._is_swing_high(data, i) and self._is_swing_high(data, j)):
-                            continue
-                        if not (self._is_swing_low(data, k) and self._is_swing_low(data, l)):
-                            continue
+                        if self.enforce_swings:
+                            if not (self._is_swing_high(data, i) and self._is_swing_high(data, j)):
+                                continue
+                            if not (self._is_swing_low(data, k) and self._is_swing_low(data, l)):
+                                continue
                         cand = self._evaluate(data, top, bottom)
                         if not cand:
                             continue
@@ -316,6 +321,14 @@ def _fmt(v: float | None) -> str:
 def run_triangle_search(search_value: str) -> pd.DataFrame:
     provider = IndexTickerProvider()
     detector = TriangleDetector()
+    relaxed_detector = TriangleDetector(
+        max_bars=320,
+        anchor_step=1,
+        max_candidates=300000,
+        max_line_break_ratio=0.35,
+        min_convergence_ratio=-0.03,
+        enforce_swings=False,
+    )
     scope_name, tickers = provider.resolve(search_value)
     print(f"[triangle-search] Zakres: {scope_name} | liczba tickerów: {len(tickers)}")
     rows = []
@@ -334,6 +347,8 @@ def run_triangle_search(search_value: str) -> pd.DataFrame:
             print(f"[triangle-search] {ticker}: pominięty (średni obrót 10 sesji < 500k PLN).")
             continue
         triangle = detector.find_best(df)
+        if not triangle:
+            triangle = relaxed_detector.find_best(df)
         if not triangle:
             print(f"[triangle-search] {ticker}: brak poprawnego trójkąta.")
             continue
