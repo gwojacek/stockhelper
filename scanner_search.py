@@ -23,6 +23,7 @@ class ScanResult:
     side: str
     respect_days: int
     close: float
+    distance_to_cloud_pct: float
 
 
 def _load_py_module(path: Path):
@@ -110,14 +111,21 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
         return None
 
     last = df.iloc[-1]
+    close = float(last["Close"])
     if last_side == "below":
-        if not (last["High"] >= last["cloud_bottom"] and body_high.iloc[-1] <= last["cloud_bottom"]):
-            return None
+        reference = float(last["cloud_bottom"])
+        distance_pct = ((reference - close) / reference) * 100 if reference else 0.0
     else:
-        if not (last["Low"] <= last["cloud_top"] and body_low.iloc[-1] >= last["cloud_top"]):
-            return None
+        reference = float(last["cloud_top"])
+        distance_pct = ((close - reference) / reference) * 100 if reference else 0.0
 
-    return ScanResult(ticker="", side=last_side, respect_days=run, close=float(last["Close"]))
+    return ScanResult(
+        ticker="",
+        side=last_side,
+        respect_days=run,
+        close=close,
+        distance_to_cloud_pct=round(distance_pct, 2),
+    )
 
 
 def run_search(target: str) -> int:
@@ -145,18 +153,18 @@ def run_search(target: str) -> int:
     out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "side", "respect_days", "close"])
+        writer.writerow(["ticker", "side", "respect_days", "close", "distance_to_cloud_pct"])
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.close:.4f}"])
+            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.close:.4f}", f"{row.distance_to_cloud_pct:.2f}"])
 
     print("\nWYNIKI (instrumenty spełniające warunki):")
     if not results:
         print("Brak wyników.")
     else:
-        print(f"{'Ticker':<12} {'Pozycja':<8} {'Dni respektu':<14} {'Close':>10}")
-        print("-" * 48)
+        print(f"{'Ticker':<12} {'Pozycja':<8} {'Dni respektu':<14} {'Close':>10} {'Dist%':>8}")
+        print("-" * 60)
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            print(f"{row.ticker:<12} {row.side:<8} {row.respect_days:<14} {row.close:>10.4f}")
+            print(f"{row.ticker:<12} {row.side:<8} {row.respect_days:<14} {row.close:>10.4f} {row.distance_to_cloud_pct:>8.2f}")
     print(f"\nZapisano CSV: {out_csv}")
     return 0
 
