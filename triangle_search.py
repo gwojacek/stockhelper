@@ -130,6 +130,8 @@ class TriangleDetector:
         self.max_bars = max_bars
         self.anchor_step = max(1, anchor_step)
         self.max_candidates = max_candidates
+        self.max_line_break_ratio = 0.08
+        self.min_convergence_ratio = 0.10
 
     def find_best(self, df: pd.DataFrame) -> TriangleCandidate | None:
         if len(df) < self.min_sessions:
@@ -148,6 +150,10 @@ class TriangleDetector:
                         checked += 1
                         if checked > self.max_candidates:
                             return best
+                        if not (self._is_swing_high(data, i) and self._is_swing_high(data, j)):
+                            continue
+                        if not (self._is_swing_low(data, k) and self._is_swing_low(data, l)):
+                            continue
                         cand = self._evaluate(data, top, bottom)
                         if not cand:
                             continue
@@ -163,6 +169,18 @@ class TriangleDetector:
             return None
         if top.value_at(end) <= bottom.value_at(end):
             return None
+        start_distance = top.value_at(span_start) - bottom.value_at(span_start)
+        end_distance = top.value_at(end) - bottom.value_at(end)
+        if start_distance <= 0 or end_distance <= 0:
+            return None
+        convergence_ratio = (start_distance - end_distance) / start_distance
+        if convergence_ratio < self.min_convergence_ratio:
+            return None
+
+        top_breaks, bottom_breaks, first_breakout = self._boundary_break_stats(data, top, bottom, span_start)
+        observations = max(1, end - span_start + 1)
+        if (top_breaks / observations) > self.max_line_break_ratio or (bottom_breaks / observations) > self.max_line_break_ratio:
+            return None
 
         top_touches = self._count_touches(data, top, is_top=True)
         bottom_touches = self._count_touches(data, bottom, is_top=False)
@@ -172,19 +190,10 @@ class TriangleDetector:
         breakout_date = None
         breakout_side = None
         line_cross_value = None
-        for idx in range(max(top.second_idx, bottom.second_idx), end + 1):
-            close = float(data.loc[idx, "Close"])
-            tv, bv = top.value_at(idx), bottom.value_at(idx)
-            if close > tv:
-                breakout_date = data.loc[idx, "Date"].date().isoformat()
-                breakout_side = "up"
-                line_cross_value = tv
-                break
-            if close < bv:
-                breakout_date = data.loc[idx, "Date"].date().isoformat()
-                breakout_side = "down"
-                line_cross_value = bv
-                break
+        if first_breakout is not None:
+            idx, breakout_side = first_breakout
+            breakout_date = data.loc[idx, "Date"].date().isoformat()
+            line_cross_value = top.value_at(idx) if breakout_side == "up" else bottom.value_at(idx)
 
         if breakout_date:
             last = data.loc[end, "Date"].date()
@@ -212,6 +221,42 @@ class TriangleDetector:
             score=score,
             span=span,
         )
+
+    def _is_swing_high(self, data: pd.DataFrame, idx: int, lookback: int = 3) -> bool:
+        left = max(0, idx - lookback)
+        right = min(len(data) - 1, idx + lookback)
+        value = float(data.loc[idx, "High"])
+        return value >= float(data.loc[left:right, "High"].max())
+
+    def _is_swing_low(self, data: pd.DataFrame, idx: int, lookback: int = 3) -> bool:
+        left = max(0, idx - lookback)
+        right = min(len(data) - 1, idx + lookback)
+        value = float(data.loc[idx, "Low"])
+        return value <= float(data.loc[left:right, "Low"].min())
+
+    def _boundary_break_stats(
+        self,
+        data: pd.DataFrame,
+        top: TrendLine,
+        bottom: TrendLine,
+        start_idx: int,
+    ) -> tuple[int, int, tuple[int, str] | None]:
+        top_breaks = 0
+        bottom_breaks = 0
+        first_breakout: tuple[int, str] | None = None
+        for idx in range(start_idx, len(data)):
+            close = float(data.loc[idx, "Close"])
+            tv = top.value_at(idx)
+            bv = bottom.value_at(idx)
+            if close > tv:
+                top_breaks += 1
+                if first_breakout is None:
+                    first_breakout = (idx, "up")
+            elif close < bv:
+                bottom_breaks += 1
+                if first_breakout is None:
+                    first_breakout = (idx, "down")
+        return top_breaks, bottom_breaks, first_breakout
 
     def _count_touches(self, data: pd.DataFrame, line: TrendLine, is_top: bool) -> int:
         eps = 0.004
