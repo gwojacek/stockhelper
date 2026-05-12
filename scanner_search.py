@@ -5,6 +5,7 @@ import csv
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import math
 from importlib import util
 from pathlib import Path
 
@@ -23,7 +24,8 @@ class ScanResult:
     side: str
     respect_days: int
     close: float
-    distance_to_cloud_pct: float
+    start_date: str
+    respect_months: float
 
 
 def _load_py_module(path: Path):
@@ -88,43 +90,45 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
 def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
     if len(df) < min_days + 2:
         return None
+
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
 
-    side_series = pd.Series("inside", index=df.index)
-    side_series = side_series.mask(body_high < bottom, "below")
-    side_series = side_series.mask(body_low > top, "above")
+    # Dla trendu poniżej chmury: korpus może wejść w chmurę, ale nie może przebić górnej granicy.
+    # Dla trendu powyżej chmury: korpus może wejść w chmurę, ale nie może przebić dolnej granicy.
+    below_respected = body_high <= top
+    above_respected = body_low >= bottom
 
-    last_side = side_series.iloc[-1]
-    if last_side not in {"below", "above"}:
+    close = df["Close"]
+    current_side = "below" if close.iloc[-1] < bottom.iloc[-1] else "above" if close.iloc[-1] > top.iloc[-1] else "inside"
+    if current_side not in {"below", "above"}:
         return None
 
+    respect_mask = below_respected if current_side == "below" else above_respected
+
     run = 0
-    for value in reversed(side_series.tolist()):
-        if value == last_side:
+    for ok in reversed(respect_mask.tolist()):
+        if ok:
             run += 1
         else:
             break
     if run < min_days:
         return None
 
-    last = df.iloc[-1]
-    close = float(last["Close"])
-    if last_side == "below":
-        reference = float(last["cloud_bottom"])
-        distance_pct = ((reference - close) / reference) * 100 if reference else 0.0
-    else:
-        reference = float(last["cloud_top"])
-        distance_pct = ((close - reference) / reference) * 100 if reference else 0.0
+    start_idx = len(df) - run
+    start_ts = pd.to_datetime(df.iloc[start_idx]["Date"])
+    end_ts = pd.to_datetime(df.iloc[-1]["Date"])
+    months = ((end_ts - start_ts).days + 1) / 30.44
 
     return ScanResult(
         ticker="",
-        side=last_side,
+        side=current_side,
         respect_days=run,
-        close=close,
-        distance_to_cloud_pct=round(distance_pct, 2),
+        close=float(close.iloc[-1]),
+        start_date=start_ts.strftime("%Y-%m-%d"),
+        respect_months=round(months, 1),
     )
 
 
@@ -153,18 +157,18 @@ def run_search(target: str) -> int:
     out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "side", "respect_days", "close", "distance_to_cloud_pct"])
+        writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close"])
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.close:.4f}", f"{row.distance_to_cloud_pct:.2f}"])
+            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}"])
 
     print("\nWYNIKI (instrumenty spełniające warunki):")
     if not results:
         print("Brak wyników.")
     else:
-        print(f"{'Ticker':<12} {'Pozycja':<8} {'Dni respektu':<14} {'Close':>10} {'Dist%':>8}")
-        print("-" * 60)
+        print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10}")
+        print("-" * 68)
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            print(f"{row.ticker:<12} {row.side:<8} {row.respect_days:<14} {row.close:>10.4f} {row.distance_to_cloud_pct:>8.2f}")
+            print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f}")
     print(f"\nZapisano CSV: {out_csv}")
     return 0
 
