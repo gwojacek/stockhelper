@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from chart_program.chart_loader import load_or_update_daily_data
+from chart_program.chart_loader import (
+    COMMODITY_STOOQ_MAP,
+    COMMODITY_YAHOO_MAP,
+    load_or_update_daily_data,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
@@ -27,6 +31,30 @@ class ScanResult:
     start_date: str
     respect_months: float
 
+
+
+
+def _normalize_commodity_symbol(raw: str) -> str:
+    cleaned = (raw or "").strip().upper().replace(" ", "_")
+    aliases = {
+        "S&P500": "US500",
+        "SP500": "US500",
+        "CRUDE_OIL": "CRUDE_OIL",
+        "CRUDEOIL": "CRUDE_OIL",
+        "NATURAL_GAS": "NATURAL_GAS",
+        "NATGAS": "NATURAL_GAS",
+        "GOLD": "XAUUSD",
+        "SILVER": "XAGUSD",
+    }
+    cleaned = aliases.get(cleaned, cleaned)
+    available = set(COMMODITY_YAHOO_MAP.keys()) | set(COMMODITY_STOOQ_MAP.keys())
+    if cleaned in available:
+        return cleaned
+    compact = cleaned.replace("_", "")
+    for key in available:
+        if key.replace("_", "") == compact:
+            return key
+    return cleaned
 
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
@@ -45,6 +73,9 @@ def _members_from_configs(scope: str) -> list[str]:
         config = module.TradingConfig()
         if scope == "forex":
             members.append((getattr(config, "pair", "").replace("/", "") or path.stem).upper())
+        elif scope == "commodities":
+            value = getattr(config, "symbol", "") or getattr(config, "name", "") or path.stem
+            members.append(_normalize_commodity_symbol(str(value)))
         else:
             members.append((getattr(config, "symbol", "") or getattr(config, "name", "") or path.stem).upper())
     dedup=[]
