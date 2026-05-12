@@ -117,9 +117,19 @@ class IndexTickerProvider:
 
 
 class TriangleDetector:
-    def __init__(self, min_sessions: int = 40, breakout_fresh_sessions: int = 5):
+    def __init__(
+        self,
+        min_sessions: int = 40,
+        breakout_fresh_sessions: int = 5,
+        max_bars: int = 140,
+        anchor_step: int = 3,
+        max_candidates: int = 60000,
+    ):
         self.min_sessions = min_sessions
         self.breakout_fresh_sessions = breakout_fresh_sessions
+        self.max_bars = max_bars
+        self.anchor_step = max(1, anchor_step)
+        self.max_candidates = max_candidates
 
     def find_best(self, df: pd.DataFrame) -> TriangleCandidate | None:
         if len(df) < self.min_sessions:
@@ -127,13 +137,17 @@ class TriangleDetector:
         data = df.sort_values("Date").reset_index(drop=True)
         best: TriangleCandidate | None = None
         n = len(data)
-        start = max(0, n - 180)
-        for i in range(start, n - self.min_sessions):
-            for j in range(i + 10, n - 5):
+        start = max(0, n - self.max_bars)
+        checked = 0
+        for i in range(start, n - self.min_sessions, self.anchor_step):
+            for j in range(i + 10, n - 5, self.anchor_step):
                 top = TrendLine(i, j, float(data.loc[i, "High"]), float(data.loc[j, "High"]))
-                for k in range(start, n - self.min_sessions):
-                    for l in range(k + 5, n - 1):
+                for k in range(start, n - self.min_sessions, self.anchor_step):
+                    for l in range(k + 5, n - 1, self.anchor_step):
                         bottom = TrendLine(k, l, float(data.loc[k, "Low"]), float(data.loc[l, "Low"]))
+                        checked += 1
+                        if checked > self.max_candidates:
+                            return best
                         cand = self._evaluate(data, top, bottom)
                         if not cand:
                             continue
@@ -257,21 +271,28 @@ def run_triangle_search(search_value: str) -> pd.DataFrame:
     provider = IndexTickerProvider()
     detector = TriangleDetector()
     scope_name, tickers = provider.resolve(search_value)
+    print(f"[triangle-search] Zakres: {scope_name} | liczba tickerów: {len(tickers)}")
     rows = []
-    for ticker in tickers:
+    for pos, ticker in enumerate(tickers, start=1):
+        print(f"[triangle-search] ({pos}/{len(tickers)}) Analiza {ticker}...")
         try:
             df, _, _ = load_or_update_daily_data(f"{ticker}.WA", "stock", persist=True, data_source="stooq")
         except Exception:
+            print(f"[triangle-search] {ticker}: pominięty (błąd pobierania danych).")
             continue
         if not {"Date", "High", "Low", "Close", "Volume"}.issubset(df.columns):
+            print(f"[triangle-search] {ticker}: pominięty (brak kolumn OHLCV).")
             continue
         turnover = _avg_turnover_10(df)
         if turnover < 500_000:
+            print(f"[triangle-search] {ticker}: pominięty (średni obrót 10 sesji < 500k PLN).")
             continue
         triangle = detector.find_best(df)
         if not triangle:
+            print(f"[triangle-search] {ticker}: brak poprawnego trójkąta.")
             continue
         status = "Breakout" if triangle.breakout_date else "Active"
+        print(f"[triangle-search] {ticker}: znaleziono {status} (touch góra={triangle.top_touches}, dół={triangle.bottom_touches}).")
         rows.append({
             "Ticker": ticker,
             "Status": status,
