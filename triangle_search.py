@@ -136,6 +136,7 @@ class TriangleDetector:
         self.max_line_break_ratio = max_line_break_ratio
         self.min_convergence_ratio = min_convergence_ratio
         self.enforce_swings = enforce_swings
+        self.max_anchor_dislocation = 90
 
     def find_best(self, df: pd.DataFrame, ticker: str | None = None) -> TriangleCandidate | None:
         if len(df) < self.min_sessions:
@@ -172,6 +173,8 @@ class TriangleDetector:
         span = end - span_start + 1
         if span < self.min_sessions:
             return None
+        if not self._anchors_time_coherent(top, bottom):
+            return None
         if top.value_at(end) <= bottom.value_at(end):
             return None
         start_distance = top.value_at(span_start) - bottom.value_at(span_start)
@@ -188,8 +191,10 @@ class TriangleDetector:
         if (top_breaks / observations) > self.max_line_break_ratio or (bottom_breaks / observations) > self.max_line_break_ratio:
             return None
 
-        top_touches = self._count_touches(data, top, is_top=True)
-        bottom_touches = self._count_touches(data, bottom, is_top=False)
+        touch_start = max(min(top.first_idx, top.second_idx), min(bottom.first_idx, bottom.second_idx))
+        touch_end = end
+        top_touches = self._count_touches(data, top, is_top=True, start_idx=touch_start, end_idx=touch_end)
+        bottom_touches = self._count_touches(data, bottom, is_top=False, start_idx=touch_start, end_idx=touch_end)
         if top_touches < 2 or bottom_touches < 2:
             return None
 
@@ -264,26 +269,28 @@ class TriangleDetector:
                     first_breakout = (idx, "down")
         return top_breaks, bottom_breaks, first_breakout
 
-    def _count_touches(self, data: pd.DataFrame, line: TrendLine, is_top: bool) -> int:
+    def _count_touches(self, data: pd.DataFrame, line: TrendLine, is_top: bool, start_idx: int, end_idx: int) -> int:
         eps = 0.004
         touched_idxs: list[int] = [line.first_idx, line.second_idx]
-        start = min(line.first_idx, line.second_idx)
-        for idx in range(start, len(data)):
+        start = max(start_idx, min(line.first_idx, line.second_idx))
+        stop = min(end_idx, len(data) - 1)
+        for idx in range(start, stop + 1):
             lv = line.value_at(idx)
             high = float(data.loc[idx, "High"])
             low = float(data.loc[idx, "Low"])
             close = float(data.loc[idx, "Close"])
+            open_ = float(data.loc[idx, "Open"]) if "Open" in data.columns else close
             if is_top:
                 near = abs(high - lv) <= max(0.01, abs(lv) * eps)
                 ok_close = close <= lv
-                wick_hit = high >= lv
-                if ok_close and (near or wick_hit):
+                body_below = max(open_, close) <= lv * (1 + eps)
+                if ok_close and near and body_below:
                     touched_idxs.append(idx)
             else:
                 near = abs(low - lv) <= max(0.01, abs(lv) * eps)
                 ok_close = close >= lv
-                wick_hit = low <= lv
-                if ok_close and (near or wick_hit):
+                body_above = min(open_, close) >= lv * (1 - eps)
+                if ok_close and near and body_above:
                     touched_idxs.append(idx)
 
         uniq = sorted(set(touched_idxs))
@@ -294,6 +301,16 @@ class TriangleDetector:
                 groups += 1
             prev = idx
         return groups
+
+    def _anchors_time_coherent(self, top: TrendLine, bottom: TrendLine) -> bool:
+        top_first, top_last = sorted((top.first_idx, top.second_idx))
+        bot_first, bot_last = sorted((bottom.first_idx, bottom.second_idx))
+        latest_start = max(top_first, bot_first)
+        earliest_end = min(top_last, bot_last)
+        if latest_start <= earliest_end:
+            return True
+        dislocation = latest_start - earliest_end
+        return dislocation <= self.max_anchor_dislocation
 
     def _is_better(self, cand: TriangleCandidate, best: TriangleCandidate) -> bool:
         if cand.score != best.score:
