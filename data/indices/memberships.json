@@ -1,0 +1,30 @@
+{
+  "source": "manual snapshot 2026-05-12",
+  "indices": {
+    "WIG20": {
+      "exchange_suffix": ".WA",
+      "tickers": [
+        "ALE",
+        "ALR",
+        "BDX",
+        "CDR",
+        "DNP",
+        "EBP",
+        "KGH",
+        "KRU",
+        "KTY",
+        "LPP",
+        "MBK",
+        "MDV",
+        "PCO",
+        "PEO",
+        "PGE",
+        "PKN",
+        "PKO",
+        "PZU",
+        "TPE",
+        "ZAB"
+      ]
+    }
+  }
+}
