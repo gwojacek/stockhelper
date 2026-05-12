@@ -117,13 +117,6 @@ class IndexTickerProvider:
 
 
 class TriangleDetector:
-    PREFERRED_ANCHORS = {
-        "KGH": {
-            "top": ("2026-02-04", "2026-03-02"),
-            "bottom": ("2025-09-10", "2025-09-18"),
-        }
-    }
-
     def __init__(
         self,
         min_sessions: int = 40,
@@ -131,8 +124,8 @@ class TriangleDetector:
         max_bars: int = 280,
         anchor_step: int = 1,
         max_candidates: int = 220000,
-        max_line_break_ratio: float = 0.22,
-        min_convergence_ratio: float = 0.02,
+        max_line_break_ratio: float = 0.35,
+        min_convergence_ratio: float = -0.05,
         enforce_swings: bool = True,
     ):
         self.min_sessions = min_sessions
@@ -148,9 +141,6 @@ class TriangleDetector:
         if len(df) < self.min_sessions:
             return None
         data = df.sort_values("Date").reset_index(drop=True)
-        seeded = self._evaluate_preferred_candidate(data, (ticker or "").upper())
-        if seeded is not None:
-            return seeded
         best: TriangleCandidate | None = None
         n = len(data)
         start = max(0, n - self.max_bars)
@@ -175,23 +165,6 @@ class TriangleDetector:
                         if not best or self._is_better(cand, best):
                             best = cand
         return best
-
-    def _evaluate_preferred_candidate(self, data: pd.DataFrame, ticker: str) -> TriangleCandidate | None:
-        anchors = self.PREFERRED_ANCHORS.get(ticker)
-        if not anchors:
-            return None
-        date_to_idx = {d.date().isoformat(): i for i, d in enumerate(pd.to_datetime(data["Date"], errors="coerce")) if pd.notna(d)}
-        top_dates = anchors["top"]
-        bottom_dates = anchors["bottom"]
-        if top_dates[0] not in date_to_idx or top_dates[1] not in date_to_idx:
-            return None
-        if bottom_dates[0] not in date_to_idx or bottom_dates[1] not in date_to_idx:
-            return None
-        i, j = date_to_idx[top_dates[0]], date_to_idx[top_dates[1]]
-        k, l = date_to_idx[bottom_dates[0]], date_to_idx[bottom_dates[1]]
-        top = TrendLine(i, j, float(data.loc[i, "High"]), float(data.loc[j, "High"]))
-        bottom = TrendLine(k, l, float(data.loc[k, "Low"]), float(data.loc[l, "Low"]))
-        return self._evaluate(data, top, bottom)
 
     def _evaluate(self, data: pd.DataFrame, top: TrendLine, bottom: TrendLine) -> TriangleCandidate | None:
         end = len(data) - 1
@@ -349,11 +322,11 @@ def run_triangle_search(search_value: str) -> pd.DataFrame:
     provider = IndexTickerProvider()
     detector = TriangleDetector()
     relaxed_detector = TriangleDetector(
-        max_bars=320,
+        max_bars=365,
         anchor_step=1,
-        max_candidates=300000,
-        max_line_break_ratio=0.35,
-        min_convergence_ratio=-0.03,
+        max_candidates=500000,
+        max_line_break_ratio=0.55,
+        min_convergence_ratio=-0.25,
         enforce_swings=False,
     )
     scope_name, tickers = provider.resolve(search_value)
