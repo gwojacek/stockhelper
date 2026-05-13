@@ -557,7 +557,8 @@ def load_or_update_daily_data(
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
         display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), _humanize_symbol(symbol))
-        enriched_name = source_name or _best_effort_display_name(symbol, instrument_type, source_symbol)
+        # Yahoo enrichment disabled in Stooq-only mode to avoid noisy 404 lookups.
+        enriched_name = source_name
         if enriched_name:
             display_name = enriched_name
         elif str(source_symbol).startswith("^"):
