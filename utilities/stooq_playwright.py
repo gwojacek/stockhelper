@@ -65,6 +65,24 @@ def _open_page(playwright):
     page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return browser, context, page
 
+
+
+def _accept_consent_if_present(page) -> None:
+    selectors = [
+        "button.fc-cta-consent",
+        "button[aria-label='Zgadzam się']",
+        "button:has-text('Zgadzam się')",
+    ]
+    for sel in selectors:
+        try:
+            btn = page.locator(sel).first
+            if btn.count() > 0 and btn.is_visible(timeout=1200):
+                btn.click(timeout=2000)
+                page.wait_for_timeout(700)
+                return
+        except Exception:
+            continue
+
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         return frame.evaluate("""() => {
@@ -99,6 +117,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         loaded = False
         for candidate_url in urls:
             page.goto(candidate_url, wait_until="networkidle")
+            _accept_consent_if_present(page)
             try:
                 page.wait_for_selector("table#fth1", timeout=4000)
             except Exception:
@@ -108,6 +127,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 break
         if not loaded:
             page.goto(urls[0], wait_until="networkidle")
+            _accept_consent_if_present(page)
 
         visited = set()
         while True:
@@ -205,6 +225,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         response = None
         for u in urls:
             response = page.goto(u, wait_until="networkidle")
+            _accept_consent_if_present(page)
             payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count()})
             if page.locator("#fth1").count() > 0:
                 break
