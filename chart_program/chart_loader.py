@@ -10,6 +10,7 @@ from urllib.request import urlopen
 
 import pandas as pd
 
+from utilities.stooq_playwright import update_stooq_history_with_playwright
 
 STOOQ_DEFAULT_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 
@@ -504,11 +505,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     except ValueError as exc:
         primary_error = exc
 
+    # Yahoo disabled: fallback only to Stooq web scraping through Playwright.
     try:
-        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
-    except ValueError as secondary_exc:
-        raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {secondary_exc}") from secondary_exc
+        csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+        df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364)
+        return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+    except Exception as web_exc:
+        raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
 
 
 def load_or_update_daily_data(
