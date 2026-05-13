@@ -21,6 +21,17 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 
+COMMODITIES_SEARCH_TICKERS = [
+    "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
+    "COPPER", "ALUMINIUM", "PLATINUM", "PALLADIUM", "WTI", "OIL.WTI",
+    "OIL", "CRUDE_OIL", "NATURAL_GAS",
+    "XAUUSD", "XAGUSD",
+    "BRACOMP", "US500", "MEXCOMP", "VIX", "US30", "US100", "HK.CASH",
+    "SG20CASH", "AU200.CASH", "CHN.CASH", "JP225", "NKX", "W20", "WIG20",
+    "UK100", "ITA40", "DE40", "DAX", "FRA40", "CAC", "NED25", "AEX",
+    "SUI20", "SMI", "SPA35", "IBEX", "EU50",
+]
+
 
 @dataclass
 class ScanResult:
@@ -90,7 +101,7 @@ def _members_from_configs(scope: str) -> list[str]:
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
     if normalized in {"commodities", "commidities", "commodity"}:
-        return "commodities", _members_from_configs("commodities"), "configs", None
+        return "commodities", COMMODITIES_SEARCH_TICKERS, "commodity maps", None
     if normalized in {"forex", "fx"}:
         return "forex", _members_from_configs("forex"), "configs", None
 
