@@ -93,7 +93,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         visited = set()
         while True:
             page.wait_for_timeout(500)
-            table_rows = page.locator("table#fth1 tbody tr, table tbody tr")
+            table_rows = page.locator("table#fth1 tr, table#fth1 tbody tr, table tr")
             count = table_rows.count()
 
             if count == 0:
@@ -119,17 +119,24 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     })
 
             for i in range(count):
-                cols = table_rows.nth(i).locator("td")
+                row = table_rows.nth(i)
+                row_id = (row.get_attribute("id") or "").lower()
+                if row_id == "f13":
+                    continue
+                if row.locator("th").count() > 0:
+                    continue
+                cols = row.locator("td")
                 if cols.count() < 6:
                     continue
-                d = cols.nth(0).inner_text().strip()
+                first_text = cols.nth(0).inner_text().strip()
+                offset = 1 if first_text.isdigit() else 0
+                d = cols.nth(offset).inner_text().strip()
                 try:
                     dt = _parse_stooq_date(d)
                 except Exception:
                     continue
                 if dt < min_required:
                     continue
-                offset = 1 if cols.nth(0).inner_text().strip().isdigit() else 0
                 rows.append({
                     "Date": dt,
                     "Open": cols.nth(1 + offset).inner_text().strip().replace(',', '.'),
