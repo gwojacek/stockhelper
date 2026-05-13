@@ -36,15 +36,38 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         visited = set()
         while True:
             page.wait_for_timeout(500)
-            table_rows = page.locator("table tbody tr")
+            table_rows = page.locator("table#fth1 tbody tr, table tbody tr")
             count = table_rows.count()
+
+            if count == 0:
+                extracted = page.evaluate("""() => {
+                    const table = document.querySelector('table#fth1') || document.querySelector('table');
+                    if (!table) return [];
+                    return Array.from(table.querySelectorAll('tr')).map(tr =>
+                      Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
+                    ).filter(r => r.length >= 6);
+                }""")
+                count = len(extracted)
+                for row in extracted:
+                    d = row[0]
+                    try:
+                        dt = pd.to_datetime(d, dayfirst=True, errors='raise')
+                    except Exception:
+                        continue
+                    if dt < min_required:
+                        continue
+                    rows.append({
+                        'Date': dt, 'Open': row[1].replace(',', '.'), 'High': row[2].replace(',', '.'),
+                        'Low': row[3].replace(',', '.'), 'Close': row[4].replace(',', '.'), 'Volume': row[5].replace(' ', '')
+                    })
+
             for i in range(count):
                 cols = table_rows.nth(i).locator("td")
                 if cols.count() < 6:
                     continue
                 d = cols.nth(0).inner_text().strip()
                 try:
-                    dt = pd.to_datetime(d, dayfirst=False, errors="raise")
+                    dt = pd.to_datetime(d, dayfirst=True, errors="raise")
                 except Exception:
                     continue
                 if dt < min_required:

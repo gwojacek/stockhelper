@@ -25,8 +25,10 @@ SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 COMMODITIES_SEARCH_TICKERS = [
     "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
     "COPPER", "ALUMINIUM", "PLATINUM", "PALLADIUM", "WTI", "OIL.WTI",
-    "OIL", "CRUDE_OIL", "NATURAL_GAS",
-    "XAUUSD", "XAGUSD",
+    "OIL", "CRUDE_OIL", "NATURAL_GAS", "XAUUSD", "XAGUSD",
+]
+
+INDEXES_SEARCH_TICKERS = [
     "BRACOMP", "US500", "MEXCOMP", "VIX", "US30", "US100", "HK.CASH",
     "SG20CASH", "AU200.CASH", "CHN.CASH", "JP225", "NKX", "W20", "WIG20",
     "UK100", "ITA40", "DE40", "DAX", "FRA40", "CAC", "NED25", "AEX",
@@ -105,6 +107,8 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         return "commodities", COMMODITIES_SEARCH_TICKERS, "commodity maps", None
     if normalized in {"forex", "fx"}:
         return "forex", _members_from_configs("forex"), "configs", None
+    if normalized in {"indexes", "indices", "index"}:
+        return "indexes", INDEXES_SEARCH_TICKERS, "commodity maps", None
 
     if INDEX_MEMBERS_FILE.exists():
         payload = json.loads(INDEX_MEMBERS_FILE.read_text(encoding="utf-8"))
@@ -207,6 +211,8 @@ def run_search(target: str) -> int:
         if group_name == "forex":
             instrument = "forex"
         elif group_name == "commodities":
+            instrument = "commodity"
+        elif group_name == "indexes":
             instrument = "commodity"
         elif group_name == "single":
             detected = detect_instrument_type(ticker, None)
