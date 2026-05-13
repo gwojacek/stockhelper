@@ -30,6 +30,20 @@ def _csv_path(base_dir: Path, symbol: str) -> Path:
     return base_dir / f"{safe}.csv"
 
 
+
+
+def _extract_rows_from_frame(frame) -> list[list[str]]:
+    try:
+        return frame.evaluate("""() => {
+            const table = document.querySelector('table#fth1') || document.querySelector('table');
+            if (!table) return [];
+            return Array.from(table.querySelectorAll('tr')).map(tr =>
+              Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
+            ).filter(r => r.length >= 6);
+        }""")
+    except Exception:
+        return []
+
 def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     start_date = (datetime.now(UTC).date() - timedelta(days=lookback_days))
@@ -62,13 +76,12 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             count = table_rows.count()
 
             if count == 0:
-                extracted = page.evaluate("""() => {
-                    const table = document.querySelector('table#fth1') || document.querySelector('table');
-                    if (!table) return [];
-                    return Array.from(table.querySelectorAll('tr')).map(tr =>
-                      Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
-                    ).filter(r => r.length >= 6);
-                }""")
+                extracted = _extract_rows_from_frame(page)
+                if not extracted:
+                    for fr in page.frames:
+                        extracted = _extract_rows_from_frame(fr)
+                        if extracted:
+                            break
                 count = len(extracted)
                 for row in extracted:
                     date_idx = 1 if row and row[0].isdigit() and len(row) >= 8 else 0
@@ -153,13 +166,14 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         html_path.write_text(html, encoding="utf-8")
         page.screenshot(path=str(out_dir / f"{symbol.lower().replace('.', '_')}.png"), full_page=True)
 
-        rows = page.evaluate("""() => {
-            const table = document.querySelector('table#fth1') || document.querySelector('table');
-            if (!table) return [];
-            return Array.from(table.querySelectorAll('tr')).map(tr =>
-              Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
-            ).filter(r => r.length >= 6);
-        }""")
+        rows = _extract_rows_from_frame(page)
+        frame_rows = {}
+        if not rows:
+            for fr in page.frames:
+                fr_rows = _extract_rows_from_frame(fr)
+                frame_rows[fr.url] = len(fr_rows)
+                if fr_rows and not rows:
+                    rows = fr_rows
         payload["rows_count"] = len(rows)
         payload["rows_preview"] = rows[:8]
         payload["title"] = page.title()
@@ -170,6 +184,9 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         payload["html_head"] = html[:1000]
         payload["table_count"] = page.locator("table").count()
         payload["fth1_count"] = page.locator("#fth1").count()
+        payload["frames"] = [fr.url for fr in page.frames]
+        payload["frame_rows"] = frame_rows
+        payload["contains_fth1_text"] = "fth1" in html.lower()
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
