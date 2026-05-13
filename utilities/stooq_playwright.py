@@ -72,16 +72,30 @@ def _accept_consent_if_present(page) -> None:
         "button.fc-cta-consent",
         "button[aria-label='Zgadzam się']",
         "button:has-text('Zgadzam się')",
+        ".fc-dialog-container button:has-text('Zgadzam się')",
     ]
-    for sel in selectors:
-        try:
-            btn = page.locator(sel).first
-            if btn.count() > 0 and btn.is_visible(timeout=1200):
-                btn.click(timeout=2000)
-                page.wait_for_timeout(700)
-                return
-        except Exception:
-            continue
+
+    contexts = [page] + list(page.frames)
+    for ctx in contexts:
+        for sel in selectors:
+            try:
+                btn = ctx.locator(sel).first
+                if btn.count() > 0 and btn.is_visible(timeout=1200):
+                    btn.click(timeout=2500, force=True)
+                    page.wait_for_timeout(900)
+                    break
+            except Exception:
+                continue
+
+    # Fallback: if CMP still blocks the page, remove overlay container.
+    try:
+        page.evaluate("""() => {
+            const overlays = document.querySelectorAll('.fc-dialog-container, .fc-consent-root, .fc-dialog-overlay');
+            overlays.forEach(el => el.remove());
+            document.body.style.overflow = 'auto';
+        }""")
+    except Exception:
+        pass
 
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
