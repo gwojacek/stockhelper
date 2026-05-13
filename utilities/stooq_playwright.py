@@ -14,6 +14,12 @@ _POLISH_MONTHS = {
 }
 
 
+def _is_rate_limited_html(html: str) -> bool:
+    lowered = (html or '').lower()
+    markers = ['przekroczony dzienny limit wywołań strony', 'odblokuj dostęp', 'przepisz powyższy kod']
+    return any(m in lowered for m in markers)
+
+
 def _parse_stooq_date(raw: str) -> pd.Timestamp:
     text = (raw or "").strip().lower().replace(".", " ")
     parts = [p for p in text.split() if p]
@@ -110,6 +116,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             except Exception:
                 continue
             _accept_consent_if_present(page)
+            if _is_rate_limited_html(page.content()):
+                raise ValueError("Stooq rate limit detected (captcha/limit popup).")
             try:
                 page.wait_for_selector("table#fth1", timeout=4000)
             except Exception:
@@ -259,6 +267,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         payload["frames"] = [fr.url for fr in page.frames]
         payload["frame_rows"] = frame_rows
         payload["contains_fth1_text"] = "fth1" in html.lower()
+        payload["rate_limited"] = _is_rate_limited_html(html)
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -13,6 +13,7 @@ import pandas as pd
 
 from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import (
+    UNIFIED_DATA_DIR,
     COMMODITY_STOOQ_MAP,
     COMMODITY_YAHOO_MAP,
     load_or_update_daily_data,
@@ -250,6 +251,7 @@ def run_search(target: str) -> int:
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f}")
     print(f"\nZapisano CSV: {out_csv}")
+    print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
     return 0
 
 
