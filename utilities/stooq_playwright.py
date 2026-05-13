@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -125,3 +126,34 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     merged = merged[merged["Date"] >= min_required]
     merged.to_csv(csv_path, index=False)
     return merged
+
+
+def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
+    out_dir = out_dir or Path("debug") / "stooq"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
+
+    payload: dict = {"symbol": symbol, "url": f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d"}
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(payload["url"], wait_until="domcontentloaded")
+        page.wait_for_timeout(800)
+
+        html = page.content()
+        (out_dir / f"{symbol.lower().replace('.', '_')}.html").write_text(html, encoding="utf-8")
+
+        rows = page.evaluate("""() => {
+            const table = document.querySelector('table#fth1') || document.querySelector('table');
+            if (!table) return [];
+            return Array.from(table.querySelectorAll('tr')).map(tr =>
+              Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
+            ).filter(r => r.length >= 6);
+        }""")
+        payload["rows_count"] = rows.length
+        payload["rows_preview"] = rows.slice(0, 8)
+        payload["title"] = page.title()
+        browser.close()
+
+    out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_file

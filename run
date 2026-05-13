@@ -62,7 +62,14 @@ def main() -> int:
     parser.add_argument("-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
     parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
+    parser.add_argument("--debug-stooq", dest="debug_stooq", help="Dump Stooq page debug artifacts for symbol")
     args = parser.parse_args()
+
+    if args.debug_stooq:
+        from utilities.stooq_playwright import debug_stooq_page
+        path = debug_stooq_page(args.debug_stooq)
+        print(f"Stooq debug zapisany: {path}")
+        return 0
 
     if args.search_target:
         from scanner_search import run_search
