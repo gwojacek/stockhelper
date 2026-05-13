@@ -7,6 +7,23 @@ import pandas as pd
 from playwright.sync_api import sync_playwright
 
 
+_POLISH_MONTHS = {
+    "sty": "01", "lut": "02", "mar": "03", "kwi": "04", "maj": "05", "cze": "06",
+    "lip": "07", "sie": "08", "wrz": "09", "paź": "10", "paz": "10", "lis": "11", "gru": "12",
+}
+
+
+def _parse_stooq_date(raw: str) -> pd.Timestamp:
+    text = (raw or "").strip().lower().replace(".", " ")
+    parts = [p for p in text.split() if p]
+    if len(parts) >= 3 and parts[1] in _POLISH_MONTHS:
+        day = parts[0].zfill(2)
+        month = _POLISH_MONTHS[parts[1]]
+        year = parts[2]
+        return pd.to_datetime(f"{year}-{month}-{day}", errors="raise")
+    return pd.to_datetime(raw, dayfirst=True, errors="raise")
+
+
 def _csv_path(base_dir: Path, symbol: str) -> Path:
     safe = symbol.replace('/', '').replace('.', '_').upper()
     return base_dir / f"{safe}.csv"
@@ -49,16 +66,17 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 }""")
                 count = len(extracted)
                 for row in extracted:
-                    d = row[0]
+                    date_idx = 1 if row and row[0].isdigit() and len(row) >= 8 else 0
+                    d = row[date_idx]
                     try:
-                        dt = pd.to_datetime(d, dayfirst=True, errors='raise')
+                        dt = _parse_stooq_date(d)
                     except Exception:
                         continue
                     if dt < min_required:
                         continue
                     rows.append({
-                        'Date': dt, 'Open': row[1].replace(',', '.'), 'High': row[2].replace(',', '.'),
-                        'Low': row[3].replace(',', '.'), 'Close': row[4].replace(',', '.'), 'Volume': row[5].replace(' ', '')
+                        'Date': dt, 'Open': row[1 + date_idx].replace(',', '.'), 'High': row[2 + date_idx].replace(',', '.'),
+                        'Low': row[3 + date_idx].replace(',', '.'), 'Close': row[4 + date_idx].replace(',', '.'), 'Volume': row[6 + date_idx].replace(' ', '')
                     })
 
             for i in range(count):
@@ -67,18 +85,19 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     continue
                 d = cols.nth(0).inner_text().strip()
                 try:
-                    dt = pd.to_datetime(d, dayfirst=True, errors="raise")
+                    dt = _parse_stooq_date(d)
                 except Exception:
                     continue
                 if dt < min_required:
                     continue
+                offset = 1 if cols.nth(0).inner_text().strip().isdigit() else 0
                 rows.append({
                     "Date": dt,
-                    "Open": cols.nth(1).inner_text().strip().replace(',', '.'),
-                    "High": cols.nth(2).inner_text().strip().replace(',', '.'),
-                    "Low": cols.nth(3).inner_text().strip().replace(',', '.'),
-                    "Close": cols.nth(4).inner_text().strip().replace(',', '.'),
-                    "Volume": cols.nth(5).inner_text().strip().replace(' ', ''),
+                    "Open": cols.nth(1 + offset).inner_text().strip().replace(',', '.'),
+                    "High": cols.nth(2 + offset).inner_text().strip().replace(',', '.'),
+                    "Low": cols.nth(3 + offset).inner_text().strip().replace(',', '.'),
+                    "Close": cols.nth(4 + offset).inner_text().strip().replace(',', '.'),
+                    "Volume": cols.nth(6 + offset).inner_text().strip().replace(' ', ''),
                 })
 
             key = page.url
