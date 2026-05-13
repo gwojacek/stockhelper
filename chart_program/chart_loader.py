@@ -14,10 +14,13 @@ from utilities.stooq_playwright import update_stooq_history_with_playwright
 
 STOOQ_DEFAULT_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
+
 DATA_DIR_BY_INSTRUMENT = {
-    "stock": Path("data/stocks"),
-    "commodity": Path("data/commodities"),
-    "forex": Path("data/forex"),
+    "stock": UNIFIED_DATA_DIR / "stocks",
+    "commodity": UNIFIED_DATA_DIR / "commodities",
+    "forex": UNIFIED_DATA_DIR / "forex",
 }
 
 COMMODITY_YAHOO_MAP = {
