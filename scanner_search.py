@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import (
     COMMODITY_STOOQ_MAP,
     COMMODITY_YAHOO_MAP,
@@ -111,6 +112,10 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         for key, data in indices.items():
             if key.lower() == normalized:
                 return key, [x.upper() for x in data.get("tickers", [])], payload.get("source", "local file"), data.get("exchange_suffix")
+    # Fallback: traktuj input jako pojedynczy ticker/symbol do skanowania.
+    raw = (target or "").strip()
+    if raw:
+        return "single", [raw.upper()], "direct symbol", None
     raise ValueError(f"Brak skonfigurowanej listy instrumentów dla: {target}")
 
 
@@ -199,7 +204,15 @@ def run_search(target: str) -> int:
     results: list[ScanResult] = []
 
     for idx, ticker in enumerate(members, start=1):
-        instrument = "forex" if group_name == "forex" else ("commodity" if group_name == "commodities" else "stock")
+        if group_name == "forex":
+            instrument = "forex"
+        elif group_name == "commodities":
+            instrument = "commodity"
+        elif group_name == "single":
+            detected = detect_instrument_type(ticker, None)
+            instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+        else:
+            instrument = "stock"
         fetch_symbol = ticker
         if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
             fetch_symbol = f"{ticker}{exchange_suffix}"
