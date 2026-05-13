@@ -50,6 +50,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d", wait_until="domcontentloaded")
+        try:
+            page.wait_for_selector("table#fth1", timeout=6000)
+        except Exception:
+            pass
 
         visited = set()
         while True:
@@ -137,11 +141,17 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(payload["url"], wait_until="domcontentloaded")
-        page.wait_for_timeout(800)
+        response = page.goto(payload["url"], wait_until="domcontentloaded")
+        page.wait_for_timeout(1500)
+        try:
+            page.wait_for_selector("table#fth1", timeout=6000)
+        except Exception:
+            pass
 
         html = page.content()
-        (out_dir / f"{symbol.lower().replace('.', '_')}.html").write_text(html, encoding="utf-8")
+        html_path = out_dir / f"{symbol.lower().replace('.', '_')}.html"
+        html_path.write_text(html, encoding="utf-8")
+        page.screenshot(path=str(out_dir / f"{symbol.lower().replace('.', '_')}.png"), full_page=True)
 
         rows = page.evaluate("""() => {
             const table = document.querySelector('table#fth1') || document.querySelector('table');
@@ -153,6 +163,13 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         payload["rows_count"] = len(rows)
         payload["rows_preview"] = rows[:8]
         payload["title"] = page.title()
+        payload["status"] = response.status if response else None
+        payload["final_url"] = page.url
+        payload["html_path"] = str(html_path)
+        payload["html_length"] = len(html)
+        payload["html_head"] = html[:1000]
+        payload["table_count"] = page.locator("table").count()
+        payload["fth1_count"] = page.locator("#fth1").count()
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
