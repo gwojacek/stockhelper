@@ -48,52 +48,27 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 def _open_page(playwright):
-    browser = playwright.chromium.launch(
-        headless=True,
-        args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-    )
-    context = browser.new_context(
-        locale="pl-PL",
-        user_agent=(
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": 1366, "height": 900},
-        extra_http_headers={"Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7"},
-    )
-    page = context.new_page()
-    page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-    return browser, context, page
+    browser = playwright.chromium.launch(headless=True)
+    page = browser.new_page()
+    return browser, page
 
 
 
 def _accept_consent_if_present(page) -> None:
-    selectors = [
-        "button.fc-cta-consent",
-        "button[aria-label='Zgadzam się']",
-        "button:has-text('Zgadzam się')",
-        ".fc-dialog-container button:has-text('Zgadzam się')",
-    ]
-
-    contexts = [page] + list(page.frames)
-    for ctx in contexts:
-        for sel in selectors:
-            try:
-                btn = ctx.locator(sel).first
-                if btn.count() > 0 and btn.is_visible(timeout=1200):
-                    btn.click(timeout=2500, force=True)
-                    page.wait_for_timeout(900)
-                    break
-            except Exception:
-                continue
-
-    # Fallback: if CMP still blocks the page, remove overlay container.
+    # Wzorowane na ręcznie działającym flow z popupem Stooq
     try:
-        page.evaluate("""() => {
-            const overlays = document.querySelectorAll('.fc-dialog-container, .fc-consent-root, .fc-dialog-overlay');
-            overlays.forEach(el => el.remove());
-            document.body.style.overflow = 'auto';
-        }""")
+        consent_button = page.locator('button.fc-button.fc-cta-consent.fc-primary-button')
+        consent_button.wait_for(state='visible', timeout=8000)
+        consent_button.click()
+        page.wait_for_timeout(1500)
+    except Exception:
+        pass
+
+    try:
+        text_button = page.locator("text=Zgadzam się")
+        if text_button.first.is_visible(timeout=3000):
+            text_button.first.click()
+            page.wait_for_timeout(1000)
     except Exception:
         pass
 
@@ -126,7 +101,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
 
     rows: list[dict] = []
     with sync_playwright() as p:
-        browser, context, page = _open_page(p)
+        browser, page = _open_page(p)
         urls = _stooq_history_urls(symbol)
         loaded = False
         for candidate_url in urls:
@@ -215,7 +190,6 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 break
             next_link.first.click()
 
-        context.close()
         browser.close()
 
     remote = pd.DataFrame(rows)
@@ -241,7 +215,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": []}
     with sync_playwright() as p:
-        browser, context, page = _open_page(p)
+        browser, page = _open_page(p)
         response = None
         for u in urls:
             try:
@@ -285,7 +259,6 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         payload["frames"] = [fr.url for fr in page.frames]
         payload["frame_rows"] = frame_rows
         payload["contains_fth1_text"] = "fth1" in html.lower()
-        context.close()
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
