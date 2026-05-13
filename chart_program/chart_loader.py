@@ -12,7 +12,7 @@ import pandas as pd
 
 from utilities.stooq_playwright import update_stooq_history_with_playwright
 
-STOOQ_DEFAULT_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
+STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"

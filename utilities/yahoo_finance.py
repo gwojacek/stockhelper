@@ -8,7 +8,7 @@ import pandas as pd
 import yfinance as yf
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
-STOOQ_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
+STOOQ_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 LAST_TURNOVER_SOURCE = "unknown"
 
 
