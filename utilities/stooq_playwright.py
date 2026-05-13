@@ -150,8 +150,8 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
               Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
             ).filter(r => r.length >= 6);
         }""")
-        payload["rows_count"] = rows.length
-        payload["rows_preview"] = rows.slice(0, 8)
+        payload["rows_count"] = len(rows)
+        payload["rows_preview"] = rows[:8]
         payload["title"] = page.title()
         browser.close()
 
