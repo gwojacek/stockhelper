@@ -32,6 +32,19 @@ def _csv_path(base_dir: Path, symbol: str) -> Path:
 
 
 
+
+
+def _stooq_history_urls(symbol: str) -> list[str]:
+    raw = (symbol or "").strip()
+    candidates = [raw, raw.lower(), raw.upper(), raw.replace('.', '_'), raw.replace('.', '_').lower(), raw.replace('.', '_').upper()]
+    dedup = []
+    seen = set()
+    for c in candidates:
+        if c and c not in seen:
+            seen.add(c)
+            dedup.append(f"https://stooq.pl/q/d/?s={c}&i=d")
+    return dedup
+
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         return frame.evaluate("""() => {
@@ -63,11 +76,19 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d", wait_until="domcontentloaded")
-        try:
-            page.wait_for_selector("table#fth1", timeout=6000)
-        except Exception:
-            pass
+        urls = _stooq_history_urls(symbol)
+        loaded = False
+        for candidate_url in urls:
+            page.goto(candidate_url, wait_until="domcontentloaded")
+            try:
+                page.wait_for_selector("table#fth1", timeout=4000)
+            except Exception:
+                pass
+            if _extract_rows_from_frame(page):
+                loaded = True
+                break
+        if not loaded:
+            page.goto(urls[0], wait_until="domcontentloaded")
 
         visited = set()
         while True:
@@ -150,11 +171,17 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
 
-    payload: dict = {"symbol": symbol, "url": f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d"}
+    urls = _stooq_history_urls(symbol)
+    payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": []}
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        response = page.goto(payload["url"], wait_until="domcontentloaded")
+        response = None
+        for u in urls:
+            response = page.goto(u, wait_until="domcontentloaded")
+            payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count()})
+            if page.locator("#fth1").count() > 0:
+                break
         page.wait_for_timeout(1500)
         try:
             page.wait_for_selector("table#fth1", timeout=6000)
