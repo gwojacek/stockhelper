@@ -36,7 +36,7 @@ def _csv_path(base_dir: Path, symbol: str) -> Path:
 
 def _stooq_history_urls(symbol: str) -> list[str]:
     raw = (symbol or "").strip()
-    candidates = [raw, raw.lower(), raw.upper(), raw.replace('.', '_'), raw.replace('.', '_').lower(), raw.replace('.', '_').upper()]
+    candidates = [raw, raw.lower()]
     dedup = []
     seen = set()
     for c in candidates:
@@ -116,7 +116,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         urls = _stooq_history_urls(symbol)
         loaded = False
         for candidate_url in urls:
-            page.goto(candidate_url, wait_until="networkidle")
+            try:
+                page.goto(candidate_url, wait_until="domcontentloaded")
+            except Exception:
+                continue
             _accept_consent_if_present(page)
             try:
                 page.wait_for_selector("table#fth1", timeout=4000)
@@ -126,8 +129,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 loaded = True
                 break
         if not loaded:
-            page.goto(urls[0], wait_until="networkidle")
-            _accept_consent_if_present(page)
+            try:
+                page.goto(urls[0], wait_until="domcontentloaded")
+                _accept_consent_if_present(page)
+            except Exception:
+                pass
 
         visited = set()
         while True:
@@ -224,9 +230,13 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         browser, context, page = _open_page(p)
         response = None
         for u in urls:
-            response = page.goto(u, wait_until="networkidle")
-            _accept_consent_if_present(page)
-            payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count()})
+            try:
+                response = page.goto(u, wait_until="domcontentloaded")
+                _accept_consent_if_present(page)
+                payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
+            except Exception as exc:
+                payload["attempted_urls"].append({"url": u, "title": "", "table_count": 0, "fth1_count": 0, "goto_error": str(exc)})
+                continue
             if page.locator("#fth1").count() > 0:
                 break
         page.wait_for_timeout(1500)
