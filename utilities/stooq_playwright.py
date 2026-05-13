@@ -45,6 +45,26 @@ def _stooq_history_urls(symbol: str) -> list[str]:
             dedup.append(f"https://stooq.pl/q/d/?s={c}&i=d")
     return dedup
 
+
+
+def _open_page(playwright):
+    browser = playwright.chromium.launch(
+        headless=True,
+        args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+    )
+    context = browser.new_context(
+        locale="pl-PL",
+        user_agent=(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        viewport={"width": 1366, "height": 900},
+        extra_http_headers={"Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7"},
+    )
+    page = context.new_page()
+    page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return browser, context, page
+
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         return frame.evaluate("""() => {
@@ -74,12 +94,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
 
     rows: list[dict] = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        browser, context, page = _open_page(p)
         urls = _stooq_history_urls(symbol)
         loaded = False
         for candidate_url in urls:
-            page.goto(candidate_url, wait_until="domcontentloaded")
+            page.goto(candidate_url, wait_until="networkidle")
             try:
                 page.wait_for_selector("table#fth1", timeout=4000)
             except Exception:
@@ -88,7 +107,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 loaded = True
                 break
         if not loaded:
-            page.goto(urls[0], wait_until="domcontentloaded")
+            page.goto(urls[0], wait_until="networkidle")
 
         visited = set()
         while True:
@@ -156,6 +175,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 break
             next_link.first.click()
 
+        context.close()
         browser.close()
 
     remote = pd.DataFrame(rows)
@@ -181,11 +201,10 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": []}
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        browser, context, page = _open_page(p)
         response = None
         for u in urls:
-            response = page.goto(u, wait_until="domcontentloaded")
+            response = page.goto(u, wait_until="networkidle")
             payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count()})
             if page.locator("#fth1").count() > 0:
                 break
@@ -221,6 +240,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         payload["frames"] = [fr.url for fr in page.frames]
         payload["frame_rows"] = frame_rows
         payload["contains_fth1_text"] = "fth1" in html.lower()
+        context.close()
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
