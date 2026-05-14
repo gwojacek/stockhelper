@@ -90,6 +90,19 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
     except Exception:
         return []
 
+
+
+def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
+    out_dir = Path("debug") / "stooq"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    name = f"{symbol.lower().replace('.', '_')}{suffix}.png"
+    path = out_dir / name
+    try:
+        page.screenshot(path=str(path), full_page=True)
+    except Exception:
+        return ""
+    return str(path)
+
 def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     start_date = (datetime.now(UTC).date() - timedelta(days=lookback_days))
@@ -124,9 +137,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     if extracted:
                         break
 
-            if not extracted:
+            if page_num == 1 and not extracted:
+                shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
                 if _is_rate_limited_html(page.content()):
-                    raise ValueError("Stooq rate limit detected (captcha/limit popup).")
+                    raise ValueError(f"Stooq rate limit detected (captcha/limit popup). Screenshot: {shot}")
+                raise ValueError(f"Stooq first-page check failed (no table rows). Screenshot: {shot}")
+
+            if not extracted:
                 break
 
             page_added = 0
