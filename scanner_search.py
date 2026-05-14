@@ -223,6 +223,10 @@ def run_search(target: str) -> int:
         fetch_symbol = ticker
         if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
             fetch_symbol = f"{ticker}{exchange_suffix}"
+        if instrument == "commodity":
+            mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
+            if mapped:
+                fetch_symbol = mapped.upper()
         print(f"[{idx}/{len(members)}] skanuję {ticker} ({fetch_symbol})...")
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)

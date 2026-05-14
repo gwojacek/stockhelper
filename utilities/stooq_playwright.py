@@ -166,7 +166,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         remote[c] = pd.to_numeric(remote[c], errors="coerce")
     remote = remote.dropna(subset=["Date", "Open", "High", "Low", "Close"])
 
-    merged = pd.concat([local, remote], ignore_index=True)
+    if local is None or local.empty:
+        merged = remote.copy()
+    else:
+        merged = pd.concat([local, remote], ignore_index=True)
     merged = merged.drop_duplicates(subset=["Date"], keep="last").sort_values("Date").reset_index(drop=True)
     merged = merged[merged["Date"] >= min_required]
     merged.to_csv(csv_path, index=False)
