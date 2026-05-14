@@ -16,7 +16,7 @@ _POLISH_MONTHS = {
 
 def _is_rate_limited_html(html: str) -> bool:
     lowered = (html or '').lower()
-    markers = ['przekroczony dzienny limit wywołań strony', 'odblokuj dostęp', 'przepisz powyższy kod']
+    markers = ['przekroczony dzienny limit wywołań strony', 'przepisz powyższy kod']
     return any(m in lowered for m in markers)
 
 
@@ -102,101 +102,59 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             local = local.dropna(subset=["Date"])
 
     min_required = pd.Timestamp(start_date)
-    if not local.empty and local["Date"].min() <= min_required and local["Date"].max().date() >= datetime.now(UTC).date() - timedelta(days=3):
+    if not local.empty and local["Date"].min() <= min_required and local["Date"].max().date() >= datetime.now(UTC).date() - timedelta(days=2):
         return local.sort_values("Date").reset_index(drop=True)
 
     rows: list[dict] = []
     with sync_playwright() as p:
         browser, page = _open_page(p)
-        urls = _stooq_history_urls(symbol)
-        loaded = False
-        for candidate_url in urls:
+        page_num = 1
+        while page_num <= 80:
+            url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
             try:
-                page.goto(candidate_url, wait_until="domcontentloaded")
+                page.goto(url, wait_until="domcontentloaded")
             except Exception:
-                continue
-            _accept_consent_if_present(page)
-            if _is_rate_limited_html(page.content()):
-                raise ValueError("Stooq rate limit detected (captcha/limit popup).")
-            try:
-                page.wait_for_selector("table#fth1", timeout=4000)
-            except Exception:
-                pass
-            if _extract_rows_from_frame(page):
-                loaded = True
                 break
-        if not loaded:
-            try:
-                page.goto(urls[0], wait_until="domcontentloaded")
-                _accept_consent_if_present(page)
-            except Exception:
-                pass
+            _accept_consent_if_present(page)
 
-        visited = set()
-        while True:
-            page.wait_for_timeout(500)
-            table_rows = page.locator("table#fth1 tr, table#fth1 tbody tr, table tr")
-            count = table_rows.count()
+            extracted = _extract_rows_from_frame(page)
+            if not extracted:
+                for fr in page.frames:
+                    extracted = _extract_rows_from_frame(fr)
+                    if extracted:
+                        break
 
-            if count == 0:
-                extracted = _extract_rows_from_frame(page)
-                if not extracted:
-                    for fr in page.frames:
-                        extracted = _extract_rows_from_frame(fr)
-                        if extracted:
-                            break
-                count = len(extracted)
-                for row in extracted:
-                    date_idx = 1 if row and row[0].isdigit() and len(row) >= 8 else 0
-                    d = row[date_idx]
-                    try:
-                        dt = _parse_stooq_date(d)
-                    except Exception:
-                        continue
-                    if dt < min_required:
-                        continue
-                    rows.append({
-                        'Date': dt, 'Open': row[1 + date_idx].replace(',', '.'), 'High': row[2 + date_idx].replace(',', '.'),
-                        'Low': row[3 + date_idx].replace(',', '.'), 'Close': row[4 + date_idx].replace(',', '.'), 'Volume': row[6 + date_idx].replace(' ', '')
-                    })
+            if not extracted:
+                if _is_rate_limited_html(page.content()):
+                    raise ValueError("Stooq rate limit detected (captcha/limit popup).")
+                break
 
-            for i in range(count):
-                row = table_rows.nth(i)
-                row_id = (row.get_attribute("id") or "").lower()
-                if row_id == "f13":
-                    continue
-                if row.locator("th").count() > 0:
-                    continue
-                cols = row.locator("td")
-                if cols.count() < 6:
-                    continue
-                first_text = cols.nth(0).inner_text().strip()
-                offset = 1 if first_text.isdigit() else 0
-                d = cols.nth(offset).inner_text().strip()
+            page_added = 0
+            oldest_dt_on_page = None
+            for row in extracted:
+                date_idx = 1 if row and row[0].isdigit() and len(row) >= 8 else 0
+                d = row[date_idx]
                 try:
                     dt = _parse_stooq_date(d)
                 except Exception:
                     continue
+                if oldest_dt_on_page is None or dt < oldest_dt_on_page:
+                    oldest_dt_on_page = dt
                 if dt < min_required:
                     continue
                 rows.append({
-                    "Date": dt,
-                    "Open": cols.nth(1 + offset).inner_text().strip().replace(',', '.'),
-                    "High": cols.nth(2 + offset).inner_text().strip().replace(',', '.'),
-                    "Low": cols.nth(3 + offset).inner_text().strip().replace(',', '.'),
-                    "Close": cols.nth(4 + offset).inner_text().strip().replace(',', '.'),
-                    "Volume": cols.nth(6 + offset).inner_text().strip().replace(' ', ''),
+                    'Date': dt,
+                    'Open': row[1 + date_idx].replace(',', '.'),
+                    'High': row[2 + date_idx].replace(',', '.'),
+                    'Low': row[3 + date_idx].replace(',', '.'),
+                    'Close': row[4 + date_idx].replace(',', '.'),
+                    'Volume': row[6 + date_idx].replace(' ', '')
                 })
+                page_added += 1
 
-            key = page.url
-            if key in visited:
+            if oldest_dt_on_page is not None and oldest_dt_on_page < min_required:
                 break
-            visited.add(key)
-
-            next_link = page.locator("a:has-text('następna')")
-            if next_link.count() == 0:
-                break
-            next_link.first.click()
+            page_num += 1
 
         browser.close()
 
