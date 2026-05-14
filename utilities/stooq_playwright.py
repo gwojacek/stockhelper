@@ -92,6 +92,22 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
 
 
 
+def _wait_for_stooq_content(page, timeout_ms: int = 12000) -> None:
+    # Wait until either table appears or rate-limit/captcha text appears.
+    try:
+        page.wait_for_function(
+            """() => {
+                const hasTable = document.querySelectorAll('table tr td').length > 0;
+                const txt = (document.body && document.body.innerText || "").toLowerCase();
+                const hasLimit = txt.includes('przekroczony dzienny limit') || txt.includes('przepisz powyższy kod');
+                return hasTable || hasLimit;
+            }""",
+            timeout=timeout_ms,
+        )
+    except Exception:
+        pass
+
+
 def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
     out_dir = Path("debug") / "stooq"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -131,6 +147,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             except Exception:
                 break
             _accept_consent_if_present(page)
+            _wait_for_stooq_content(page)
 
             extracted = _extract_rows_from_frame(page)
             if not extracted:
@@ -209,6 +226,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
                 _accept_consent_if_present(page)
+                _wait_for_stooq_content(page)
                 payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
             except Exception as exc:
                 payload["attempted_urls"].append({"url": u, "title": "", "table_count": 0, "fth1_count": 0, "goto_error": str(exc)})
