@@ -94,11 +94,11 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
 
 
 
-def _wait_for_table_or_limit_with_retry(page, retries: int = 3) -> bool:
+def _wait_for_table_or_limit_with_retry(page, retries: int = 2) -> bool:
     # Playwright-native wait with retries for occasional blank page loads.
     for _ in range(retries):
         try:
-            page.locator("table tr td").first.wait_for(state="visible", timeout=7000)
+            page.locator("table tr td").first.wait_for(state="visible", timeout=3000)
             return True
         except Exception:
             pass
@@ -142,7 +142,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     with sync_playwright() as p:
         browser, page = _open_page(p)
         page_num = 1
-        while page_num <= 80:
+        empty_pages = 0
+        while page_num <= 30:
             url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
             attempted_urls.append(url)
             try:
@@ -191,6 +192,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 })
                 page_added += 1
 
+            if page_added == 0:
+                empty_pages += 1
+            else:
+                empty_pages = 0
+
+            if empty_pages >= 2:
+                break
             if oldest_dt_on_page is not None and oldest_dt_on_page < min_required:
                 break
             page_num += 1
