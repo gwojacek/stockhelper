@@ -501,14 +501,26 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
+    # For commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
+    if instrument_type == "commodity":
+        try:
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364)
+            return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
+        except Exception as web_exc:
+            try:
+                df, candidate = _stooq_download(symbol, instrument_type, api_key=None)
+                return df, "stooq", candidate, None, f"Stooq web failed, fallback to Stooq API: {web_exc}"
+            except ValueError as api_exc:
+                raise ValueError(f"Stooq web failed: {web_exc} ; Stooq API failed: {api_exc}") from api_exc
+
     primary_error = None
     try:
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
 
-    # Yahoo disabled: fallback only to Stooq web scraping through Playwright.
     try:
         csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
         df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364)
