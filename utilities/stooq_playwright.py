@@ -119,11 +119,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         return local.sort_values("Date").reset_index(drop=True)
 
     rows: list[dict] = []
+    attempted_urls: list[str] = []
     with sync_playwright() as p:
         browser, page = _open_page(p)
         page_num = 1
         while page_num <= 80:
             url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
+            attempted_urls.append(url)
             try:
                 page.goto(url, wait_until="domcontentloaded")
             except Exception:
@@ -140,8 +142,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             if page_num == 1 and not extracted:
                 shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
                 if _is_rate_limited_html(page.content()):
-                    raise ValueError(f"Stooq rate limit detected (captcha/limit popup). Screenshot: {shot}")
-                raise ValueError(f"Stooq first-page check failed (no table rows). Screenshot: {shot}")
+                    raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
+                raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
             if not extracted:
                 break
@@ -177,7 +179,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
 
     remote = pd.DataFrame(rows)
     if remote.empty:
-        raise ValueError(f"Brak danych ze strony Stooq dla {symbol}")
+        raise ValueError(f"Brak danych ze strony Stooq dla {symbol}. Attempted URLs: {attempted_urls}")
 
     for c in ["Open", "High", "Low", "Close", "Volume"]:
         remote[c] = pd.to_numeric(remote[c], errors="coerce")

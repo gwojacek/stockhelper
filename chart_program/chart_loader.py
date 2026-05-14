@@ -508,11 +508,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364)
             return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
         except Exception as web_exc:
-            try:
-                df, candidate = _stooq_download(symbol, instrument_type, api_key=None)
-                return df, "stooq", candidate, None, f"Stooq web failed, fallback to Stooq API: {web_exc}"
-            except ValueError as api_exc:
-                raise ValueError(f"Stooq web failed: {web_exc} ; Stooq API failed: {api_exc}") from api_exc
+            raise ValueError(f"Stooq web failed: {web_exc}") from web_exc
 
     primary_error = None
     try:
