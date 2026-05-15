@@ -80,17 +80,37 @@ def _accept_consent_if_present(page) -> None:
 
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
-        return frame.evaluate("""() => {
-            const table = document.querySelector('table#fth1') || document.querySelector('table');
+        # 1) Prefer strict Stooq history table only.
+        rows = frame.evaluate("""() => {
+            const table = document.querySelector('#fth1');
             if (!table) return [];
             return Array.from(table.querySelectorAll('tr')).map(tr =>
               Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
-            ).filter(r => r.length >= 6);
+            ).filter(r => r.length >= 9);
         }""")
+        if rows:
+            return rows
+
+        # 2) Fallback to generic table rows, but still require date-like second column.
+        rows = frame.evaluate("""() => {
+            const tables = Array.from(document.querySelectorAll('table'));
+            const out = [];
+            for (const table of tables) {
+                const trs = Array.from(table.querySelectorAll('tr'));
+                for (const tr of trs) {
+                    const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+                    if (tds.length >= 9) out.push(tds);
+                }
+            }
+            return out;
+        }""")
+        filtered = []
+        for r in rows:
+            if len(r) >= 2 and any(m in r[1].lower() for m in ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "paz", "lis", "gru"]):
+                filtered.append(r)
+        return filtered
     except Exception:
         return []
-
-
 
 
 
@@ -179,6 +199,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 break
 
             page_added = 0
+            parsed_ok = 0
             oldest_dt_on_page = None
             for row in extracted:
                 date_idx = 1 if row and row[0].isdigit() and len(row) >= 8 else 0
@@ -189,6 +210,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     continue
                 if oldest_dt_on_page is None or dt < oldest_dt_on_page:
                     oldest_dt_on_page = dt
+                parsed_ok += 1
                 if dt < min_required:
                     continue
                 rows.append({
@@ -202,7 +224,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 page_added += 1
 
             if verbose:
-                print(f"[stooq-web] page={page_num} added_rows={page_added} oldest={oldest_dt_on_page}")
+                print(f"[stooq-web] page={page_num} parsed_ok={parsed_ok} added_rows={page_added} oldest={oldest_dt_on_page}")
 
             if page_added == 0:
                 empty_pages += 1
