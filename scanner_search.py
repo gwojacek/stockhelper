@@ -480,6 +480,54 @@ def run_ichimoku_search(target: str) -> int:
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
 
+    if group_name == "WIG":
+        print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
+        chunk_size = WIG_PART_SIZE
+        chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
+        for chunk_idx, chunk in enumerate(chunks, start=1):
+            print(f"[search] starting chunk {chunk_idx}/{len(chunks)} (size={len(chunk)})")
+            max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(chunk))
+            with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                fut_map = {
+                    ex.submit(_scan_one, ticker, group_name, exchange_suffix): (idx, ticker)
+                    for idx, ticker in enumerate(chunk, start=(chunk_idx - 1) * chunk_size + 1)
+                }
+                for fut in as_completed(fut_map):
+                    idx, ticker = fut_map[fut]
+                    display_symbol, result, flip, err = fut.result()
+                    print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
+                    if err:
+                        print(f"  pominięto ({err})")
+                    elif result:
+                        results.append(result)
+                    if flip:
+                        flip_results.append(flip)
+            if chunk_idx < len(chunks):
+                try:
+                    answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
+                except EOFError:
+                    answer = "n"
+                if answer != "y":
+                    print("[search] Scan paused/stopped by user before next WIG chunk.")
+                    break
+
+        SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+        with out_csv.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln"])
+            for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
+                writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
+        print(f"\nZapisano CSV: {out_csv}")
+        out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
+        with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "close"])
+            for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
+                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", f"{row.close:.4f}"])
+        print(f"Zapisano CSV #2: {out_csv_flip}")
+        return 0
+
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
     print(f"[1/{len(members)}] skanuję {first}...")
