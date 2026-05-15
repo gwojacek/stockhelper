@@ -49,6 +49,16 @@ class ScanResult:
     respect_months: float
 
 
+@dataclass
+class FlipResult:
+    ticker: str
+    previous_side: str
+    current_side: str
+    flip_date: str
+    months_since_flip: float
+    close: float
+
+
 
 
 def _reverse_stooq_symbol(symbol: str) -> str | None:
@@ -215,7 +225,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
 
 
 
-def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, str | None]:
+def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None]:
     if group_name == "forex":
         instrument = "forex"
     elif group_name == "commodities":
@@ -247,43 +257,101 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
         enriched = _ichimoku(df)
         result = _qualifies(enriched)
+        flip = _flip_after_long_respect(enriched)
         if result:
             result.ticker = ticker
-        return display_symbol, result, None
+        if flip:
+            flip.ticker = ticker
+        return display_symbol, result, flip, None
     except Exception as exc:
-        return display_symbol, None, str(exc)
+        return display_symbol, None, None, str(exc)
 
 
 def _rate_limit_detected(err: str | None) -> bool:
     text = (err or "").lower()
     return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
+
+
+def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult | None:
+    if len(df) < min_days + 5:
+        return None
+    close = df["Close"]
+    top = df["cloud_top"]
+    bottom = df["cloud_bottom"]
+
+    side = pd.Series("inside", index=df.index)
+    side = side.mask(close < bottom, "below")
+    side = side.mask(close > top, "above")
+
+    current = side.iloc[-1]
+    if current not in {"below", "above"}:
+        return None
+
+    run = 0
+    for v in reversed(side.tolist()):
+        if v == current:
+            run += 1
+        else:
+            break
+    start_current = len(side) - run
+    if start_current <= 0:
+        return None
+
+    prev = side.iloc[start_current - 1]
+    if prev not in {"below", "above"} or prev == current:
+        return None
+
+    prev_run = 0
+    i = start_current - 1
+    while i >= 0 and side.iloc[i] == prev:
+        prev_run += 1
+        i -= 1
+    if prev_run < min_days:
+        return None
+
+    opposite = "above" if current == "below" else "below"
+    if (side.iloc[start_current:] == opposite).any():
+        return None
+
+    flip_ts = pd.to_datetime(df.iloc[start_current]["Date"])
+    end_ts = pd.to_datetime(df.iloc[-1]["Date"])
+    months = ((end_ts - flip_ts).days + 1) / 30.44
+
+    return FlipResult("", prev, current, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+
+
 def run_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     results: list[ScanResult] = []
+    flip_results: list[FlipResult] = []
 
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
     print(f"[1/{len(members)}] skanuję {first}...")
-    display_symbol, first_result, first_err = _scan_one(first, group_name, exchange_suffix)
+    display_symbol, first_result, first_flip, first_err = _scan_one(first, group_name, exchange_suffix)
     print(f"[1/{len(members)}] skanuję {first} ({display_symbol})...")
     sequential = _rate_limit_detected(first_err)
     if first_err:
         print(f"  pominięto ({first_err})")
     elif first_result:
         results.append(first_result)
+    if first_flip:
+        flip_results.append(first_flip)
 
     rest = members[1:]
     if sequential or len(rest) == 0:
         if sequential:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
-            display_symbol, result, err = _scan_one(ticker, group_name, exchange_suffix)
+            display_symbol, result, flip, err = _scan_one(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})...")
             if err:
                 print(f"  pominięto ({err})")
             elif result:
                 results.append(result)
+            if flip:
+                flip_results.append(flip)
     else:
         max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
@@ -291,12 +359,14 @@ def run_search(target: str) -> int:
             fut_map = {ex.submit(_scan_one, ticker, group_name, exchange_suffix): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
-                display_symbol, result, err = fut.result()
+                display_symbol, result, flip, err = fut.result()
                 print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
                 if err:
                     print(f"  pominięto ({err})")
                 elif result:
                     results.append(result)
+                if flip:
+                    flip_results.append(flip)
 
     SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -316,6 +386,23 @@ def run_search(target: str) -> int:
             print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f}")
     print(f"\nZapisano CSV: {out_csv}")
     print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
+
+    print("\nWYNIKI 2 (po >=4 mies. po jednej stronie, potem wybicie i utrzymanie po drugiej):")
+    if not flip_results:
+        print("Brak wyników.")
+    else:
+        print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10}")
+        print("-" * 78)
+        for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
+            print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f}")
+
+    out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
+    with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "close"])
+        for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
+            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", f"{row.close:.4f}"])
+    print(f"Zapisano CSV #2: {out_csv_flip}")
     return 0
 
 
