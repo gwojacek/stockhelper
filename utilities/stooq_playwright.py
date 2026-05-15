@@ -80,35 +80,25 @@ def _accept_consent_if_present(page) -> None:
 
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
-        # 1) Prefer strict Stooq history table only.
+        # Prefer strict Stooq history rows: ids like t03, t11 etc. (data only, no header).
         rows = frame.evaluate("""() => {
-            const table = document.querySelector('#fth1');
-            if (!table) return [];
-            return Array.from(table.querySelectorAll('tr')).map(tr =>
-              Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
-            ).filter(r => r.length >= 9);
-        }""")
-        if rows:
-            return rows
-
-        # 2) Fallback to generic table rows, but still require date-like second column.
-        rows = frame.evaluate("""() => {
-            const tables = Array.from(document.querySelectorAll('table'));
             const out = [];
-            for (const table of tables) {
-                const trs = Array.from(table.querySelectorAll('tr'));
-                for (const tr of trs) {
-                    const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
-                    if (tds.length >= 9) out.push(tds);
-                }
+            const dataRows = Array.from(document.querySelectorAll('tr[id^="t"]'));
+            for (const tr of dataRows) {
+                const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+                if (tds.length >= 9) out.push(tds);
+            }
+            if (out.length) return out;
+
+            // Fallback inside #fth1 excluding header id=f13
+            const tblRows = Array.from(document.querySelectorAll('#fth1 tr')).filter(tr => (tr.id || '').toLowerCase() !== 'f13');
+            for (const tr of tblRows) {
+                const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+                if (tds.length >= 9) out.push(tds);
             }
             return out;
         }""")
-        filtered = []
-        for r in rows:
-            if len(r) >= 2 and any(m in r[1].lower() for m in ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "paz", "lis", "gru"]):
-                filtered.append(r)
-        return filtered
+        return rows or []
     except Exception:
         return []
 
@@ -202,8 +192,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             parsed_ok = 0
             oldest_dt_on_page = None
             for row in extracted:
-                date_idx = 1 if row and row[0].isdigit() and len(row) >= 8 else 0
-                d = row[date_idx]
+                # Expected columns: Nr, Data, Open, High, Low, Close, Zmiana%, Zmiana, Wolumen, LOP
+                d = row[1] if len(row) >= 2 else ''
                 try:
                     dt = _parse_stooq_date(d)
                 except Exception:
@@ -215,11 +205,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     continue
                 rows.append({
                     'Date': dt,
-                    'Open': row[1 + date_idx].replace(',', '.'),
-                    'High': row[2 + date_idx].replace(',', '.'),
-                    'Low': row[3 + date_idx].replace(',', '.'),
-                    'Close': row[4 + date_idx].replace(',', '.'),
-                    'Volume': row[6 + date_idx].replace(' ', '')
+                    'Open': row[2].replace(',', '.'),
+                    'High': row[3].replace(',', '.'),
+                    'Low': row[4].replace(',', '.'),
+                    'Close': row[5].replace(',', '.'),
+                    'Volume': row[8].replace(' ', '')
                 })
                 page_added += 1
 
