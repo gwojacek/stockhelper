@@ -502,8 +502,10 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
-    # For commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
-    if instrument_type == "commodity":
+    # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
+    # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20).
+    is_literal_commodity = instrument_type == "commodity" and symbol.strip().upper() in COMMODITY_STOOQ_MAP
+    if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
             df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364, verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1", interactive_captcha=False)
@@ -518,12 +520,15 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     except ValueError as exc:
         primary_error = exc
 
-    try:
-        csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
-        df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364, verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1", interactive_captcha=False)
-        return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
-    except Exception as web_exc:
-        raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
+    if is_literal_commodity:
+        try:
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364, verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1", interactive_captcha=False)
+            return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+        except Exception as web_exc:
+            raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
+
+    raise ValueError(f"Stooq API failed for non-commodity-web symbol {symbol}: {primary_error}")
 
 
 def load_or_update_daily_data(
