@@ -45,16 +45,16 @@ WIG_SEARCH_TICKERS = [
     "CMP","COG","CPD","CRM","DCR","DOM","EAT","EKP","ELT","ENE","ENI","ERB","ETL","FON","FRO","FSG","FTE","LES","GPW","HDR",
     "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KGN","RWL","KOM","KPD","KPL",
     "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","GKI","MLK","MNC","MON",
-    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPB","PRC",
+    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPS","PRC",
     "PRT","QRS","NVG","RBW","RLP","RMK","RNK","RPC","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
-    "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WRX","ZEP","MGT","ZMT","PGF","ZUE",
-    "ZUK","DIG","VIR","OPM","OPN","PMP","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTL","TLX","TRC","PHE","APE","MFO","BMX",
-    "BLR","SVE","CLD","CPR","EOT","GRN","IMS","JRI","MDG","PHR","DTA","SAR","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
-    "MRC","ALT","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MUZ","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKB","VGO",
-    "CDL","AWA","DEK","WPR","OML","XPL","ECB","ERG","BIP","WP","1AT","PBX","WTN","LOK","ENT","XTB","ARH","APR","KMP","ASM",
-    "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CPT","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
-    "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","MCE","BBT","SLV","DBE","GOP","SIM","SPY","GIF","ALE","DAD","PCF","ANS","HUG",
-    "GMT","CTX","VRC","SHR","OND","DRG","CAV","WPC","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
+    "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WXF","ZEP","MGT","ZMT","PGV","ZUE",
+    "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
+    "BLO","SVE","CLD","CPR","EAH","GRN","IMS","JRI","MDG","PHR","DAT","SAR","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
+    "MRC","ALI","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MZA","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKH","VGO",
+    "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","WP","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
+    "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CAP","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
+    "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
+    "GMT","CTX","VRC","SHO","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
     "DGN","ARL",
 ]
 
@@ -489,6 +489,9 @@ def run_ichimoku_search(target: str) -> int:
     if group_name == "WIG":
         sequential = True
         print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+    elif group_name.startswith("WIG_PART"):
+        sequential = False
+        print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
     if first_err:
         print(f"  pominięto ({first_err})")
     elif first_result:
