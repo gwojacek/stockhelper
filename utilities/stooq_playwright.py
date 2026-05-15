@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import os
 import json
 from pathlib import Path
 
@@ -121,6 +122,23 @@ def _wait_for_table_or_limit_with_retry(page, retries: int = 2) -> bool:
             pass
     return page.locator("table tr td").count() > 0
 
+
+
+def _handle_captcha_interactive(page, symbol: str) -> bool:
+    """Optional interactive captcha handling (opens Playwright inspector).
+
+    Enable by setting env: STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1
+    """
+    if os.getenv("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") != "1":
+        return False
+
+    if page.locator("text=Przekroczony dzienny limit").count() > 0 or page.locator("text=Przepisz powyższy kod").count() > 0:
+        print(f"[stooq-web] CAPTCHA/limit detected for {symbol}. Interactive mode enabled.")
+        print("[stooq-web] Browser inspector opened. Solve captcha manually, then resume execution.")
+        page.pause()
+        return True
+    return False
+
 def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
     out_dir = Path("debug") / "stooq"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -165,6 +183,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             except Exception:
                 break
             _accept_consent_if_present(page)
+            _handle_captcha_interactive(page, symbol)
             ready = _wait_for_table_or_limit_with_retry(page, retries=3)
             if verbose:
                 print(f"[stooq-web] page={page_num} ready={ready}")
@@ -263,6 +282,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
                 _accept_consent_if_present(page)
+                _handle_captcha_interactive(page, symbol)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
                 payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
             except Exception as exc:
