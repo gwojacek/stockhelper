@@ -60,8 +60,8 @@ def _resolve_runner(instrument_type: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
-    parser.add_argument("-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
-    parser.add_argument("-d", "--search-debug", action="store_true", help="Verbose Stooq scraping logs for -search")
+    parser.add_argument("-ichimoku_search", "-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
+    parser.add_argument("-d", "--search-debug", action="store_true", help="Verbose Stooq scraping logs for -ichimoku_search")
     parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
     parser.add_argument("--debug-stooq", dest="debug_stooq", help="Dump Stooq page debug artifacts for symbol")
@@ -78,12 +78,12 @@ def main() -> int:
         return 0
 
     if args.search_target:
-        from scanner_search import run_search
-        return run_search(args.search_target)
+        from scanner_search import run_ichimoku_search
+        return run_ichimoku_search(args.search_target)
 
     target = (args.target or "").strip()
     if not target:
-        parser.error("target is required unless -search is used")
+        parser.error("target is required unless -ichimoku_search is used")
     resolved_path = _resolve_existing_config_path(target)
 
     if args.chart:

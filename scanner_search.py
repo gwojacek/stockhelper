@@ -20,6 +20,7 @@ from chart_program.chart_loader import (
     COMMODITY_YAHOO_MAP,
     load_or_update_daily_data,
 )
+from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
@@ -39,6 +40,23 @@ INDEXES_SEARCH_TICKERS = [
 ]
 
 
+GDP_PPP_VALUE = {
+    "PL": 2120569,
+    "US": 31821293,
+    "DE": 6323531,
+    "FR": 4657190,
+    "CN": 43491520,
+}
+
+SUFFIX_TO_COUNTRY = {
+    "WA": "PL",
+    "US": "US",
+    "DE": "DE",
+    "PA": "FR",
+    "SS": "CN",
+}
+
+
 @dataclass
 class ScanResult:
     ticker: str
@@ -47,6 +65,10 @@ class ScanResult:
     close: float
     start_date: str
     respect_months: float
+    avg_turnover_10d_pln: float | None = None
+    low_turnover_days_20d: int | None = None
+    liquidity_threshold_10d_pln: float | None = None
+    liquidity_threshold_20d_pln: float | None = None
 
 
 @dataclass
@@ -225,6 +247,40 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
 
 
 
+def _country_code_from_ticker(symbol: str) -> str:
+    suffix = symbol.split(".")[-1].upper() if "." in symbol else "US"
+    return SUFFIX_TO_COUNTRY.get(suffix, "US")
+
+
+def _gdp_multiplier_for_ticker(symbol: str) -> float:
+    pl = GDP_PPP_VALUE["PL"]
+    cc = _country_code_from_ticker(symbol)
+    return GDP_PPP_VALUE.get(cc, pl) / pl
+
+
+def _compute_stock_liquidity_metrics(df: pd.DataFrame, fetch_symbol: str) -> tuple[float, int, float, float] | None:
+    if "Close" not in df.columns or "Volume" not in df.columns or len(df) < 20:
+        return None
+    turnover_native = pd.to_numeric(df["Close"], errors="coerce") * pd.to_numeric(df["Volume"], errors="coerce")
+    turnover_native = turnover_native.dropna()
+    if len(turnover_native) < 20:
+        return None
+    try:
+        cc = _country_code_from_ticker(fetch_symbol)
+        currency = "PLN" if cc == "PL" else cc
+        _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+        fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+    except Exception:
+        fx_to_pln = 1.0
+    turnover_pln = turnover_native * fx_to_pln
+    avg_10d = float(turnover_pln.tail(10).mean())
+    gdp_mult = _gdp_multiplier_for_ticker(fetch_symbol)
+    threshold_10d = 700000.0 * gdp_mult
+    threshold_20d = 300000.0 * gdp_mult
+    below_20d = int((turnover_pln.tail(20) < threshold_20d).sum())
+    return avg_10d, below_20d, threshold_10d, threshold_20d
+
+
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None]:
     if group_name == "forex":
         instrument = "forex"
@@ -260,6 +316,19 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         flip = _flip_after_long_respect(enriched)
         if result:
             result.ticker = ticker
+            if instrument == "stock":
+                metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
+                if metrics is None:
+                    return display_symbol, None, flip, "insufficient turnover data"
+                avg_10d, below_20d, threshold_10d, threshold_20d = metrics
+                result.avg_turnover_10d_pln = avg_10d
+                result.low_turnover_days_20d = below_20d
+                result.liquidity_threshold_10d_pln = threshold_10d
+                result.liquidity_threshold_20d_pln = threshold_20d
+                if avg_10d < threshold_10d or below_20d > 2:
+                    return display_symbol, None, flip, (
+                        f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
+                    )
         if flip:
             flip.ticker = ticker
         return display_symbol, result, flip, None
@@ -320,7 +389,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     return FlipResult("", prev, current, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
 
 
-def run_search(target: str) -> int:
+def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     results: list[ScanResult] = []
@@ -372,18 +441,20 @@ def run_search(target: str) -> int:
     out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close"])
+        writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln"])
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}"])
+            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
 
     print("\nWYNIKI (instrumenty spełniające warunki):")
     if not results:
         print("Brak wyników.")
     else:
-        print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10}")
-        print("-" * 68)
+        print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10}")
+        print("-" * 98)
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f}")
+            avg_10d = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
+            low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
+            print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10}")
     print(f"\nZapisano CSV: {out_csv}")
     print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
 
@@ -410,7 +481,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Skaner ichimoku cloud search")
     parser.add_argument("target", help="Nazwa indeksu albo: commodities / forex")
     args = parser.parse_args()
-    return run_search(args.target)
+    return run_ichimoku_search(args.target)
 
 
 if __name__ == "__main__":
