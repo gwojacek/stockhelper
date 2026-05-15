@@ -49,6 +49,19 @@ DAX40_SEARCH_TICKERS = [
     "SAP.DE","SHL.DE","SIE.DE","SRT3.DE","SY1.DE","VNA.DE","VOW3.DE","ZAL.DE","ENR.DE","RHM.DE",
 ]
 
+NDX100_SEARCH_TICKERS = [
+    "AAPL.US","ABNB.US","ADBE.US","ADI.US","ADP.US","ADSK.US","AEP.US","ALNY.US","AMAT.US","AMD.US",
+    "AMGN.US","AMZN.US","APP.US","ARM.US","ASML.US","AVGO.US","AXON.US","BKR.US","BKNG.US","CCEP.US",
+    "CDNS.US","CEG.US","CHTR.US","CMCSA.US","COST.US","CPRT.US","CRWD.US","CSCO.US","CSGP.US","CSX.US",
+    "CTAS.US","CTSH.US","DASH.US","DDOG.US","DXCM.US","EA.US","EXC.US","FANG.US","FAST.US","FER.US",
+    "FTNT.US","GEHC.US","GILD.US","GOOG.US","GOOGL.US","HON.US","IDXX.US","INSM.US","INTC.US","INTU.US",
+    "ISRG.US","KDP.US","KLAC.US","KHC.US","LIN.US","LRCX.US","MAR.US","MCHP.US","MDLZ.US","MELI.US",
+    "META.US","MNST.US","MPWR.US","MRVL.US","MSFT.US","MSTR.US","MU.US","NFLX.US","NVDA.US","NXPI.US",
+    "ODFL.US","ORLY.US","PANW.US","PAYX.US","PCAR.US","PDD.US","PEP.US","PLTR.US","PYPL.US","QCOM.US",
+    "REGN.US","ROP.US","ROST.US","SBUX.US","SHOP.US","SNPS.US","STX.US","TMUS.US","TRI.US","TSLA.US",
+    "TTWO.US","TXN.US","VRSK.US","VRTX.US","WBD.US","WDC.US","WMT.US","XEL.US","ZS.US",
+]
+
 
 GDP_PPP_VALUE = {
     "PL": 2120569,
@@ -160,6 +173,8 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         return "WIG", WIG_SEARCH_TICKERS, "manual WIG list", ".WA"
     if normalized in {"dax", "dax40"}:
         return "DAX40", DAX40_SEARCH_TICKERS, "manual DAX40 list", None
+    if normalized in {"ndx", "us100", "nasdaq100", "nasdaq-100"}:
+        return "NDX100", NDX100_SEARCH_TICKERS, "manual NDX100 list", None
     if normalized in {"commodities", "commidities", "commodity"}:
         return "commodities", COMMODITIES_SEARCH_TICKERS, "commodity maps", None
     if normalized in {"forex", "fx"}:
