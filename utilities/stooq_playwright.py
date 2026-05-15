@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-import os
 import json
 from pathlib import Path
 
@@ -19,6 +18,13 @@ def _is_rate_limited_html(html: str) -> bool:
     lowered = (html or '').lower()
     markers = ['przekroczony dzienny limit wywołań strony', 'przepisz powyższy kod']
     return any(m in lowered for m in markers)
+
+
+def _clean_numeric(raw: str, for_volume: bool = False) -> str:
+    text = (raw or "").strip().replace(" ", " ").replace(" ", "")
+    if for_volume:
+        return text.replace(",", "")
+    return text.replace(",", ".")
 
 
 def _parse_stooq_date(raw: str) -> pd.Timestamp:
@@ -54,8 +60,7 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 
-def _open_page(playwright):
-    interactive = os.getenv("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") == "1"
+def _open_page(playwright, interactive: bool = False):
     browser = playwright.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
     page = browser.new_page()
     return browser, page
@@ -129,12 +134,12 @@ def _wait_for_table_or_limit_with_retry(page, retries: int = 2) -> bool:
 
 
 
-def _handle_captcha_interactive(page, symbol: str, state: dict | None = None) -> bool:
+def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, interactive_captcha: bool = False) -> bool:
     """Optional interactive captcha handling (opens Playwright inspector).
 
     Enable by setting env: STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1
     """
-    if os.getenv("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") != "1":
+    if not interactive_captcha:
         return False
     if state is not None and state.get("done"):
         return False
@@ -163,7 +168,7 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
         return ""
     return str(path)
 
-def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False) -> pd.DataFrame:
+def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, _retried_interactive: bool = False) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     start_date = (datetime.now(UTC).date() - timedelta(days=lookback_days))
 
@@ -183,7 +188,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     if verbose:
         print(f"[stooq-web] start symbol={symbol} csv={csv_path} lookback_days={lookback_days}")
     with sync_playwright() as p:
-        browser, page = _open_page(p)
+        browser, page = _open_page(p, interactive=interactive_captcha)
         page_num = 1
         empty_pages = 0
         interactive_state = {"done": False}
@@ -198,7 +203,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 break
             if page_num == 1:
                 _accept_consent_if_present(page, first_page=True)
-            _handle_captcha_interactive(page, symbol, interactive_state)
+            _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
             ready = _wait_for_table_or_limit_with_retry(page, retries=3)
             if verbose:
                 print(f"[stooq-web] page={page_num} ready={ready}")
@@ -216,6 +221,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             if page_num == 1 and not extracted:
                 shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
                 if _is_rate_limited_html(page.content()):
+                    if not interactive_captcha and not _retried_interactive:
+                        if verbose:
+                            print("[stooq-web] rate limit detected -> retry once in interactive inspector mode")
+                        return update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=lookback_days, verbose=verbose, interactive_captcha=True, _retried_interactive=True)
                     raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
                 raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
@@ -239,11 +248,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     continue
                 rows.append({
                     'Date': dt,
-                    'Open': row[2].replace(',', '.'),
-                    'High': row[3].replace(',', '.'),
-                    'Low': row[4].replace(',', '.'),
-                    'Close': row[5].replace(',', '.'),
-                    'Volume': (row[8] if len(row) > 8 else row[7]).replace(' ', '')
+                    'Open': _clean_numeric(row[2]),
+                    'High': _clean_numeric(row[3]),
+                    'Low': _clean_numeric(row[4]),
+                    'Close': _clean_numeric(row[5]),
+                    'Volume': _clean_numeric((row[8] if len(row) > 8 else row[7]), for_volume=True)
                 })
                 page_added += 1
 
@@ -283,7 +292,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     return merged
 
 
-def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
+def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captcha: bool = False) -> Path:
     out_dir = out_dir or Path("debug") / "stooq"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
@@ -291,14 +300,14 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": []}
     with sync_playwright() as p:
-        browser, page = _open_page(p)
+        browser, page = _open_page(p, interactive=interactive_captcha)
         response = None
         interactive_state = {"done": False}
         for u in urls:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
                 _accept_consent_if_present(page, first_page=True)
-                _handle_captcha_interactive(page, symbol, interactive_state)
+                _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
                 payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
             except Exception as exc:

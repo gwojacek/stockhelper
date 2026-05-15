@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -67,12 +66,9 @@ def main() -> int:
     parser.add_argument("-inspector", "--inspector", action="store_true", help="Enable interactive captcha inspector for Stooq")
     args = parser.parse_args()
 
-    if args.inspector:
-        os.environ["STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA"] = "1"
-
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page
-        path = debug_stooq_page(args.debug_stooq)
+        path = debug_stooq_page(args.debug_stooq, interactive_captcha=args.inspector)
         print(f"Stooq debug zapisany: {path}")
         return 0
 
