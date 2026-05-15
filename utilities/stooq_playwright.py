@@ -122,7 +122,7 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
         return ""
     return str(path)
 
-def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364) -> pd.DataFrame:
+def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     start_date = (datetime.now(UTC).date() - timedelta(days=lookback_days))
 
@@ -139,6 +139,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
 
     rows: list[dict] = []
     attempted_urls: list[str] = []
+    if verbose:
+        print(f"[stooq-web] start symbol={symbol} csv={csv_path} lookback_days={lookback_days}")
     with sync_playwright() as p:
         browser, page = _open_page(p)
         page_num = 1
@@ -146,12 +148,16 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         while page_num <= 30:
             url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
             attempted_urls.append(url)
+            if verbose:
+                print(f"[stooq-web] page={page_num} goto={url}")
             try:
                 page.goto(url, wait_until="domcontentloaded")
             except Exception:
                 break
             _accept_consent_if_present(page)
-            _wait_for_table_or_limit_with_retry(page, retries=3)
+            ready = _wait_for_table_or_limit_with_retry(page, retries=3)
+            if verbose:
+                print(f"[stooq-web] page={page_num} ready={ready}")
 
             extracted = _extract_rows_from_frame(page)
             if not extracted:
@@ -159,6 +165,9 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     extracted = _extract_rows_from_frame(fr)
                     if extracted:
                         break
+
+            if verbose:
+                print(f"[stooq-web] page={page_num} extracted_rows={len(extracted)}")
 
             if page_num == 1 and not extracted:
                 shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
@@ -192,6 +201,9 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 })
                 page_added += 1
 
+            if verbose:
+                print(f"[stooq-web] page={page_num} added_rows={page_added} oldest={oldest_dt_on_page}")
+
             if page_added == 0:
                 empty_pages += 1
             else:
@@ -208,6 +220,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     remote = pd.DataFrame(rows)
     if remote.empty:
         raise ValueError(f"Brak danych ze strony Stooq dla {symbol}. Attempted URLs: {attempted_urls}")
+    if verbose:
+        print(f"[stooq-web] collected_rows={len(remote)}")
 
     for c in ["Open", "High", "Low", "Close", "Volume"]:
         remote[c] = pd.to_numeric(remote[c], errors="coerce")
