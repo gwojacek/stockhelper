@@ -62,18 +62,19 @@ def _open_page(playwright):
 
 
 
-def _accept_consent_if_present(page, quick: bool = True) -> None:
+def _accept_consent_if_present(page, first_page: bool = False) -> None:
     selectors = [
         'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Zgadzam się"]',
         'text=Zgadzam się',
     ]
+    visible_timeout = 8000 if first_page else 500
     for sel in selectors:
         try:
             loc = page.locator(sel).first
-            if loc.count() > 0 and loc.is_visible(timeout=500 if quick else 2000):
-                loc.click(timeout=1500)
-                page.wait_for_timeout(300)
+            if loc.count() > 0 and loc.is_visible(timeout=visible_timeout):
+                loc.click(timeout=2500)
+                page.wait_for_timeout(600)
                 return
         except Exception:
             continue
@@ -190,7 +191,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             except Exception:
                 break
             if page_num == 1:
-                _accept_consent_if_present(page)
+                _accept_consent_if_present(page, first_page=True)
             _handle_captcha_interactive(page, symbol, interactive_state)
             ready = _wait_for_table_or_limit_with_retry(page, retries=3)
             if verbose:
@@ -290,7 +291,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
         for u in urls:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
-                _accept_consent_if_present(page)
+                _accept_consent_if_present(page, first_page=True)
                 _handle_captcha_interactive(page, symbol, interactive_state)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
                 payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
