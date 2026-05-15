@@ -157,6 +157,20 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
         return True
     return False
 
+def _force_interactive_pause(page, symbol: str, state: dict | None = None, interactive_captcha: bool = False) -> None:
+    if not interactive_captcha:
+        return
+    if state is not None and state.get("forced_pause_done"):
+        return
+    print(f"[stooq-web] interactive inspector forced for {symbol}. Check page/Network, solve captcha if shown, then Resume.")
+    try:
+        page.pause()
+        if state is not None:
+            state["forced_pause_done"] = True
+    except Exception as exc:
+        print(f"[stooq-web] Unable to open inspector: {exc}")
+
+
 def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
     out_dir = Path("debug") / "stooq"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -192,7 +206,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         browser, page = _open_page(p, interactive=interactive_captcha)
         page_num = 1
         empty_pages = 0
-        interactive_state = {"done": False}
+        interactive_state = {"done": False, "forced_pause_done": False}
         while page_num <= 30:
             url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
             attempted_urls.append(url)
@@ -227,7 +241,9 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                             print("[stooq-web] rate limit detected -> retry once in interactive inspector mode")
                         retry_interactive_requested = True
                         break
+                    _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
                     raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
+                _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
                 raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
             if not extracted:
@@ -307,7 +323,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     with sync_playwright() as p:
         browser, page = _open_page(p, interactive=interactive_captcha)
         response = None
-        interactive_state = {"done": False}
+        interactive_state = {"done": False, "forced_pause_done": False}
         for u in urls:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
