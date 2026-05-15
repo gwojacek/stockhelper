@@ -39,8 +39,35 @@ INDEXES_SEARCH_TICKERS = [
 ]
 
 WIG_SEARCH_TICKERS = [
-    "EBP","PKO","MBK","OPL","PEO","CEZ","GTN","GTC","AGO","KGH","PXM","PKN","CPS","BIO","ACO","MIL","ENA","ECH","EUR","PGE","PZU","UCG","MBW","MOL","MGN","ABE","ABS","ACG","ACT","AGT","ALR","AMB","AMC","APN","APT","ASB","ASE","ATD","AST","ATC","ATG","ATP","ATR","ATS","ATT","BBD","MDI","BDX","BFT","BHW","BMC","BRS","BOS","BOW","LRQ","CAR","MDV","CDR","CIG","CLE","CMP","COG","CPD","CRM","DCR","DDV","EAT","EKP","ELT","ENE","ENI","ERB","EUL","FON","FRO","FSG","FTE","LES","GPW","HDR","HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","IPR","IPE","ITB","IZS","JSW","FAB","KZC","RWL","KOM","KPD","KPL","KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","IMM","MLK","MNC","MON","MRB","MSP","MSW","MSZ","NEU","3RG","NTT","PNA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FDB","PRM","PPB","PRC","PRT","QRS","NVG","RNB","RLP","RMK","RNK","RPC","SEL","SFS","SGN","SKA","ONO","SMS","SON","STF","STP","STX","SWG","TOA","TPE","TRN","TSG","AAT","ULM","UNB","VIX","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WRX","ZEP","MGT","ZMT","PGF","ZUE","ZUK","DIG","VIR","OPM","OPN","PMP","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTL","TLX","TRC","PHE","APE","MFO","BMX","BLR","SVE","CLD","CPR","EOT","GRN","IMS","JRI","MDG","PHR","DTA","SAR","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG","MRC","ALT","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MUZ","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKB","VGO","CDL","AWA","DEK","WPR","OML","XPL","ECB","ERG","BIP","WP","1AT","PBX","WTN","LOK","ENT","XTB","ARH","APR","KMP","ASM","BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CPT","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS","MLS","ULG","CRJ","PAS","PUR","MOV","4MS","MCE","BBT","SLV","DBE","GOP","SIM","SPY","GIF","ALE","DAD","PCF","ANS","HUG","GMT","CTX","VRC","SHR","OND","DRG","CAV","WPC","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB","DGN","ARL"
+    "EBP","PKO","MBK","OPL","PEO","CEZ","GTN","GTC","AGO","KGH","PXM","PKN","CPS","BIO","ACP","MIL","ENA","ECH","EUR","PGE",
+    "PZU","UCG","MBW","MOL","06N","ABE","ABS","ACG","ACT","AGT","ALR","AMB","AMC","APN","APT","ASB","ASE","ATD","AST","ATC",
+    "ATG","ATP","ATR","ATS","ATT","BBD","MDI","BDX","BFT","BHW","BMC","BRS","BOS","BOW","LRQ","CAR","MDV","CDR","CIG","CLE",
+    "CMP","COG","CPD","CRM","DCR","DOM","EAT","EKP","ELT","ENE","ENI","ERB","ETL","FON","FRO","FSG","FTE","LES","GPW","HDR",
+    "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KZC","RWL","KOM","KPD","KPL",
+    "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","IMM","MLK","MNC","MON",
+    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","PNA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPB","PRC",
+    "PRT","QRS","NVG","RBW","RLP","RMK","RNK","RPC","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
+    "TPE","TRN","TSG","AAT","ULM","UNI","VIX","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WRX","ZEP","MGT","ZMT","PGF","ZUE",
+    "ZUK","DIG","VIR","OPM","OPN","PMP","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTL","TLX","TRC","PHE","APE","MFO","BMX",
+    "BLR","SVE","CLD","CPR","EOT","GRN","IMS","JRI","MDG","PHR","DTA","SAR","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
+    "MRC","ALT","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MUZ","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKB","VGO",
+    "CDL","AWA","DEK","WPR","OML","XPL","ECB","ERG","BIP","WP","1AT","PBX","WTN","LOK","ENT","XTB","ARH","APR","KMP","ASM",
+    "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CPT","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
+    "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","MCE","BBT","SLV","DBE","GOP","SIM","SPY","GIF","ALE","DAD","PCF","ANS","HUG",
+    "GMT","CTX","VRC","SHR","OND","DRG","CAV","WPC","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
+    "DGN","ARL",
 ]
+
+
+WIG_PART_SIZE = 165
+
+
+def _split_into_parts(items: list[str], part_size: int) -> tuple[list[str], list[str], list[str]]:
+    p1 = items[:part_size]
+    p2 = items[part_size:part_size * 2]
+    p3 = items[part_size * 2:]
+    return p1, p2, p3
+
 
 DAX40_SEARCH_TICKERS = [
     "ADS.DE","AIR.DE","ALV.DE","BAS.DE","BAYN.DE","BEI.DE","BMW.DE","BNR.DE","CON.DE","DB1.DE",
@@ -170,7 +197,17 @@ def _members_from_configs(scope: str) -> list[str]:
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
     if normalized == "wig":
+        print("[search] WIG has a large universe. For VPN/rate-limit safety use: wig_part1, wig_part2, wig_part3.")
         return "WIG", WIG_SEARCH_TICKERS, "manual WIG list", ".WA"
+    if normalized in {"wig_part1", "wig1", "wig_p1"}:
+        p1, _, _ = _split_into_parts(WIG_SEARCH_TICKERS, WIG_PART_SIZE)
+        return "WIG_PART1", p1, "manual WIG list part1", ".WA"
+    if normalized in {"wig_part2", "wig2", "wig_p2"}:
+        _, p2, _ = _split_into_parts(WIG_SEARCH_TICKERS, WIG_PART_SIZE)
+        return "WIG_PART2", p2, "manual WIG list part2", ".WA"
+    if normalized in {"wig_part3", "wig3", "wig_p3"}:
+        _, _, p3 = _split_into_parts(WIG_SEARCH_TICKERS, WIG_PART_SIZE)
+        return "WIG_PART3", p3, "manual WIG list part3", ".WA"
     if normalized in {"dax", "dax40"}:
         return "DAX40", DAX40_SEARCH_TICKERS, "manual DAX40 list", None
     if normalized in {"ndx", "us100", "nasdaq100", "nasdaq-100"}:
