@@ -187,6 +187,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     attempted_urls: list[str] = []
     if verbose:
         print(f"[stooq-web] start symbol={symbol} csv={csv_path} lookback_days={lookback_days}")
+    retry_interactive_requested = False
     with sync_playwright() as p:
         browser, page = _open_page(p, interactive=interactive_captcha)
         page_num = 1
@@ -224,7 +225,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     if not interactive_captcha and not _retried_interactive:
                         if verbose:
                             print("[stooq-web] rate limit detected -> retry once in interactive inspector mode")
-                        return update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=lookback_days, verbose=verbose, interactive_captcha=True, _retried_interactive=True)
+                        retry_interactive_requested = True
+                        break
                     raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
                 raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
@@ -271,6 +273,9 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             page_num += 1
 
         browser.close()
+
+    if retry_interactive_requested:
+        return update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=lookback_days, verbose=verbose, interactive_captcha=True, _retried_interactive=True)
 
     remote = pd.DataFrame(rows)
     if remote.empty:
