@@ -55,7 +55,8 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 def _open_page(playwright):
-    browser = playwright.chromium.launch(headless=True)
+    interactive = os.getenv("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") == "1"
+    browser = playwright.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
     page = browser.new_page()
     return browser, page
 
@@ -134,8 +135,12 @@ def _handle_captcha_interactive(page, symbol: str) -> bool:
 
     if page.locator("text=Przekroczony dzienny limit").count() > 0 or page.locator("text=Przepisz powyższy kod").count() > 0:
         print(f"[stooq-web] CAPTCHA/limit detected for {symbol}. Interactive mode enabled.")
-        print("[stooq-web] Browser inspector opened. Solve captcha manually, then resume execution.")
-        page.pause()
+        print("[stooq-web] Browser inspector opened (headed mode required). Solve captcha manually, then resume execution.")
+        try:
+            page.pause()
+        except Exception as exc:
+            print(f"[stooq-web] Unable to open inspector automatically: {exc}")
+            print("[stooq-web] Tip: run with STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1 and desktop session/X server.")
         return True
     return False
 
