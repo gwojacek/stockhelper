@@ -348,45 +348,64 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
 
-    side = pd.Series("inside", index=df.index)
-    side = side.mask(close < bottom, "below")
-    side = side.mask(close > top, "above")
+    body_high = df[["Open", "Close"]].max(axis=1)
+    body_low = df[["Open", "Close"]].min(axis=1)
 
-    current = side.iloc[-1]
-    if current not in {"below", "above"}:
-        return None
+    # Respect definitions match _qualifies:
+    # - trend below: body may enter cloud, but cannot break above cloud top
+    # - trend above: body may enter cloud, but cannot break below cloud bottom
+    below_respected = body_high <= top
+    above_respected = body_low >= bottom
 
-    run = 0
-    for v in reversed(side.tolist()):
-        if v == current:
-            run += 1
-        else:
+    flip_idx: int | None = None
+    previous_side: str | None = None
+    current_side: str | None = None
+
+    # Prefer latest valid flip below->above.
+    for i in range(len(df) - 1, 0, -1):
+        crossed_up = body_low.iloc[i] > top.iloc[i] and body_low.iloc[i - 1] <= top.iloc[i - 1]
+        if not crossed_up:
+            continue
+        if not bool(above_respected.iloc[i:].all()):
+            continue
+        prev_run = 0
+        j = i - 1
+        while j >= 0 and bool(below_respected.iloc[j]):
+            prev_run += 1
+            j -= 1
+        if prev_run >= min_days:
+            flip_idx = i
+            previous_side = "below"
+            current_side = "above"
             break
-    start_current = len(side) - run
-    if start_current <= 0:
+
+    # If not found, try latest valid flip above->below.
+    if flip_idx is None:
+        for i in range(len(df) - 1, 0, -1):
+            crossed_down = body_high.iloc[i] < bottom.iloc[i] and body_high.iloc[i - 1] >= bottom.iloc[i - 1]
+            if not crossed_down:
+                continue
+            if not bool(below_respected.iloc[i:].all()):
+                continue
+            prev_run = 0
+            j = i - 1
+            while j >= 0 and bool(above_respected.iloc[j]):
+                prev_run += 1
+                j -= 1
+            if prev_run >= min_days:
+                flip_idx = i
+                previous_side = "above"
+                current_side = "below"
+                break
+
+    if flip_idx is None or previous_side is None or current_side is None:
         return None
 
-    prev = side.iloc[start_current - 1]
-    if prev not in {"below", "above"} or prev == current:
-        return None
-
-    prev_run = 0
-    i = start_current - 1
-    while i >= 0 and side.iloc[i] == prev:
-        prev_run += 1
-        i -= 1
-    if prev_run < min_days:
-        return None
-
-    opposite = "above" if current == "below" else "below"
-    if (side.iloc[start_current:] == opposite).any():
-        return None
-
-    flip_ts = pd.to_datetime(df.iloc[start_current]["Date"])
+    flip_ts = pd.to_datetime(df.iloc[flip_idx]["Date"])
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - flip_ts).days + 1) / 30.44
 
-    return FlipResult("", prev, current, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+    return FlipResult("", previous_side, current_side, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
 
 
 def run_ichimoku_search(target: str) -> int:
