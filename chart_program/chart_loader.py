@@ -506,6 +506,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20).
     normalized_symbol = symbol.strip().upper()
     mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
+    if not mapped_stooq:
+        # Scanner may already pass mapped stooq symbols (e.g. "fx.f" instead of "EU50").
+        direct = symbol.strip().lower()
+        if direct in {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}:
+            mapped_stooq = direct
     is_index_like_commodity_symbol = (
         str(mapped_stooq).startswith("^")
         or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
@@ -514,7 +519,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     requires_web_even_if_index_like = str(mapped_stooq).lower() in {"fx.f"}
     is_literal_commodity = (
         instrument_type == "commodity"
-        and normalized_symbol in COMMODITY_STOOQ_MAP
+        and (normalized_symbol in COMMODITY_STOOQ_MAP or bool(mapped_stooq))
         and (not is_index_like_commodity_symbol or requires_web_even_if_index_like)
     )
     if is_literal_commodity:
