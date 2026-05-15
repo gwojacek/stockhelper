@@ -145,6 +145,10 @@ def _members_from_configs(scope: str) -> list[str]:
 
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
+    if normalized == "wig":
+        # Broad WIG scan: use all supported stock configs (primarily Warsaw tickers),
+        # then append .WA exchange suffix during fetching just like index membership flows.
+        return "WIG", _members_from_configs("stocks"), "configs/stocks", ".WA"
     if normalized in {"commodities", "commidities", "commodity"}:
         return "commodities", COMMODITIES_SEARCH_TICKERS, "commodity maps", None
     if normalized in {"forex", "fx"}:
