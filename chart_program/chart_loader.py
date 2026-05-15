@@ -504,7 +504,17 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
     # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20).
-    is_literal_commodity = instrument_type == "commodity" and symbol.strip().upper() in COMMODITY_STOOQ_MAP
+    normalized_symbol = symbol.strip().upper()
+    mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
+    is_index_like_commodity_symbol = (
+        str(mapped_stooq).startswith("^")
+        or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
+    )
+    is_literal_commodity = (
+        instrument_type == "commodity"
+        and normalized_symbol in COMMODITY_STOOQ_MAP
+        and not is_index_like_commodity_symbol
+    )
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
