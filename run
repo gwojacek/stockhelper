@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -63,7 +64,11 @@ def main() -> int:
     parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
     parser.add_argument("--debug-stooq", dest="debug_stooq", help="Dump Stooq page debug artifacts for symbol")
+    parser.add_argument("-inspector", "--inspector", action="store_true", help="Enable interactive captcha inspector for Stooq")
     args = parser.parse_args()
+
+    if args.inspector:
+        os.environ["STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA"] = "1"
 
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page

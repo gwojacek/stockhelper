@@ -62,24 +62,21 @@ def _open_page(playwright):
 
 
 
-def _accept_consent_if_present(page) -> None:
-    # Wzorowane na ręcznie działającym flow z popupem Stooq
-    try:
-        consent_button = page.locator('button.fc-button.fc-cta-consent.fc-primary-button')
-        consent_button.wait_for(state='visible', timeout=8000)
-        consent_button.click()
-        page.wait_for_timeout(1500)
-    except Exception:
-        pass
-
-    try:
-        text_button = page.locator("text=Zgadzam się")
-        if text_button.first.is_visible(timeout=3000):
-            text_button.first.click()
-            page.wait_for_timeout(1000)
-    except Exception:
-        pass
-
+def _accept_consent_if_present(page, quick: bool = True) -> None:
+    selectors = [
+        'button.fc-button.fc-cta-consent.fc-primary-button',
+        'button[aria-label="Zgadzam się"]',
+        'text=Zgadzam się',
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() > 0 and loc.is_visible(timeout=500 if quick else 2000):
+                loc.click(timeout=1500)
+                page.wait_for_timeout(300)
+                return
+        except Exception:
+            continue
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         # Prefer strict Stooq history rows: ids like t03, t11 etc. (data only, no header).
@@ -125,12 +122,14 @@ def _wait_for_table_or_limit_with_retry(page, retries: int = 2) -> bool:
 
 
 
-def _handle_captcha_interactive(page, symbol: str) -> bool:
+def _handle_captcha_interactive(page, symbol: str, state: dict | None = None) -> bool:
     """Optional interactive captcha handling (opens Playwright inspector).
 
     Enable by setting env: STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1
     """
     if os.getenv("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") != "1":
+        return False
+    if state is not None and state.get("done"):
         return False
 
     if page.locator("text=Przekroczony dzienny limit").count() > 0 or page.locator("text=Przepisz powyższy kod").count() > 0:
@@ -138,6 +137,8 @@ def _handle_captcha_interactive(page, symbol: str) -> bool:
         print("[stooq-web] Browser inspector opened (headed mode required). Solve captcha manually, then resume execution.")
         try:
             page.pause()
+            if state is not None:
+                state["done"] = True
         except Exception as exc:
             print(f"[stooq-web] Unable to open inspector automatically: {exc}")
             print("[stooq-web] Tip: run with STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1 and desktop session/X server.")
@@ -178,6 +179,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         browser, page = _open_page(p)
         page_num = 1
         empty_pages = 0
+        interactive_state = {"done": False}
         while page_num <= 30:
             url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
             attempted_urls.append(url)
@@ -187,8 +189,9 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 page.goto(url, wait_until="domcontentloaded")
             except Exception:
                 break
-            _accept_consent_if_present(page)
-            _handle_captcha_interactive(page, symbol)
+            if page_num == 1:
+                _accept_consent_if_present(page)
+            _handle_captcha_interactive(page, symbol, interactive_state)
             ready = _wait_for_table_or_limit_with_retry(page, retries=3)
             if verbose:
                 print(f"[stooq-web] page={page_num} ready={ready}")
@@ -233,7 +236,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     'High': row[3].replace(',', '.'),
                     'Low': row[4].replace(',', '.'),
                     'Close': row[5].replace(',', '.'),
-                    'Volume': row[8].replace(' ', '')
+                    'Volume': (row[8] if len(row) > 8 else row[7]).replace(' ', '')
                 })
                 page_added += 1
 
@@ -283,11 +286,12 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None) -> Path:
     with sync_playwright() as p:
         browser, page = _open_page(p)
         response = None
+        interactive_state = {"done": False}
         for u in urls:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
                 _accept_consent_if_present(page)
-                _handle_captcha_interactive(page, symbol)
+                _handle_captcha_interactive(page, symbol, interactive_state)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
                 payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
             except Exception as exc:
