@@ -43,11 +43,11 @@ WIG_SEARCH_TICKERS = [
     "PZU","UCG","MBW","MOL","06N","ABE","ABS","ACG","ACT","AGT","ALR","AMB","AMC","APN","APT","ASB","ASE","ATD","AST","ATC",
     "ATG","ATP","ATR","ATS","ATT","BBD","MDI","BDX","BFT","BHW","BMC","BRS","BOS","BOW","LRQ","CAR","MDV","CDR","CIG","CLE",
     "CMP","COG","CPD","CRM","DCR","DOM","EAT","EKP","ELT","ENE","ENI","ERB","ETL","FON","FRO","FSG","FTE","LES","GPW","HDR",
-    "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KZC","RWL","KOM","KPD","KPL",
-    "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","IMM","MLK","MNC","MON",
-    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","PNA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPB","PRC",
+    "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KGN","RWL","KOM","KPD","KPL",
+    "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","GKI","MLK","MNC","MON",
+    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPB","PRC",
     "PRT","QRS","NVG","RBW","RLP","RMK","RNK","RPC","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
-    "TPE","TRN","TSG","AAT","ULM","UNI","VIX","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WRX","ZEP","MGT","ZMT","PGF","ZUE",
+    "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WRX","ZEP","MGT","ZMT","PGF","ZUE",
     "ZUK","DIG","VIR","OPM","OPN","PMP","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTL","TLX","TRC","PHE","APE","MFO","BMX",
     "BLR","SVE","CLD","CPR","EOT","GRN","IMS","JRI","MDG","PHR","DTA","SAR","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
     "MRC","ALT","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MUZ","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKB","VGO",
@@ -486,6 +486,9 @@ def run_ichimoku_search(target: str) -> int:
     display_symbol, first_result, first_flip, first_err = _scan_one(first, group_name, exchange_suffix)
     print(f"[1/{len(members)}] skanuję {first} ({display_symbol})...")
     sequential = _rate_limit_detected(first_err)
+    if group_name == "WIG":
+        sequential = True
+        print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
     if first_err:
         print(f"  pominięto ({first_err})")
     elif first_result:
@@ -498,6 +501,14 @@ def run_ichimoku_search(target: str) -> int:
         if sequential:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
+            if group_name == "WIG" and offset in {166, 331}:
+                try:
+                    answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
+                except EOFError:
+                    answer = "n"
+                if answer != "y":
+                    print("[search] Scan paused/stopped by user before next WIG chunk.")
+                    break
             display_symbol, result, flip, err = _scan_one(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})...")
             if err:
