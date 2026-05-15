@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import math
@@ -211,47 +213,90 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
     )
 
 
+
+
+def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, str | None]:
+    if group_name == "forex":
+        instrument = "forex"
+    elif group_name == "commodities":
+        instrument = "commodity"
+    elif group_name == "indexes":
+        instrument = "commodity"
+    elif group_name == "single":
+        detected = detect_instrument_type(ticker, None)
+        instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+    else:
+        instrument = "stock"
+
+    fetch_symbol = ticker
+    display_symbol = fetch_symbol
+    if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
+        fetch_symbol = f"{ticker}{exchange_suffix}"
+        display_symbol = fetch_symbol
+    if instrument == "commodity":
+        mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
+        if mapped:
+            fetch_symbol = mapped.upper()
+            display_symbol = fetch_symbol
+        elif group_name == "single":
+            canonical = _reverse_stooq_symbol(ticker)
+            if canonical:
+                display_symbol = canonical
+
+    try:
+        df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+        enriched = _ichimoku(df)
+        result = _qualifies(enriched)
+        if result:
+            result.ticker = ticker
+        return display_symbol, result, None
+    except Exception as exc:
+        return display_symbol, None, str(exc)
+
+
+def _rate_limit_detected(err: str | None) -> bool:
+    text = (err or "").lower()
+    return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
 def run_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     results: list[ScanResult] = []
 
-    for idx, ticker in enumerate(members, start=1):
-        if group_name == "forex":
-            instrument = "forex"
-        elif group_name == "commodities":
-            instrument = "commodity"
-        elif group_name == "indexes":
-            instrument = "commodity"
-        elif group_name == "single":
-            detected = detect_instrument_type(ticker, None)
-            instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
-        else:
-            instrument = "stock"
-        fetch_symbol = ticker
-        display_symbol = fetch_symbol
-        if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
-            fetch_symbol = f"{ticker}{exchange_suffix}"
-            display_symbol = fetch_symbol
-        if instrument == "commodity":
-            mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
-            if mapped:
-                fetch_symbol = mapped.upper()
-                display_symbol = fetch_symbol
-            elif group_name == "single":
-                canonical = _reverse_stooq_symbol(ticker)
-                if canonical:
-                    display_symbol = canonical
-        print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
-        try:
-            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
-            enriched = _ichimoku(df)
-            result = _qualifies(enriched)
-            if result:
-                result.ticker = ticker
+    # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
+    first = members[0]
+    print(f"[1/{len(members)}] skanuję {first}...")
+    display_symbol, first_result, first_err = _scan_one(first, group_name, exchange_suffix)
+    print(f"[1/{len(members)}] skanuję {first} ({display_symbol})...")
+    sequential = _rate_limit_detected(first_err)
+    if first_err:
+        print(f"  pominięto ({first_err})")
+    elif first_result:
+        results.append(first_result)
+
+    rest = members[1:]
+    if sequential or len(rest) == 0:
+        if sequential:
+            print("[search] rate-limit/captcha detected -> switching to sequential mode.")
+        for offset, ticker in enumerate(rest, start=2):
+            display_symbol, result, err = _scan_one(ticker, group_name, exchange_suffix)
+            print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})...")
+            if err:
+                print(f"  pominięto ({err})")
+            elif result:
                 results.append(result)
-        except Exception as exc:
-            print(f"  pominięto ({exc})")
+    else:
+        max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
+        print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            fut_map = {ex.submit(_scan_one, ticker, group_name, exchange_suffix): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
+            for fut in as_completed(fut_map):
+                idx, ticker = fut_map[fut]
+                display_symbol, result, err = fut.result()
+                print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
+                if err:
+                    print(f"  pominięto ({err})")
+                elif result:
+                    results.append(result)
 
     SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
