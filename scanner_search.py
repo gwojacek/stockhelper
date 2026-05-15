@@ -49,6 +49,14 @@ class ScanResult:
 
 
 
+def _reverse_stooq_symbol(symbol: str) -> str | None:
+    target = (symbol or "").strip().upper()
+    for key, value in COMMODITY_STOOQ_MAP.items():
+        if str(value).upper() == target:
+            return key.upper()
+    return None
+
+
 def _normalize_commodity_symbol(raw: str) -> str:
     cleaned = (raw or "").strip().upper().replace(" ", "_")
     aliases = {
@@ -221,13 +229,20 @@ def run_search(target: str) -> int:
         else:
             instrument = "stock"
         fetch_symbol = ticker
+        display_symbol = fetch_symbol
         if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
             fetch_symbol = f"{ticker}{exchange_suffix}"
+            display_symbol = fetch_symbol
         if instrument == "commodity":
             mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
             if mapped:
                 fetch_symbol = mapped.upper()
-        print(f"[{idx}/{len(members)}] skanuję {ticker} ({fetch_symbol})...")
+                display_symbol = fetch_symbol
+            elif group_name == "single":
+                canonical = _reverse_stooq_symbol(ticker)
+                if canonical:
+                    display_symbol = canonical
+        print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
             enriched = _ichimoku(df)
