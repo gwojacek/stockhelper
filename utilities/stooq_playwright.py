@@ -63,21 +63,27 @@ def _open_page(playwright):
 
 
 def _accept_consent_if_present(page, first_page: bool = False) -> None:
+    if not first_page:
+        return
+
     selectors = [
         'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Zgadzam się"]',
+        '.fc-dialog-container button:has-text("Zgadzam się")',
         'text=Zgadzam się',
     ]
-    visible_timeout = 8000 if first_page else 500
-    for sel in selectors:
-        try:
-            loc = page.locator(sel).first
-            if loc.count() > 0 and loc.is_visible(timeout=visible_timeout):
-                loc.click(timeout=2500)
-                page.wait_for_timeout(600)
+
+    contexts = [page] + list(page.frames)
+    for ctx in contexts:
+        for sel in selectors:
+            try:
+                loc = ctx.locator(sel).first
+                loc.wait_for(state='visible', timeout=8000)
+                loc.click(timeout=3000, force=True)
+                page.wait_for_timeout(700)
                 return
-        except Exception:
-            continue
+            except Exception:
+                continue
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         # Prefer strict Stooq history rows: ids like t03, t11 etc. (data only, no header).
