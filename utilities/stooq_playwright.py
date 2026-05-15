@@ -242,9 +242,33 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         retry_interactive_requested = True
                         break
                     _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
-                    raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
-                _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
-                raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
+                    # After manual captcha/consent, try extraction again before failing.
+                    _accept_consent_if_present(page, first_page=True)
+                    _wait_for_table_or_limit_with_retry(page, retries=2)
+                    extracted = _extract_rows_from_frame(page)
+                    if not extracted:
+                        for fr in page.frames:
+                            extracted = _extract_rows_from_frame(fr)
+                            if extracted:
+                                break
+                    if verbose:
+                        print(f"[stooq-web] post-resume extracted_rows={len(extracted)}")
+                    if not extracted:
+                        raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
+                else:
+                    _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
+                    _accept_consent_if_present(page, first_page=True)
+                    _wait_for_table_or_limit_with_retry(page, retries=2)
+                    extracted = _extract_rows_from_frame(page)
+                    if not extracted:
+                        for fr in page.frames:
+                            extracted = _extract_rows_from_frame(fr)
+                            if extracted:
+                                break
+                    if verbose:
+                        print(f"[stooq-web] post-resume extracted_rows={len(extracted)}")
+                    if not extracted:
+                        raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
             if not extracted:
                 break
