@@ -167,6 +167,7 @@ def _force_interactive_pause(page, symbol: str, state: dict | None = None, inter
         page.pause()
         if state is not None:
             state["forced_pause_done"] = True
+            state["done"] = True
     except Exception as exc:
         print(f"[stooq-web] Unable to open inspector: {exc}")
 
@@ -218,7 +219,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 break
             if page_num == 1:
                 _accept_consent_if_present(page, first_page=True)
-            _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
+            if page_num == 1:
+                _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
             ready = _wait_for_table_or_limit_with_retry(page, retries=3)
             if verbose:
                 print(f"[stooq-web] page={page_num} ready={ready}")
@@ -300,6 +302,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
 
             if verbose:
                 print(f"[stooq-web] page={page_num} parsed_ok={parsed_ok} added_rows={page_added} oldest={oldest_dt_on_page}")
+            else:
+                print(f"[stooq-web] progress page={page_num} collected={len(rows)}")
 
             if page_added == 0:
                 empty_pages += 1
