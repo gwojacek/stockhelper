@@ -52,7 +52,7 @@ WIG_SEARCH_TICKERS = [
     "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
     "BLO","SVE","CLD","CPR","EAH","IMS","MDG","PHR","DAT","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
     "MRC","ALI","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MZA","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKH","VGO",
-    "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","WPL","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
+    "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
     "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CAP","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
     "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
     "GMT","CTX","VRC","SHO","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
@@ -409,8 +409,17 @@ def _rate_limit_detected(err: str | None) -> bool:
 
 
 def _stooq_chart_url(ticker: str) -> str:
-    symbol = f"{ticker.lower()}.wa" if "." not in ticker else ticker.lower()
-    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=298&ft=20250609&l=236&d=1&ch=0&f=1&lt=57&r=0&o=1"
+    symbol = ticker.lower()
+    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=298&ft=20251114&l=235&d=1&ch=0&f=1&lt=56&r=3&o=1"
+
+
+def _compact_error(err: str | None) -> str:
+    text = (err or "").strip()
+    if "url=" in text:
+        return text.split(" | url=", 1)[0]
+    if " Tried: " in text:
+        return text.split(" Tried: ", 1)[0]
+    return text
 
 
 def _print_results_with_links(results: list[ScanResult]) -> None:
@@ -528,7 +537,7 @@ def run_ichimoku_search(target: str) -> int:
                     display_symbol, result, flip, err = fut.result()
                     print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
                     if err:
-                        print(f"  pominięto ({err})")
+                        print(f"  pominięto ({_compact_error(err)})")
                     elif result:
                         results.append(result)
                     if flip:
@@ -551,6 +560,15 @@ def run_ichimoku_search(target: str) -> int:
                 writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
         _print_results_with_links(results)
         print(f"\nZapisano CSV: {out_csv}")
+        print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
+        print("\nWYNIKI 2 (po >=4 mies. po jednej stronie, potem wybicie i utrzymanie po drugiej):")
+        if not flip_results:
+            print("Brak wyników.")
+        else:
+            print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10}")
+            print("-" * 78)
+            for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
+                print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f}")
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
@@ -595,7 +613,7 @@ def run_ichimoku_search(target: str) -> int:
             display_symbol, result, flip, err = _scan_one(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})...")
             if err:
-                print(f"  pominięto ({err})")
+                print(f"  pominięto ({_compact_error(err)})")
             elif result:
                 results.append(result)
             if flip:
@@ -610,7 +628,7 @@ def run_ichimoku_search(target: str) -> int:
                 display_symbol, result, flip, err = fut.result()
                 print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
                 if err:
-                    print(f"  pominięto ({err})")
+                    print(f"  pominięto ({_compact_error(err)})")
                 elif result:
                     results.append(result)
                 if flip:
