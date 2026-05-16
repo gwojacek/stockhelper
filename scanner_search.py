@@ -142,11 +142,12 @@ class FiboScanResult:
     incline_duration_days: int
     decline_end_date: str
     decline_duration_days: int
+    incline_decline_duration_ratio: float
     fib_61_8: float
     first_61_8_touch_date: str
     reversal_pattern_name: str
     stop_loss: float
-    target_price: float
+    current_close: float
 
 
 def _is_bullish_hammer(c: pd.Series) -> bool:
@@ -777,8 +778,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     low = w["Low"]
     if direction == "long":
         i_start = int(low.iloc[:-60].idxmin())
-        i_peak = int(close.iloc[i_start + 30:].idxmax())
-        if i_peak <= i_start + 30:
+        min_incline_days = 15  # ~3 weeks
+        i_peak = int(close.iloc[i_start + min_incline_days:].idxmax())
+        if i_peak <= i_start + min_incline_days:
             return None
         i_end = len(w) - 1
         if i_end - i_peak < 8:
@@ -795,13 +797,14 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         if corr_low > fib_382:
             return None
         touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
-        if not touch_idxs:
+        in_result1_zone = corr_low <= fib_382 and corr_low > fib_618
+        if not touch_idxs and not in_result1_zone:
             return None
-        if len(touch_idxs) > 3:
+        if touch_idxs and len(touch_idxs) > 3:
             return None
         status = "valid_reversal"
         pattern = "none"
-        pattern_idx = touch_idxs[-1]
+        pattern_idx = touch_idxs[-1] if touch_idxs else i_end
         # 1-candle: hammer touching 61.8 and closing above 61.8
         for i in touch_idxs:
             c = w.iloc[i]
@@ -810,7 +813,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
                 pattern_idx = i
                 break
         # 2-candle: bullish engulfing, at least one candle touches 61.8, second close > 61.8
-        if pattern == "none":
+        if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
                 engulf = float(c1["Close"]) < float(c1["Open"]) and float(c2["Close"]) > float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
@@ -818,7 +821,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
                     pattern = "bullish_engulfing"
                     pattern_idx = i
                     break
-        if pattern == "none":
+        if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
                 if _is_bullish_piercing_line(c1, c2, fib_618):
@@ -826,11 +829,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
                     pattern_idx = i
                     break
         if pattern == "none":
-            status = "touched_61_8_no_pattern"
+            status = "reached_38_2_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
         if not next5.empty and (next5["Close"] < stop_loss).any():
             status = "invalidated_by_stop_loss"
+        ratio = round((i_peak - i_start) / max(i_end - i_peak, 1), 2)
         return FiboScanResult(
             ticker="", direction=direction, status=status,
             incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
@@ -838,14 +842,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
             incline_duration_days=i_peak - i_start,
             decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
             decline_duration_days=i_end - i_peak,
+            incline_decline_duration_ratio=ratio,
             fib_61_8=fib_618,
             first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
-            reversal_pattern_name=pattern, stop_loss=stop_loss, target_price=fib_500
+            reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
     i_start = int(close.iloc[:-60].idxmax())
-    i_bottom = int(close.iloc[i_start + 30:].idxmin())
-    if i_bottom <= i_start + 30:
+    min_incline_days = 15
+    i_bottom = int(close.iloc[i_start + min_incline_days:].idxmin())
+    if i_bottom <= i_start + min_incline_days:
         return None
     i_end = len(w) - 1
     if i_end - i_bottom < 8:
@@ -862,20 +868,21 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     if corr_high < fib_382:
         return None
     touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
-    if not touch_idxs:
+    in_result1_zone = corr_high >= fib_382 and corr_high < fib_618
+    if not touch_idxs and not in_result1_zone:
         return None
-    if len(touch_idxs) > 3:
+    if touch_idxs and len(touch_idxs) > 3:
         return None
     status = "valid_reversal"
     pattern = "none"
-    pattern_idx = touch_idxs[-1]
+    pattern_idx = touch_idxs[-1] if touch_idxs else i_end
     for i in touch_idxs:
         c = w.iloc[i]
         if _is_bearish_shooting_star(c) and _touches_level(c, fib_618) and float(c["Close"]) < fib_618:
             pattern = "shooting_star"
             pattern_idx = i
             break
-    if pattern == "none":
+    if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), i_end + 1):
             c1, c2 = w.iloc[i - 1], w.iloc[i]
             engulf = float(c1["Close"]) > float(c1["Open"]) and float(c2["Close"]) < float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
@@ -884,11 +891,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
                 pattern_idx = i
                 break
     if pattern == "none":
-        status = "touched_61_8_no_pattern"
+        status = "reached_38_2_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
     if not next5.empty and (next5["Close"] > stop_loss).any():
         status = "invalidated_by_stop_loss"
+    ratio = round((i_bottom - i_start) / max(i_end - i_bottom, 1), 2)
     return FiboScanResult(
         ticker="", direction=direction, status=status,
         incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
@@ -896,22 +904,40 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         incline_duration_days=i_bottom - i_start,
         decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
         decline_duration_days=i_end - i_bottom,
+        incline_decline_duration_ratio=ratio,
         fib_61_8=fib_618,
         first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
-        reversal_pattern_name=pattern, stop_loss=stop_loss, target_price=fib_500
+        reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
     )
 
 
-def _print_fibo_results(rows: list[FiboScanResult]) -> None:
-    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO:{ANSI_RESET}")
-    if not rows:
+def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]) -> list[str]:
+    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (>=38.2 and <=61.8 for long; short mirrored, plus 61.8 formations):{ANSI_RESET}")
+    if not rows1:
         print("Brak wyników.")
-        return
-    print(f"{'Ticker':<10} {'Dir':<6} {'Status':<28} {'Pattern':<20} {'61.8':>10} {'Stop':>10} {'Target':>10} {'Touch':<12}")
-    print("-" * 130)
-    for r in rows:
+        links = []
+    else:
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>8} {'Touch':<12} {'Link':<0}")
+        print("-" * 185)
+        links = []
+    for r in rows1:
         color = ANSI_GREEN if r.status == "valid_reversal" else ANSI_YELLOW if r.status == "touched_61_8_no_pattern" else "\033[31m"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<28}{ANSI_RESET} {r.reversal_pattern_name:<20} {r.fib_61_8:>10.4f} {r.stop_loss:>10.4f} {r.target_price:>10.4f} {r.first_61_8_touch_date:<12}")
+        link = _stooq_chart_url(r.ticker)
+        links.append(link)
+        incline = f"{r.incline_start_date}->{r.incline_end_date}"
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {r.incline_decline_duration_ratio:>8.2f} {r.first_61_8_touch_date:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
+    if not rows2:
+        print("Brak wyników.")
+        return links
+    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Touch':<12} {'Close':>10} {'Link':<0}")
+    print("-" * 140)
+    for r in rows2:
+        link = _stooq_chart_url(r.ticker)
+        if link not in links:
+            links.append(link)
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {r.first_61_8_touch_date:<12} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+    return links
 
 
 def run_fibo_search(target: str) -> int:
@@ -955,9 +981,25 @@ def run_fibo_search(target: str) -> int:
         w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
         for row in rows:
             w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
-    _print_fibo_results(rows)
+    rows1 = sorted(rows, key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date), reverse=False)
+    two_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=61)
+    rows2 = [
+        r for r in rows
+        if r.status == "valid_reversal"
+        and r.reversal_pattern_name != "none"
+        and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
+    ]
+    links = _print_fibo_results(rows1, rows2)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
+    if links:
+        try:
+            open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
+        except EOFError:
+            open_all = "n"
+        if open_all == "y":
+            for link in links:
+                webbrowser.open_new_tab(link)
     return 0
 
 
