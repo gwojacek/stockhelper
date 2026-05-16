@@ -348,7 +348,7 @@ def _compute_stock_liquidity_metrics(df: pd.DataFrame, fetch_symbol: str) -> tup
     return avg_10d, below_20d, threshold_10d, threshold_20d
 
 
-def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None]:
+def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
     elif group_name == "commodities":
@@ -383,7 +383,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 display_symbol = canonical
 
     try:
-        df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+        source_label = str((meta or {}).get("source", "unknown")).lower()
         enriched = _ichimoku(df)
         result = _qualifies(enriched)
         flip = _flip_after_long_respect(enriched)
@@ -392,7 +393,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
             if instrument == "stock":
                 metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
                 if metrics is None:
-                    return display_symbol, None, flip, "insufficient turnover data"
+                    return display_symbol, None, flip, "insufficient turnover data", source_label
                 avg_10d, below_20d, threshold_10d, threshold_20d = metrics
                 result.avg_turnover_10d_pln = avg_10d
                 result.low_turnover_days_20d = below_20d
@@ -401,12 +402,12 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 if avg_10d < threshold_10d or below_20d > 2:
                     return display_symbol, None, flip, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
-                    )
+                    ), source_label
         if flip:
             flip.ticker = ticker
-        return display_symbol, result, flip, None
+        return display_symbol, result, flip, None, source_label
     except Exception as exc:
-        return display_symbol, None, None, str(exc)
+        return display_symbol, None, None, str(exc), "unknown"
 
 
 def _rate_limit_detected(err: str | None) -> bool:
@@ -440,6 +441,15 @@ def _compact_error(err: str | None) -> str:
     if " Tried: " in text:
         return text.split(" Tried: ", 1)[0]
     return text
+
+
+def _scan_source_label(src: str) -> str:
+    s = (src or "").lower()
+    if s in {"stooq_web"}:
+        return "UI"
+    if s in {"stooq", "yahoo", "cache"}:
+        return "API"
+    return s.upper() or "UNKNOWN"
 
 
 def _print_results_with_links(results: list[ScanResult]) -> list[str]:
@@ -562,8 +572,8 @@ def run_ichimoku_search(target: str) -> int:
                 }
                 for fut in as_completed(fut_map):
                     idx, ticker = fut_map[fut]
-                    display_symbol, result, flip, err = fut.result()
-                    print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
+                    display_symbol, result, flip, err, src = fut.result()
+                    print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
                     if err:
                         print(f"  pominięto ({_compact_error(err)})")
                     elif result:
@@ -611,8 +621,8 @@ def run_ichimoku_search(target: str) -> int:
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
     print(f"[1/{len(members)}] skanuję {first}...")
-    display_symbol, first_result, first_flip, first_err = _scan_one(first, group_name, exchange_suffix)
-    print(f"[1/{len(members)}] skanuję {first} ({display_symbol})...")
+    display_symbol, first_result, first_flip, first_err, first_source = _scan_one(first, group_name, exchange_suffix)
+    print(f"[1/{len(members)}] skanuję {first} ({display_symbol})... [skanuję przez {_scan_source_label(first_source)}]")
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = True
@@ -640,8 +650,8 @@ def run_ichimoku_search(target: str) -> int:
                 if answer != "y":
                     print("[search] Scan paused/stopped by user before next WIG chunk.")
                     break
-            display_symbol, result, flip, err = _scan_one(ticker, group_name, exchange_suffix)
-            print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})...")
+            display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+            print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
             elif result:
@@ -655,8 +665,8 @@ def run_ichimoku_search(target: str) -> int:
             fut_map = {ex.submit(_scan_one, ticker, group_name, exchange_suffix): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
-                display_symbol, result, flip, err = fut.result()
-                print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})...")
+                display_symbol, result, flip, err, src = fut.result()
+                print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
                 if err:
                     print(f"  pominięto ({_compact_error(err)})")
                 elif result:
