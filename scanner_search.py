@@ -171,6 +171,22 @@ def _touches_level(c: pd.Series, level: float) -> bool:
     return float(c["Low"]) <= level <= float(c["High"])
 
 
+def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+    c1_open = float(c1["Open"])
+    c1_close = float(c1["Close"])
+    c2_open = float(c2["Open"])
+    c2_close = float(c2["Close"])
+    if not (c1_close < c1_open and c2_close > c2_open):
+        return False
+    midpoint_c1 = (c1_open + c1_close) / 2.0
+    return (
+        c2_open < c1_close
+        and c2_close > midpoint_c1
+        and (_touches_level(c1, level) or _touches_level(c2, level))
+        and c2_close > level
+    )
+
+
 
 def _reverse_stooq_symbol(symbol: str) -> str | None:
     target = (symbol or "").strip().upper()
@@ -760,7 +776,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     high = w["High"]
     low = w["Low"]
     if direction == "long":
-        i_start = int(close.iloc[:-60].idxmin())
+        i_start = int(low.iloc[:-60].idxmin())
         i_peak = int(close.iloc[i_start + 30:].idxmax())
         if i_peak <= i_start + 30:
             return None
@@ -803,6 +819,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
                     pattern_idx = i
                     break
         if pattern == "none":
+            for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
+                c1, c2 = w.iloc[i - 1], w.iloc[i]
+                if _is_bullish_piercing_line(c1, c2, fib_618):
+                    pattern = "bullish_piercing_line"
+                    pattern_idx = i
+                    break
+        if pattern == "none":
             status = "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
@@ -816,7 +839,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
             decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
             decline_duration_days=i_end - i_peak,
             fib_61_8=fib_618,
-            first_61_8_touch_date=str(pd.to_datetime(w.iloc[touch_idxs[0]]["Date"]).date()),
+            first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
             reversal_pattern_name=pattern, stop_loss=stop_loss, target_price=fib_500
         )
     # short setup
@@ -874,7 +897,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
         decline_duration_days=i_end - i_bottom,
         fib_61_8=fib_618,
-        first_61_8_touch_date=str(pd.to_datetime(w.iloc[touch_idxs[0]]["Date"]).date()),
+        first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
         reversal_pattern_name=pattern, stop_loss=stop_loss, target_price=fib_500
     )
 
