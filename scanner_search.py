@@ -334,7 +334,14 @@ def _compute_stock_liquidity_metrics(df: pd.DataFrame, fetch_symbol: str) -> tup
         return None
     try:
         cc = _country_code_from_ticker(fetch_symbol)
-        currency = "PLN" if cc == "PL" else cc
+        country_to_currency = {
+            "PL": "PLN",
+            "US": "USD",
+            "DE": "EUR",
+            "FR": "EUR",
+            "CN": "CNY",
+        }
+        currency = country_to_currency.get(cc, "USD")
         _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
         fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
     except Exception:
