@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import subprocess
+import os
 import sys
 from pathlib import Path
 
 from chart_program.instrument_detector import detect_instrument_type
+from chart_program.chart_loader import COMMODITY_STOOQ_MAP
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -59,11 +61,38 @@ def _resolve_runner(instrument_type: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
-    parser.add_argument("target", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
+    parser.add_argument("-ichimoku_search", "-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
+    parser.add_argument("-d", "--search-debug", action="store_true", help="Verbose Stooq scraping logs for -ichimoku_search")
+    parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
+    parser.add_argument("--debug-stooq", dest="debug_stooq", help="Dump Stooq page debug artifacts for symbol")
+    parser.add_argument("-inspector", "--inspector", action="store_true", help="Enable interactive captcha inspector for Stooq")
     args = parser.parse_args()
 
-    target = args.target.strip()
+    if args.search_debug:
+        os.environ["STOCKHELPER_STOOQ_DEBUG"] = "1"
+
+    if args.debug_stooq:
+        from utilities.stooq_playwright import debug_stooq_page
+        raw = args.debug_stooq.strip()
+        upper_raw = raw.upper()
+        mapped = COMMODITY_STOOQ_MAP.get(upper_raw)
+        if mapped:
+            symbol_for_debug = str(mapped).lower()
+        else:
+            values = {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}
+            symbol_for_debug = raw.lower() if raw.lower() in values else raw
+        path = debug_stooq_page(symbol_for_debug, interactive_captcha=args.inspector)
+        print(f"Stooq debug zapisany: {path}")
+        return 0
+
+    if args.search_target:
+        from scanner_search import run_ichimoku_search
+        return run_ichimoku_search(args.search_target)
+
+    target = (args.target or "").strip()
+    if not target:
+        parser.error("target is required unless -ichimoku_search is used")
     resolved_path = _resolve_existing_config_path(target)
 
     if args.chart:

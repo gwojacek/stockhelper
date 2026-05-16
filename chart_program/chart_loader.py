@@ -7,16 +7,21 @@ from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
+import os
 
 import pandas as pd
 
+from utilities.stooq_playwright import update_stooq_history_with_playwright
 
-STOOQ_DEFAULT_API_KEY = "x1s2H9UeqW6t3oJR7gDpm8fwPnudBjFS"
+STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
 
 DATA_DIR_BY_INSTRUMENT = {
-    "stock": Path("data/stocks"),
-    "commodity": Path("data/commodities"),
-    "forex": Path("data/forex"),
+    "stock": UNIFIED_DATA_DIR / "stocks",
+    "commodity": UNIFIED_DATA_DIR / "commodities",
+    "forex": UNIFIED_DATA_DIR / "forex",
 }
 
 COMMODITY_YAHOO_MAP = {
@@ -98,7 +103,8 @@ COMMODITY_STOOQ_MAP = {
     "WTI": "cl.f",
     "OIL.WTI": "cl.f",
     "OIL": "cb.f",
-    "ALUMINIUM": "ali.f",
+    "COPPER": "hg.f",
+    "ALUMINIUM": "al.f",
     "NICKEL": "ni.f",
     "ZINC": "zn.f",
     "CRUDE_OIL_BRENT": "cb.f",
@@ -490,6 +496,20 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     return trimmed.sort_values("Date").reset_index(drop=True)
 
 def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+    def _incremental_lookback_days(csv_path: Path, default_days: int = 364) -> int:
+        try:
+            if not csv_path.exists():
+                return default_days
+            local_df = pd.read_csv(csv_path)
+            if "Date" not in local_df.columns or local_df.empty:
+                return default_days
+            latest = pd.to_datetime(local_df["Date"], errors="coerce").max()
+            if pd.isna(latest):
+                return default_days
+            days = (pd.Timestamp.utcnow().tz_localize(None) - latest).days + 14
+            return max(30, min(default_days, int(days)))
+        except Exception:
+            return default_days
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
@@ -497,18 +517,65 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
+    # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
+    # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20).
+    normalized_symbol = symbol.strip().upper()
+    mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
+    if not mapped_stooq:
+        # Scanner may already pass mapped stooq symbols (e.g. "fx.f" instead of "EU50").
+        direct = symbol.strip().lower()
+        if direct in {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}:
+            mapped_stooq = direct
+    is_index_like_commodity_symbol = (
+        str(mapped_stooq).startswith("^")
+        or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
+    )
+    # Some symbols are unavailable via Stooq CSV API and must use web pages.
+    requires_web_even_if_index_like = str(mapped_stooq).lower() in {"fx.f"}
+    # Force selected metals to stay on API path (no Playwright fallback).
+    force_api_only_symbols = {"xauusd", "xagusd", "xpdusd"}
+    is_literal_commodity = (
+        instrument_type == "commodity"
+        and (normalized_symbol in COMMODITY_STOOQ_MAP or bool(mapped_stooq))
+        and (not is_index_like_commodity_symbol or requires_web_even_if_index_like)
+        and str(mapped_stooq).lower() not in force_api_only_symbols
+    )
+    if is_literal_commodity:
+        try:
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            df = update_stooq_history_with_playwright(
+                symbol=symbol,
+                csv_path=csv_path,
+                lookback_days=_incremental_lookback_days(csv_path),
+                verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                interactive_captcha=False,
+            )
+            return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
+        except Exception as web_exc:
+            raise ValueError(f"Stooq web failed: {web_exc}") from web_exc
+
     primary_error = None
     try:
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
 
-    try:
-        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name, f"Stooq failed, fallback to Yahoo: {primary_error}"
-    except ValueError as secondary_exc:
-        raise ValueError(f"Stooq failed: {primary_error} ; Yahoo failed: {secondary_exc}") from secondary_exc
+    if is_literal_commodity:
+        try:
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            df = update_stooq_history_with_playwright(
+                symbol=symbol,
+                csv_path=csv_path,
+                lookback_days=_incremental_lookback_days(csv_path),
+                verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                interactive_captcha=False,
+            )
+            return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+        except Exception as web_exc:
+            raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
+
+    raise ValueError(f"Stooq API failed for non-commodity-web symbol {symbol}: {primary_error}")
 
 
 def load_or_update_daily_data(
@@ -554,7 +621,8 @@ def load_or_update_daily_data(
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
         display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), _humanize_symbol(symbol))
-        enriched_name = source_name or _best_effort_display_name(symbol, instrument_type, source_symbol)
+        # Yahoo enrichment disabled in Stooq-only mode to avoid noisy 404 lookups.
+        enriched_name = source_name
         if enriched_name:
             display_name = enriched_name
         elif str(source_symbol).startswith("^"):

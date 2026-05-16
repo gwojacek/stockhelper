@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 from chart_program.chart_loader import load_or_update_daily_data
 from chart_program.chart_ui import ChartLevelSelectorUI
 from chart_program.config_writer import resolve_config_path, write_or_update_config
@@ -79,7 +81,7 @@ def _restore_file(path: Path, existed_before: bool, content: bytes):
 
 
 def _session_path(config_path: Path) -> Path:
-    return Path("data/sessions") / f"{config_path.stem}.json"
+    return PROJECT_ROOT / "data" / "sessions" / f"{config_path.stem}.json"
 
 
 def _load_session_state(config_path: Path) -> dict:

@@ -57,15 +57,15 @@ Each instrument setup is encoded as a Python module with a `TradingConfig` datac
 
 This makes setups versionable and reproducible.
 
-### 4) Currency handling for foreign stocks
+### 2) Currency handling for foreign stocks
 - If **FX conversion fee is enabled** for a foreign stock, StockHelper sizes the position with round-trip conversion fees included (buy + sell at stop), and prints how much the position was reduced because of fees.
 - If **FX conversion fee is disabled**, StockHelper assumes you already hold the instrument currency (e.g. USD). In that case stock table money values are shown in the instrument currency instead of PLN.
 - In that OFF mode, account capital is internally translated from PLN to instrument currency using current FX so risk percentages stay consistent (no artificial 3-4x position inflation).
 
-### 2) Strategy factory
+### 3) Strategy factory
 `core.factory.StrategyFactory` picks the right strategy implementation based on `instrument_type` from the config.
 
-### 3) Multi-risk evaluation
+### 4) Multi-risk evaluation
 Strategies run calculations across a set of risk levels (default tuple is commonly used across generated configs), helping compare conservative vs aggressive sizing.
 
 ---
@@ -121,6 +121,49 @@ To open chart mode directly:
 python run -c ena
 python run -c eurusd_long
 ```
+
+### Ichimoku scanner (`-ichimoku_search`)
+
+You can run bulk scanner workflows directly from launcher:
+
+```bash
+python run -ichimoku_search indexes
+python run -ichimoku_search commodities
+python run -ichimoku_search wig
+python run -ichimoku_search dax
+python run -ichimoku_search ndx
+```
+
+Scanner details:
+- supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
+- writes CSV outputs to `chart_program/data/search/`,
+- prints **WYNIKI** and **WYNIKI 2** (flip results),
+- prints per-row Stooq chart links and can open all links after confirmation.
+
+For large `wig` runs, scanner uses VPN-friendly chunking (165-size parts) with confirmation between chunks.
+
+You can also run explicit parts (parallel-friendly):
+
+```bash
+python run -ichimoku_search wig_part1
+python run -ichimoku_search wig_part2
+python run -ichimoku_search wig_part3
+```
+
+### Stooq debug / scraper helpers
+
+To inspect Stooq/captcha/debug artifacts:
+
+```bash
+python run --debug-stooq coffee
+python run --debug-stooq coffee --inspector
+python run -ichimoku_search commodities --search-debug
+```
+
+Notes:
+- `--inspector` enables interactive captcha/debug flow in browser.
+- `--search-debug` enables verbose Stooq scraper logs via `STOCKHELPER_STOOQ_DEBUG=1`.
+- For selected symbols, loader may use Playwright web path (`stooq_web`) when API responses are insufficient.
 
 
 ### Stocks
