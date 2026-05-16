@@ -132,6 +132,28 @@ class FlipResult:
     close: float
 
 
+@dataclass
+class FiboScanResult:
+    ticker: str
+    direction: str
+    status: str
+    incline_start_date: str
+    incline_end_date: str
+    incline_duration_days: int
+    decline_end_date: str
+    decline_duration_days: int
+    fib_start_price: float
+    fib_end_price: float
+    fib_38_2: float
+    fib_50_0: float
+    fib_61_8: float
+    first_61_8_touch_date: str
+    number_of_61_8_touch_candles: int
+    reversal_pattern_name: str
+    stop_loss: float
+    target_price: float
+    risk_reward_ratio: float | None
+
 
 
 def _reverse_stooq_symbol(symbol: str) -> str | None:
@@ -711,6 +733,175 @@ def run_ichimoku_search(target: str) -> int:
         if open_all == "y":
             for link in all_links:
                 webbrowser.open_new_tab(link)
+    return 0
+
+
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResult | None:
+    if len(df) < 120:
+        return None
+    w = df.tail(220).reset_index(drop=True)
+    close = w["Close"]
+    high = w["High"]
+    low = w["Low"]
+    if direction == "long":
+        i_start = int(close.iloc[:-60].idxmin())
+        i_peak = int(close.iloc[i_start + 30:].idxmax())
+        if i_peak <= i_start + 30:
+            return None
+        i_end = len(w) - 1
+        if i_end - i_peak < 8:
+            return None
+        fib_start = float(low.iloc[i_start])
+        fib_end = float(high.iloc[i_peak])
+        rng = fib_end - fib_start
+        if rng <= 0:
+            return None
+        fib_382 = fib_end - rng * 0.382
+        fib_500 = fib_end - rng * 0.5
+        fib_618 = fib_end - rng * 0.618
+        corr_low = float(low.iloc[i_peak:i_end + 1].min())
+        if corr_low > fib_382:
+            return None
+        touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
+        if not touch_idxs:
+            return None
+        touch_idxs = touch_idxs[:3]
+        status = "valid_reversal"
+        pattern = "none"
+        pattern_idx = touch_idxs[0]
+        for i in touch_idxs:
+            body = abs(float(w.iloc[i]["Close"] - w.iloc[i]["Open"]))
+            lower = min(float(w.iloc[i]["Open"]), float(w.iloc[i]["Close"])) - float(w.iloc[i]["Low"])
+            upper = float(w.iloc[i]["High"]) - max(float(w.iloc[i]["Open"]), float(w.iloc[i]["Close"]))
+            if body > 0 and lower >= 2 * body and upper <= body:
+                pattern = "hammer"
+                pattern_idx = i
+                break
+        if pattern == "none":
+            status = "touched_61_8_no_pattern"
+        stop_loss = float(low.iloc[pattern_idx])
+        next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
+        if not next5.empty and (next5["Close"] < stop_loss).any():
+            status = "invalidated_by_stop_loss"
+        entry = float(close.iloc[pattern_idx])
+        risk = max(entry - stop_loss, 0.0)
+        reward = max(fib_500 - entry, 0.0)
+        rr = (reward / risk) if risk > 0 else None
+        return FiboScanResult(
+            ticker="", direction=direction, status=status,
+            incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
+            incline_end_date=str(pd.to_datetime(w.iloc[i_peak]["Date"]).date()),
+            incline_duration_days=i_peak - i_start,
+            decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
+            decline_duration_days=i_end - i_peak,
+            fib_start_price=fib_start, fib_end_price=fib_end,
+            fib_38_2=fib_382, fib_50_0=fib_500, fib_61_8=fib_618,
+            first_61_8_touch_date=str(pd.to_datetime(w.iloc[touch_idxs[0]]["Date"]).date()),
+            number_of_61_8_touch_candles=len(touch_idxs),
+            reversal_pattern_name=pattern, stop_loss=stop_loss, target_price=fib_500, risk_reward_ratio=rr
+        )
+    # short setup
+    i_start = int(close.iloc[:-60].idxmax())
+    i_bottom = int(close.iloc[i_start + 30:].idxmin())
+    if i_bottom <= i_start + 30:
+        return None
+    i_end = len(w) - 1
+    if i_end - i_bottom < 8:
+        return None
+    fib_start = float(high.iloc[i_start])
+    fib_end = float(low.iloc[i_bottom])
+    rng = fib_start - fib_end
+    if rng <= 0:
+        return None
+    fib_382 = fib_end + rng * 0.382
+    fib_500 = fib_end + rng * 0.5
+    fib_618 = fib_end + rng * 0.618
+    corr_high = float(high.iloc[i_bottom:i_end + 1].max())
+    if corr_high < fib_382:
+        return None
+    touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
+    if not touch_idxs:
+        return None
+    touch_idxs = touch_idxs[:3]
+    status = "valid_reversal"
+    pattern = "none"
+    pattern_idx = touch_idxs[0]
+    for i in touch_idxs:
+        body = abs(float(w.iloc[i]["Close"] - w.iloc[i]["Open"]))
+        upper = float(w.iloc[i]["High"]) - max(float(w.iloc[i]["Open"]), float(w.iloc[i]["Close"]))
+        lower = min(float(w.iloc[i]["Open"]), float(w.iloc[i]["Close"])) - float(w.iloc[i]["Low"])
+        if body > 0 and upper >= 2 * body and lower <= body:
+            pattern = "shooting_star"
+            pattern_idx = i
+            break
+    if pattern == "none":
+        status = "touched_61_8_no_pattern"
+    stop_loss = float(high.iloc[pattern_idx])
+    next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
+    if not next5.empty and (next5["Close"] > stop_loss).any():
+        status = "invalidated_by_stop_loss"
+    entry = float(close.iloc[pattern_idx])
+    risk = max(stop_loss - entry, 0.0)
+    reward = max(entry - fib_500, 0.0)
+    rr = (reward / risk) if risk > 0 else None
+    return FiboScanResult(
+        ticker="", direction=direction, status=status,
+        incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
+        incline_end_date=str(pd.to_datetime(w.iloc[i_bottom]["Date"]).date()),
+        incline_duration_days=i_bottom - i_start,
+        decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
+        decline_duration_days=i_end - i_bottom,
+        fib_start_price=fib_start, fib_end_price=fib_end,
+        fib_38_2=fib_382, fib_50_0=fib_500, fib_61_8=fib_618,
+        first_61_8_touch_date=str(pd.to_datetime(w.iloc[touch_idxs[0]]["Date"]).date()),
+        number_of_61_8_touch_candles=len(touch_idxs),
+        reversal_pattern_name=pattern, stop_loss=stop_loss, target_price=fib_500, risk_reward_ratio=rr
+    )
+
+
+def run_fibo_search(target: str) -> int:
+    group_name, members, source, exchange_suffix = _get_members(target)
+    print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
+    rows: list[FiboScanResult] = []
+    for idx, ticker in enumerate(members, start=1):
+        display_symbol, _, _, err, _ = _scan_one(ticker, group_name, exchange_suffix)
+        print(f"[{idx}/{len(members)}] fibo {ticker} ({display_symbol})...")
+        if err:
+            print(f"  pominięto ({_compact_error(err)})")
+            continue
+        instrument = "stock"
+        if group_name == "forex":
+            instrument = "forex"
+        elif group_name in {"commodities", "indexes"}:
+            instrument = "commodity"
+        elif group_name == "single":
+            detected = detect_instrument_type(ticker, None)
+            instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+        fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
+        if instrument == "commodity":
+            fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
+        try:
+            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+            long_setup = _find_fibo_setup(df, "long")
+            if long_setup:
+                long_setup.ticker = ticker
+                rows.append(long_setup)
+            if instrument in {"commodity", "forex"}:
+                short_setup = _find_fibo_setup(df, "short")
+                if short_setup:
+                    short_setup.ticker = ticker
+                    rows.append(short_setup)
+        except Exception as exc:
+            print(f"  pominięto ({_compact_error(str(exc))})")
+    SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_csv = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    with out_csv.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
+        for row in rows:
+            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+    print(f"\n[fibo] znaleziono: {len(rows)}")
+    print(f"[fibo] csv: {out_csv}")
     return 0
 
 
