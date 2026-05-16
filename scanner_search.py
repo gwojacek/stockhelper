@@ -367,7 +367,13 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         fetch_symbol = f"{ticker}{exchange_suffix}"
         display_symbol = fetch_symbol
     if instrument == "commodity":
-        mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
+        t_upper = ticker.upper()
+        mapped = COMMODITY_STOOQ_MAP.get(t_upper)
+        # Requested explicit stooq symbols for scanner output/fetching.
+        if t_upper == "ALUMINIUM":
+            mapped = "al.f"
+        elif t_upper == "COPPER":
+            mapped = "hg.f"
         if mapped:
             fetch_symbol = mapped.upper()
             display_symbol = fetch_symbol
