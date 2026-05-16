@@ -122,6 +122,49 @@ python run -c ena
 python run -c eurusd_long
 ```
 
+### Ichimoku scanner (`-ichimoku_search`)
+
+You can run bulk scanner workflows directly from launcher:
+
+```bash
+python run -ichimoku_search indexes
+python run -ichimoku_search commodities
+python run -ichimoku_search wig
+python run -ichimoku_search dax
+python run -ichimoku_search ndx
+```
+
+Scanner details:
+- supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
+- writes CSV outputs to `chart_program/data/search/`,
+- prints **WYNIKI** and **WYNIKI 2** (flip results),
+- prints per-row Stooq chart links and can open all links after confirmation.
+
+For large `wig` runs, scanner uses VPN-friendly chunking (165-size parts) with confirmation between chunks.
+
+You can also run explicit parts (parallel-friendly):
+
+```bash
+python run -ichimoku_search wig_part1
+python run -ichimoku_search wig_part2
+python run -ichimoku_search wig_part3
+```
+
+### Stooq debug / scraper helpers
+
+To inspect Stooq/captcha/debug artifacts:
+
+```bash
+python run --debug-stooq coffee
+python run --debug-stooq coffee --inspector
+python run -ichimoku_search commodities --search-debug
+```
+
+Notes:
+- `--inspector` enables interactive captcha/debug flow in browser.
+- `--search-debug` enables verbose Stooq scraper logs via `STOCKHELPER_STOOQ_DEBUG=1`.
+- For selected symbols, loader may use Playwright web path (`stooq_web`) when API responses are insufficient.
+
 
 ### Stocks
 
