@@ -529,8 +529,9 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         str(mapped_stooq).startswith("^")
         or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
     )
-    # Some index-like symbols are unavailable via Stooq CSV API and must use web pages.
-    requires_web_even_if_index_like = str(mapped_stooq).lower() in {"fx.f"}
+    # Some symbols are unavailable via Stooq CSV API and must use web pages.
+    # Keep XAUUSD/XAGUSD on API path as requested.
+    requires_web_even_if_index_like = str(mapped_stooq).lower() in {"fx.f", "al.f", "hg.f"}
     is_literal_commodity = (
         instrument_type == "commodity"
         and (normalized_symbol in COMMODITY_STOOQ_MAP or bool(mapped_stooq))
