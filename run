@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from chart_program.instrument_detector import detect_instrument_type
+from chart_program.chart_loader import COMMODITY_STOOQ_MAP
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -73,7 +74,15 @@ def main() -> int:
 
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page
-        path = debug_stooq_page(args.debug_stooq, interactive_captcha=args.inspector)
+        raw = args.debug_stooq.strip()
+        upper_raw = raw.upper()
+        mapped = COMMODITY_STOOQ_MAP.get(upper_raw)
+        if mapped:
+            symbol_for_debug = str(mapped).lower()
+        else:
+            values = {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}
+            symbol_for_debug = raw.lower() if raw.lower() in values else raw
+        path = debug_stooq_page(symbol_for_debug, interactive_captcha=args.inspector)
         print(f"Stooq debug zapisany: {path}")
         return 0
 
