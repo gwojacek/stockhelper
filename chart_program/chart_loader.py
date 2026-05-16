@@ -495,6 +495,20 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     return trimmed.sort_values("Date").reset_index(drop=True)
 
 def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+    def _incremental_lookback_days(csv_path: Path, default_days: int = 364) -> int:
+        try:
+            if not csv_path.exists():
+                return default_days
+            local_df = pd.read_csv(csv_path)
+            if "Date" not in local_df.columns or local_df.empty:
+                return default_days
+            latest = pd.to_datetime(local_df["Date"], errors="coerce").max()
+            if pd.isna(latest):
+                return default_days
+            days = (pd.Timestamp.utcnow().tz_localize(None) - latest).days + 14
+            return max(30, min(default_days, int(days)))
+        except Exception:
+            return default_days
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
@@ -525,7 +539,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
-            df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364, verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1", interactive_captcha=False)
+            df = update_stooq_history_with_playwright(
+                symbol=symbol,
+                csv_path=csv_path,
+                lookback_days=_incremental_lookback_days(csv_path),
+                verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                interactive_captcha=False,
+            )
             return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
         except Exception as web_exc:
             raise ValueError(f"Stooq web failed: {web_exc}") from web_exc
@@ -540,7 +560,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
-            df = update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=364, verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1", interactive_captcha=False)
+            df = update_stooq_history_with_playwright(
+                symbol=symbol,
+                csv_path=csv_path,
+                lookback_days=_incremental_lookback_days(csv_path),
+                verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                interactive_captcha=False,
+            )
             return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
         except Exception as web_exc:
             raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc

@@ -408,9 +408,23 @@ def _rate_limit_detected(err: str | None) -> bool:
     return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
 
 
+def _stooq_symbol_for_link(ticker: str) -> str:
+    raw = (ticker or "").strip().upper()
+    # Commodity/index aliases -> exact stooq symbols for chart links.
+    mapped = COMMODITY_STOOQ_MAP.get(raw)
+    if mapped:
+        # Requested overrides
+        if raw == "ALUMINIUM":
+            return "al.f"
+        if raw == "COPPER":
+            return "hg.f"
+        return str(mapped).lower()
+    return raw.lower()
+
+
 def _stooq_chart_url(ticker: str) -> str:
-    symbol = ticker.lower()
-    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=298&ft=20251114&l=235&d=1&ch=0&f=1&lt=56&r=3&o=1"
+    symbol = _stooq_symbol_for_link(ticker)
+    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
 
 
 def _compact_error(err: str | None) -> str:
@@ -422,29 +436,37 @@ def _compact_error(err: str | None) -> str:
     return text
 
 
-def _print_results_with_links(results: list[ScanResult]) -> None:
-    print("\nWYNIKI (instrumenty spełniające warunki):")
+def _print_results_with_links(results: list[ScanResult]) -> list[str]:
+    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI (instrumenty spełniające warunki):{ANSI_RESET}")
     if not results:
         print("Brak wyników.")
-        return
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10}")
-    print("-" * 98)
+        return []
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Link':<0}")
+    print("-" * 140)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
+    links: list[str] = []
     for row in sorted_rows:
         avg_10d = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
         low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
-        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10}")
-    print("\nLinki Stooq:")
-    links = [_stooq_chart_url(r.ticker) for r in sorted_rows]
-    for link in links:
-        print(link)
-    try:
-        open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
-    except EOFError:
-        open_all = "n"
-    if open_all == "y":
-        for link in links:
-            webbrowser.open_new_tab(link)
+        link = _stooq_chart_url(row.ticker)
+        links.append(link)
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {ANSI_CYAN}{link}{ANSI_RESET}")
+    return links
+
+
+def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
+    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI 2 (po >=4 mies. po jednej stronie, potem wybicie i utrzymanie po drugiej):{ANSI_RESET}")
+    if not flip_results:
+        print("Brak wyników.")
+        return []
+    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10} {'Link':<0}")
+    print("-" * 150)
+    links: list[str] = []
+    for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
+        link = _stooq_chart_url(row.ticker)
+        links.append(link)
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+    return links
 
 
 def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult | None:
@@ -558,17 +580,10 @@ def run_ichimoku_search(target: str) -> int:
             writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln"])
             for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
                 writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
-        _print_results_with_links(results)
+        links_primary = _print_results_with_links(results)
         print(f"\nZapisano CSV: {out_csv}")
         print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
-        print("\nWYNIKI 2 (po >=4 mies. po jednej stronie, potem wybicie i utrzymanie po drugiej):")
-        if not flip_results:
-            print("Brak wyników.")
-        else:
-            print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10}")
-            print("-" * 78)
-            for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-                print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f}")
+        links_flip = _print_flip_results_with_links(flip_results)
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
@@ -576,6 +591,15 @@ def run_ichimoku_search(target: str) -> int:
             for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
                 writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", f"{row.close:.4f}"])
         print(f"Zapisano CSV #2: {out_csv_flip}")
+        all_links = links_primary + [x for x in links_flip if x not in links_primary]
+        if all_links:
+            try:
+                open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
+            except EOFError:
+                open_all = "n"
+            if open_all == "y":
+                for link in all_links:
+                    webbrowser.open_new_tab(link)
         return 0
 
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
@@ -642,18 +666,11 @@ def run_ichimoku_search(target: str) -> int:
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
 
-    _print_results_with_links(results)
+    links_primary = _print_results_with_links(results)
     print(f"\nZapisano CSV: {out_csv}")
     print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
 
-    print("\nWYNIKI 2 (po >=4 mies. po jednej stronie, potem wybicie i utrzymanie po drugiej):")
-    if not flip_results:
-        print("Brak wyników.")
-    else:
-        print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10}")
-        print("-" * 78)
-        for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-            print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f}")
+    links_flip = _print_flip_results_with_links(flip_results)
 
     out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
     with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
@@ -662,6 +679,15 @@ def run_ichimoku_search(target: str) -> int:
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", f"{row.close:.4f}"])
     print(f"Zapisano CSV #2: {out_csv_flip}")
+    all_links = links_primary + [x for x in links_flip if x not in links_primary]
+    if all_links:
+        try:
+            open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
+        except EOFError:
+            open_all = "n"
+        if open_all == "y":
+            for link in all_links:
+                webbrowser.open_new_tab(link)
     return 0
 
 
@@ -674,3 +700,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+ANSI_BOLD = "\033[1m"
+ANSI_GREEN = "\033[32m"
+ANSI_CYAN = "\033[36m"
+ANSI_YELLOW = "\033[33m"
+ANSI_RESET = "\033[0m"
