@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import os
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -49,9 +50,9 @@ WIG_SEARCH_TICKERS = [
     "PRT","QRS","NVG","RBW","RLP","RMK","RNK","RPC","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
     "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WXF","ZEP","MGT","ZMT","PGV","ZUE",
     "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
-    "BLO","SVE","CLD","CPR","EAH","GRN","IMS","JRI","MDG","PHR","DAT","SAR","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
+    "BLO","SVE","CLD","CPR","EAH","IMS","MDG","PHR","DAT","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
     "MRC","ALI","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MZA","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKH","VGO",
-    "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","WP","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
+    "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","WPL","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
     "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CAP","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
     "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
     "GMT","CTX","VRC","SHO","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
@@ -407,6 +408,36 @@ def _rate_limit_detected(err: str | None) -> bool:
     return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
 
 
+def _stooq_chart_url(ticker: str) -> str:
+    symbol = f"{ticker.lower()}.wa" if "." not in ticker else ticker.lower()
+    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=298&ft=20250609&l=236&d=1&ch=0&f=1&lt=57&r=0&o=1"
+
+
+def _print_results_with_links(results: list[ScanResult]) -> None:
+    print("\nWYNIKI (instrumenty spełniające warunki):")
+    if not results:
+        print("Brak wyników.")
+        return
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10}")
+    print("-" * 98)
+    sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
+    for row in sorted_rows:
+        avg_10d = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
+        low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10}")
+    print("\nLinki Stooq:")
+    links = [_stooq_chart_url(r.ticker) for r in sorted_rows]
+    for link in links:
+        print(link)
+    try:
+        open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
+    except EOFError:
+        open_all = "n"
+    if open_all == "y":
+        for link in links:
+            webbrowser.open_new_tab(link)
+
+
 def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult | None:
     if len(df) < min_days + 5:
         return None
@@ -518,6 +549,7 @@ def run_ichimoku_search(target: str) -> int:
             writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln"])
             for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
                 writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
+        _print_results_with_links(results)
         print(f"\nZapisano CSV: {out_csv}")
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
@@ -592,16 +624,7 @@ def run_ichimoku_search(target: str) -> int:
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
 
-    print("\nWYNIKI (instrumenty spełniające warunki):")
-    if not results:
-        print("Brak wyników.")
-    else:
-        print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10}")
-        print("-" * 98)
-        for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            avg_10d = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
-            low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
-            print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10}")
+    _print_results_with_links(results)
     print(f"\nZapisano CSV: {out_csv}")
     print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
 
