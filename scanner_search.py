@@ -315,6 +315,9 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int) -> int | None:
     right = len(high) - 9
     best_idx = None
     best_score = -1e9
+    global_max = float(high.iloc[left:right].max())
+    if global_max <= 0:
+        return None
     for i in range(left, right):
         win_l = max(0, i - 5)
         win_r = min(len(high), i + 6)
@@ -322,7 +325,9 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int) -> int | None:
             continue
         recency = i / max(len(high) - 1, 1)
         prominence = float(high.iloc[i]) / max(float(high.iloc[max(0, i - 20):i + 1].mean()), 1e-9)
-        score = recency * 2.0 + prominence
+        height_rank = float(high.iloc[i]) / global_max
+        # Prefer dominant highs over merely recent local highs.
+        score = prominence * 1.2 + height_rank * 1.0 + recency * 0.2
         if score > best_score:
             best_score = score
             best_idx = i
@@ -946,6 +951,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_500 = fib_end - rng * 0.5
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
+        if _has_long_sideways(w.iloc[i_peak:i_end + 1], max_days=22, band_pct=0.12):
+            return None
         if corr_low > fib_236:
             return None
         if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
@@ -1053,6 +1060,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     fib_500 = fib_end + rng * 0.5
     fib_618 = fib_end + rng * 0.618
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
+    if _has_long_sideways(w.iloc[i_bottom:i_end + 1], max_days=22, band_pct=0.12):
+        return None
     if corr_high < fib_236:
         return None
     all_touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
