@@ -941,6 +941,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             return None
         anchor_left = max(0, i_start - 3)
         fib_start_idx = int(low.iloc[anchor_left:i_start + 1].idxmin())
+        i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
         rng = fib_end - fib_start
@@ -973,7 +974,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         pattern_idx = touch_idxs[-1] if touch_idxs else i_end
         detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
         # 1-candle: hammer touching 61.8 and closing above 61.8
-        for i in touch_idxs:
+        for i in touch_idxs[:1]:
             c = w.iloc[i]
             if _is_bullish_hammer(c) and _touches_level(c, fib_618) and float(c["Close"]) > fib_618:
                 pattern = "hammer"
@@ -1020,7 +1021,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     pattern_idx = i
                     break
         if pattern == "none":
-            status = "reached_23_6_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
+            status = "reached_23_6_waiting_for_61_8" if not all_touch_idxs else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
         if not next5.empty and (next5["Close"] < stop_loss).any():
@@ -1128,7 +1129,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 pattern_idx = i
                 break
     if pattern == "none":
-        status = "reached_23_6_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
+        status = "reached_23_6_waiting_for_61_8" if not all_touch_idxs else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
     if not next5.empty and (next5["Close"] > stop_loss).any():
