@@ -188,6 +188,58 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         and c2_close > level
     )
 
+def _candle_parts(c: pd.Series) -> tuple[float, float, float, float, float]:
+    o = float(c["Open"]); cl = float(c["Close"]); h = float(c["High"]); l = float(c["Low"])
+    body = abs(cl - o)
+    return o, cl, h, l, body
+
+def _is_doji(c: pd.Series, tol: float = 0.15) -> bool:
+    o, cl, h, l, body = _candle_parts(c)
+    rng = max(h - l, 1e-9)
+    return body / rng <= tol
+
+def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
+    if not (cl1 < o1 and cl2 > o2 and b2 < b1):
+        return False
+    lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
+    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 > level
+
+def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
+    o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
+    if not (cl1 < o1 and cl3 > o3):
+        return False
+    if b2 >= b1 * 0.6:
+        return False
+    if doji_middle and not _is_doji(c2):
+        return False
+    mid1 = (o1 + cl1) / 2.0
+    return cl3 > mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 > level
+
+def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
+    if not (cl1 > o1 and cl2 < o2 and b2 < b1):
+        return False
+    lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
+    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
+
+def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+    o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
+    if not (cl1 > o1 and cl2 < o2 and o2 > cl1):
+        return False
+    mid1 = (o1 + cl1) / 2.0
+    return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
+
+def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
+    o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
+    if not (cl1 > o1 and cl3 < o3):
+        return False
+    if b2 >= b1 * 0.6:
+        return False
+    if doji_middle and not _is_doji(c2):
+        return False
+    mid1 = (o1 + cl1) / 2.0
+    return cl3 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 < level
 def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 21, band_pct: float = 0.08) -> bool:
     if len(df_slice) < max_days:
         return False
@@ -913,6 +965,24 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     pattern = "bullish_piercing_line"
                     pattern_idx = i
                     break
+        if pattern == "none" and touch_idxs:
+            for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
+                if _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+                    pattern = "bullish_harami"
+                    pattern_idx = i
+                    break
+        if pattern == "none" and touch_idxs:
+            for i in range(max(i_peak + 2, touch_idxs[0] + 2), i_end + 1):
+                if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+                    pattern = "morning_star"
+                    pattern_idx = i
+                    break
+        if pattern == "none" and touch_idxs:
+            for i in range(max(i_peak + 2, touch_idxs[0] + 2), i_end + 1):
+                if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+                    pattern = "morning_doji_star"
+                    pattern_idx = i
+                    break
         if pattern == "none":
             status = "reached_38_2_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
@@ -980,6 +1050,30 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             engulf = float(c1["Close"]) > float(c1["Open"]) and float(c2["Close"]) < float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
             if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
                 pattern = "bearish_engulfing"
+                pattern_idx = i
+                break
+    if pattern == "none" and touch_idxs:
+        for i in range(max(i_bottom + 1, touch_idxs[0]), i_end + 1):
+            if _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+                pattern = "bearish_harami"
+                pattern_idx = i
+                break
+    if pattern == "none" and touch_idxs:
+        for i in range(max(i_bottom + 1, touch_idxs[0]), i_end + 1):
+            if _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
+                pattern = "dark_cloud_cover"
+                pattern_idx = i
+                break
+    if pattern == "none" and touch_idxs:
+        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), i_end + 1):
+            if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+                pattern = "evening_star"
+                pattern_idx = i
+                break
+    if pattern == "none" and touch_idxs:
+        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), i_end + 1):
+            if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+                pattern = "evening_doji_star"
                 pattern_idx = i
                 break
     if pattern == "none":
