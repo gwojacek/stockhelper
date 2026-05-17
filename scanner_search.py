@@ -940,13 +940,24 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         i_peak = int(i_peak_sel)
         i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
         if i_start is None or i_peak <= i_start + min_incline_days:
+            left_fallback = max(0, i_peak - 140)
+            right_fallback = i_peak - min_incline_days
+            if right_fallback > left_fallback:
+                i_start = int(low.iloc[left_fallback:right_fallback + 1].idxmin())
+                _log(f"Long: fallback impulse start chosen at index={i_start}.")
+            else:
+                _log("Rejected long: invalid impulse start/peak distance.")
+                return None
+        if i_peak <= i_start + min_incline_days:
             _log("Rejected long: invalid impulse start/peak distance.")
             return None
         i_end = len(w) - 1
         if i_end - i_peak < 8:
             _log("Rejected long: correction leg too short (<8 bars).")
             return None
-        fib_start_idx = int(low.iloc[i_start:i_peak + 1].idxmin())
+        pre_start_left = max(0, i_start - 6)
+        fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
+        _log(f"Long: fib start low searched in [{pre_start_left}, {i_start}] -> idx={fib_start_idx}.")
         i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
