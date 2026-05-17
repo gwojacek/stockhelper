@@ -187,6 +187,22 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         and c2_close > level
     )
 
+def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 21, band_pct: float = 0.08) -> bool:
+    if len(df_slice) < max_days:
+        return False
+    closes = pd.to_numeric(df_slice["Close"], errors="coerce").dropna()
+    if closes.empty:
+        return False
+    for i in range(0, len(closes) - max_days + 1):
+        window = closes.iloc[i:i + max_days]
+        mid = float(window.mean())
+        if mid <= 0:
+            continue
+        rng_pct = (float(window.max()) - float(window.min())) / mid
+        if rng_pct <= band_pct:
+            return True
+    return False
+
 
 
 def _reverse_stooq_symbol(symbol: str) -> str | None:
@@ -779,7 +795,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     if direction == "long":
         i_start = int(low.iloc[:-60].idxmin())
         min_incline_days = 15  # ~3 weeks
-        i_peak = int(close.iloc[i_start + min_incline_days:].idxmax())
+        i_peak = int(high.iloc[i_start + min_incline_days:].idxmax())
         if i_peak <= i_start + min_incline_days:
             return None
         i_end = len(w) - 1
@@ -795,6 +811,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
         if corr_low > fib_382:
+            return None
+        if _has_long_sideways(w.iloc[i_start:i_peak + 1]) or _has_long_sideways(w.iloc[i_peak:i_end + 1]):
             return None
         touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         in_result1_zone = corr_low <= fib_382 and corr_low > fib_618
@@ -834,14 +852,15 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
         if not next5.empty and (next5["Close"] < stop_loss).any():
             status = "invalidated_by_stop_loss"
-        ratio = round((i_peak - i_start) / max(i_end - i_peak, 1), 2)
+        decline_end_idx = touch_idxs[0] if touch_idxs else i_end
+        ratio = round((i_peak - i_start) / max(decline_end_idx - i_peak, 1), 2)
         return FiboScanResult(
             ticker="", direction=direction, status=status,
             incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
             incline_end_date=str(pd.to_datetime(w.iloc[i_peak]["Date"]).date()),
             incline_duration_days=i_peak - i_start,
-            decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
-            decline_duration_days=i_end - i_peak,
+            decline_end_date=str(pd.to_datetime(w.iloc[decline_end_idx]["Date"]).date()),
+            decline_duration_days=decline_end_idx - i_peak,
             incline_decline_duration_ratio=ratio,
             fib_61_8=fib_618,
             first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
@@ -850,7 +869,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     # short setup
     i_start = int(close.iloc[:-60].idxmax())
     min_incline_days = 15
-    i_bottom = int(close.iloc[i_start + min_incline_days:].idxmin())
+    i_bottom = int(low.iloc[i_start + min_incline_days:].idxmin())
     if i_bottom <= i_start + min_incline_days:
         return None
     i_end = len(w) - 1
@@ -896,14 +915,15 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
     if not next5.empty and (next5["Close"] > stop_loss).any():
         status = "invalidated_by_stop_loss"
-    ratio = round((i_bottom - i_start) / max(i_end - i_bottom, 1), 2)
+    decline_end_idx = touch_idxs[0] if touch_idxs else i_end
+    ratio = round((i_bottom - i_start) / max(decline_end_idx - i_bottom, 1), 2)
     return FiboScanResult(
         ticker="", direction=direction, status=status,
         incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
         incline_end_date=str(pd.to_datetime(w.iloc[i_bottom]["Date"]).date()),
         incline_duration_days=i_bottom - i_start,
-        decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
-        decline_duration_days=i_end - i_bottom,
+        decline_end_date=str(pd.to_datetime(w.iloc[decline_end_idx]["Date"]).date()),
+        decline_duration_days=decline_end_idx - i_bottom,
         incline_decline_duration_ratio=ratio,
         fib_61_8=fib_618,
         first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
@@ -917,7 +937,7 @@ def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>8} {'Touch':<12} {'Link':<0}")
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Link':<0}")
         print("-" * 185)
         links = []
     for r in rows1:
@@ -925,7 +945,8 @@ def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]
         link = _stooq_chart_url(r.ticker)
         links.append(link)
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {r.incline_decline_duration_ratio:>8.2f} {r.first_61_8_touch_date:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
+        ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -944,12 +965,8 @@ def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     rows: list[FiboScanResult] = []
-    for idx, ticker in enumerate(members, start=1):
-        display_symbol, _, _, err, _ = _scan_one(ticker, group_name, exchange_suffix)
-        print(f"[{idx}/{len(members)}] fibo {ticker} ({display_symbol})...")
-        if err:
-            print(f"  pominięto ({_compact_error(err)})")
-            continue
+    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None]:
+        idx, ticker = idx_ticker
         instrument = "stock"
         if group_name == "forex":
             instrument = "forex"
@@ -961,19 +978,33 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "commodity":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
+        out_rows: list[FiboScanResult] = []
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
             long_setup = _find_fibo_setup(df, "long")
             if long_setup:
                 long_setup.ticker = ticker
-                rows.append(long_setup)
+                out_rows.append(long_setup)
             if instrument in {"commodity", "forex"}:
                 short_setup = _find_fibo_setup(df, "short")
                 if short_setup:
                     short_setup.ticker = ticker
-                    rows.append(short_setup)
+                    out_rows.append(short_setup)
+            return idx, ticker, out_rows, None
         except Exception as exc:
-            print(f"  pominięto ({_compact_error(str(exc))})")
+            return idx, ticker, [], _compact_error(str(exc))
+
+    max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(members))
+    print(f"[fibo] parallel mode ({max_workers} workers, xdist-style).")
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        fut_map = {ex.submit(_scan_fibo_one, (idx, ticker)): (idx, ticker) for idx, ticker in enumerate(members, start=1)}
+        for fut in as_completed(fut_map):
+            idx, ticker = fut_map[fut]
+            _, _, found, err = fut.result()
+            print(f"[{idx}/{len(members)}] fibo {ticker}...")
+            if err:
+                print(f"  pominięto ({err})")
+            rows.extend(found)
     SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_csv = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
@@ -989,6 +1020,8 @@ def run_fibo_search(target: str) -> int:
         and r.reversal_pattern_name != "none"
         and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
     ]
+    rows2_keys = {(r.ticker, r.direction) for r in rows2}
+    rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
     links = _print_fibo_results(rows1, rows2)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
