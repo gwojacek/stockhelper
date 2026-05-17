@@ -279,6 +279,14 @@ def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) ->
     right = peak_idx - min_days
     if right <= left:
         return None
+    # If a long sideways block exists before the selected peak, treat the breakout
+    # after that block as a newer impulse and avoid anchoring to very old lows.
+    seg = w.iloc[left:peak_idx + 1]
+    sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
+    if sideways_end is not None:
+        candidate_left = left + sideways_end + 1
+        if candidate_left < right:
+            left = candidate_left
     # Use the lowest low in the allowed pre-peak window as impulse base.
     return int(low.iloc[left:right + 1].idxmin())
 
