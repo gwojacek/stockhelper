@@ -275,36 +275,12 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
 
 def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) -> int | None:
     low = pd.to_numeric(w["Low"], errors="coerce")
-    high = pd.to_numeric(w["High"], errors="coerce")
     left = max(0, peak_idx - 140)
     right = peak_idx - min_days
     if right <= left:
         return None
-    best_i = None
-    best_score = -1e9
-    peak_high = float(high.iloc[peak_idx])
-    for i in range(left, right + 1):
-        base = float(low.iloc[i])
-        if base <= 0:
-            continue
-        days = peak_idx - i
-        ret = (peak_high - base) / base
-        if ret <= 0:
-            continue
-        segment = pd.to_numeric(w["Close"].iloc[i:peak_idx + 1], errors="coerce").dropna()
-        if len(segment) < min_days:
-            continue
-        seg_ohlc = w.iloc[i:peak_idx + 1]
-        sideways_end = _latest_sideways_end_offset(seg_ohlc, max_days=22, band_pct=0.12)
-        if sideways_end is not None and sideways_end < len(seg_ohlc) - 1:
-            # Sideways >1 month exists before peak: treat later breakout as a new impulse.
-            continue
-        dd = float(((segment.cummax() - segment) / segment.cummax().replace(0, pd.NA)).max() or 0.0)
-        score = (ret / days) - dd * 0.02  # prefer steeper / cleaner impulse
-        if score > best_score:
-            best_score = score
-            best_i = i
-    return best_i
+    # Use the lowest low in the allowed pre-peak window as impulse base.
+    return int(low.iloc[left:right + 1].idxmin())
 
 
 def _select_peak_long(w: pd.DataFrame, min_incline_days: int) -> int | None:
@@ -1019,28 +995,6 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
                     pattern = "bullish_engulfing"
                     pattern_idx = i
-                    break
-        # fallback near 23.6 when 61.8 was not touched yet:
-        # allow early reversal qualification if correction reached 23.6 and
-        # bullish engulfing forms at/near that level.
-        if pattern == "none" and not touch_idxs and corr_low <= fib_236:
-            for i in range(max(i_peak + 1, 1), i_end + 1):
-                c1, c2 = w.iloc[i - 1], w.iloc[i]
-                engulf = (
-                    float(c1["Close"]) < float(c1["Open"])
-                    and float(c2["Close"]) > float(c2["Open"])
-                    and float(c2["Open"]) < float(c1["Close"])
-                    and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
-                    and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
-                )
-                if (
-                    engulf
-                    and (_touches_level(c1, fib_236) or _touches_level(c2, fib_236))
-                    and float(c2["Close"]) > fib_236
-                ):
-                    pattern = "bullish_engulfing_23_6"
-                    pattern_idx = i
-                    _log(f"Long: matched early engulfing near 23.6 at idx={i}.")
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
