@@ -1220,7 +1220,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     )
 
 
-def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]) -> list[str]:
+def _print_fibo_results(rows1: list[FiboScanResult]) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (current 23.6..61.8 OR 61.8+valid formation):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
@@ -1236,19 +1236,6 @@ def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
         print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
-    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
-    if not rows2:
-        print("Brak wyników.")
-        return links
-    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Close':>10} {'Link':<0}")
-    print("-" * 140)
-    for r in rows2:
-        link = _stooq_chart_url(r.ticker)
-        if link not in links:
-            links.append(link)
-        incline = f"{r.incline_start_date}->{r.incline_end_date}"
-        ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 
@@ -1324,13 +1311,6 @@ def run_fibo_search(target: str) -> int:
         w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
         for row in rows:
             w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
-    two_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=62)
-    rows2 = [
-        r for r in rows
-        if r.status == "valid_reversal"
-        and r.reversal_pattern_name != "none"
-        and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
-    ]
     rows1 = []
     two_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=62)
     for r in rows:
@@ -1350,9 +1330,7 @@ def run_fibo_search(target: str) -> int:
             rows1.append(r)
             continue
     rows1 = sorted(rows1, key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date), reverse=False)
-    rows2_keys = {(r.ticker, r.direction) for r in rows2}
-    rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
-    links = _print_fibo_results(rows1, rows2)
+    links = _print_fibo_results(rows1)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
     if links:
