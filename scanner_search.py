@@ -846,10 +846,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
             return None
         if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
             return None
-        touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
-        if not touch_idxs and corr_low > fib_382:
-            return None
-        if touch_idxs and len(touch_idxs) > 3:
+        all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
+        touch_idxs: list[int] = []
+        if all_touch_idxs:
+            first_touch = all_touch_idxs[0]
+            for i in range(first_touch, min(first_touch + 3, i_end + 1)):
+                if low.iloc[i] <= fib_618 <= high.iloc[i]:
+                    touch_idxs.append(i)
+                else:
+                    break
+        if not all_touch_idxs and corr_low > fib_382:
             return None
         status = "valid_reversal"
         pattern = "none"
@@ -883,7 +889,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
         if not next5.empty and (next5["Close"] < stop_loss).any():
             status = "invalidated_by_stop_loss"
-        decline_end_idx = touch_idxs[0] if touch_idxs else i_end
+        decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
         ratio = round((i_peak - i_start) / max(decline_end_idx - i_peak, 1), 2)
         return FiboScanResult(
             ticker="", direction=direction, status=status,
@@ -918,10 +924,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
     if corr_high < fib_382:
         return None
-    touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
-    if not touch_idxs and corr_high < fib_382:
-        return None
-    if touch_idxs and len(touch_idxs) > 3:
+    all_touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
+    touch_idxs: list[int] = []
+    if all_touch_idxs:
+        first_touch = all_touch_idxs[0]
+        for i in range(first_touch, min(first_touch + 3, i_end + 1)):
+            if low.iloc[i] <= fib_618 <= high.iloc[i]:
+                touch_idxs.append(i)
+            else:
+                break
+    if not all_touch_idxs and corr_high < fib_382:
         return None
     status = "valid_reversal"
     pattern = "none"
@@ -946,7 +958,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
     if not next5.empty and (next5["Close"] > stop_loss).any():
         status = "invalidated_by_stop_loss"
-    decline_end_idx = touch_idxs[0] if touch_idxs else i_end
+    decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
     ratio = round((i_bottom - i_start) / max(decline_end_idx - i_bottom, 1), 2)
     return FiboScanResult(
         ticker="", direction=direction, status=status,
@@ -1008,6 +1020,8 @@ def run_fibo_search(target: str) -> int:
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
+        if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+            fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
