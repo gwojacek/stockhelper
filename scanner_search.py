@@ -1020,6 +1020,28 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     pattern = "bullish_engulfing"
                     pattern_idx = i
                     break
+        # fallback near 23.6 when 61.8 was not touched yet:
+        # allow early reversal qualification if correction reached 23.6 and
+        # bullish engulfing forms at/near that level.
+        if pattern == "none" and not touch_idxs and corr_low <= fib_236:
+            for i in range(max(i_peak + 1, 1), i_end + 1):
+                c1, c2 = w.iloc[i - 1], w.iloc[i]
+                engulf = (
+                    float(c1["Close"]) < float(c1["Open"])
+                    and float(c2["Close"]) > float(c2["Open"])
+                    and float(c2["Open"]) < float(c1["Close"])
+                    and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
+                    and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+                )
+                if (
+                    engulf
+                    and (_touches_level(c1, fib_236) or _touches_level(c2, fib_236))
+                    and float(c2["Close"]) > fib_236
+                ):
+                    pattern = "bullish_engulfing_23_6"
+                    pattern_idx = i
+                    _log(f"Long: matched early engulfing near 23.6 at idx={i}.")
+                    break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
