@@ -960,7 +960,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
-                engulf = float(c1["Close"]) < float(c1["Open"]) and float(c2["Close"]) > float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+                engulf = (
+                    float(c1["Close"]) < float(c1["Open"])
+                    and float(c2["Close"]) > float(c2["Open"])
+                    and float(c2["Open"]) < float(c1["Close"])
+                    and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
+                    and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+                )
                 if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
                     pattern = "bullish_engulfing"
                     pattern_idx = i
@@ -1055,7 +1061,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
             c1, c2 = w.iloc[i - 1], w.iloc[i]
-            engulf = float(c1["Close"]) > float(c1["Open"]) and float(c2["Close"]) < float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+            engulf = (
+                float(c1["Close"]) > float(c1["Open"])
+                and float(c2["Close"]) < float(c2["Open"])
+                and float(c2["Open"]) > float(c1["Close"])
+                and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
+                and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+            )
             if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
                 pattern = "bearish_engulfing"
                 pattern_idx = i
