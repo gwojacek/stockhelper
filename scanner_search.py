@@ -1021,6 +1021,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     break
         crossed_618 = corr_low <= fib_618
         if pattern == "none":
+            if crossed_618:
+                return None
             status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
@@ -1130,6 +1132,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 break
     crossed_618 = corr_high >= fib_618
     if pattern == "none":
+        if crossed_618:
+            return None
         status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
