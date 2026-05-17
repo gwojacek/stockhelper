@@ -63,6 +63,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
     parser.add_argument("-ichimoku_search", "-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
     parser.add_argument("-fibo_search", dest="fibo_search_target", help="Run fibonacci pullback scanner for index/commodities/forex")
+    parser.add_argument("-explain", dest="fibo_explain_target", help="Explain fibo classification for a single symbol (use with -fibo_search)")
     parser.add_argument("-d", "--search-debug", action="store_true", help="Verbose Stooq scraping logs for -ichimoku_search")
     parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
     parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
@@ -91,6 +92,9 @@ def main() -> int:
         from scanner_search import run_ichimoku_search
         return run_ichimoku_search(args.search_target)
     if args.fibo_search_target:
+        if args.fibo_explain_target:
+            from scanner_search import run_fibo_explain
+            return run_fibo_explain(args.fibo_search_target, args.fibo_explain_target)
         from scanner_search import run_fibo_search
         return run_fibo_search(args.fibo_search_target)
 

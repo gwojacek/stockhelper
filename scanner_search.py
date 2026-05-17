@@ -915,8 +915,12 @@ def run_ichimoku_search(target: str) -> int:
     return 0
 
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0) -> FiboScanResult | None:
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None) -> FiboScanResult | None:
+    def _log(msg: str) -> None:
+        if explain is not None:
+            explain.append(msg)
     if len(df) < 120:
+        _log("Rejected: less than 120 candles.")
         return None
     tail_len = 220 + max(end_offset, 0)
     w_full = df.tail(tail_len).reset_index(drop=True)
@@ -931,13 +935,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         min_incline_days = 10  # ~2 weeks
         i_peak_sel = _select_peak_long(w, min_incline_days)
         if i_peak_sel is None:
+            _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
         i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
         if i_start is None or i_peak <= i_start + min_incline_days:
+            _log("Rejected long: invalid impulse start/peak distance.")
             return None
         i_end = len(w) - 1
         if i_end - i_peak < 8:
+            _log("Rejected long: correction leg too short (<8 bars).")
             return None
         fib_start_idx = int(low.iloc[i_start:i_peak + 1].idxmin())
         i_start = fib_start_idx
@@ -945,6 +952,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_end = float(high.iloc[i_peak])
         rng = fib_end - fib_start
         if rng <= 0:
+            _log("Rejected long: non-positive fib range.")
             return None
         fib_236 = fib_end - rng * 0.236
         fib_382 = fib_end - rng * 0.382
@@ -952,10 +960,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
         if _has_long_sideways(w.iloc[i_peak:i_end + 1], max_days=22, band_pct=0.12):
+            _log("Rejected long: correction is sideways/flat.")
             return None
         if corr_low > fib_236:
+            _log("Rejected long: correction never reached 23.6.")
             return None
         if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
+            _log("Rejected long: impulse is sideways/flat.")
             return None
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
@@ -966,6 +977,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     touch_idxs.append(i)
                 else:
                     break
+            _log(f"Long touches 61.8: all={all_touch_idxs}, contiguous_first_block={touch_idxs}")
+        else:
+            _log("Long: no 61.8 touches yet.")
         if not all_touch_idxs and corr_low > fib_236:
             return None
         status = "valid_reversal"
@@ -990,38 +1004,45 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                     and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
                 )
-                if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
+                includes_first_touch = touch_idxs[0] in {i - 1, i}
+                if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
                     pattern = "bullish_engulfing"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
-                if _is_bullish_piercing_line(c1, c2, fib_618):
+                includes_first_touch = touch_idxs[0] in {i - 1, i}
+                if includes_first_touch and _is_bullish_piercing_line(c1, c2, fib_618):
                     pattern = "bullish_piercing_line"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
-                if _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+                includes_first_touch = touch_idxs[0] in {i - 1, i}
+                if includes_first_touch and _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                     pattern = "bullish_harami"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+                includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
                     pattern = "morning_star"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+                includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
                     pattern = "morning_doji_star"
                     pattern_idx = i
                     break
         crossed_618 = corr_low <= fib_618
+        _log(f"Long pattern={pattern}, crossed_618={crossed_618}, corr_low={corr_low:.4f}, fib_618={fib_618:.4f}")
         if pattern == "none":
             if crossed_618:
+                _log("Rejected long: 61.8 crossed but no valid pattern.")
                 return None
             status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
@@ -1053,14 +1074,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     min_incline_days = 10
     i_bottom = int(low.iloc[i_start + min_incline_days:].idxmin())
     if i_bottom <= i_start + min_incline_days:
+        _log("Rejected short: invalid impulse start/bottom distance.")
         return None
     i_end = len(w) - 1
     if i_end - i_bottom < 8:
+        _log("Rejected short: correction leg too short (<8 bars).")
         return None
     fib_start = float(high.iloc[i_start])
     fib_end = float(low.iloc[i_bottom])
     rng = fib_start - fib_end
     if rng <= 0:
+        _log("Rejected short: non-positive fib range.")
         return None
     fib_236 = fib_end + rng * 0.236
     fib_382 = fib_end + rng * 0.382
@@ -1068,8 +1092,10 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     fib_618 = fib_end + rng * 0.618
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
     if _has_long_sideways(w.iloc[i_bottom:i_end + 1], max_days=22, band_pct=0.12):
+        _log("Rejected short: correction is sideways/flat.")
         return None
     if corr_high < fib_236:
+        _log("Rejected short: correction never reached 23.6.")
         return None
     all_touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
     touch_idxs: list[int] = []
@@ -1080,6 +1106,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 touch_idxs.append(i)
             else:
                 break
+        _log(f"Short touches 61.8: all={all_touch_idxs}, contiguous_first_block={touch_idxs}")
+    else:
+        _log("Short: no 61.8 touches yet.")
     if not all_touch_idxs and corr_high < fib_236:
         return None
     status = "valid_reversal"
@@ -1102,37 +1131,44 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                 and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
             )
-            if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
+            includes_first_touch = touch_idxs[0] in {i - 1, i}
+            if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
                 pattern = "bearish_engulfing"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            if _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_first_touch = touch_idxs[0] in {i - 1, i}
+            if includes_first_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "bearish_harami"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            if _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_first_touch = touch_idxs[0] in {i - 1, i}
+            if includes_first_touch and _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "dark_cloud_cover"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+            includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+            includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
                 pattern = "evening_doji_star"
                 pattern_idx = i
                 break
     crossed_618 = corr_high >= fib_618
+    _log(f"Short pattern={pattern}, crossed_618={crossed_618}, corr_high={corr_high:.4f}, fib_618={fib_618:.4f}")
     if pattern == "none":
         if crossed_618:
+            _log("Rejected short: 61.8 crossed but no valid pattern.")
             return None
         status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
@@ -1298,6 +1334,37 @@ def run_fibo_search(target: str) -> int:
         if open_all == "y":
             for link in links:
                 webbrowser.open_new_tab(link)
+    return 0
+
+
+def run_fibo_explain(scope: str, symbol: str) -> int:
+    group_name, _, _, exchange_suffix = _get_members(scope)
+    ticker = symbol.strip().upper()
+    instrument = "stock"
+    if group_name == "forex":
+        instrument = "forex"
+    elif group_name in {"commodities", "indexes"}:
+        instrument = "commodity"
+    elif group_name == "single":
+        detected = detect_instrument_type(ticker, None)
+        instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+    fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
+    if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+        fetch_symbol = f"{fetch_symbol}.WA"
+    if instrument == "commodity":
+        fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
+    print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
+    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+    for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
+        print(f"\n=== Direction: {direction} ===")
+        for off in [0, 5, 10, 15, 20, 30, 40]:
+            steps: list[str] = []
+            res = _find_fibo_setup(df, direction, end_offset=off, explain=steps)
+            print(f"- offset={off}: {'MATCH' if res else 'NO MATCH'}")
+            if res:
+                print(f"  status={res.status}, pattern={res.reversal_pattern_name}, touch_date={res.first_61_8_touch_date}, close={res.current_close:.4f}")
+            for s in steps:
+                print(f"    • {s}")
     return 0
 
 
