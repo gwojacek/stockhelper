@@ -247,21 +247,30 @@ def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, 
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 < level
-def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 21, band_pct: float = 0.08) -> bool:
+def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> int | None:
     if len(df_slice) < max_days:
-        return False
-    closes = pd.to_numeric(df_slice["Close"], errors="coerce").dropna()
-    if closes.empty:
-        return False
-    for i in range(0, len(closes) - max_days + 1):
-        window = closes.iloc[i:i + max_days]
-        mid = float(window.mean())
+        return None
+    highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
+    lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
+    best_end: int | None = None
+    for i in range(0, len(df_slice) - max_days + 1):
+        hwin = highs.iloc[i:i + max_days]
+        lwin = lows.iloc[i:i + max_days]
+        hi = float(hwin.max())
+        lo = float(lwin.min())
+        mid = (hi + lo) / 2.0
         if mid <= 0:
             continue
-        rng_pct = (float(window.max()) - float(window.min())) / mid
+        rng_pct = (hi - lo) / mid
         if rng_pct <= band_pct:
-            return True
-    return False
+            best_end = i + max_days - 1
+    return best_end
+
+
+def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> bool:
+    if len(df_slice) < max_days:
+        return False
+    return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct) is not None
 
 
 def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) -> int | None:
@@ -284,6 +293,11 @@ def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) ->
             continue
         segment = pd.to_numeric(w["Close"].iloc[i:peak_idx + 1], errors="coerce").dropna()
         if len(segment) < min_days:
+            continue
+        seg_ohlc = w.iloc[i:peak_idx + 1]
+        sideways_end = _latest_sideways_end_offset(seg_ohlc, max_days=22, band_pct=0.12)
+        if sideways_end is not None and sideways_end < len(seg_ohlc) - 1:
+            # Sideways >1 month exists before peak: treat later breakout as a new impulse.
             continue
         dd = float(((segment.cummax() - segment) / segment.cummax().replace(0, pd.NA)).max() or 0.0)
         score = (ret / days) - dd * 0.02  # prefer steeper / cleaner impulse
