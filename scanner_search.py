@@ -1044,6 +1044,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             if crossed_618:
                 _log("Rejected long: 61.8 crossed but no valid pattern.")
                 return None
+            if float(close.iloc[-1]) > fib_236:
+                _log("Rejected long: current close is above 23.6, so not waiting-for-61.8 anymore.")
+                return None
             status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
@@ -1170,6 +1173,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if crossed_618:
             _log("Rejected short: 61.8 crossed but no valid pattern.")
             return None
+        if float(close.iloc[-1]) < fib_236:
+            _log("Rejected short: current close is below 23.6, so not waiting-for-61.8 anymore.")
+            return None
         status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
@@ -1256,7 +1262,10 @@ def run_fibo_search(target: str) -> int:
             for off in [0, 5, 10, 15, 20, 30, 40]:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
-                    long_setup = cand
+                    if off == 0:
+                        long_setup = cand
+                    elif cand.status == "valid_reversal":
+                        long_setup = cand
                     if cand.status == "valid_reversal":
                         break
             if long_setup:
@@ -1267,7 +1276,10 @@ def run_fibo_search(target: str) -> int:
                 for off in [0, 5, 10, 15, 20, 30, 40]:
                     cand = _find_fibo_setup(df, "short", end_offset=off)
                     if cand:
-                        short_setup = cand
+                        if off == 0:
+                            short_setup = cand
+                        elif cand.status == "valid_reversal":
+                            short_setup = cand
                         if cand.status == "valid_reversal":
                             break
                 if short_setup:
