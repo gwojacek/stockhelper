@@ -1000,13 +1000,15 @@ def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]
     if not rows2:
         print("Brak wyników.")
         return links
-    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Touch':<12} {'Close':>10} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Close':>10} {'Link':<0}")
     print("-" * 140)
     for r in rows2:
         link = _stooq_chart_url(r.ticker)
         if link not in links:
             links.append(link)
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {r.first_61_8_touch_date:<12} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+        incline = f"{r.incline_start_date}->{r.incline_end_date}"
+        ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 
@@ -1084,8 +1086,13 @@ def run_fibo_search(target: str) -> int:
         and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
     ]
     rows1 = []
+    two_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=62)
     for r in rows:
-        if r.status == "valid_reversal" and r.reversal_pattern_name != "none":
+        if (
+            r.status == "valid_reversal"
+            and r.reversal_pattern_name != "none"
+            and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
+        ):
             rows1.append(r)
             continue
         if r.direction == "long" and r.status == "reached_38_2_waiting_for_61_8" and r.fib_61_8 <= r.current_close <= r.fib_38_2:
