@@ -234,6 +234,28 @@ def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) ->
     return best_i
 
 
+def _select_peak_long(w: pd.DataFrame, min_incline_days: int) -> int | None:
+    high = pd.to_numeric(w["High"], errors="coerce")
+    if len(high) < min_incline_days + 10:
+        return None
+    left = min_incline_days
+    right = len(high) - 9
+    best_idx = None
+    best_score = -1e9
+    for i in range(left, right):
+        win_l = max(0, i - 5)
+        win_r = min(len(high), i + 6)
+        if float(high.iloc[i]) < float(high.iloc[win_l:win_r].max()):
+            continue
+        recency = i / max(len(high) - 1, 1)
+        prominence = float(high.iloc[i]) / max(float(high.iloc[max(0, i - 20):i + 1].mean()), 1e-9)
+        score = recency * 2.0 + prominence
+        if score > best_score:
+            best_score = score
+            best_idx = i
+    return best_idx
+
+
 
 def _reverse_stooq_symbol(symbol: str) -> str | None:
     target = (symbol or "").strip().upper()
@@ -829,7 +851,10 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     low = w["Low"]
     if direction == "long":
         min_incline_days = 15  # ~3 weeks
-        i_peak = int(high.iloc[:-8].idxmax())
+        i_peak_sel = _select_peak_long(w, min_incline_days)
+        if i_peak_sel is None:
+            return None
+        i_peak = int(i_peak_sel)
         i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
         if i_start is None or i_peak <= i_start + min_incline_days:
             return None
