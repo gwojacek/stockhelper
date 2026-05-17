@@ -928,7 +928,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     high = w["High"]
     low = w["Low"]
     if direction == "long":
-        min_incline_days = 15  # ~3 weeks
+        min_incline_days = 10  # ~2 weeks
         i_peak_sel = _select_peak_long(w, min_incline_days)
         if i_peak_sel is None:
             return None
@@ -1026,7 +1026,11 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if not next5.empty and (next5["Close"] < stop_loss).any():
             status = "invalidated_by_stop_loss"
         decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
+        if (decline_end_idx - i_peak) < 2:
+            return None
         ratio = round((i_peak - i_start) / max(decline_end_idx - i_peak, 1), 2)
+        if ratio > 8.0:
+            return None
         return FiboScanResult(
             ticker="", direction=direction, status=status,
             incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
@@ -1043,7 +1047,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         )
     # short setup
     i_start = int(close.iloc[:-60].idxmax())
-    min_incline_days = 15
+    min_incline_days = 10
     i_bottom = int(low.iloc[i_start + min_incline_days:].idxmin())
     if i_bottom <= i_start + min_incline_days:
         return None
@@ -1130,7 +1134,11 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     if not next5.empty and (next5["Close"] > stop_loss).any():
         status = "invalidated_by_stop_loss"
     decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
+    if (decline_end_idx - i_bottom) < 2:
+        return None
     ratio = round((i_bottom - i_start) / max(decline_end_idx - i_bottom, 1), 2)
+    if ratio > 8.0:
+        return None
     return FiboScanResult(
         ticker="", direction=direction, status=status,
         incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
