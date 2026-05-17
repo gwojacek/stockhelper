@@ -939,8 +939,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         i_end = len(w) - 1
         if i_end - i_peak < 8:
             return None
-        anchor_left = max(0, i_start - 3)
-        fib_start_idx = int(low.iloc[anchor_left:i_start + 1].idxmin())
+        fib_start_idx = int(low.iloc[i_start:i_peak + 1].idxmin())
         i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
@@ -1270,6 +1269,8 @@ def run_fibo_search(target: str) -> int:
             and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
         ):
             rows1.append(r)
+            continue
+        if r.status == "touched_61_8_no_pattern":
             continue
         if r.direction == "long" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_61_8 <= r.current_close <= r.fib_23_6:
             rows1.append(r)
