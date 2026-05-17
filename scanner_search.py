@@ -47,7 +47,7 @@ WIG_SEARCH_TICKERS = [
     "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KGN","RWL","KOM","KPD","KPL",
     "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","GKI","MLK","MNC","MON",
     "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPS","PRC",
-    "PRT","QRS","NVG","RBW","RLP","RMK","RNK","RPC","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
+    "PRT","QRS","NVG","RBW","RLP","RMK","RNK","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
     "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WXF","ZEP","MGT","ZMT","PGV","ZUE",
     "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
     "BLO","SVE","CLD","CPR","EAH","IMS","MDG","PHR","DAT","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
@@ -202,6 +202,35 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 21, band_pct: flo
         if rng_pct <= band_pct:
             return True
     return False
+
+
+def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) -> int | None:
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    high = pd.to_numeric(w["High"], errors="coerce")
+    left = max(0, peak_idx - 140)
+    right = peak_idx - min_days
+    if right <= left:
+        return None
+    best_i = None
+    best_score = -1e9
+    peak_high = float(high.iloc[peak_idx])
+    for i in range(left, right + 1):
+        base = float(low.iloc[i])
+        if base <= 0:
+            continue
+        days = peak_idx - i
+        ret = (peak_high - base) / base
+        if ret <= 0:
+            continue
+        segment = pd.to_numeric(w["Close"].iloc[i:peak_idx + 1], errors="coerce").dropna()
+        if len(segment) < min_days:
+            continue
+        dd = float(((segment.cummax() - segment) / segment.cummax().replace(0, pd.NA)).max() or 0.0)
+        score = (ret / days) - dd * 0.02  # prefer steeper / cleaner impulse
+        if score > best_score:
+            best_score = score
+            best_i = i
+    return best_i
 
 
 
@@ -793,10 +822,10 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
     high = w["High"]
     low = w["Low"]
     if direction == "long":
-        i_start = int(low.iloc[:-60].idxmin())
         min_incline_days = 15  # ~3 weeks
-        i_peak = int(high.iloc[i_start + min_incline_days:].idxmax())
-        if i_peak <= i_start + min_incline_days:
+        i_peak = int(high.iloc[:-8].idxmax())
+        i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
+        if i_start is None or i_peak <= i_start + min_incline_days:
             return None
         i_end = len(w) - 1
         if i_end - i_peak < 8:
@@ -812,7 +841,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResul
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
         if corr_low > fib_382:
             return None
-        if _has_long_sideways(w.iloc[i_start:i_peak + 1]) or _has_long_sideways(w.iloc[i_peak:i_end + 1]):
+        if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
             return None
         touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         in_result1_zone = corr_low <= fib_382 and corr_low > fib_618
