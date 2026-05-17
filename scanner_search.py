@@ -815,10 +815,15 @@ def run_ichimoku_search(target: str) -> int:
     return 0
 
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long") -> FiboScanResult | None:
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0) -> FiboScanResult | None:
     if len(df) < 120:
         return None
-    w = df.tail(220).reset_index(drop=True)
+    tail_len = 220 + max(end_offset, 0)
+    w_full = df.tail(tail_len).reset_index(drop=True)
+    if end_offset > 0:
+        w = w_full.iloc[:-end_offset].reset_index(drop=True)
+    else:
+        w = w_full
     close = w["Close"]
     high = w["High"]
     low = w["Low"]
@@ -1027,12 +1032,25 @@ def run_fibo_search(target: str) -> int:
         out_rows: list[FiboScanResult] = []
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
-            long_setup = _find_fibo_setup(df, "long")
+            # Try multiple end offsets so older (but still recent) valid formations are not missed.
+            long_setup = None
+            for off in [0, 5, 10, 15, 20, 30, 40]:
+                cand = _find_fibo_setup(df, "long", end_offset=off)
+                if cand:
+                    long_setup = cand
+                    if cand.status == "valid_reversal":
+                        break
             if long_setup:
                 long_setup.ticker = ticker
                 out_rows.append(long_setup)
             if instrument in {"commodity", "forex"}:
-                short_setup = _find_fibo_setup(df, "short")
+                short_setup = None
+                for off in [0, 5, 10, 15, 20, 30, 40]:
+                    cand = _find_fibo_setup(df, "short", end_offset=off)
+                    if cand:
+                        short_setup = cand
+                        if cand.status == "valid_reversal":
+                            break
                 if short_setup:
                     short_setup.ticker = ticker
                     out_rows.append(short_setup)
@@ -1058,12 +1076,12 @@ def run_fibo_search(target: str) -> int:
         w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
         for row in rows:
             w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
-    three_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=92)
+    two_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=62)
     rows2 = [
         r for r in rows
         if r.status == "valid_reversal"
         and r.reversal_pattern_name != "none"
-        and pd.Timestamp(r.first_61_8_touch_date) >= three_months_ago
+        and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
     ]
     rows1 = []
     for r in rows:
