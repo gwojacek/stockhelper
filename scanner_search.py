@@ -207,11 +207,14 @@ def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
 
 def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
+    c2_close = float(c2["Close"])
     if not (cl1 < o1 and cl3 > o3):
         return False
     if b2 >= b1 * 0.6:
         return False
     if doji_middle and not _is_doji(c2):
+        return False
+    if not (c2_close <= min(cl1, cl3)):
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 > mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 > level
@@ -232,11 +235,14 @@ def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
 
 def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
+    c2_close = float(c2["Close"])
     if not (cl1 > o1 and cl3 < o3):
         return False
     if b2 >= b1 * 0.6:
         return False
     if doji_middle and not _is_doji(c2):
+        return False
+    if not (c2_close >= max(cl1, cl3)):
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 < level
@@ -942,6 +948,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         status = "valid_reversal"
         pattern = "none"
         pattern_idx = touch_idxs[-1] if touch_idxs else i_end
+        detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
         # 1-candle: hammer touching 61.8 and closing above 61.8
         for i in touch_idxs:
             c = w.iloc[i]
@@ -951,7 +958,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 break
         # 2-candle: bullish engulfing, at least one candle touches 61.8, second close > 61.8
         if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
+            for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
                 engulf = float(c1["Close"]) < float(c1["Open"]) and float(c2["Close"]) > float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
                 if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
@@ -959,26 +966,26 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
+            for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
                 if _is_bullish_piercing_line(c1, c2, fib_618):
                     pattern = "bullish_piercing_line"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 1, touch_idxs[0]), i_end + 1):
+            for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 if _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                     pattern = "bullish_harami"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 2, touch_idxs[0] + 2), i_end + 1):
+            for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
                 if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
                     pattern = "morning_star"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 2, touch_idxs[0] + 2), i_end + 1):
+            for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
                 if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
                     pattern = "morning_doji_star"
                     pattern_idx = i
@@ -1038,6 +1045,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     status = "valid_reversal"
     pattern = "none"
     pattern_idx = touch_idxs[-1] if touch_idxs else i_end
+    detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
     for i in touch_idxs:
         c = w.iloc[i]
         if _is_bearish_shooting_star(c) and _touches_level(c, fib_618) and float(c["Close"]) < fib_618:
@@ -1045,7 +1053,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             pattern_idx = i
             break
     if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 1, touch_idxs[0]), i_end + 1):
+        for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
             c1, c2 = w.iloc[i - 1], w.iloc[i]
             engulf = float(c1["Close"]) > float(c1["Open"]) and float(c2["Close"]) < float(c2["Open"]) and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"])) and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
             if engulf and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
@@ -1053,25 +1061,25 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 1, touch_idxs[0]), i_end + 1):
+        for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
             if _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "bearish_harami"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 1, touch_idxs[0]), i_end + 1):
+        for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
             if _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "dark_cloud_cover"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), i_end + 1):
+        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
             if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), i_end + 1):
+        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
             if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
                 pattern = "evening_doji_star"
                 pattern_idx = i
