@@ -143,6 +143,7 @@ class FiboScanResult:
     decline_end_date: str
     decline_duration_days: int
     incline_decline_duration_ratio: float
+    fib_23_6: float
     fib_38_2: float
     fib_61_8: float
     first_61_8_touch_date: str
@@ -926,11 +927,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         rng = fib_end - fib_start
         if rng <= 0:
             return None
+        fib_236 = fib_end - rng * 0.236
         fib_382 = fib_end - rng * 0.382
         fib_500 = fib_end - rng * 0.5
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
-        if corr_low > fib_382:
+        if corr_low > fib_236:
             return None
         if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
             return None
@@ -943,7 +945,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     touch_idxs.append(i)
                 else:
                     break
-        if not all_touch_idxs and corr_low > fib_382:
+        if not all_touch_idxs and corr_low > fib_236:
             return None
         status = "valid_reversal"
         pattern = "none"
@@ -997,7 +999,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     pattern_idx = i
                     break
         if pattern == "none":
-            status = "reached_38_2_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
+            status = "reached_23_6_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
         if not next5.empty and (next5["Close"] < stop_loss).any():
@@ -1012,6 +1014,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             decline_end_date=str(pd.to_datetime(w.iloc[decline_end_idx]["Date"]).date()),
             decline_duration_days=decline_end_idx - i_peak,
             incline_decline_duration_ratio=ratio,
+            fib_23_6=fib_236,
             fib_38_2=fib_382,
             fib_61_8=fib_618,
             first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
@@ -1031,11 +1034,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     rng = fib_start - fib_end
     if rng <= 0:
         return None
+    fib_236 = fib_end + rng * 0.236
     fib_382 = fib_end + rng * 0.382
     fib_500 = fib_end + rng * 0.5
     fib_618 = fib_end + rng * 0.618
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
-    if corr_high < fib_382:
+    if corr_high < fib_236:
         return None
     all_touch_idxs = [i for i in range(i_bottom, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
     touch_idxs: list[int] = []
@@ -1046,7 +1050,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 touch_idxs.append(i)
             else:
                 break
-    if not all_touch_idxs and corr_high < fib_382:
+    if not all_touch_idxs and corr_high < fib_236:
         return None
     status = "valid_reversal"
     pattern = "none"
@@ -1097,7 +1101,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 pattern_idx = i
                 break
     if pattern == "none":
-        status = "reached_38_2_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
+        status = "reached_23_6_waiting_for_61_8" if not touch_idxs else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
     if not next5.empty and (next5["Close"] > stop_loss).any():
@@ -1112,6 +1116,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         decline_end_date=str(pd.to_datetime(w.iloc[decline_end_idx]["Date"]).date()),
         decline_duration_days=decline_end_idx - i_bottom,
         incline_decline_duration_ratio=ratio,
+        fib_23_6=fib_236,
         fib_38_2=fib_382,
         fib_61_8=fib_618,
         first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
@@ -1120,7 +1125,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
 
 
 def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]) -> list[str]:
-    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (current 38.2..61.8 OR 61.8+valid formation):{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (current 23.6..61.8 OR 61.8+valid formation):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
         links = []
@@ -1234,10 +1239,10 @@ def run_fibo_search(target: str) -> int:
         ):
             rows1.append(r)
             continue
-        if r.direction == "long" and r.status == "reached_38_2_waiting_for_61_8" and r.fib_61_8 <= r.current_close <= r.fib_38_2:
+        if r.direction == "long" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_61_8 <= r.current_close <= r.fib_23_6:
             rows1.append(r)
             continue
-        if r.direction == "short" and r.status == "reached_38_2_waiting_for_61_8" and r.fib_38_2 <= r.current_close <= r.fib_61_8:
+        if r.direction == "short" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_23_6 <= r.current_close <= r.fib_61_8:
             rows1.append(r)
             continue
     rows1 = sorted(rows1, key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date), reverse=False)
