@@ -1233,6 +1233,10 @@ def _print_fibo_results(
         print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
         print("-" * 185)
         links = []
+    top3_avg_keys: set[tuple[str, str, str, str]] = set()
+    if avg_turnover_10d_by_key:
+        top3 = sorted(avg_turnover_10d_by_key.items(), key=lambda kv: kv[1], reverse=True)[:3]
+        top3_avg_keys = {k for k, _ in top3}
     for r in rows1:
         color = ANSI_GREEN if r.status == "valid_reversal" else ANSI_YELLOW if r.status == "touched_61_8_no_pattern" else "\033[31m"
         link = _stooq_chart_url(r.ticker)
@@ -1240,10 +1244,11 @@ def _print_fibo_results(
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
         avg_turn = "-"
+        row_key = (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         if avg_turnover_10d_by_key is not None:
-            key = (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
-            if key in avg_turnover_10d_by_key:
-                avg_turn = f"{avg_turnover_10d_by_key[key]:,.0f}"
+            if row_key in avg_turnover_10d_by_key:
+                avg_turn = f"{avg_turnover_10d_by_key[row_key]:,.0f}"
+        avg_col = "\033[38;5;220m" if row_key in top3_avg_keys else ANSI_RESET
         near_txt = "-"
         near_col = ANSI_YELLOW
         try:
@@ -1254,7 +1259,7 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_turn:>12} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -1480,7 +1485,14 @@ def run_fibo_search(target: str) -> int:
     rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows1 = sorted(
         rows1,
-        key=lambda r: (r.ticker, r.direction, r.status != "valid_reversal", r.incline_start_date, r.first_61_8_touch_date),
+        key=lambda r: (
+            r.status != "valid_reversal",
+            abs(float(r.current_close) - float(r.fib_61_8)),
+            r.ticker,
+            r.direction,
+            r.incline_start_date,
+            r.first_61_8_touch_date,
+        ),
         reverse=False,
     )
     rows2 = sorted(
