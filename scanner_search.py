@@ -314,12 +314,12 @@ def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) ->
     return int(low.iloc[left:right + 1].idxmin())
 
 
-def _select_peak_long(w: pd.DataFrame, min_incline_days: int) -> int | None:
+def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int = 8) -> int | None:
     high = pd.to_numeric(w["High"], errors="coerce")
     if len(high) < min_incline_days + 10:
         return None
     left = min_incline_days
-    right = len(high) - 9
+    right = len(high) - min_tail_bars
     best_idx = None
     best_score = -1e9
     global_max = float(high.iloc[left:right].max())
@@ -940,7 +940,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     low = w["Low"]
     if direction == "long":
         min_incline_days = 10  # ~2 weeks
-        i_peak_sel = _select_peak_long(w, min_incline_days)
+        min_correction_days = 2
+        i_peak_sel = _select_peak_long(w, min_incline_days, min_tail_bars=min_correction_days)
         if i_peak_sel is None:
             _log("Rejected long: no valid peak selected.")
             return None
@@ -959,9 +960,19 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             _log("Rejected long: invalid impulse start/peak distance.")
             return None
         i_end = len(w) - 1
-        if i_end - i_peak < 8:
-            _log("Rejected long: correction leg too short (<8 bars).")
-            return None
+        corr_bars = i_end - i_peak
+        if corr_bars < 8:
+            corr_low_early = float(low.iloc[i_peak:i_end + 1].min())
+            peak_high = float(high.iloc[i_peak])
+            early_decline_pct = (peak_high - corr_low_early) / max(peak_high, 1e-9)
+            if corr_bars >= min_correction_days and early_decline_pct >= 0.05:
+                _log(
+                    "Long: accepting early correction leg "
+                    f"({corr_bars} bars, decline={early_decline_pct * 100:.2f}%)."
+                )
+            else:
+                _log("Rejected long: correction leg too short (<8 bars).")
+                return None
         pre_start_left = max(0, i_start - 6)
         fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
         _log(f"Long: fib start low searched in [{pre_start_left}, {i_start}] -> idx={fib_start_idx}.")
