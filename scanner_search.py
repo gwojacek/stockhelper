@@ -267,6 +267,29 @@ def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band
     return best_end
 
 
+def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> tuple[int, int, float, float, float] | None:
+    if len(df_slice) < max_days:
+        return None
+    highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
+    lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
+    best: tuple[int, int, float, float, float] | None = None
+    for i in range(0, len(df_slice) - max_days + 1):
+        hwin = highs.iloc[i:i + max_days]
+        lwin = lows.iloc[i:i + max_days]
+        hi = float(hwin.max())
+        lo = float(lwin.min())
+        mid = (hi + lo) / 2.0
+        if mid <= 0:
+            continue
+        rng_pct = (hi - lo) / mid
+        if rng_pct <= band_pct:
+            end = i + max_days - 1
+            # keep the tightest qualifying window as most diagnostic
+            if best is None or rng_pct < best[4]:
+                best = (i, end, hi, lo, rng_pct)
+    return best
+
+
 def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> bool:
     if len(df_slice) < max_days:
         return False
@@ -981,8 +1004,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_500 = fib_end - rng * 0.5
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
-        if _has_long_sideways(w.iloc[i_peak:i_end + 1], max_days=22, band_pct=0.12):
-            _log("Rejected long: correction is sideways/flat.")
+        correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
+        correction_sideways = _latest_sideways_window(correction_seg, max_days=22, band_pct=0.12)
+        if correction_sideways is not None:
+            s, e, hi, lo, rng_pct = correction_sideways
+            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
+            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
+            _log(
+                "Rejected long: correction is sideways/flat. "
+                f"window={s}-{e} ({start_date}..{end_date}), "
+                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 12.00%."
+            )
             return None
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
