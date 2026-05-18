@@ -948,12 +948,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         # Guard against stale multi-cycle impulses:
         # if an earlier local peak (after the chosen start, before the chosen peak)
         # already completed a >=61.8 correction, this start is too old.
-        # Skip guard checks for short pre-impulses (< ~2 weeks) to avoid rejecting
+        # Skip guard checks for short pre-impulses (<= ~2 weeks) to avoid rejecting
         # noisy early bumps that do not represent a full impulse leg.
         min_stale_guard_days = 10  # ~2 weeks
         stale_cycle = False
         for p in range(i_start + min_incline_days, max(i_start + min_incline_days, i_peak - 8)):
-            if (p - i_start) < min_stale_guard_days:
+            if (p - i_start) <= min_stale_guard_days:
                 continue
             win_l = max(i_start, p - 4)
             win_r = min(i_peak, p + 5)
