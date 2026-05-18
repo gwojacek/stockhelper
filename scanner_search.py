@@ -1285,11 +1285,16 @@ def run_fibo_search(target: str) -> int:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
+            long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
             for off in [0, 5, 10, 15, 20, 30, 40]:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
             if long_candidates:
+                # If current window (offset 0) no longer qualifies as "waiting",
+                # drop stale waiting candidates coming from older offsets.
+                if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
+                    long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 # Keep at most two distinct formations (e.g. bigger + recent smaller).
                 long_candidates = sorted(
                     long_candidates,
@@ -1310,11 +1315,14 @@ def run_fibo_search(target: str) -> int:
                     out_rows.append(c)
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
+                short_offset0 = _find_fibo_setup(df, "short", end_offset=0)
                 for off in [0, 5, 10, 15, 20, 30, 40]:
                     cand = _find_fibo_setup(df, "short", end_offset=off)
                     if cand:
                         short_candidates.append(cand)
                 if short_candidates:
+                    if short_offset0 is None or short_offset0.status != "reached_23_6_waiting_for_61_8":
+                        short_candidates = [c for c in short_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                     short_candidates = sorted(
                         short_candidates,
                         key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
