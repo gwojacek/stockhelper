@@ -945,28 +945,6 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
-        # Guard against stale multi-cycle impulses:
-        # if an earlier local peak (after the chosen start, before the chosen peak)
-        # already completed a >=61.8 correction, this start is too old.
-        stale_cycle = False
-        for p in range(i_start + min_incline_days, max(i_start + min_incline_days, i_peak - 8)):
-            win_l = max(i_start, p - 4)
-            win_r = min(i_peak, p + 5)
-            if float(high.iloc[p]) < float(high.iloc[win_l:win_r].max()):
-                continue
-            p_high = float(high.iloc[p])
-            p_base = fib_start
-            p_rng = p_high - p_base
-            if p_rng <= 0:
-                continue
-            p_fib_618 = p_high - p_rng * 0.618
-            post_low = float(low.iloc[p:i_peak + 1].min())
-            if post_low <= p_fib_618:
-                stale_cycle = True
-                _log(f"Rejected long: stale impulse start (earlier peak idx={p} already corrected below its 61.8).")
-                break
-        if stale_cycle:
-            return None
         rng = fib_end - fib_start
         if rng <= 0:
             _log("Rejected long: non-positive fib range.")
