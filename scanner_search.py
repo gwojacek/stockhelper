@@ -1230,7 +1230,7 @@ def _print_fibo_results(
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Avg10Turn':>12} {'Link':<0}")
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
         print("-" * 185)
         links = []
     for r in rows1:
@@ -1244,7 +1244,17 @@ def _print_fibo_results(
             key = (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
             if key in avg_turnover_10d_by_key:
                 avg_turn = f"{avg_turnover_10d_by_key[key]:,.0f}"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_turn:>12} {ANSI_CYAN}{link}{ANSI_RESET}")
+        near_txt = "-"
+        near_col = ANSI_YELLOW
+        try:
+            dist = abs(float(r.current_close) - float(r.fib_61_8))
+            band = max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9)
+            closeness = max(0.0, 1.0 - (dist / band))
+            near_txt = f"{closeness*100:5.1f}%"
+            near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
+        except Exception:
+            pass
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_turn:>12} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -1348,7 +1358,9 @@ def run_fibo_search(target: str) -> int:
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc))
 
-    max_workers = min(12, max(2, os.cpu_count() or 4), len(members))
+    cpu = os.cpu_count() or 4
+    auto_workers = max(4, min(cpu * 3, 32))
+    max_workers = min(auto_workers, len(members))
     print(f"[fibo] parallel mode ({max_workers} workers, xdist-style).")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         fut_map = {ex.submit(_scan_fibo_one, (idx, ticker)): (idx, ticker) for idx, ticker in enumerate(members, start=1)}
