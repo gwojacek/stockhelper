@@ -961,11 +961,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             return None
         i_end = len(w) - 1
         corr_bars = i_end - i_peak
+        early_correction_accepted = False
         if corr_bars < 8:
             corr_low_early = float(low.iloc[i_peak:i_end + 1].min())
             peak_high = float(high.iloc[i_peak])
             early_decline_pct = (peak_high - corr_low_early) / max(peak_high, 1e-9)
             if corr_bars >= min_correction_days and early_decline_pct >= 0.05:
+                early_correction_accepted = True
                 _log(
                     "Long: accepting early correction leg "
                     f"({corr_bars} bars, decline={early_decline_pct * 100:.2f}%)."
@@ -1118,11 +1120,19 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if not next5.empty and (next5["Close"] < stop_loss).any():
             status = "invalidated_by_stop_loss"
         decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
-        if (decline_end_idx - i_peak) < 2:
+        decline_bars = decline_end_idx - i_peak
+        if decline_bars < 2:
+            _log(f"Rejected long: decline leg too short for scoring ({decline_bars} bars).")
             return None
         ratio = round((i_peak - i_start) / max(decline_end_idx - i_peak, 1), 2)
-        if ratio > 8.0:
+        if ratio > 8.0 and not early_correction_accepted:
+            _log(f"Rejected long: incline/decline ratio too high ({ratio} > 8.0).")
             return None
+        if ratio > 8.0 and early_correction_accepted:
+            _log(
+                f"Long: keeping setup despite high incline/decline ratio ({ratio}) "
+                "because early correction mode is active."
+            )
         return FiboScanResult(
             ticker="", direction=direction, status=status,
             incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
