@@ -1338,6 +1338,20 @@ def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     rows: list[FiboScanResult] = []
+    def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
+        if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
+            return False
+        dts = pd.to_datetime(df_full["Date"], errors="coerce")
+        try:
+            end_ts = pd.to_datetime(cand.incline_end_date)
+        except Exception:
+            return False
+        after = df_full.loc[dts > end_ts]
+        if after.empty:
+            return False
+        after_low = pd.to_numeric(after["Low"], errors="coerce")
+        return bool((after_low <= float(cand.fib_61_8)).any())
+
     def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None]:
         idx, ticker = idx_ticker
         instrument = "stock"
@@ -1368,10 +1382,12 @@ def run_fibo_search(target: str) -> int:
                 # drop stale waiting candidates coming from older offsets.
                 if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
                     long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
+                long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
                 # Keep at most two distinct formations (e.g. bigger + recent smaller).
                 long_candidates = sorted(
                     long_candidates,
-                    key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
+                    key=lambda r: (r.status == "valid_reversal", r.incline_end_date, r.first_61_8_touch_date),
+                    reverse=True,
                 )
                 seen_long: set[tuple[str, str]] = set()
                 seen_long_start: set[str] = set()
@@ -1398,9 +1414,11 @@ def run_fibo_search(target: str) -> int:
                 if short_candidates:
                     if short_offset0 is None or short_offset0.status != "reached_23_6_waiting_for_61_8":
                         short_candidates = [c for c in short_candidates if c.status != "reached_23_6_waiting_for_61_8"]
+                    short_candidates = [c for c in short_candidates if not _is_waiting_candidate_stale(df, c)]
                     short_candidates = sorted(
                         short_candidates,
-                        key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
+                        key=lambda r: (r.status == "valid_reversal", r.incline_end_date, r.first_61_8_touch_date),
+                        reverse=True,
                     )
                     seen_short: set[tuple[str, str]] = set()
                     seen_short_start: set[str] = set()
