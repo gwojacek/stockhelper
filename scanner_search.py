@@ -1090,11 +1090,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
-    recent_left = max(0, len(w) - 80)
-    recent_right = len(w) - 8
-    if recent_right <= recent_left:
-        return None
-    i_start = int(high.iloc[recent_left:recent_right].idxmax())
+    i_start = int(close.iloc[:-60].idxmax())
     min_incline_days = 10
     i_bottom = int(low.iloc[i_start + min_incline_days:].idxmin())
     if i_bottom <= i_start + min_incline_days:
@@ -1279,33 +1275,54 @@ def run_fibo_search(target: str) -> int:
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
-            long_setup = None
+            long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
-                    if off == 0:
-                        long_setup = cand
-                    elif cand.status == "valid_reversal":
-                        long_setup = cand
-                    if cand.status == "valid_reversal":
+                    long_candidates.append(cand)
+            if long_candidates:
+                # Keep at most two distinct formations (e.g. bigger + recent smaller).
+                long_candidates = sorted(
+                    long_candidates,
+                    key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
+                )
+                seen_long: set[tuple[str, str]] = set()
+                picked_long: list[FiboScanResult] = []
+                for c in long_candidates:
+                    k = (c.incline_start_date, c.incline_end_date)
+                    if k in seen_long:
+                        continue
+                    seen_long.add(k)
+                    picked_long.append(c)
+                    if len(picked_long) >= 2:
                         break
-            if long_setup:
-                long_setup.ticker = ticker
-                out_rows.append(long_setup)
-            if instrument in {"commodity", "forex", "stock"}:
-                short_setup = None
+                for c in picked_long:
+                    c.ticker = ticker
+                    out_rows.append(c)
+            if instrument in {"commodity", "forex"}:
+                short_candidates: list[FiboScanResult] = []
                 for off in [0, 5, 10, 15, 20, 30, 40]:
                     cand = _find_fibo_setup(df, "short", end_offset=off)
                     if cand:
-                        if off == 0:
-                            short_setup = cand
-                        elif cand.status == "valid_reversal":
-                            short_setup = cand
-                        if cand.status == "valid_reversal":
+                        short_candidates.append(cand)
+                if short_candidates:
+                    short_candidates = sorted(
+                        short_candidates,
+                        key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
+                    )
+                    seen_short: set[tuple[str, str]] = set()
+                    picked_short: list[FiboScanResult] = []
+                    for c in short_candidates:
+                        k = (c.incline_start_date, c.incline_end_date)
+                        if k in seen_short:
+                            continue
+                        seen_short.add(k)
+                        picked_short.append(c)
+                        if len(picked_short) >= 2:
                             break
-                if short_setup:
-                    short_setup.ticker = ticker
-                    out_rows.append(short_setup)
+                    for c in picked_short:
+                        c.ticker = ticker
+                        out_rows.append(c)
             return idx, ticker, out_rows, None
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc))
@@ -1352,6 +1369,57 @@ def run_fibo_search(target: str) -> int:
         if r.direction == "short" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_23_6 <= r.current_close <= r.fib_61_8:
             rows1.append(r)
             continue
+    def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
+        if r.status != "valid_reversal":
+            return True
+        row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
+        if row is None:
+            return True
+        symbol = row[0]
+        try:
+            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=row[1], persist=True)
+        except Exception:
+            return False
+        if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
+            return False
+        turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
+        turnover_native = turnover_native.dropna()
+        if len(turnover_native) < 10:
+            return False
+        try:
+            cc = _country_code_from_ticker(symbol)
+            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
+            currency = country_to_currency.get(cc, "USD")
+            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+        except Exception:
+            fx_to_pln = 1.0
+        avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
+        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
+        return avg_10d_pln >= min_avg
+
+    rows_by_key: dict[tuple[str, str, str, str], tuple[str, str]] = {}
+    # Build lookup using the same symbol normalization as scanner.
+    for ticker in members:
+        instrument = "stock"
+        if group_name == "forex":
+            instrument = "forex"
+        elif group_name in {"commodities", "indexes"}:
+            instrument = "commodity"
+        elif group_name == "single":
+            detected = detect_instrument_type(ticker, None)
+            instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+        fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
+        if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+            fetch_symbol = f"{fetch_symbol}.WA"
+        if instrument == "commodity":
+            fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
+        for r in rows:
+            if r.ticker == ticker:
+                rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
+
+    rows1 = [r for r in rows1 if _passes_fibo_liquidity(r)]
+    rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows1 = sorted(rows1, key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date), reverse=False)
     rows2_keys = {(r.ticker, r.direction) for r in rows2}
     rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
