@@ -46,7 +46,7 @@ WIG_SEARCH_TICKERS = [
     "CMP","COG","CPD","CRM","DCR","DOM","EAT","EKP","ELT","ENE","ENI","ERB","ETL","FON","FRO","FSG","FTE","LES","GPW","HDR",
     "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KGN","RWL","KOM","KPD","KPL",
     "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","GKI","MLK","MNC","MON",
-    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPS","PRC",
+    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPS",
     "PRT","QRS","NVG","RBW","RLP","RMK","RNK","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
     "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WXF","ZEP","MGT","ZMT","PGV","ZUE",
     "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
@@ -1348,7 +1348,7 @@ def run_fibo_search(target: str) -> int:
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc))
 
-    max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(members))
+    max_workers = min(12, max(2, os.cpu_count() or 4), len(members))
     print(f"[fibo] parallel mode ({max_workers} workers, xdist-style).")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         fut_map = {ex.submit(_scan_fibo_one, (idx, ticker)): (idx, ticker) for idx, ticker in enumerate(members, start=1)}
@@ -1393,11 +1393,9 @@ def run_fibo_search(target: str) -> int:
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] = {}
 
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
-        if r.status != "valid_reversal":
-            return True
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
         if row is None:
-            return True
+            return False
         symbol = row[0]
         try:
             df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=row[1], persist=True)
