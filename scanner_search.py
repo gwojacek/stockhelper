@@ -1301,12 +1301,14 @@ def run_fibo_search(target: str) -> int:
                     key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
                 )
                 seen_long: set[tuple[str, str]] = set()
+                seen_long_start: set[str] = set()
                 picked_long: list[FiboScanResult] = []
                 for c in long_candidates:
                     k = (c.incline_start_date, c.incline_end_date)
-                    if k in seen_long:
+                    if k in seen_long or c.incline_start_date in seen_long_start:
                         continue
                     seen_long.add(k)
+                    seen_long_start.add(c.incline_start_date)
                     picked_long.append(c)
                     if len(picked_long) >= 2:
                         break
@@ -1328,12 +1330,14 @@ def run_fibo_search(target: str) -> int:
                         key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date),
                     )
                     seen_short: set[tuple[str, str]] = set()
+                    seen_short_start: set[str] = set()
                     picked_short: list[FiboScanResult] = []
                     for c in short_candidates:
                         k = (c.incline_start_date, c.incline_end_date)
-                        if k in seen_short:
+                        if k in seen_short or c.incline_start_date in seen_short_start:
                             continue
                         seen_short.add(k)
+                        seen_short_start.add(c.incline_start_date)
                         picked_short.append(c)
                         if len(picked_short) >= 2:
                             break
@@ -1437,6 +1441,30 @@ def run_fibo_search(target: str) -> int:
         for r in rows:
             if r.ticker == ticker:
                 rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
+
+    # Populate Avg10Turn display metric also for non-valid rows shown in WYNIKI #1.
+    for r in rows1:
+        k = (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
+        if k in avg_turnover_10d_by_key:
+            continue
+        row = rows_by_key.get(k)
+        if row is None:
+            continue
+        symbol, instrument_type = row
+        try:
+            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
+            turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
+            turnover_native = turnover_native.dropna()
+            if len(turnover_native) < 10:
+                continue
+            cc = _country_code_from_ticker(symbol)
+            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
+            currency = country_to_currency.get(cc, "USD")
+            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+            avg_turnover_10d_by_key[k] = float((turnover_native.tail(10) * fx_to_pln).mean())
+        except Exception:
+            continue
 
     rows1 = [r for r in rows1 if _passes_fibo_liquidity(r)]
     rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
