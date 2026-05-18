@@ -1220,13 +1220,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     )
 
 
-def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]) -> list[str]:
+def _print_fibo_results(
+    rows1: list[FiboScanResult],
+    rows2: list[FiboScanResult],
+    avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] | None = None,
+) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (current 23.6..61.8 OR 61.8+valid formation):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Link':<0}")
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Avg10Turn':>12} {'Link':<0}")
         print("-" * 185)
         links = []
     for r in rows1:
@@ -1235,7 +1239,12 @@ def _print_fibo_results(rows1: list[FiboScanResult], rows2: list[FiboScanResult]
         links.append(link)
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
+        avg_turn = "-"
+        if avg_turnover_10d_by_key is not None:
+            key = (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
+            if key in avg_turnover_10d_by_key:
+                avg_turn = f"{avg_turnover_10d_by_key[key]:,.0f}"
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_turn:>12} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -1369,6 +1378,8 @@ def run_fibo_search(target: str) -> int:
         if r.direction == "short" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_23_6 <= r.current_close <= r.fib_61_8:
             rows1.append(r)
             continue
+    avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] = {}
+
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         if r.status != "valid_reversal":
             return True
@@ -1395,6 +1406,7 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             fx_to_pln = 1.0
         avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
+        avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
         return avg_10d_pln >= min_avg
 
@@ -1420,10 +1432,19 @@ def run_fibo_search(target: str) -> int:
 
     rows1 = [r for r in rows1 if _passes_fibo_liquidity(r)]
     rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
-    rows1 = sorted(rows1, key=lambda r: (r.status != "valid_reversal", r.first_61_8_touch_date), reverse=False)
+    rows1 = sorted(
+        rows1,
+        key=lambda r: (r.ticker, r.direction, r.status != "valid_reversal", r.incline_start_date, r.first_61_8_touch_date),
+        reverse=False,
+    )
+    rows2 = sorted(
+        rows2,
+        key=lambda r: (r.ticker, r.direction, r.incline_start_date, r.first_61_8_touch_date),
+        reverse=False,
+    )
     rows2_keys = {(r.ticker, r.direction) for r in rows2}
     rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
-    links = _print_fibo_results(rows1, rows2)
+    links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
     if links:
