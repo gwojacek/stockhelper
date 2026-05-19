@@ -1383,6 +1383,15 @@ def run_fibo_search(target: str) -> int:
                 if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
                     long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
+                # If multiple candidates end on the same impulse top, keep only the broadest leg
+                # (earliest start). This removes nested mini-impulses like 2026-04-16->2026-05-11
+                # when the proper formation is 2026-04-07->2026-05-11.
+                by_end: dict[str, FiboScanResult] = {}
+                for c in long_candidates:
+                    prev = by_end.get(c.incline_end_date)
+                    if prev is None or c.incline_start_date < prev.incline_start_date:
+                        by_end[c.incline_end_date] = c
+                long_candidates = list(by_end.values())
                 # Keep at most two distinct formations (e.g. bigger + recent smaller).
                 long_candidates = sorted(
                     long_candidates,
