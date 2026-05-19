@@ -131,6 +131,11 @@ class FlipResult:
     flip_date: str
     months_since_flip: float
     close: float
+    retest_status: str = "no_breakout"
+    retest_depth: str = "-"
+    valid_retests_count: int = 0
+    first_valid_retest_pattern_date: str = "-"
+    retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
 
 
 @dataclass
@@ -183,8 +188,9 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
     if not (c1_close < c1_open and c2_close > c2_open):
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
+    c1_body_low = min(c1_open, c1_close)
     return (
-        c2_open < c1_close
+        c2_open < c1_body_low
         and c2_close > midpoint_c1
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level
@@ -230,7 +236,8 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
 
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
-    if not (cl1 > o1 and cl2 < o2 and o2 > cl1):
+    c1_body_high = max(o1, cl1)
+    if not (cl1 > o1 and cl2 < o2 and o2 > c1_body_high):
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
@@ -681,6 +688,19 @@ def _scan_source_label(src: str) -> str:
     return s.upper() or "UNKNOWN"
 
 
+def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
+    base = f"search_{group_name.lower()}_"
+    files = [p for p in SEARCH_OUTPUT_DIR.glob(f"{base}*.csv") if p.is_file()]
+    if len(files) <= keep_last:
+        return
+    files_sorted = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in files_sorted[keep_last:]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
+
+
 def _print_results_with_links(results: list[ScanResult]) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI (instrumenty spełniające warunki):{ANSI_RESET}")
     if not results:
@@ -704,13 +724,24 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     if not flip_results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10} {'Link':<0}")
+    max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
+    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12}"
+    event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
+    print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
     print("-" * 150)
     links: list[str] = []
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+        events = row.retest_events or []
+        event_cells = []
+        for idx in range(max_events):
+            if idx < len(events):
+                event_cells.append(f"{events[idx][0]} {events[idx][1]}")
+            else:
+                event_cells.append("-")
+        event_cols = " ".join([f"{cell:<34}" for cell in event_cells])
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
     return links
 
 
@@ -778,7 +809,160 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - flip_ts).days + 1) / 30.44
 
-    return FlipResult("", previous_side, current_side, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+    flip = FlipResult("", previous_side, current_side, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+    (
+        flip.retest_status,
+        flip.retest_depth,
+        flip.valid_retests_count,
+        flip.first_valid_retest_pattern_date,
+        flip.retest_events,
+    ) = _detect_ichimoku_retest(df, flip_idx, current_side)
+    return flip
+
+
+def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: float, side: str) -> str:
+    thickness = max(cloud_top - cloud_bottom, 1e-9)
+    rel = (cloud_top - probe_price) / thickness if side == "above" else (probe_price - cloud_bottom) / thickness
+    shallow_limit = 0.2
+    medium_limit = 0.6
+    if rel <= shallow_limit:
+        return "shallow"
+    if thickness < probe_price * 0.01:
+        return "deep"
+    if rel <= medium_limit:
+        return "medium"
+    return "deep"
+
+
+def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+    body_high = df[["Open", "Close"]].max(axis=1)
+    body_low = df[["Open", "Close"]].min(axis=1)
+    top = df["cloud_top"]
+    bottom = df["cloud_bottom"]
+    post = range(flip_idx + 1, len(df))
+    if flip_idx <= 0 or (flip_idx + 1) >= len(df):
+        return "breakout_confirmed", "-", 0, "-", []
+
+    waiting = False
+    touch_idxs: list[int] = []
+    for i in post:
+        if current_side == "above":
+            if body_low.iloc[i] < bottom.iloc[i]:
+                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
+            touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
+        else:
+            if body_high.iloc[i] > top.iloc[i]:
+                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
+            touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
+        if touched:
+            waiting = True
+            touch_idxs.append(i)
+
+    if not waiting:
+        return "breakout_confirmed", "-", 0, "-", []
+
+    first_valid_date = "-"
+    first_valid_status = "-"
+    first_valid_depth = "-"
+    valid_count = 0
+    found_too_late = False
+    events: list[tuple[str, str, str]] = []
+    i = flip_idx + 1
+    while i < len(df):
+        if current_side == "above":
+            touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
+            outside = body_low.iloc[i] > top.iloc[i]
+        else:
+            touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
+            outside = body_high.iloc[i] < bottom.iloc[i]
+
+        if not touched:
+            i += 1
+            continue
+
+        cycle_start = i
+        cycle_end = i
+        while cycle_end + 1 < len(df):
+            n = cycle_end + 1
+            if current_side == "above":
+                n_touched = float(df["Low"].iloc[n]) <= float(top.iloc[n])
+                n_outside = body_low.iloc[n] > top.iloc[n]
+            else:
+                n_touched = float(df["High"].iloc[n]) >= float(bottom.iloc[n])
+                n_outside = body_high.iloc[n] < bottom.iloc[n]
+            if n_touched:
+                cycle_end = n
+                continue
+            if n_outside:
+                break
+            cycle_end = n
+
+        w_start = max(cycle_start - 2, flip_idx + 1)
+        w = df.iloc[w_start: cycle_end + 1].reset_index(drop=True)
+        if len(w) >= 2:
+            pattern_candidates: list[tuple[int, str]] = []
+            if current_side == "above":
+                for j in range(0, len(w)):
+                    if _is_bullish_hammer(w.iloc[j]):
+                        pattern_candidates.append((j, "hammer"))
+                for j in range(1, len(w)):
+                    lvl = float(w["cloud_top"].iloc[j])
+                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "bullish_harami"))
+                    if _is_bullish_piercing_line(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "bullish_piercing_line"))
+                for j in range(2, len(w)):
+                    lvl = float(w["cloud_top"].iloc[j])
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False):
+                        pattern_candidates.append((j, "morning_star"))
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                        pattern_candidates.append((j, "morning_doji_star"))
+            else:
+                for j in range(0, len(w)):
+                    if _is_bearish_shooting_star(w.iloc[j]):
+                        pattern_candidates.append((j, "shooting_star"))
+                for j in range(1, len(w)):
+                    lvl = float(w["cloud_bottom"].iloc[j])
+                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "bearish_harami"))
+                    if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "dark_cloud_cover"))
+                for j in range(2, len(w)):
+                    lvl = float(w["cloud_bottom"].iloc[j])
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False):
+                        pattern_candidates.append((j, "evening_star"))
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                        pattern_candidates.append((j, "evening_doji_star"))
+            for pattern_idx, formation in sorted(set(pattern_candidates), key=lambda x: x[0]):
+                pattern_abs = w_start + pattern_idx
+                local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
+                if pattern_abs - local_reaction_abs >= 2:
+                    found_too_late = True
+                    continue
+                probe = float(df["Low"].iloc[pattern_abs]) if current_side == "above" else float(df["High"].iloc[pattern_abs])
+                depth = _classify_retest_depth(float(top.iloc[pattern_abs]), float(bottom.iloc[pattern_abs]), probe, current_side)
+                # shallow if only shadow pierces/touches cloud or very slight entry
+                body_lo = min(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
+                body_hi = max(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
+                if (current_side == "above" and body_lo >= float(top.iloc[pattern_abs])) or (current_side == "below" and body_hi <= float(bottom.iloc[pattern_abs])):
+                    depth = "shallow"
+                valid_count += 1
+                ev_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
+                events.append((ev_date, formation, depth))
+                if first_valid_date == "-":
+                    first_valid_date = ev_date
+                    first_valid_depth = depth
+                    first_valid_status = f"{depth}_retest_pattern"
+                break
+        i = cycle_end + 1
+
+    if valid_count > 0:
+        latest_depth = events[-1][2]
+        latest_status = f"{latest_depth}_retest_pattern"
+        return latest_status, latest_depth, valid_count, first_valid_date, events
+    if found_too_late:
+        return "invalid_pattern_too_late", "-", 0, "-", []
+    return "returned_to_cloud_waiting_for_pattern", "-", 0, "-", []
 
 
 def run_ichimoku_search(target: str) -> int:
@@ -832,10 +1016,22 @@ def run_ichimoku_search(target: str) -> int:
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
-            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "close"])
+            max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
+            dynamic_cols: list[str] = []
+            for i in range(1, max_events + 1):
+                dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
+            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
             for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", f"{row.close:.4f}"])
+                ev = row.retest_events or []
+                dynamic_vals: list[str] = []
+                for i in range(max_events):
+                    if i < len(ev):
+                        dynamic_vals.extend([ev[i][0], ev[i][1]])
+                    else:
+                        dynamic_vals.extend(["", ""])
+                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
         print(f"Zapisano CSV #2: {out_csv_flip}")
+        _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
         if all_links:
             try:
@@ -920,10 +1116,22 @@ def run_ichimoku_search(target: str) -> int:
     out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
     with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "close"])
+        max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
+        dynamic_cols: list[str] = []
+        for i in range(1, max_events + 1):
+            dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
+        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", f"{row.close:.4f}"])
+            ev = row.retest_events or []
+            dynamic_vals: list[str] = []
+            for i in range(max_events):
+                if i < len(ev):
+                    dynamic_vals.extend([ev[i][0], ev[i][1]])
+                else:
+                    dynamic_vals.extend(["", ""])
+            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
     print(f"Zapisano CSV #2: {out_csv_flip}")
+    _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links:
         try:
