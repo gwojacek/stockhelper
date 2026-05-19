@@ -131,6 +131,9 @@ class FlipResult:
     flip_date: str
     months_since_flip: float
     close: float
+    retest_status: str = "no_breakout"
+    retest_depth: str = "-"
+    valid_retests_count: int = 0
 
 
 @dataclass
@@ -704,13 +707,16 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     if not flip_results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Close':>10} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Retest status':<44} {'Count':<6} {'Close':>10} {'Link':<0}")
     print("-" * 150)
     links: list[str] = []
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(
+            f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} "
+            f"{row.retest_status:<44} {row.valid_retests_count:<6} {row.close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}"
+        )
     return links
 
 
@@ -778,7 +784,88 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - flip_ts).days + 1) / 30.44
 
-    return FlipResult("", previous_side, current_side, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+    flip = FlipResult("", previous_side, current_side, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+    flip.retest_status, flip.retest_depth, flip.valid_retests_count = _detect_ichimoku_retest(df, flip_idx, current_side)
+    return flip
+
+
+def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: float, side: str) -> str:
+    thickness = max(cloud_top - cloud_bottom, 1e-9)
+    rel = (cloud_top - probe_price) / thickness if side == "above" else (probe_price - cloud_bottom) / thickness
+    shallow_limit = 0.2
+    medium_limit = 0.6
+    if rel <= shallow_limit:
+        return "shallow"
+    if thickness < probe_price * 0.01:
+        return "deep"
+    if rel <= medium_limit:
+        return "medium"
+    return "deep"
+
+
+def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) -> tuple[str, str, int]:
+    body_high = df[["Open", "Close"]].max(axis=1)
+    body_low = df[["Open", "Close"]].min(axis=1)
+    top = df["cloud_top"]
+    bottom = df["cloud_bottom"]
+    post = range(flip_idx + 1, len(df))
+    if flip_idx <= 0 or (flip_idx + 1) >= len(df):
+        return "breakout_confirmed", "-", 0
+
+    waiting = False
+    touch_idxs: list[int] = []
+    for i in post:
+        if current_side == "above":
+            if body_low.iloc[i] < bottom.iloc[i]:
+                return "invalidated_by_body_break_through_cloud", "-", 0
+            touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
+        else:
+            if body_high.iloc[i] > top.iloc[i]:
+                return "invalidated_by_body_break_through_cloud", "-", 0
+            touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
+        if touched:
+            waiting = True
+            touch_idxs.append(i)
+
+    if not waiting:
+        return "breakout_confirmed", "-", 0
+
+    first_touch = touch_idxs[0]
+    latest_touch = touch_idxs[-1]
+    w_start = max(first_touch - 2, flip_idx + 1)
+    w = df.iloc[w_start: latest_touch + 1].reset_index(drop=True)
+    if len(w) < 2:
+        return "returned_to_cloud_waiting_for_pattern", "-", 0
+
+    pattern_idx = -1
+    if current_side == "above":
+        for i in range(0, len(w)):
+            if _is_bullish_hammer(w.iloc[i]):
+                pattern_idx = i; break
+        if pattern_idx < 0:
+            for i in range(1, len(w)):
+                if _is_bullish_harami(w.iloc[i - 1], w.iloc[i], float(w["cloud_top"].iloc[i])):
+                    pattern_idx = i; break
+    else:
+        for i in range(0, len(w)):
+            if _is_bearish_shooting_star(w.iloc[i]):
+                pattern_idx = i; break
+        if pattern_idx < 0:
+            for i in range(1, len(w)):
+                if _is_bearish_harami(w.iloc[i - 1], w.iloc[i], float(w["cloud_bottom"].iloc[i])):
+                    pattern_idx = i; break
+
+    if pattern_idx < 0:
+        return "returned_to_cloud_waiting_for_pattern", "-", 0
+
+    pattern_abs = w_start + pattern_idx
+    local_reaction_abs = int(df["Low"].iloc[first_touch:latest_touch + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[first_touch:latest_touch + 1].idxmax())
+    if pattern_abs - local_reaction_abs >= 2:
+        return "invalid_pattern_too_late", "-", 0
+
+    probe = float(df["Low"].iloc[pattern_abs]) if current_side == "above" else float(df["High"].iloc[pattern_abs])
+    depth = _classify_retest_depth(float(top.iloc[pattern_abs]), float(bottom.iloc[pattern_abs]), probe, current_side)
+    return f"{depth}_retest_pattern", depth, 1
 
 
 def run_ichimoku_search(target: str) -> int:
