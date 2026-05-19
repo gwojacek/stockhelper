@@ -1349,8 +1349,27 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > end_ts]
         if after.empty:
             return False
+        if cand.direction == "long":
+            # Long waiting setup becomes stale if market already made a higher high
+            # after the selected impulse top (newer impulse supersedes older one),
+            # or if price already reached the setup's 61.8 retracement.
+            end_rows = df_full.loc[dts == end_ts]
+            end_high = pd.to_numeric(end_rows["High"], errors="coerce").max() if not end_rows.empty else float("nan")
+            after_high = pd.to_numeric(after["High"], errors="coerce")
+            made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
+            if made_higher_high:
+                return True
+            after_low = pd.to_numeric(after["Low"], errors="coerce")
+            return bool((after_low <= float(cand.fib_61_8)).any())
+        # Symmetric stale condition for short waiting setups.
+        end_rows = df_full.loc[dts == end_ts]
+        end_low = pd.to_numeric(end_rows["Low"], errors="coerce").min() if not end_rows.empty else float("nan")
         after_low = pd.to_numeric(after["Low"], errors="coerce")
-        return bool((after_low <= float(cand.fib_61_8)).any())
+        made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
+        if made_lower_low:
+            return True
+        after_high = pd.to_numeric(after["High"], errors="coerce")
+        return bool((after_high >= float(cand.fib_61_8)).any())
 
     def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None]:
         idx, ticker = idx_ticker
