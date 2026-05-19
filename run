@@ -1,164 +1,114 @@
 #!/usr/bin/env python3
-import argparse
-import subprocess
-import os
-import sys
+import argparse, subprocess, os, sys, csv, webbrowser
+from datetime import UTC, datetime
 from pathlib import Path
-
 from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import COMMODITY_STOOQ_MAP
-
 PROJECT_ROOT = Path(__file__).resolve().parent
+SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
+ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_search"
+ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"; ANSI_GREEN="\033[32m"; ANSI_YELLOW="\033[33m"
 
-
-def _normalize_key(value: str) -> str:
-    return "".join(ch for ch in (value or "").lower() if ch.isalnum())
-
-
+def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
-    key = _normalize_key(target.replace(".py", ""))
-    exact = [p for p in directory.glob("*.py") if _normalize_key(p.stem) == key]
-    if exact:
-        return exact
-    return [p for p in directory.glob("*.py") if _normalize_key(p.stem).startswith(key)]
-
-
+    key=_normalize_key(target.replace('.py','')); exact=[p for p in directory.glob('*.py') if _normalize_key(p.stem)==key]
+    return exact or [p for p in directory.glob('*.py') if _normalize_key(p.stem).startswith(key)]
 def _resolve_existing_config_path(target: str) -> Path | None:
-    groups = [
-        PROJECT_ROOT / "configs" / "stocks",
-        PROJECT_ROOT / "configs" / "forex",
-        PROJECT_ROOT / "configs" / "commodities",
-    ]
-    found: list[Path] = []
-    for directory in groups:
-        matches = _match_in_dir(directory, target)
-        if len(matches) == 1:
-            found.append(matches[0])
-        elif len(matches) > 1:
-            found.append(matches[0])
-
-    if len(found) == 1:
-        return found[0]
-    return None
-
-
+    groups=[PROJECT_ROOT/'configs'/'stocks',PROJECT_ROOT/'configs'/'forex',PROJECT_ROOT/'configs'/'commodities']; found=[]
+    for d in groups:
+        m=_match_in_dir(d,target)
+        if m: found.append(m[0])
+    return found[0] if len(found)==1 else None
 def _instrument_type_from_path(path: Path | None) -> str | None:
-    if not path:
-        return None
-    parts = [p.lower() for p in path.parts]
-    if "stocks" in parts:
-        return "stock"
-    if "forex" in parts:
-        return "forex"
-    if "commodities" in parts:
-        return "commodity"
-    return None
+    if not path: return None
+    parts=[p.lower() for p in path.parts]
+    return 'stock' if 'stocks' in parts else 'forex' if 'forex' in parts else 'commodity' if 'commodities' in parts else None
+def _resolve_runner(instrument_type: str) -> str: return 'main_stock.py' if instrument_type=='stock' else 'main.py'
+def _stooq_chart_url(ticker: str) -> str:
+    raw=(ticker or '').strip().upper(); mapped=COMMODITY_STOOQ_MAP.get(raw)
+    symbol='al.f' if raw=='ALUMINIUM' else 'hg.f' if raw=='COPPER' else (str(mapped).lower() if mapped else raw.lower())
+    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
 
-
-def _resolve_runner(instrument_type: str) -> str:
-    return "main_stock.py" if instrument_type == "stock" else "main.py"
-
+def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -> None:
+    if not csv_path.exists(): return
+    with csv_path.open(newline='', encoding='utf-8') as fh: rows=list(csv.DictReader(fh))
+    with fp.open('a', encoding='utf-8') as out:
+        out.write(f"\n{ANSI_BOLD}{ANSI_CYAN}=== {title} ==={ANSI_RESET}\n")
+        if not rows: out.write("Brak wyników.\n"); return
+        out.write(f"Rows: {len(rows)}\n")
+        for r in rows[:2000]:
+            t=r.get('ticker','').strip(); link=_stooq_chart_url(t) if t else ''
+            if link: links.add(link)
+            out.write(f"{ANSI_GREEN}{t:<12}{ANSI_RESET} {r}\n")
 
 def _run_batch_search(mode: str, batch: list[str]) -> int:
-    failures = 0
-    if mode == "ichimoku":
-        from scanner_search import run_ichimoku_search as runner
-    else:
-        from scanner_search import run_fibo_search as runner
-
-    labels = ", ".join(batch)
-    print(f"[batch] {mode} search scope: {labels}")
-    for idx, scope in enumerate(batch, start=1):
+    from scanner_search import run_ichimoku_search, run_fibo_search
+    runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
+    os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
+    ALL_REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    report = ALL_REPORT_DIR / f"{mode}_all_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.txt"
+    report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
+    failures=0; all_links=set()
+    for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
-        try:
-            code = int(runner(scope))
-        except Exception as exc:
-            print(f"[batch] {mode} search failed for {scope}: {exc}")
-            code = 1
-        if code != 0:
-            failures += 1
-    if failures:
-        print(f"[batch] completed with failures: {failures}/{len(batch)}")
-        return 1
-    print(f"[batch] completed successfully: {len(batch)}/{len(batch)}")
-    return 0
+        before=set(SEARCH_OUTPUT_DIR.glob('*.csv'))
+        try: code=int(runner(scope))
+        except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
+        after=set(SEARCH_OUTPUT_DIR.glob('*.csv')); new=sorted(after-before, key=lambda p: p.stat().st_mtime)
+        for p in new:
+            if mode=='ichimoku' and p.name.startswith(f'search_{scope.lower()}'):
+                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
+            if mode=='fibo' and p.name.startswith(f'fibo_search_{scope.lower()}'):
+                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
+        if code!=0: failures+=1
+    print(f"\n[batch] combo report saved: {report}")
+    if all_links:
+        try: open_all=input('Czy otworzyć wszystkie linki? [y/N]: ').strip().lower()
+        except EOFError: open_all='n'
+        if open_all=='y':
+            for l in sorted(all_links): webbrowser.open_new_tab(l)
+    os.environ.pop('STOCKHELPER_BATCH_MODE',None); os.environ.pop('STOCKHELPER_DEFER_OPEN_LINKS',None)
+    return 1 if failures else 0
 
-
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
-    parser.add_argument("-ichimoku_search", "-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
-    parser.add_argument("-fibo_search", dest="fibo_search_target", nargs="?", const="single", help="Run fibonacci pullback scanner for index/commodities/forex")
-    parser.add_argument("-explain", dest="fibo_explain_target", help="Explain fibo classification for a single symbol (auto-uses single scope when -fibo_search is omitted)")
-    parser.add_argument("-d", "--search-debug", action="store_true", help="Verbose Stooq scraping logs for -ichimoku_search")
-    parser.add_argument("target", nargs="?", help="Config slug/symbol/pair, e.g. ena, eurusd_long, cocoa_short")
-    parser.add_argument("-c", "--chart", action="store_true", help="Open chart program instead of direct analysis")
-    parser.add_argument("--debug-stooq", dest="debug_stooq", help="Dump Stooq page debug artifacts for symbol")
-    parser.add_argument("-inspector", "--inspector", action="store_true", help="Enable interactive captcha inspector for Stooq")
-    args = parser.parse_args()
-
-    if args.search_debug:
-        os.environ["STOCKHELPER_STOOQ_DEBUG"] = "1"
-
+def main()->int:
+    parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
+    parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
+    parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
+    parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
+    args=parser.parse_args()
+    if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page
-        raw = args.debug_stooq.strip()
-        upper_raw = raw.upper()
-        mapped = COMMODITY_STOOQ_MAP.get(upper_raw)
-        if mapped:
-            symbol_for_debug = str(mapped).lower()
+        raw = args.debug_stooq.strip(); upper_raw = raw.upper(); mapped = COMMODITY_STOOQ_MAP.get(upper_raw)
+        if mapped: symbol_for_debug = str(mapped).lower()
         else:
             values = {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}
             symbol_for_debug = raw.lower() if raw.lower() in values else raw
         path = debug_stooq_page(symbol_for_debug, interactive_captcha=args.inspector)
         print(f"Stooq debug zapisany: {path}")
         return 0
-
     if args.search_target:
-        normalized = args.search_target.strip().lower()
-        if normalized == "all":
-            return _run_batch_search("ichimoku", ["wig", "dax", "us100", "forex", "commodities"])
-        from scanner_search import run_ichimoku_search
-        return run_ichimoku_search(args.search_target)
+        if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
+        from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
     if args.fibo_explain_target:
-        from scanner_search import run_fibo_explain
-        explain_scope = args.fibo_search_target or "single"
-        return run_fibo_explain(explain_scope, args.fibo_explain_target)
+        from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
-        normalized = args.fibo_search_target.strip().lower()
-        if normalized == "all":
-            return _run_batch_search("fibo", ["wig", "dax", "us100", "forex", "commodities"])
-        from scanner_search import run_fibo_search
-        return run_fibo_search(args.fibo_search_target)
-
-    target = (args.target or "").strip()
-    if not target:
-        parser.error("target is required unless -ichimoku_search is used")
-    resolved_path = _resolve_existing_config_path(target)
-
+        if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo',['wig','dax','us100','forex','commodities'])
+        from scanner_search import run_fibo_search; return run_fibo_search(args.fibo_search_target)
+    target=(args.target or '').strip()
+    if not target: parser.error('target is required unless -ichimoku_search is used')
+    resolved_path=_resolve_existing_config_path(target)
     if args.chart:
         if resolved_path:
-            chart_target = resolved_path.stem
-            cmd = [sys.executable, "-m", "chart_program", chart_target, "--config", str(resolved_path)]
+            cmd=[sys.executable,'-m','chart_program',resolved_path.stem,'--config',str(resolved_path)]
             instrument_type = _instrument_type_from_path(resolved_path)
             if instrument_type:
-                cmd.extend(["--instrument", instrument_type])
+                cmd.extend(['--instrument', instrument_type])
         else:
-            cmd = [sys.executable, "-m", "chart_program", target]
+            cmd=[sys.executable,'-m','chart_program',target]
     else:
-        instrument_type = _instrument_type_from_path(resolved_path) or detect_instrument_type(target, None)
-        if resolved_path is None:
-            print(
-                f"Instrument config not found: {target}. "
-                f"Please use `python run -c {target}` and finish chart workflow, "
-                "or create a config manually."
-            )
-            return 1
-        runner = _resolve_runner(instrument_type)
-        arg = str(resolved_path) if resolved_path else target
-        cmd = [sys.executable, str(PROJECT_ROOT / runner), arg]
-
+        instrument_type=_instrument_type_from_path(resolved_path) or detect_instrument_type(target,None)
+        if resolved_path is None: print(f'Instrument config not found: {target}.'); return 1
+        cmd=[sys.executable,str(PROJECT_ROOT/_resolve_runner(instrument_type)),str(resolved_path)]
     return subprocess.call(cmd)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__=='__main__': raise SystemExit(main())

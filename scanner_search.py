@@ -994,13 +994,16 @@ def run_ichimoku_search(target: str) -> int:
                     if flip:
                         flip_results.append(flip)
             if chunk_idx < len(chunks):
-                try:
-                    answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
-                except EOFError:
-                    answer = "n"
-                if answer != "y":
-                    print("[search] Scan paused/stopped by user before next WIG chunk.")
-                    break
+                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                    print("[search] batch mode: auto-continue to next WIG chunk.")
+                else:
+                    try:
+                        answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
+                    except EOFError:
+                        answer = "n"
+                    if answer != "y":
+                        print("[search] Scan paused/stopped by user before next WIG chunk.")
+                        break
 
         SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -1033,7 +1036,7 @@ def run_ichimoku_search(target: str) -> int:
         print(f"Zapisano CSV #2: {out_csv_flip}")
         _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
-        if all_links:
+        if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
             try:
                 open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
             except EOFError:
@@ -1068,13 +1071,16 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             if group_name == "WIG" and offset in {166, 331}:
-                try:
-                    answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
-                except EOFError:
-                    answer = "n"
-                if answer != "y":
-                    print("[search] Scan paused/stopped by user before next WIG chunk.")
-                    break
+                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                    print("[search] batch mode: auto-continue after WIG checkpoint.")
+                else:
+                    try:
+                        answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
+                    except EOFError:
+                        answer = "n"
+                    if answer != "y":
+                        print("[search] Scan paused/stopped by user before next WIG chunk.")
+                        break
             display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
             if err:
@@ -1133,7 +1139,7 @@ def run_ichimoku_search(target: str) -> int:
     print(f"Zapisano CSV #2: {out_csv_flip}")
     _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
-    if all_links:
+    if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
         except EOFError:
@@ -1838,7 +1844,7 @@ def run_fibo_search(target: str) -> int:
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
-    if links:
+    if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
         except EOFError:
