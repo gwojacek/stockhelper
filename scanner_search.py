@@ -712,7 +712,7 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
         print("Brak wyników.")
         return []
     max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
-    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Retest status':<36} {'Retest count':<12}"
+    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12}"
     event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
     print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
     print("-" * 150)
@@ -1007,7 +1007,7 @@ def run_ichimoku_search(target: str) -> int:
             dynamic_cols: list[str] = []
             for i in range(1, max_events + 1):
                 dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
-            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
+            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
             for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
                 ev = row.retest_events or []
                 dynamic_vals: list[str] = []
@@ -1106,7 +1106,7 @@ def run_ichimoku_search(target: str) -> int:
         dynamic_cols: list[str] = []
         for i in range(1, max_events + 1):
             dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
-        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
+        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             ev = row.retest_events or []
             dynamic_vals: list[str] = []
