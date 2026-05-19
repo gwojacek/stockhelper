@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 import math
 from importlib import util
 from pathlib import Path
+from urllib.parse import quote
 
 import pandas as pd
 
@@ -646,7 +647,8 @@ def _stooq_symbol_for_link(ticker: str) -> str:
 
 def _stooq_chart_url(ticker: str) -> str:
     symbol = _stooq_symbol_for_link(ticker)
-    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
+    symbol_q = quote(symbol, safe="")
+    return f"https://stooq.pl/q/a2/?s={symbol_q}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
 
 
 def _compact_error(err: str | None) -> str:
