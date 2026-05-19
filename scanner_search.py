@@ -135,6 +135,7 @@ class FlipResult:
     retest_depth: str = "-"
     valid_retests_count: int = 0
     first_valid_retest_pattern_date: str = "-"
+    retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
 
 
 @dataclass
@@ -710,16 +711,16 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     if not flip_results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Retest status':<36} {'Retest date':<12} {'Count':<6} {'Close':>10} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Retest status':<36} {'Retest count':<12} {'Retest #1 (date pattern)':<34} {'Retest #2 (date pattern)':<34} {'Link':<0}")
     print("-" * 150)
     links: list[str] = []
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        print(
-            f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} "
-            f"{row.retest_status:<36} {row.first_valid_retest_pattern_date:<12} {row.valid_retests_count:<6} {row.close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}"
-        )
+        events = row.retest_events or []
+        e1 = f"{events[0][0]} {events[0][1]}" if len(events) >= 1 else "-"
+        e2 = f"{events[1][0]} {events[1][1]}" if len(events) >= 2 else "-"
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {e1:<34} {e2:<34} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 
@@ -793,6 +794,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
         flip.retest_depth,
         flip.valid_retests_count,
         flip.first_valid_retest_pattern_date,
+        flip.retest_events,
     ) = _detect_ichimoku_retest(df, flip_idx, current_side)
     return flip
 
@@ -811,38 +813,39 @@ def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: f
     return "deep"
 
 
-def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) -> tuple[str, str, int, str]:
+def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     post = range(flip_idx + 1, len(df))
     if flip_idx <= 0 or (flip_idx + 1) >= len(df):
-        return "breakout_confirmed", "-", 0, "-"
+        return "breakout_confirmed", "-", 0, "-", []
 
     waiting = False
     touch_idxs: list[int] = []
     for i in post:
         if current_side == "above":
             if body_low.iloc[i] < bottom.iloc[i]:
-                return "invalidated_by_body_break_through_cloud", "-", 0, "-"
+                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
             touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
         else:
             if body_high.iloc[i] > top.iloc[i]:
-                return "invalidated_by_body_break_through_cloud", "-", 0, "-"
+                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
             touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
         if touched:
             waiting = True
             touch_idxs.append(i)
 
     if not waiting:
-        return "breakout_confirmed", "-", 0, "-"
+        return "breakout_confirmed", "-", 0, "-", []
 
     first_valid_date = "-"
     first_valid_status = "-"
     first_valid_depth = "-"
     valid_count = 0
     found_too_late = False
+    events: list[tuple[str, str, str]] = []
     i = flip_idx + 1
     while i < len(df):
         if current_side == "above":
@@ -876,32 +879,40 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
         w_start = max(cycle_start - 2, flip_idx + 1)
         w = df.iloc[w_start: cycle_end + 1].reset_index(drop=True)
         if len(w) >= 2:
-            pattern_candidates: list[int] = []
+            pattern_candidates: list[tuple[int, str]] = []
             if current_side == "above":
                 for j in range(0, len(w)):
                     if _is_bullish_hammer(w.iloc[j]):
-                        pattern_candidates.append(j)
+                        pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
-                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl) or _is_bullish_piercing_line(w.iloc[j - 1], w.iloc[j], lvl):
-                        pattern_candidates.append(j)
+                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "bullish_harami"))
+                    if _is_bullish_piercing_line(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "bullish_piercing_line"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
-                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False) or _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
-                        pattern_candidates.append(j)
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False):
+                        pattern_candidates.append((j, "morning_star"))
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                        pattern_candidates.append((j, "morning_doji_star"))
             else:
                 for j in range(0, len(w)):
                     if _is_bearish_shooting_star(w.iloc[j]):
-                        pattern_candidates.append(j)
+                        pattern_candidates.append((j, "shooting_star"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
-                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl) or _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
-                        pattern_candidates.append(j)
+                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "bearish_harami"))
+                    if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append((j, "dark_cloud_cover"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
-                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False) or _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
-                        pattern_candidates.append(j)
-            for pattern_idx in sorted(set(pattern_candidates)):
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False):
+                        pattern_candidates.append((j, "evening_star"))
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                        pattern_candidates.append((j, "evening_doji_star"))
+            for pattern_idx, formation in sorted(set(pattern_candidates), key=lambda x: x[0]):
                 pattern_abs = w_start + pattern_idx
                 local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
                 if pattern_abs - local_reaction_abs >= 2:
@@ -909,19 +920,28 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                     continue
                 probe = float(df["Low"].iloc[pattern_abs]) if current_side == "above" else float(df["High"].iloc[pattern_abs])
                 depth = _classify_retest_depth(float(top.iloc[pattern_abs]), float(bottom.iloc[pattern_abs]), probe, current_side)
+                # shallow if only shadow pierces/touches cloud or very slight entry
+                body_lo = min(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
+                body_hi = max(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
+                if (current_side == "above" and body_lo >= float(top.iloc[pattern_abs])) or (current_side == "below" and body_hi <= float(bottom.iloc[pattern_abs])):
+                    depth = "shallow"
                 valid_count += 1
+                ev_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
+                events.append((ev_date, formation, depth))
                 if first_valid_date == "-":
-                    first_valid_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
+                    first_valid_date = ev_date
                     first_valid_depth = depth
                     first_valid_status = f"{depth}_retest_pattern"
                 break
         i = cycle_end + 1
 
     if valid_count > 0:
-        return first_valid_status, first_valid_depth, valid_count, first_valid_date
+        latest_depth = events[-1][2]
+        latest_status = f"{latest_depth}_retest_pattern"
+        return latest_status, latest_depth, valid_count, first_valid_date, events
     if found_too_late:
-        return "invalid_pattern_too_late", "-", 0, "-"
-    return "returned_to_cloud_waiting_for_pattern", "-", 0, "-"
+        return "invalid_pattern_too_late", "-", 0, "-", []
+    return "returned_to_cloud_waiting_for_pattern", "-", 0, "-", []
 
 
 def run_ichimoku_search(target: str) -> int:
@@ -975,9 +995,12 @@ def run_ichimoku_search(target: str) -> int:
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
-            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "close"])
+            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "retest_date_1", "formation_1", "retest_date_2", "formation_2"])
             for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, f"{row.close:.4f}"])
+                ev = row.retest_events or []
+                d1, f1 = (ev[0][0], ev[0][1]) if len(ev) >= 1 else ("", "")
+                d2, f2 = (ev[1][0], ev[1][1]) if len(ev) >= 2 else ("", "")
+                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, d1, f1, d2, f2])
         print(f"Zapisano CSV #2: {out_csv_flip}")
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
         if all_links:
@@ -1063,9 +1086,12 @@ def run_ichimoku_search(target: str) -> int:
     out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
     with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "close"])
+        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "retest_date_1", "formation_1", "retest_date_2", "formation_2"])
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, f"{row.close:.4f}"])
+            ev = row.retest_events or []
+            d1, f1 = (ev[0][0], ev[0][1]) if len(ev) >= 1 else ("", "")
+            d2, f2 = (ev[1][0], ev[1][1]) if len(ev) >= 2 else ("", "")
+            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, d1, f1, d2, f2])
     print(f"Zapisano CSV #2: {out_csv_flip}")
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links:
