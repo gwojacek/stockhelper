@@ -328,6 +328,8 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
         return None
     near_top_idxs: list[int] = []
     near_top_threshold = global_max * 0.92
+    recent_near_top_idxs: list[int] = []
+    recent_left = max(left, right - 35)
     for i in range(left, right):
         win_l = max(0, i - 5)
         win_r = min(len(high), i + 6)
@@ -335,6 +337,8 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
             continue
         if float(high.iloc[i]) >= near_top_threshold:
             near_top_idxs.append(i)
+            if i >= recent_left and float(high.iloc[i]) >= (global_max * 0.97):
+                recent_near_top_idxs.append(i)
         recency = i / max(len(high) - 1, 1)
         prominence = float(high.iloc[i]) / max(float(high.iloc[max(0, i - 20):i + 1].mean()), 1e-9)
         height_rank = float(high.iloc[i]) / global_max
@@ -343,6 +347,8 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
         if score > best_score:
             best_score = score
             best_idx = i
+    if recent_near_top_idxs:
+        return max(recent_near_top_idxs)
     if near_top_idxs:
         return max(near_top_idxs)
     return best_idx
