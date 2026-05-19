@@ -59,6 +59,31 @@ def _resolve_runner(instrument_type: str) -> str:
     return "main_stock.py" if instrument_type == "stock" else "main.py"
 
 
+def _run_batch_search(mode: str, batch: list[str]) -> int:
+    failures = 0
+    if mode == "ichimoku":
+        from scanner_search import run_ichimoku_search as runner
+    else:
+        from scanner_search import run_fibo_search as runner
+
+    labels = ", ".join(batch)
+    print(f"[batch] {mode} search scope: {labels}")
+    for idx, scope in enumerate(batch, start=1):
+        print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
+        try:
+            code = int(runner(scope))
+        except Exception as exc:
+            print(f"[batch] {mode} search failed for {scope}: {exc}")
+            code = 1
+        if code != 0:
+            failures += 1
+    if failures:
+        print(f"[batch] completed with failures: {failures}/{len(batch)}")
+        return 1
+    print(f"[batch] completed successfully: {len(batch)}/{len(batch)}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="run", description="Ultra-short launcher. -c opens chart_program.")
     parser.add_argument("-ichimoku_search", "-search", dest="search_target", help="Run ichimoku scanner for index/commodities/forex")
@@ -89,6 +114,9 @@ def main() -> int:
         return 0
 
     if args.search_target:
+        normalized = args.search_target.strip().lower()
+        if normalized == "all":
+            return _run_batch_search("ichimoku", ["wig", "dax", "us100", "forex", "commodities"])
         from scanner_search import run_ichimoku_search
         return run_ichimoku_search(args.search_target)
     if args.fibo_explain_target:
@@ -96,6 +124,9 @@ def main() -> int:
         explain_scope = args.fibo_search_target or "single"
         return run_fibo_explain(explain_scope, args.fibo_explain_target)
     if args.fibo_search_target:
+        normalized = args.fibo_search_target.strip().lower()
+        if normalized == "all":
+            return _run_batch_search("fibo", ["wig", "dax", "us100", "forex", "commodities"])
         from scanner_search import run_fibo_search
         return run_fibo_search(args.fibo_search_target)
 
