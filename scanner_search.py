@@ -623,22 +623,29 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         enriched = _ichimoku(df)
         result = _qualifies(enriched)
         flip = _flip_after_long_respect(enriched)
+        stock_liquidity_ok = True
+        if instrument == "stock" and (result or flip):
+            metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
+            if metrics is None:
+                return display_symbol, None, None, "insufficient turnover data", source_label
+            avg_10d, below_20d, threshold_10d, threshold_20d = metrics
+            stock_liquidity_ok = avg_10d >= threshold_10d and below_20d <= 2
         if result:
             result.ticker = ticker
             if instrument == "stock":
-                metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
-                if metrics is None:
-                    return display_symbol, None, flip, "insufficient turnover data", source_label
-                avg_10d, below_20d, threshold_10d, threshold_20d = metrics
                 result.avg_turnover_10d_pln = avg_10d
                 result.low_turnover_days_20d = below_20d
                 result.liquidity_threshold_10d_pln = threshold_10d
                 result.liquidity_threshold_20d_pln = threshold_20d
-                if avg_10d < threshold_10d or below_20d > 2:
+                if not stock_liquidity_ok:
                     return display_symbol, None, flip, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
         if flip:
+            if instrument == "stock" and not stock_liquidity_ok:
+                return display_symbol, result, None, (
+                    f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
+                ), source_label
             flip.ticker = ticker
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
