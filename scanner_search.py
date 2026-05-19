@@ -975,9 +975,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             else:
                 _log("Rejected long: correction leg too short (<8 bars).")
                 return None
-        pre_start_left = max(0, i_start - 6)
+        # Extend fib-base search left of the selected impulse start.
+        # In strong accelerations, impulse-start selector can land on a later pullback
+        # (e.g. 2026-04-16) while the true swing base is a bit earlier (e.g. 2026-04-07).
+        # We cap the extension to keep the setup local and avoid very old anchors.
+        pre_start_left = max(0, min(i_start - 6, i_peak - 30))
         fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
-        _log(f"Long: fib start low searched in [{pre_start_left}, {i_start}] -> idx={fib_start_idx}.")
+        _log(
+            f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
+            f"(peak_idx={i_peak}) -> idx={fib_start_idx}."
+        )
         i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
