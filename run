@@ -89,6 +89,16 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
             for r in rows:
                 side = str(r.get("side", ""))
                 r["side_marker"] = "🟢 above" if side == "above" else ("🔴 below" if side == "below" else side)
+            th10_vals = {str(r.get("threshold_10d_pln", "")).strip() for r in rows if str(r.get("threshold_10d_pln", "")).strip()}
+            th20_vals = {str(r.get("threshold_20d_pln", "")).strip() for r in rows if str(r.get("threshold_20d_pln", "")).strip()}
+            low20_desc = "Liczba dni (z ostatnich 20), gdy obrót był poniżej progu 20d."
+            if len(th10_vals) == 1 and len(th20_vals) == 1:
+                out.write(
+                    "Progi płynności dla tej grupy: "
+                    f"Th10d (min. średni obrót 10d, PLN) = {next(iter(th10_vals))}, "
+                    f"Th20d (dolny próg dziennego obrotu, PLN) = {next(iter(th20_vals))}. "
+                    f"{low20_desc}\n"
+                )
             cols = [
                 ("Ticker", "ticker"),
                 ("Pozycja", "side_marker"),
@@ -98,9 +108,9 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Close", "close"),
                 ("Avg10d PLN", "avg_turnover_10d_pln"),
                 ("Low<Th20", "below_threshold_days_20d"),
-                ("Th10d PLN", "threshold_10d_pln"),
-                ("Th20d PLN", "threshold_20d_pln"),
             ]
+            if not (len(th10_vals) == 1 and len(th20_vals) == 1):
+                cols.extend([("Th10d PLN", "threshold_10d_pln"), ("Th20d PLN", "threshold_20d_pln")])
             _write_table(out, f"{title} / WYNIKI 1", rows, cols)
 
 def _is_ichimoku_csv(name: str) -> bool:
@@ -113,16 +123,18 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
-    ALL_REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report = ALL_REPORT_DIR / f"{mode}_all_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.txt"
+    report_dir = ALL_REPORT_DIR / ("ichimoku_searches" if mode == "ichimoku" else "fibo_searches")
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report = report_dir / f"{mode}_all_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.txt"
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
     failures=0; all_links=set()
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
-        before=set(SEARCH_OUTPUT_DIR.glob('*.csv'))
+        run_started = datetime.now(UTC).timestamp()
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
-        after=set(SEARCH_OUTPUT_DIR.glob('*.csv')); new=sorted(after-before, key=lambda p: p.stat().st_mtime)
+        after = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
+        new = [p for p in after if p.stat().st_mtime >= run_started - 2]
         for p in new:
             if mode == 'ichimoku' and _is_ichimoku_csv(p.name):
                 _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
