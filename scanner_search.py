@@ -1418,8 +1418,10 @@ def run_fibo_search(target: str) -> int:
                 if cand:
                     long_candidates.append(cand)
             if long_candidates:
-                # Keep older-offset waiting candidates if they still pass stale checks below.
-                # This preserves valid recent formations that are no longer visible at offset=0.
+                # If current window (offset 0) no longer qualifies as "waiting",
+                # drop stale waiting candidates coming from older offsets.
+                if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
+                    long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
                 # If multiple candidates end on the same impulse top, keep only the broadest leg
                 # (earliest start). This removes nested mini-impulses like 2026-04-16->2026-05-11
@@ -1459,7 +1461,8 @@ def run_fibo_search(target: str) -> int:
                     if cand:
                         short_candidates.append(cand)
                 if short_candidates:
-                    # Keep older-offset waiting candidates if they still pass stale checks below.
+                    if short_offset0 is None or short_offset0.status != "reached_23_6_waiting_for_61_8":
+                        short_candidates = [c for c in short_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                     short_candidates = [c for c in short_candidates if not _is_waiting_candidate_stale(df, c)]
                     short_candidates = sorted(
                         short_candidates,
