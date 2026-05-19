@@ -187,8 +187,9 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
     if not (c1_close < c1_open and c2_close > c2_open):
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
+    c1_body_low = min(c1_open, c1_close)
     return (
-        c2_open < c1_close
+        c2_open < c1_body_low
         and c2_close > midpoint_c1
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level
@@ -234,7 +235,8 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
 
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
-    if not (cl1 > o1 and cl2 < o2 and o2 > cl1):
+    c1_body_high = max(o1, cl1)
+    if not (cl1 > o1 and cl2 < o2 and o2 > c1_body_high):
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
@@ -836,54 +838,87 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
     if not waiting:
         return "breakout_confirmed", "-", 0, "-"
 
-    first_touch = touch_idxs[0]
-    latest_touch = touch_idxs[-1]
-    w_start = max(first_touch - 2, flip_idx + 1)
-    w = df.iloc[w_start: latest_touch + 1].reset_index(drop=True)
-    if len(w) < 2:
-        return "returned_to_cloud_waiting_for_pattern", "-", 0, "-"
-
-    pattern_candidates: list[int] = []
+    first_valid_date = "-"
+    first_valid_status = "-"
+    first_valid_depth = "-"
+    valid_count = 0
     found_too_late = False
-    if current_side == "above":
-        for i in range(0, len(w)):
-            if _is_bullish_hammer(w.iloc[i]):
-                pattern_candidates.append(i)
-        for i in range(1, len(w)):
-            lvl = float(w["cloud_top"].iloc[i])
-            if _is_bullish_harami(w.iloc[i - 1], w.iloc[i], lvl) or _is_bullish_piercing_line(w.iloc[i - 1], w.iloc[i], lvl):
-                pattern_candidates.append(i)
-        for i in range(2, len(w)):
-            lvl = float(w["cloud_top"].iloc[i])
-            if _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], lvl, doji_middle=False) or _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], lvl, doji_middle=True):
-                pattern_candidates.append(i)
-    else:
-        for i in range(0, len(w)):
-            if _is_bearish_shooting_star(w.iloc[i]):
-                pattern_candidates.append(i)
-        for i in range(1, len(w)):
-            lvl = float(w["cloud_bottom"].iloc[i])
-            if _is_bearish_harami(w.iloc[i - 1], w.iloc[i], lvl) or _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], lvl):
-                pattern_candidates.append(i)
-        for i in range(2, len(w)):
-            lvl = float(w["cloud_bottom"].iloc[i])
-            if _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], lvl, doji_middle=False) or _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], lvl, doji_middle=True):
-                pattern_candidates.append(i)
+    i = flip_idx + 1
+    while i < len(df):
+        if current_side == "above":
+            touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
+            outside = body_low.iloc[i] > top.iloc[i]
+        else:
+            touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
+            outside = body_high.iloc[i] < bottom.iloc[i]
 
-    if not pattern_candidates:
-        return "returned_to_cloud_waiting_for_pattern", "-", 0, "-"
-
-    for pattern_idx in sorted(set(pattern_candidates)):
-        pattern_abs = w_start + pattern_idx
-        local_reaction_abs = int(df["Low"].iloc[first_touch:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[first_touch:pattern_abs + 1].idxmax())
-        if pattern_abs - local_reaction_abs >= 2:
-            found_too_late = True
+        if not touched:
+            i += 1
             continue
-        probe = float(df["Low"].iloc[pattern_abs]) if current_side == "above" else float(df["High"].iloc[pattern_abs])
-        depth = _classify_retest_depth(float(top.iloc[pattern_abs]), float(bottom.iloc[pattern_abs]), probe, current_side)
-        pattern_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
-        return f"{depth}_retest_pattern", depth, 1, pattern_date
 
+        cycle_start = i
+        cycle_end = i
+        while cycle_end + 1 < len(df):
+            n = cycle_end + 1
+            if current_side == "above":
+                n_touched = float(df["Low"].iloc[n]) <= float(top.iloc[n])
+                n_outside = body_low.iloc[n] > top.iloc[n]
+            else:
+                n_touched = float(df["High"].iloc[n]) >= float(bottom.iloc[n])
+                n_outside = body_high.iloc[n] < bottom.iloc[n]
+            if n_touched:
+                cycle_end = n
+                continue
+            if n_outside:
+                break
+            cycle_end = n
+
+        w_start = max(cycle_start - 2, flip_idx + 1)
+        w = df.iloc[w_start: cycle_end + 1].reset_index(drop=True)
+        if len(w) >= 2:
+            pattern_candidates: list[int] = []
+            if current_side == "above":
+                for j in range(0, len(w)):
+                    if _is_bullish_hammer(w.iloc[j]):
+                        pattern_candidates.append(j)
+                for j in range(1, len(w)):
+                    lvl = float(w["cloud_top"].iloc[j])
+                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl) or _is_bullish_piercing_line(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append(j)
+                for j in range(2, len(w)):
+                    lvl = float(w["cloud_top"].iloc[j])
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False) or _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                        pattern_candidates.append(j)
+            else:
+                for j in range(0, len(w)):
+                    if _is_bearish_shooting_star(w.iloc[j]):
+                        pattern_candidates.append(j)
+                for j in range(1, len(w)):
+                    lvl = float(w["cloud_bottom"].iloc[j])
+                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl) or _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
+                        pattern_candidates.append(j)
+                for j in range(2, len(w)):
+                    lvl = float(w["cloud_bottom"].iloc[j])
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False) or _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                        pattern_candidates.append(j)
+            for pattern_idx in sorted(set(pattern_candidates)):
+                pattern_abs = w_start + pattern_idx
+                local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
+                if pattern_abs - local_reaction_abs >= 2:
+                    found_too_late = True
+                    continue
+                probe = float(df["Low"].iloc[pattern_abs]) if current_side == "above" else float(df["High"].iloc[pattern_abs])
+                depth = _classify_retest_depth(float(top.iloc[pattern_abs]), float(bottom.iloc[pattern_abs]), probe, current_side)
+                valid_count += 1
+                if first_valid_date == "-":
+                    first_valid_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
+                    first_valid_depth = depth
+                    first_valid_status = f"{depth}_retest_pattern"
+                break
+        i = cycle_end + 1
+
+    if valid_count > 0:
+        return first_valid_status, first_valid_depth, valid_count, first_valid_date
     if found_too_late:
         return "invalid_pattern_too_late", "-", 0, "-"
     return "returned_to_cloud_waiting_for_pattern", "-", 0, "-"
