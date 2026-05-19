@@ -711,16 +711,24 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     if not flip_results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Retest status':<36} {'Retest count':<12} {'Retest #1 (date pattern)':<34} {'Retest #2 (date pattern)':<34} {'Link':<0}")
+    max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
+    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Retest status':<36} {'Retest count':<12}"
+    event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
+    print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
     print("-" * 150)
     links: list[str] = []
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         link = _stooq_chart_url(row.ticker)
         links.append(link)
         events = row.retest_events or []
-        e1 = f"{events[0][0]} {events[0][1]}" if len(events) >= 1 else "-"
-        e2 = f"{events[1][0]} {events[1][1]}" if len(events) >= 2 else "-"
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {e1:<34} {e2:<34} {ANSI_CYAN}{link}{ANSI_RESET}")
+        event_cells = []
+        for idx in range(max_events):
+            if idx < len(events):
+                event_cells.append(f"{events[idx][0]} {events[idx][1]}")
+            else:
+                event_cells.append("-")
+        event_cols = " ".join([f"{cell:<34}" for cell in event_cells])
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
     return links
 
 
@@ -995,12 +1003,20 @@ def run_ichimoku_search(target: str) -> int:
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
-            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "retest_date_1", "formation_1", "retest_date_2", "formation_2"])
+            max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
+            dynamic_cols: list[str] = []
+            for i in range(1, max_events + 1):
+                dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
+            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
             for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
                 ev = row.retest_events or []
-                d1, f1 = (ev[0][0], ev[0][1]) if len(ev) >= 1 else ("", "")
-                d2, f2 = (ev[1][0], ev[1][1]) if len(ev) >= 2 else ("", "")
-                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, d1, f1, d2, f2])
+                dynamic_vals: list[str] = []
+                for i in range(max_events):
+                    if i < len(ev):
+                        dynamic_vals.extend([ev[i][0], ev[i][1]])
+                    else:
+                        dynamic_vals.extend(["", ""])
+                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
         print(f"Zapisano CSV #2: {out_csv_flip}")
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
         if all_links:
@@ -1086,12 +1102,20 @@ def run_ichimoku_search(target: str) -> int:
     out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
     with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "retest_date_1", "formation_1", "retest_date_2", "formation_2"])
+        max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
+        dynamic_cols: list[str] = []
+        for i in range(1, max_events + 1):
+            dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
+        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             ev = row.retest_events or []
-            d1, f1 = (ev[0][0], ev[0][1]) if len(ev) >= 1 else ("", "")
-            d2, f2 = (ev[1][0], ev[1][1]) if len(ev) >= 2 else ("", "")
-            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, d1, f1, d2, f2])
+            dynamic_vals: list[str] = []
+            for i in range(max_events):
+                if i < len(ev):
+                    dynamic_vals.extend([ev[i][0], ev[i][1]])
+                else:
+                    dynamic_vals.extend(["", ""])
+            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
     print(f"Zapisano CSV #2: {out_csv_flip}")
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links:
