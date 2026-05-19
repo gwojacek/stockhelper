@@ -1151,7 +1151,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             fib_23_6=fib_236,
             fib_38_2=fib_382,
             fib_61_8=fib_618,
-            first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
+            first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
             reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
@@ -1280,7 +1280,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_23_6=fib_236,
         fib_38_2=fib_382,
         fib_61_8=fib_618,
-        first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
+        first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
         reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
     )
 
@@ -1295,7 +1295,7 @@ def _print_fibo_results(
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
         print("-" * 185)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
@@ -1324,12 +1324,12 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
         return links
-    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Close':>10} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Close':>10} {'Link':<0}")
     print("-" * 140)
     for r in rows2:
         link = _stooq_chart_url(r.ticker)
@@ -1337,7 +1337,7 @@ def _print_fibo_results(
             links.append(link)
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 
