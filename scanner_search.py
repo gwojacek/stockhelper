@@ -326,19 +326,25 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
     global_max = float(high.iloc[left:right].max())
     if global_max <= 0:
         return None
+    near_top_idxs: list[int] = []
+    near_top_threshold = global_max * 0.92
     for i in range(left, right):
         win_l = max(0, i - 5)
         win_r = min(len(high), i + 6)
         if float(high.iloc[i]) < float(high.iloc[win_l:win_r].max()):
             continue
+        if float(high.iloc[i]) >= near_top_threshold:
+            near_top_idxs.append(i)
         recency = i / max(len(high) - 1, 1)
         prominence = float(high.iloc[i]) / max(float(high.iloc[max(0, i - 20):i + 1].mean()), 1e-9)
         height_rank = float(high.iloc[i]) / global_max
-        # Prefer dominant highs over merely recent local highs.
-        score = prominence * 1.2 + height_rank * 1.0 + recency * 0.2
+        # Prefer recent dominant highs; keep strong weight on recency to avoid stale peaks.
+        score = prominence * 0.9 + height_rank * 1.0 + recency * 0.7
         if score > best_score:
             best_score = score
             best_idx = i
+    if near_top_idxs:
+        return max(near_top_idxs)
     return best_idx
 
 
