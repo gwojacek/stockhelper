@@ -688,6 +688,19 @@ def _scan_source_label(src: str) -> str:
     return s.upper() or "UNKNOWN"
 
 
+def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
+    base = f"search_{group_name.lower()}_"
+    files = [p for p in SEARCH_OUTPUT_DIR.glob(f"{base}*.csv") if p.is_file()]
+    if len(files) <= keep_last:
+        return
+    files_sorted = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in files_sorted[keep_last:]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
+
+
 def _print_results_with_links(results: list[ScanResult]) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI (instrumenty spełniające warunki):{ANSI_RESET}")
     if not results:
@@ -1018,6 +1031,7 @@ def run_ichimoku_search(target: str) -> int:
                         dynamic_vals.extend(["", ""])
                 writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
         print(f"Zapisano CSV #2: {out_csv_flip}")
+        _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
         if all_links:
             try:
@@ -1117,6 +1131,7 @@ def run_ichimoku_search(target: str) -> int:
                     dynamic_vals.extend(["", ""])
             writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
     print(f"Zapisano CSV #2: {out_csv_flip}")
+    _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links:
         try:
