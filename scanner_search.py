@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 import math
 from importlib import util
 from pathlib import Path
+from urllib.parse import quote
 
 import pandas as pd
 
@@ -325,19 +326,31 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
     global_max = float(high.iloc[left:right].max())
     if global_max <= 0:
         return None
+    near_top_idxs: list[int] = []
+    near_top_threshold = global_max * 0.92
+    recent_near_top_idxs: list[int] = []
+    recent_left = max(left, right - 35)
     for i in range(left, right):
         win_l = max(0, i - 5)
         win_r = min(len(high), i + 6)
         if float(high.iloc[i]) < float(high.iloc[win_l:win_r].max()):
             continue
+        if float(high.iloc[i]) >= near_top_threshold:
+            near_top_idxs.append(i)
+            if i >= recent_left and float(high.iloc[i]) >= (global_max * 0.97):
+                recent_near_top_idxs.append(i)
         recency = i / max(len(high) - 1, 1)
         prominence = float(high.iloc[i]) / max(float(high.iloc[max(0, i - 20):i + 1].mean()), 1e-9)
         height_rank = float(high.iloc[i]) / global_max
-        # Prefer dominant highs over merely recent local highs.
-        score = prominence * 1.2 + height_rank * 1.0 + recency * 0.2
+        # Prefer recent dominant highs; keep strong weight on recency to avoid stale peaks.
+        score = prominence * 0.9 + height_rank * 1.0 + recency * 0.7
         if score > best_score:
             best_score = score
             best_idx = i
+    if recent_near_top_idxs:
+        return max(recent_near_top_idxs)
+    if near_top_idxs:
+        return max(near_top_idxs)
     return best_idx
 
 
@@ -646,7 +659,8 @@ def _stooq_symbol_for_link(ticker: str) -> str:
 
 def _stooq_chart_url(ticker: str) -> str:
     symbol = _stooq_symbol_for_link(ticker)
-    return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
+    symbol_q = quote(symbol, safe="")
+    return f"https://stooq.pl/q/a2/?s={symbol_q}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
 
 
 def _compact_error(err: str | None) -> str:
@@ -975,9 +989,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             else:
                 _log("Rejected long: correction leg too short (<8 bars).")
                 return None
-        pre_start_left = max(0, i_start - 6)
+        # Extend fib-base search left of the selected impulse start.
+        # In strong accelerations, impulse-start selector can land on a later pullback
+        # (e.g. 2026-04-16) while the true swing base is a bit earlier (e.g. 2026-04-07).
+        # We cap the extension to keep the setup local and avoid very old anchors.
+        pre_start_left = max(0, min(i_start - 6, i_peak - 30))
         fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
-        _log(f"Long: fib start low searched in [{pre_start_left}, {i_start}] -> idx={fib_start_idx}.")
+        _log(
+            f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
+            f"(peak_idx={i_peak}) -> idx={fib_start_idx}."
+        )
         i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
@@ -1144,7 +1165,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             fib_23_6=fib_236,
             fib_38_2=fib_382,
             fib_61_8=fib_618,
-            first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
+            first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
             reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
@@ -1273,7 +1294,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_23_6=fib_236,
         fib_38_2=fib_382,
         fib_61_8=fib_618,
-        first_61_8_touch_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()),
+        first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
         reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
     )
 
@@ -1288,7 +1309,7 @@ def _print_fibo_results(
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
         print("-" * 185)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
@@ -1317,12 +1338,12 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
         return links
-    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touch':<12} {'Close':>10} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Close':>10} {'Link':<0}")
     print("-" * 140)
     for r in rows2:
         link = _stooq_chart_url(r.ticker)
@@ -1330,7 +1351,7 @@ def _print_fibo_results(
             links.append(link)
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {r.first_61_8_touch_date:<12} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 
@@ -1349,8 +1370,27 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > end_ts]
         if after.empty:
             return False
+        if cand.direction == "long":
+            # Long waiting setup becomes stale if market already made a higher high
+            # after the selected impulse top (newer impulse supersedes older one),
+            # or if price already reached the setup's 61.8 retracement.
+            end_rows = df_full.loc[dts == end_ts]
+            end_high = pd.to_numeric(end_rows["High"], errors="coerce").max() if not end_rows.empty else float("nan")
+            after_high = pd.to_numeric(after["High"], errors="coerce")
+            made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
+            if made_higher_high:
+                return True
+            after_low = pd.to_numeric(after["Low"], errors="coerce")
+            return bool((after_low <= float(cand.fib_61_8)).any())
+        # Symmetric stale condition for short waiting setups.
+        end_rows = df_full.loc[dts == end_ts]
+        end_low = pd.to_numeric(end_rows["Low"], errors="coerce").min() if not end_rows.empty else float("nan")
         after_low = pd.to_numeric(after["Low"], errors="coerce")
-        return bool((after_low <= float(cand.fib_61_8)).any())
+        made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
+        if made_lower_low:
+            return True
+        after_high = pd.to_numeric(after["High"], errors="coerce")
+        return bool((after_high >= float(cand.fib_61_8)).any())
 
     def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None]:
         idx, ticker = idx_ticker
@@ -1383,6 +1423,15 @@ def run_fibo_search(target: str) -> int:
                 if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
                     long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
+                # If multiple candidates end on the same impulse top, keep only the broadest leg
+                # (earliest start). This removes nested mini-impulses like 2026-04-16->2026-05-11
+                # when the proper formation is 2026-04-07->2026-05-11.
+                by_end: dict[str, FiboScanResult] = {}
+                for c in long_candidates:
+                    prev = by_end.get(c.incline_end_date)
+                    if prev is None or c.incline_start_date < prev.incline_start_date:
+                        by_end[c.incline_end_date] = c
+                long_candidates = list(by_end.values())
                 # Keep at most two distinct formations (e.g. bigger + recent smaller).
                 long_candidates = sorted(
                     long_candidates,
