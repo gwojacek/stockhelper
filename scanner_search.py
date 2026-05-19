@@ -874,6 +874,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
     valid_count = 0
     found_too_late = False
     events: list[tuple[str, str, str]] = []
+    last_pattern_abs: int | None = None
     i = flip_idx + 1
     while i < len(df):
         if current_side == "above":
@@ -956,6 +957,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                 valid_count += 1
                 ev_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
                 events.append((ev_date, formation, depth))
+                last_pattern_abs = pattern_abs
                 if first_valid_date == "-":
                     first_valid_date = ev_date
                     first_valid_depth = depth
@@ -964,6 +966,26 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
         i = cycle_end + 1
 
     if valid_count > 0:
+        # If after a valid retest pattern price returned to cloud and then broke
+        # the last pattern candle extreme in the opposite direction, downgrade
+        # current state back to waiting_for_pattern.
+        if last_pattern_abs is not None and last_pattern_abs + 1 < len(df):
+            if current_side == "above":
+                last_pattern_floor = float(df["Low"].iloc[last_pattern_abs])
+                returned_to_cloud = False
+                for k in range(last_pattern_abs + 1, len(df)):
+                    if float(df["Low"].iloc[k]) <= float(top.iloc[k]):
+                        returned_to_cloud = True
+                    if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
+                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
+            else:
+                last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
+                returned_to_cloud = False
+                for k in range(last_pattern_abs + 1, len(df)):
+                    if float(df["High"].iloc[k]) >= float(bottom.iloc[k]):
+                        returned_to_cloud = True
+                    if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
+                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
         return latest_status, latest_depth, valid_count, first_valid_date, events

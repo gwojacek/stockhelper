@@ -54,6 +54,9 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
             if link: links.add(link)
 
         if csv_path.name.endswith("_flips.csv"):
+            for r in rows:
+                retest_dates = [str(v).strip() for k, v in r.items() if str(k).startswith("retest_date_") and str(v).strip()]
+                r["last_valid_retest_pattern_date"] = retest_dates[-1] if retest_dates else "-"
             cols = [
                 ("Ticker", "ticker"),
                 ("Było", "previous_side"),
@@ -62,7 +65,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Mies. od wybicia", "months_since_flip"),
                 ("Retest status", "latest_retest_status"),
                 ("Retest count", "valid_retests_count"),
-                ("1st valid retest", "first_valid_retest_pattern_date"),
+                ("Last valid retest", "last_valid_retest_pattern_date"),
             ]
             _write_table(out, f"{title} / WYNIKI 2", rows, cols)
         elif csv_path.name.startswith("fibo_search_"):
@@ -125,16 +128,21 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
     report_dir = ALL_REPORT_DIR / ("ichimoku_searches" if mode == "ichimoku" else "fibo_searches")
     report_dir.mkdir(parents=True, exist_ok=True)
-    report = report_dir / f"{mode}_all_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.txt"
+    for old in report_dir.glob("*.txt"):
+        try:
+            old.unlink()
+        except Exception:
+            pass
+    report = report_dir / f"{mode}_all_latest.txt"
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
     failures=0; all_links=set()
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
-        run_started = datetime.now(UTC).timestamp()
+        before_mtime = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
         after = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
-        new = [p for p in after if p.stat().st_mtime >= run_started - 2]
+        new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
         for p in new:
             if mode == 'ichimoku' and _is_ichimoku_csv(p.name):
                 _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
