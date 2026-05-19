@@ -103,6 +103,12 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
             ]
             _write_table(out, f"{title} / WYNIKI 1", rows, cols)
 
+def _is_ichimoku_csv(name: str) -> bool:
+    return name.startswith("search_") and name.endswith(".csv")
+
+def _is_fibo_csv(name: str) -> bool:
+    return name.startswith("fibo_search_") and name.endswith(".csv")
+
 def _run_batch_search(mode: str, batch: list[str]) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
@@ -118,9 +124,9 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
         after=set(SEARCH_OUTPUT_DIR.glob('*.csv')); new=sorted(after-before, key=lambda p: p.stat().st_mtime)
         for p in new:
-            if mode=='ichimoku' and p.name.startswith(f'search_{scope.lower()}'):
+            if mode == 'ichimoku' and _is_ichimoku_csv(p.name):
                 _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
-            if mode=='fibo' and p.name.startswith(f'fibo_search_{scope.lower()}'):
+            if mode == 'fibo' and _is_fibo_csv(p.name):
                 _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
         if code!=0: failures+=1
     print(f"\n[batch] combo report saved: {report}")
