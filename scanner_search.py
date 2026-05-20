@@ -623,22 +623,29 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         enriched = _ichimoku(df)
         result = _qualifies(enriched)
         flip = _flip_after_long_respect(enriched)
+        stock_liquidity_ok = True
+        if instrument == "stock" and (result or flip):
+            metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
+            if metrics is None:
+                return display_symbol, None, None, "insufficient turnover data", source_label
+            avg_10d, below_20d, threshold_10d, threshold_20d = metrics
+            stock_liquidity_ok = avg_10d >= threshold_10d and below_20d <= 2
         if result:
             result.ticker = ticker
             if instrument == "stock":
-                metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
-                if metrics is None:
-                    return display_symbol, None, flip, "insufficient turnover data", source_label
-                avg_10d, below_20d, threshold_10d, threshold_20d = metrics
                 result.avg_turnover_10d_pln = avg_10d
                 result.low_turnover_days_20d = below_20d
                 result.liquidity_threshold_10d_pln = threshold_10d
                 result.liquidity_threshold_20d_pln = threshold_20d
-                if avg_10d < threshold_10d or below_20d > 2:
+                if not stock_liquidity_ok:
                     return display_symbol, None, flip, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
         if flip:
+            if instrument == "stock" and not stock_liquidity_ok:
+                return display_symbol, result, None, (
+                    f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
+                ), source_label
             flip.ticker = ticker
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
@@ -867,6 +874,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
     valid_count = 0
     found_too_late = False
     events: list[tuple[str, str, str]] = []
+    last_pattern_abs: int | None = None
     i = flip_idx + 1
     while i < len(df):
         if current_side == "above":
@@ -949,6 +957,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                 valid_count += 1
                 ev_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
                 events.append((ev_date, formation, depth))
+                last_pattern_abs = pattern_abs
                 if first_valid_date == "-":
                     first_valid_date = ev_date
                     first_valid_depth = depth
@@ -957,6 +966,26 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
         i = cycle_end + 1
 
     if valid_count > 0:
+        # If after a valid retest pattern price returned to cloud and then broke
+        # the last pattern candle extreme in the opposite direction, downgrade
+        # current state back to waiting_for_pattern.
+        if last_pattern_abs is not None and last_pattern_abs + 1 < len(df):
+            if current_side == "above":
+                last_pattern_floor = float(df["Low"].iloc[last_pattern_abs])
+                returned_to_cloud = False
+                for k in range(last_pattern_abs + 1, len(df)):
+                    if float(df["Low"].iloc[k]) <= float(top.iloc[k]):
+                        returned_to_cloud = True
+                    if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
+                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
+            else:
+                last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
+                returned_to_cloud = False
+                for k in range(last_pattern_abs + 1, len(df)):
+                    if float(df["High"].iloc[k]) >= float(bottom.iloc[k]):
+                        returned_to_cloud = True
+                    if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
+                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
         return latest_status, latest_depth, valid_count, first_valid_date, events
@@ -994,13 +1023,16 @@ def run_ichimoku_search(target: str) -> int:
                     if flip:
                         flip_results.append(flip)
             if chunk_idx < len(chunks):
-                try:
-                    answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
-                except EOFError:
-                    answer = "n"
-                if answer != "y":
-                    print("[search] Scan paused/stopped by user before next WIG chunk.")
-                    break
+                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                    print("[search] batch mode: auto-continue to next WIG chunk.")
+                else:
+                    try:
+                        answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
+                    except EOFError:
+                        answer = "n"
+                    if answer != "y":
+                        print("[search] Scan paused/stopped by user before next WIG chunk.")
+                        break
 
         SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -1033,7 +1065,7 @@ def run_ichimoku_search(target: str) -> int:
         print(f"Zapisano CSV #2: {out_csv_flip}")
         _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
-        if all_links:
+        if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
             try:
                 open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
             except EOFError:
@@ -1068,13 +1100,16 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             if group_name == "WIG" and offset in {166, 331}:
-                try:
-                    answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
-                except EOFError:
-                    answer = "n"
-                if answer != "y":
-                    print("[search] Scan paused/stopped by user before next WIG chunk.")
-                    break
+                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                    print("[search] batch mode: auto-continue after WIG checkpoint.")
+                else:
+                    try:
+                        answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
+                    except EOFError:
+                        answer = "n"
+                    if answer != "y":
+                        print("[search] Scan paused/stopped by user before next WIG chunk.")
+                        break
             display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
             if err:
@@ -1133,7 +1168,7 @@ def run_ichimoku_search(target: str) -> int:
     print(f"Zapisano CSV #2: {out_csv_flip}")
     _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
-    if all_links:
+    if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
         except EOFError:
@@ -1838,7 +1873,7 @@ def run_fibo_search(target: str) -> int:
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
-    if links:
+    if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
         except EOFError:
