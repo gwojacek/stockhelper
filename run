@@ -195,7 +195,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
         print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: ICHIMOKU ===\033[0m")
         before_i = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
-        code_i = _run_batch_search("ichimoku", [scope])
+        code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
         after_i = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new_i = [p for p in after_i if p.name not in before_i or p.stat().st_mtime > before_i[p.name]]
         with report.open("a", encoding="utf-8") as out:
@@ -209,7 +209,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
         print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: FIBO ===\033[0m")
         before_f = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
-        code_f = _run_batch_search("fibo", [scope])
+        code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
         after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new_f = [p for p in after_f if p.name not in before_f or p.stat().st_mtime > before_f[p.name]]
         with report.open("a", encoding="utf-8") as out:
@@ -230,13 +230,21 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             out.write(f"- {l}\n")
         out.write(f"\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[allsearch] combo report saved: {report}")
+    if all_links:
+        try:
+            open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
+        except EOFError:
+            open_all = "n"
+        if open_all == "y":
+            for l in sorted(all_links):
+                webbrowser.open_new_tab(l)
     print("CSV files:")
     for p in csv_refs:
         print(f" - {p}")
     print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
     return 1 if failures else 0
 
-def _run_batch_search(mode: str, batch: list[str]) -> int:
+def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
@@ -278,7 +286,7 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
             out.write(f"- {l}\n")
         out.write(f"\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
-    if all_links:
+    if ask_open_links and all_links:
         try: open_all=input('Czy otworzyć wszystkie linki? [y/N]: ').strip().lower()
         except EOFError: open_all='n'
         if open_all=='y':
