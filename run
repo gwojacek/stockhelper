@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_search"
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
-GOLD_DOT = "🟡"
+GOLD_DOT = "🟨"
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
 
@@ -47,8 +47,6 @@ def _format_row(cells: list[str], widths: list[int], right_align: list[bool] | N
     right_align = right_align or [False] * len(cells)
     for i, (cell, width) in enumerate(zip(cells, widths)):
         txt = str(cell)
-        if len(txt) > width:
-            txt = txt[: max(1, width - 1)] + "…"
         out_cells.append(txt.rjust(width) if right_align[i] else txt.ljust(width))
     return "│ " + " │ ".join(out_cells) + " │"
 
@@ -62,8 +60,10 @@ def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tupl
     widths = []
     for h, k in columns:
         w = max(len(h), max((len(str(r.get(k, ""))) for r in rows), default=0))
+        if k == "side_marker" or k == "jest_marker":
+            w = max(w, 9)
         if k == "stooq_link":
-            w = min(max(w, 52), 80)
+            w = max(w, 120)
         widths.append(w)
     right_align = []
     for _, key in columns:
@@ -79,9 +79,10 @@ def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tupl
         out.write(_format_row([str(row.get(k, "")) for k in keys], widths, right_align=right_align) + "\n")
     out.write(bottom + "\n")
 
-def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -> None:
+def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str], csv_refs: list[Path]) -> None:
     if not csv_path.exists(): return
     with csv_path.open(newline='', encoding='utf-8') as fh: rows=list(csv.DictReader(fh))
+    csv_refs.append(csv_path)
     with fp.open('a', encoding='utf-8') as out:
         for r in rows:
             t=r.get('ticker','').strip(); link=_stooq_chart_url(t) if t else ''
@@ -111,7 +112,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Link", "stooq_link"),
             ]
             rows = sorted(rows, key=lambda r: (str(r.get("current_side", "")) != "below", -float(str(r.get("months_since_flip", "0") or "0"))))
-            _write_table(out, f"{title} / WYNIKI 2", rows, cols)
+            _write_table(out, section, rows, cols)
         elif csv_path.name.startswith("fibo_search_"):
             for r in rows:
                 status = str(r.get("status", ""))
@@ -132,7 +133,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Close", "current_close"),
                 ("Link", "stooq_link"),
             ]
-            _write_table(out, f"{title} / WYNIKI 1+2", rows, cols)
+            _write_table(out, section, rows, cols)
         else:
             for r in rows:
                 side = str(r.get("side", ""))
@@ -166,7 +167,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
             for r in rows:
                 if r.get("ticker") in top_keys:
                     r["avg_turnover_10d_pln"] = f"{GOLD_DOT} {r.get('avg_turnover_10d_pln')}"
-            _write_table(out, f"{title} / WYNIKI 1", rows, cols)
+            _write_table(out, section, rows, cols)
 
 def _is_ichimoku_csv(name: str) -> bool:
     return name.startswith("search_") and name.endswith(".csv")
@@ -186,6 +187,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     report.write_text("ALLSEARCH COMBO REPORT\n", encoding="utf-8")
 
     failures = 0
+    csv_refs: list[Path] = []
+    all_links: set[str] = set()
     for scope in scopes:
         with report.open("a", encoding="utf-8") as out:
             out.write(f"\n\n========== {scope.upper()} ==========\n")
@@ -199,7 +202,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             out.write("\n------ ICHIMOKU ------\n")
         for p in new_i:
             if _is_ichimoku_csv(p.name):
-                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, set())
+                label = "WYNIKI 2" if p.name.endswith("_flips.csv") else "WYNIKI 1"
+                _append_csv_section(report, label, p, all_links, csv_refs)
         if code_i != 0:
             failures += 1
 
@@ -212,11 +216,24 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             out.write("\n------ FIBO ------\n")
         for p in new_f:
             if _is_fibo_csv(p.name):
-                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, set())
+                _append_csv_section(report, "WYNIKI 1+2", p, all_links, csv_refs)
         if code_f != 0:
             failures += 1
 
+    with report.open("a", encoding="utf-8") as out:
+        out.write("\n\n========== PODSUMOWANIE ==========\n")
+        out.write("\nCSV files:\n")
+        for p in csv_refs:
+            out.write(f"- {p}\n")
+        out.write("\nLinks:\n")
+        for l in sorted(all_links):
+            out.write(f"- {l}\n")
+        out.write(f"\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[allsearch] combo report saved: {report}")
+    print("CSV files:")
+    for p in csv_refs:
+        print(f" - {p}")
+    print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
     return 1 if failures else 0
 
 def _run_batch_search(mode: str, batch: list[str]) -> int:
@@ -232,7 +249,7 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
             pass
     report = report_dir / f"{mode}_all_latest.txt"
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
-    failures=0; all_links=set()
+    failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         before_mtime = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
@@ -247,10 +264,19 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
         for p in normal + flips:
             if mode == 'ichimoku' and _is_ichimoku_csv(p.name):
                 label = "WYNIKI 2" if p.name.endswith("_flips.csv") else "WYNIKI 1"
-                _append_csv_section(report, f"{scope.upper()} :: {p.name} / {label}", p, all_links)
+                _append_csv_section(report, label, p, all_links, csv_refs)
             if mode == 'fibo' and _is_fibo_csv(p.name):
-                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
+                _append_csv_section(report, "WYNIKI 1+2", p, all_links, csv_refs)
         if code!=0: failures+=1
+    with report.open("a", encoding="utf-8") as out:
+        out.write("\n\n========== PODSUMOWANIE ==========\n")
+        out.write("\nCSV files:\n")
+        for p in csv_refs:
+            out.write(f"- {p}\n")
+        out.write("\nLinks:\n")
+        for l in sorted(all_links):
+            out.write(f"- {l}\n")
+        out.write(f"\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
     if all_links:
         try: open_all=input('Czy otworzyć wszystkie linki? [y/N]: ').strip().lower()
