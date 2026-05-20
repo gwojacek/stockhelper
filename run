@@ -8,6 +8,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_search"
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
+GOLD_DOT = "🟡"
+RED_DOT = "🔴"
+GRAY_DOT = "⚪"
 
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
@@ -43,7 +46,9 @@ def _format_row(cells: list[str], widths: list[int], right_align: list[bool] | N
     out_cells: list[str] = []
     right_align = right_align or [False] * len(cells)
     for i, (cell, width) in enumerate(zip(cells, widths)):
-        txt = str(cell)[:width]
+        txt = str(cell)
+        if len(txt) > width:
+            txt = txt[: max(1, width - 1)] + "…"
         out_cells.append(txt.rjust(width) if right_align[i] else txt.ljust(width))
     return "│ " + " │ ".join(out_cells) + " │"
 
@@ -54,7 +59,12 @@ def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tupl
         return
     headers = [h for h, _ in columns]
     keys = [k for _, k in columns]
-    widths = [max(len(h), max((len(str(r.get(k, ""))) for r in rows), default=0)) for h, k in columns]
+    widths = []
+    for h, k in columns:
+        w = max(len(h), max((len(str(r.get(k, ""))) for r in rows), default=0))
+        if k == "stooq_link":
+            w = min(max(w, 52), 80)
+        widths.append(w)
     right_align = []
     for _, key in columns:
         sample = next((str(r.get(key, "")) for r in rows if str(r.get(key, "")).strip()), "")
@@ -85,17 +95,22 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
             for r in rows:
                 retest_dates = [str(v).strip() for k, v in r.items() if str(k).startswith("retest_date_") and str(v).strip()]
                 r["last_valid_retest_pattern_date"] = retest_dates[-1] if retest_dates else "-"
+                last_pattern = [str(v).strip() for k, v in r.items() if str(k).startswith("formation_") and str(v).strip()]
+                r["last_valid_retest_pattern_name"] = last_pattern[-1] if last_pattern else "-"
+                r["jest_marker"] = f"{GRAY_DOT} above" if str(r.get("current_side", "")) == "above" else f"{RED_DOT} below"
             cols = [
                 ("Ticker", "ticker"),
                 ("Było", "previous_side"),
-                ("Jest", "current_side"),
+                ("Jest", "jest_marker"),
                 ("Data wybicia", "flip_date"),
                 ("Mies. od wybicia", "months_since_flip"),
                 ("Retest status", "latest_retest_status"),
                 ("Retest count", "valid_retests_count"),
                 ("Last valid retest", "last_valid_retest_pattern_date"),
+                ("Pattern", "last_valid_retest_pattern_name"),
                 ("Link", "stooq_link"),
             ]
+            rows = sorted(rows, key=lambda r: (str(r.get("current_side", "")) != "below", -float(str(r.get("months_since_flip", "0") or "0"))))
             _write_table(out, f"{title} / WYNIKI 2", rows, cols)
         elif csv_path.name.startswith("fibo_search_"):
             for r in rows:
@@ -121,17 +136,15 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
         else:
             for r in rows:
                 side = str(r.get("side", ""))
-                r["side_marker"] = "🟢 above" if side == "above" else ("🔴 below" if side == "below" else side)
+                r["side_marker"] = f"{GRAY_DOT} above" if side == "above" else (f"{RED_DOT} below" if side == "below" else side)
             th10_vals = {str(r.get("threshold_10d_pln", "")).strip() for r in rows if str(r.get("threshold_10d_pln", "")).strip()}
             th20_vals = {str(r.get("threshold_20d_pln", "")).strip() for r in rows if str(r.get("threshold_20d_pln", "")).strip()}
             low20_desc = "Liczba dni (z ostatnich 20), gdy obrót był poniżej progu 20d."
+            out.write("\n========== PROGI ==========\n\n")
             if len(th10_vals) == 1 and len(th20_vals) == 1:
-                out.write(
-                    "Progi płynności dla tej grupy: "
-                    f"Th10d (min. średni obrót 10d, PLN) = {next(iter(th10_vals))}, "
-                    f"Th20d (dolny próg dziennego obrotu, PLN) = {next(iter(th20_vals))}. "
-                    f"{low20_desc}\n"
-                )
+                out.write(f"Th10d (min. średni obrót 10d, PLN) = {next(iter(th10_vals))}\n")
+                out.write(f"Th20d (dolny próg dziennego obrotu, PLN) = {next(iter(th20_vals))}\n")
+            out.write(f"{low20_desc}\n")
             cols = [
                 ("Ticker", "ticker"),
                 ("Pozycja", "side_marker"),
@@ -139,12 +152,20 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Mies.", "respect_months"),
                 ("Start", "start_date"),
                 ("Close", "close"),
-                ("Avg10d PLN", "avg_turnover_10d_pln"),
-                ("Low<Th20", "below_threshold_days_20d"),
                 ("Link", "stooq_link"),
             ]
-            if not (len(th10_vals) == 1 and len(th20_vals) == 1):
+            is_stock_like = any("." in str(r.get("ticker", "")) or str(r.get("ticker", "")).isalpha() for r in rows)
+            if is_stock_like:
+                cols.insert(6, ("Avg10d PLN", "avg_turnover_10d_pln"))
+                cols.insert(7, ("Low<Th20", "below_threshold_days_20d"))
+            if is_stock_like and not (len(th10_vals) == 1 and len(th20_vals) == 1):
                 cols.extend([("Th10d PLN", "threshold_10d_pln"), ("Th20d PLN", "threshold_20d_pln")])
+            rows = sorted(rows, key=lambda r: (str(r.get("side", "")) != "below", -float(str(r.get("respect_months", "0") or "0"))))
+            top3 = sorted([r for r in rows if str(r.get("avg_turnover_10d_pln", "")).strip()], key=lambda r: float(str(r.get("avg_turnover_10d_pln", "0")).replace(",", "")), reverse=True)[:3]
+            top_keys = {r.get("ticker") for r in top3}
+            for r in rows:
+                if r.get("ticker") in top_keys:
+                    r["avg_turnover_10d_pln"] = f"{GOLD_DOT} {r.get('avg_turnover_10d_pln')}"
             _write_table(out, f"{title} / WYNIKI 1", rows, cols)
 
 def _is_ichimoku_csv(name: str) -> bool:
@@ -174,9 +195,14 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
         after = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
-        for p in new:
+        with report.open("a", encoding="utf-8") as out:
+            out.write(f"\n\n========== {scope.upper()} ==========\n")
+        normal = [p for p in new if not p.name.endswith("_flips.csv")]
+        flips = [p for p in new if p.name.endswith("_flips.csv")]
+        for p in normal + flips:
             if mode == 'ichimoku' and _is_ichimoku_csv(p.name):
-                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
+                label = "WYNIKI 2" if p.name.endswith("_flips.csv") else "WYNIKI 1"
+                _append_csv_section(report, f"{scope.upper()} :: {p.name} / {label}", p, all_links)
             if mode == 'fibo' and _is_fibo_csv(p.name):
                 _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, all_links)
         if code!=0: failures+=1
