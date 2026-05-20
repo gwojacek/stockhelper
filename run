@@ -174,6 +174,51 @@ def _is_ichimoku_csv(name: str) -> bool:
 def _is_fibo_csv(name: str) -> bool:
     return name.startswith("fibo_search_") and name.endswith(".csv")
 
+def _run_allsearch_combo(scopes: list[str]) -> int:
+    report_dir = ALL_REPORT_DIR / "allsearch"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    for old in report_dir.glob("*.txt"):
+        try:
+            old.unlink()
+        except Exception:
+            pass
+    report = report_dir / "allsearch_latest.txt"
+    report.write_text("ALLSEARCH COMBO REPORT\n", encoding="utf-8")
+
+    failures = 0
+    for scope in scopes:
+        with report.open("a", encoding="utf-8") as out:
+            out.write(f"\n\n========== {scope.upper()} ==========\n")
+
+        print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: ICHIMOKU ===\033[0m")
+        before_i = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        code_i = _run_batch_search("ichimoku", [scope])
+        after_i = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
+        new_i = [p for p in after_i if p.name not in before_i or p.stat().st_mtime > before_i[p.name]]
+        with report.open("a", encoding="utf-8") as out:
+            out.write("\n------ ICHIMOKU ------\n")
+        for p in new_i:
+            if _is_ichimoku_csv(p.name):
+                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, set())
+        if code_i != 0:
+            failures += 1
+
+        print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: FIBO ===\033[0m")
+        before_f = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        code_f = _run_batch_search("fibo", [scope])
+        after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
+        new_f = [p for p in after_f if p.name not in before_f or p.stat().st_mtime > before_f[p.name]]
+        with report.open("a", encoding="utf-8") as out:
+            out.write("\n------ FIBO ------\n")
+        for p in new_f:
+            if _is_fibo_csv(p.name):
+                _append_csv_section(report, f"{scope.upper()} :: {p.name}", p, set())
+        if code_f != 0:
+            failures += 1
+
+    print(f"\n[allsearch] combo report saved: {report}")
+    return 1 if failures else 0
+
 def _run_batch_search(mode: str, batch: list[str]) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
@@ -218,6 +263,7 @@ def _run_batch_search(mode: str, batch: list[str]) -> int:
 def main()->int:
     parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
+    parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
     args=parser.parse_args()
@@ -235,6 +281,11 @@ def main()->int:
     if args.search_target:
         if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
+    if args.allsearch_target:
+        normalized = args.allsearch_target.strip().lower()
+        if normalized == "all":
+            return _run_allsearch_combo(["wig", "dax", "us100", "forex", "commodities"])
+        return _run_allsearch_combo([normalized])
     if args.fibo_explain_target:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
