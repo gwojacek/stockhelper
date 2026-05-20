@@ -51,7 +51,11 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
     with fp.open('a', encoding='utf-8') as out:
         for r in rows:
             t=r.get('ticker','').strip(); link=_stooq_chart_url(t) if t else ''
-            if link: links.add(link)
+            if link:
+                links.add(link)
+                r["stooq_link"] = link
+            else:
+                r["stooq_link"] = ""
 
         if csv_path.name.endswith("_flips.csv"):
             for r in rows:
@@ -66,6 +70,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Retest status", "latest_retest_status"),
                 ("Retest count", "valid_retests_count"),
                 ("Last valid retest", "last_valid_retest_pattern_date"),
+                ("Link", "stooq_link"),
             ]
             _write_table(out, f"{title} / WYNIKI 2", rows, cols)
         elif csv_path.name.startswith("fibo_search_"):
@@ -86,6 +91,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Incline end", "incline_end_date"),
                 ("Touch 61.8", "first_61_8_touch_date"),
                 ("Close", "current_close"),
+                ("Link", "stooq_link"),
             ]
             _write_table(out, f"{title} / WYNIKI 1+2", rows, cols)
         else:
@@ -111,6 +117,7 @@ def _append_csv_section(fp: Path, title: str, csv_path: Path, links: set[str]) -
                 ("Close", "close"),
                 ("Avg10d PLN", "avg_turnover_10d_pln"),
                 ("Low<Th20", "below_threshold_days_20d"),
+                ("Link", "stooq_link"),
             ]
             if not (len(th10_vals) == 1 and len(th20_vals) == 1):
                 cols.extend([("Th10d PLN", "threshold_10d_pln"), ("Th20d PLN", "threshold_20d_pln")])
