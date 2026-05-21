@@ -1547,7 +1547,7 @@ def _print_fibo_results(
     rows2: list[FiboScanResult],
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] | None = None,
 ) -> list[str]:
-    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (current 23.6..61.8 OR 61.8+valid formation):{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
         links = []
@@ -1582,19 +1582,19 @@ def _print_fibo_results(
         except Exception:
             pass
         print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
-    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 2 months):{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
         return links
-    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Close':>10} {'Link':<0}")
-    print("-" * 140)
+    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Link':<0}")
+    print("-" * 128)
     for r in rows2:
         link = _stooq_chart_url(r.ticker)
         if link not in links:
             links.append(link)
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {r.current_close:>10.4f} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 
@@ -1751,19 +1751,19 @@ def run_fibo_search(target: str) -> int:
         w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
         for row in rows:
             w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
-    two_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=62)
+    four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
     rows2 = [
         r for r in rows
         if r.status == "valid_reversal"
         and r.reversal_pattern_name != "none"
-        and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
+        and pd.Timestamp(r.first_61_8_touch_date) >= four_months_ago
     ]
     rows1 = []
     for r in rows:
         if (
             r.status == "valid_reversal"
             and r.reversal_pattern_name != "none"
-            and pd.Timestamp(r.first_61_8_touch_date) >= two_months_ago
+            and pd.Timestamp(r.first_61_8_touch_date) >= four_months_ago
         ):
             rows1.append(r)
             continue

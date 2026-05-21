@@ -115,8 +115,8 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             rows = sorted(rows, key=lambda r: (str(r.get("current_side", "")) != "below", -float(str(r.get("months_since_flip", "0") or "0"))))
             rows_w1 = [r for r in rows if str(r.get("status", "")) != "valid_reversal"]
             rows_w2 = [r for r in rows if str(r.get("status", "")) == "valid_reversal"]
-            _write_table(out, "WYNIKI 1", rows_w1, cols)
-            _write_table(out, "WYNIKI 2", rows_w2, cols)
+            _write_table(out, "WYNIKI 1 (status waiting 23.6->61.8)", rows_w1, cols)
+            _write_table(out, "WYNIKI 2 (valid formation, touch<=4 months)", rows_w2, cols)
         elif csv_path.name.startswith("fibo_search_"):
             for r in rows:
                 status = str(r.get("status", ""))
