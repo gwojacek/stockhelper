@@ -23,6 +23,11 @@ def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     right = width - len(label) - left
     return f"{fill * left}{label}{fill * right}"
 
+def _scope_label(scope: str) -> str:
+    s = scope.upper()
+    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️"}
+    return f"{flags.get(s, '📊')} {s}"
+
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
     key=_normalize_key(target.replace('.py','')); exact=[p for p in directory.glob('*.py') if _normalize_key(p.stem)==key]
@@ -113,7 +118,8 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Link", "stooq_link"),
             ]
             rows = sorted(rows, key=lambda r: (str(r.get("current_side", "")) != "below", -float(str(r.get("months_since_flip", "0") or "0"))))
-            _write_table(out, section, rows, cols)
+            title = "WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)" if section == "WYNIKI 2" else "WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)"
+            _write_table(out, title, rows, cols)
         elif csv_path.name.startswith("fibo_search_"):
             for r in rows:
                 status = str(r.get("status", ""))
@@ -218,7 +224,8 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             for r in rows:
                 if r.get("ticker") in top_keys:
                     r["avg_turnover_10d_pln"] = f"{GOLD_DOT} {r.get('avg_turnover_10d_pln')}"
-            _write_table(out, section, rows, cols)
+            title = "WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)" if section == "WYNIKI 2" else "WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)"
+            _write_table(out, title, rows, cols)
 
 def _extract_progi_from_csv(csv_path: Path) -> tuple[str | None, str | None]:
     if not csv_path.exists():
@@ -253,7 +260,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     all_links: set[str] = set()
     for scope in scopes:
         with report.open("a", encoding="utf-8") as out:
-            out.write("\n\n" + _section_banner(f" {scope.upper()} ", width=108, fill="■") + "\n")
+            out.write("\n\n" + _section_banner(f" {_scope_label(scope)} ", width=108, fill="■") + "\n")
 
         print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
@@ -288,6 +295,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         fibo_split_present = any(p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv") for p in new_f)
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
+            out.write("PROGI FIBO: Th10d (min. średni obrót 10d, PLN) = 500000 × mnożnik kraju.\n")
         for p in new_f:
             if _is_fibo_csv(p.name):
                 if fibo_split_present and not (p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv")):
@@ -333,7 +341,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
         after = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
         with report.open("a", encoding="utf-8") as out:
-            out.write(f"\n\n========== {scope.upper()} ==========\n")
+            out.write(f"\n\n{_section_banner(f' {_scope_label(scope)} ', width=108, fill='■')}\n")
         normal = [p for p in new if not p.name.endswith("_flips.csv")]
         flips = [p for p in new if p.name.endswith("_flips.csv")]
         fibo_split_present = any(p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv") for p in new)
