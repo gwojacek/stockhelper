@@ -145,11 +145,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             th10_vals = {str(r.get("threshold_10d_pln", "")).strip() for r in rows if str(r.get("threshold_10d_pln", "")).strip()}
             th20_vals = {str(r.get("threshold_20d_pln", "")).strip() for r in rows if str(r.get("threshold_20d_pln", "")).strip()}
             low20_desc = "Liczba dni (z ostatnich 20), gdy obrót był poniżej progu 20d."
-            out.write("\n" + _section_banner("PROGI", width=84) + "\n\n")
-            if len(th10_vals) == 1 and len(th20_vals) == 1:
-                out.write(f"Th10d (min. średni obrót 10d, PLN) = {next(iter(th10_vals))}\n")
-                out.write(f"Th20d (dolny próg dziennego obrotu, PLN) = {next(iter(th20_vals))}\n")
-            out.write(f"{low20_desc}\n")
+            # PROGI block is rendered by orchestration layer once per scope.
             cols = [
                 ("Ticker", "ticker"),
                 ("Pozycja", "side_marker"),
@@ -173,6 +169,17 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                     r["avg_turnover_10d_pln"] = f"{GOLD_DOT} {r.get('avg_turnover_10d_pln')}"
             _write_table(out, section, rows, cols)
 
+def _extract_progi_from_csv(csv_path: Path) -> tuple[str | None, str | None]:
+    if not csv_path.exists():
+        return None, None
+    with csv_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    th10_vals = {str(r.get("threshold_10d_pln", "")).strip() for r in rows if str(r.get("threshold_10d_pln", "")).strip()}
+    th20_vals = {str(r.get("threshold_20d_pln", "")).strip() for r in rows if str(r.get("threshold_20d_pln", "")).strip()}
+    if len(th10_vals) == 1 and len(th20_vals) == 1:
+        return next(iter(th10_vals)), next(iter(th20_vals))
+    return None, None
+
 def _is_ichimoku_csv(name: str) -> bool:
     return name.startswith("search_") and name.endswith(".csv")
 
@@ -195,7 +202,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     all_links: set[str] = set()
     for scope in scopes:
         with report.open("a", encoding="utf-8") as out:
-            out.write("\n\n" + _section_banner(scope.upper(), width=100) + "\n")
+            out.write("\n\n" + _section_banner(f" {scope.upper()} ", width=108, fill="■") + "\n")
 
         print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: ICHIMOKU ===\033[0m")
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
@@ -203,8 +210,15 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
         after_i = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new_i = [p for p in after_i if p.name not in before_i or p.stat().st_mtime > before_i[p.name]]
+        main_ichimoku_csv = next((p for p in new_i if _is_ichimoku_csv(p.name) and not p.name.endswith("_flips.csv")), None)
+        th10, th20 = _extract_progi_from_csv(main_ichimoku_csv) if main_ichimoku_csv else (None, None)
         with report.open("a", encoding="utf-8") as out:
-            out.write("\n" + _section_banner("ICHIMOKU", width=84, fill="-") + "\n")
+            out.write("\n" + _section_banner(" PROGI ", width=96, fill="=") + "\n\n")
+            if th10 and th20:
+                out.write(f"Th10d (min. średni obrót 10d, PLN) = {th10}\n")
+                out.write(f"Th20d (dolny próg dziennego obrotu, PLN) = {th20}\n")
+            out.write("Liczba dni (z ostatnich 20), gdy obrót był poniżej progu 20d.\n")
+            out.write("\n" + _section_banner(" ICHIMOKU ", width=96, fill="-") + "\n")
         for p in new_i:
             if _is_ichimoku_csv(p.name):
                 label = "WYNIKI 2" if p.name.endswith("_flips.csv") else "WYNIKI 1"
@@ -219,7 +233,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new_f = [p for p in after_f if p.name not in before_f or p.stat().st_mtime > before_f[p.name]]
         with report.open("a", encoding="utf-8") as out:
-            out.write("\n" + _section_banner("FIBO", width=84, fill="-") + "\n")
+            out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
         for p in new_f:
             if _is_fibo_csv(p.name):
                 _append_csv_section(report, "FIBO", p, all_links, csv_refs)
