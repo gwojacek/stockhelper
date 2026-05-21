@@ -58,33 +58,17 @@ def _format_row(cells: list[str], widths: list[int], right_align: list[bool] | N
     return "│ " + " │ ".join(out_cells) + " │"
 
 def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tuple[str, str]]) -> None:
-    out.write(f"\n=== {title} ===\n")
+    out.write(f"\n### {title}\n")
     if not rows:
         out.write("Brak wyników.\n")
         return
     headers = [h for h, _ in columns]
     keys = [k for _, k in columns]
-    widths = []
-    for h, k in columns:
-        w = max(len(h), max((len(str(r.get(k, ""))) for r in rows), default=0))
-        if k == "side_marker" or k == "jest_marker":
-            w = max(w, 9)
-        if k == "stooq_link":
-            w = max(w, 120)
-        widths.append(w)
-    right_align = []
-    for _, key in columns:
-        sample = next((str(r.get(key, "")) for r in rows if str(r.get(key, "")).strip()), "")
-        right_align.append(_is_number_text(sample))
-    top = "┌" + "┬".join("─" * (w + 2) for w in widths) + "┐"
-    sep = "├" + "┼".join("─" * (w + 2) for w in widths) + "┤"
-    bottom = "└" + "┴".join("─" * (w + 2) for w in widths) + "┘"
-    out.write(top + "\n")
-    out.write(_format_row(headers, widths) + "\n")
-    out.write(sep + "\n")
+    out.write("| " + " | ".join(headers) + " |\n")
+    out.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
     for row in rows:
-        out.write(_format_row([str(row.get(k, "")) for k in keys], widths, right_align=right_align) + "\n")
-    out.write(bottom + "\n")
+        vals = [str(row.get(k, "")) for k in keys]
+        out.write("| " + " | ".join(v.replace("\n", " ") for v in vals) + " |\n")
 
 def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str], csv_refs: list[Path]) -> None:
     if not csv_path.exists(): return
@@ -95,7 +79,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             t=r.get('ticker','').strip(); link=_stooq_chart_url(t) if t else ''
             if link:
                 links.add(link)
-                r["stooq_link"] = link
+                r["stooq_link"] = f"[stooq]({link})"
             else:
                 r["stooq_link"] = ""
 
@@ -193,7 +177,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             old.unlink()
         except Exception:
             pass
-    report = report_dir / "allsearch_latest.txt"
+    report = report_dir / "allsearch_latest.md"
     report.write_text("ALLSEARCH COMBO REPORT\n", encoding="utf-8")
 
     failures = 0
@@ -268,7 +252,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
             old.unlink()
         except Exception:
             pass
-    report = report_dir / f"{mode}_all_latest.txt"
+    report = report_dir / f"{mode}_all_latest.md"
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
