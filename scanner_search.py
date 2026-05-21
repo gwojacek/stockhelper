@@ -1327,7 +1327,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         status = "valid_reversal"
         pattern = "none"
         pattern_idx = touch_idxs[-1] if touch_idxs else i_end
-        detect_end = min(i_end, (all_touch_idxs[-1] + 2) if all_touch_idxs else i_end)
+        detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
         # 1-candle: hammer touching 61.8 and closing above 61.8
         for i in touch_idxs[:1]:
             c = w.iloc[i]
@@ -1346,37 +1346,37 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                     and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
                 )
-                includes_any_touch = any(t in {i - 1, i} for t in all_touch_idxs)
-                if engulf and includes_any_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
+                includes_first_touch = touch_idxs[0] in {i - 1, i}
+                if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
                     pattern = "bullish_engulfing"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
-                includes_any_touch = any(t in {i - 1, i} for t in all_touch_idxs)
-                if includes_any_touch and _is_bullish_piercing_line(c1, c2, fib_618):
+                includes_first_touch = touch_idxs[0] in {i - 1, i}
+                if includes_first_touch and _is_bullish_piercing_line(c1, c2, fib_618):
                     pattern = "bullish_piercing_line"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
-                includes_any_touch = any(t in {i - 1, i} for t in all_touch_idxs)
-                if includes_any_touch and _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+                includes_first_touch = touch_idxs[0] in {i - 1, i}
+                if includes_first_touch and _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                     pattern = "bullish_harami"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                includes_any_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-                if includes_any_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+                includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
                     pattern = "morning_star"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                includes_any_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-                if includes_any_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+                includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
                     pattern = "morning_doji_star"
                     pattern_idx = i
                     break
@@ -1467,7 +1467,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     status = "valid_reversal"
     pattern = "none"
     pattern_idx = touch_idxs[-1] if touch_idxs else i_end
-    detect_end = min(i_end, (all_touch_idxs[-1] + 2) if all_touch_idxs else i_end)
+    detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
     for i in touch_idxs:
         c = w.iloc[i]
         if _is_bearish_shooting_star(c) and _touches_level(c, fib_618) and float(c["Close"]) < fib_618:
@@ -1484,15 +1484,15 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                 and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
             )
-            includes_any_touch = any(t in {i - 1, i} for t in all_touch_idxs)
-            if engulf and includes_any_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
+            includes_first_touch = touch_idxs[0] in {i - 1, i}
+            if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
                 pattern = "bearish_engulfing"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            includes_any_touch = any(t in {i - 1, i} for t in all_touch_idxs)
-            if includes_any_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_first_touch = touch_idxs[0] in {i - 1, i}
+            if includes_first_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "bearish_harami"
                 pattern_idx = i
                 break
@@ -1505,15 +1505,15 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            includes_any_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-            if includes_any_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+            includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            includes_any_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-            if includes_any_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+            includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
                 pattern = "evening_doji_star"
                 pattern_idx = i
                 break
@@ -1901,15 +1901,6 @@ def run_fibo_search(target: str) -> int:
         w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
         for row in rows2:
             w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
-    # Keep the main csv aligned with terminal output (same filtered sets as WYNIKI #1/#2).
-    with out_csv.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
-        cols = [f.name for f in FiboScanResult.__dataclass_fields__.values()]
-        w.writerow(["section", *cols])
-        for row in rows1:
-            w.writerow(["w1", *[getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()]])
-        for row in rows2:
-            w.writerow(["w2", *[getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()]])
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
