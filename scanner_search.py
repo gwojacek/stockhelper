@@ -1217,6 +1217,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             _log("Rejected long: invalid impulse start/peak distance.")
             return None
         i_end = len(w) - 1
+        # Guard: selected impulse peak should be the dominant high in analyzed window.
+        # This prevents anchoring a newer/lower local top while an earlier higher top
+        # in the same structure was never fully reset by a proper 61.8 cycle.
+        win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
+        if win_peak != i_peak:
+            _log(
+                "Rejected long: selected peak is not dominant in window "
+                f"(selected={i_peak}, dominant={win_peak})."
+            )
+            return None
         corr_bars = i_end - i_peak
         early_correction_accepted = False
         if corr_bars < 8:
