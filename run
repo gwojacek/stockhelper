@@ -132,6 +132,17 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 i_d = str(r.get("incline_duration_days", "0") or "0")
                 d_d = str(r.get("decline_duration_days", "0") or "0")
                 r["ratio_txt"] = f"{i_d}/{d_d} ({ratio:.2f}:1)"
+                r["avg10turn"] = "-"
+                try:
+                    cur = float(str(r.get("current_close", "0") or "0"))
+                    f23 = float(str(r.get("fib_23_6", "0") or "0"))
+                    f61 = float(str(r.get("fib_61_8", "0") or "0"))
+                    dist = abs(cur - f61)
+                    band = max(abs(f23 - f61), 1e-9)
+                    closeness = max(0.0, 1.0 - (dist / band))
+                    r["near61"] = f"{closeness * 100:5.1f}%"
+                except Exception:
+                    r["near61"] = "-"
             cols_w1 = [
                 ("Ticker", "ticker"),
                 ("Dir", "direction"),
@@ -140,6 +151,8 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Incline", "incline"),
                 ("Ratio(d)", "ratio_txt"),
                 ("Touched_61.8_date", "first_61_8_touch_date"),
+                ("Avg10Turn", "avg10turn"),
+                ("Near61.8", "near61"),
                 ("Link", "stooq_link"),
             ]
             cols_w2 = [
