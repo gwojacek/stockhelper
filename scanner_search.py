@@ -154,6 +154,7 @@ class FiboScanResult:
     fib_61_8: float
     first_61_8_touch_date: str
     reversal_pattern_name: str
+    reversal_pattern_date: str
     stop_loss: float
     current_close: float
 
@@ -1419,7 +1420,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             fib_38_2=fib_382,
             fib_61_8=fib_618,
             first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
-            reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
+            reversal_pattern_name=pattern, reversal_pattern_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()), stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
     i_start = int(close.iloc[:-60].idxmax())
@@ -1548,7 +1549,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_38_2=fib_382,
         fib_61_8=fib_618,
         first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
-        reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
+        reversal_pattern_name=pattern, reversal_pattern_date=str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()), stop_loss=stop_loss, current_close=float(close.iloc[-1])
     )
 
 
@@ -1766,14 +1767,14 @@ def run_fibo_search(target: str) -> int:
         r for r in rows
         if r.status == "valid_reversal"
         and r.reversal_pattern_name != "none"
-        and pd.Timestamp(r.first_61_8_touch_date) >= four_months_ago
+        and pd.Timestamp(r.reversal_pattern_date or r.first_61_8_touch_date) >= four_months_ago
     ]
     rows1 = []
     for r in rows:
         if (
             r.status == "valid_reversal"
             and r.reversal_pattern_name != "none"
-            and pd.Timestamp(r.first_61_8_touch_date) >= four_months_ago
+            and pd.Timestamp(r.reversal_pattern_date or r.first_61_8_touch_date) >= four_months_ago
         ):
             rows1.append(r)
             continue
