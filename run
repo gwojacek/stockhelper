@@ -89,7 +89,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             t=r.get('ticker','').strip(); link=_stooq_chart_url(t) if t else ''
             if link:
                 links.add(link)
-                r["stooq_link"] = f"[stooq]({link})"
+                r["stooq_link"] = link
             else:
                 r["stooq_link"] = ""
 
@@ -140,7 +140,8 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                     dist = abs(cur - f61)
                     band = max(abs(f23 - f61), 1e-9)
                     closeness = max(0.0, 1.0 - (dist / band))
-                    r["near61"] = f"{closeness * 100:5.1f}%"
+                    marker = "🟢" if closeness >= 0.7 else ("🟡" if closeness >= 0.35 else "🔴")
+                    r["near61"] = f"{marker} {closeness * 100:5.1f}%"
                 except Exception:
                     r["near61"] = "-"
             cols_w1 = [
@@ -164,8 +165,20 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Touched_61.8_date", "first_61_8_touch_date"),
                 ("Link", "stooq_link"),
             ]
-            rows_w1 = [r for r in rows if str(r.get("status", "")) != "valid_reversal"]
+            rows_w1 = [r for r in rows if str(r.get("status", "")) == "reached_23_6_waiting_for_61_8"]
             rows_w2 = [r for r in rows if str(r.get("status", "")) == "valid_reversal"]
+            def _dedupe(items):
+                seen = set()
+                out = []
+                for it in items:
+                    k = (it.get("ticker"), it.get("direction"), it.get("incline"))
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    out.append(it)
+                return out
+            rows_w1 = _dedupe(rows_w1)
+            rows_w2 = _dedupe(rows_w2)
             _write_table(out, "WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", rows_w1, cols_w1)
             _write_table(out, "WYNIKI FIBO #2 (valid formation, last 4 months)", rows_w2, cols_w2)
         else:
@@ -184,7 +197,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Start", "start_date"),
                 ("Link", "stooq_link"),
             ]
-            is_stock_like = any("." in str(r.get("ticker", "")) or str(r.get("ticker", "")).isalpha() for r in rows)
+            is_stock_like = any(str(r.get("avg_turnover_10d_pln", "")).strip() for r in rows)
             if is_stock_like:
                 cols.insert(6, ("Avg10d PLN", "avg_turnover_10d_pln"))
                 cols.insert(7, ("Low<Th20", "below_threshold_days_20d"))
