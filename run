@@ -2,6 +2,10 @@
 import argparse, subprocess, os, sys, csv, webbrowser
 from datetime import UTC, datetime
 from pathlib import Path
+try:
+    from tabulate import tabulate
+except Exception:
+    tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import COMMODITY_STOOQ_MAP
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -64,11 +68,17 @@ def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tupl
         return
     headers = [h for h, _ in columns]
     keys = [k for _, k in columns]
-    out.write("| " + " | ".join(headers) + " |\n")
-    out.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
+    rows_data = []
     for row in rows:
-        vals = [str(row.get(k, "")) for k in keys]
-        out.write("| " + " | ".join(v.replace("\n", " ") for v in vals) + " |\n")
+        vals = [str(row.get(k, "")).replace("\n", " ") for k in keys]
+        rows_data.append(vals)
+    if tabulate is not None:
+        out.write(tabulate(rows_data, headers=headers, tablefmt="github") + "\n")
+    else:
+        out.write("| " + " | ".join(headers) + " |\n")
+        out.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
+        for vals in rows_data:
+            out.write("| " + " | ".join(vals) + " |\n")
 
 def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str], csv_refs: list[Path]) -> None:
     if not csv_path.exists(): return
