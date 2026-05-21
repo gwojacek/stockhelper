@@ -1385,9 +1385,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             if crossed_618:
                 _log("Rejected long: 61.8 crossed but no valid pattern.")
                 return None
-            if float(close.iloc[-1]) > fib_236:
-                _log("Rejected long: current close is above 23.6, so not waiting-for-61.8 anymore.")
-                return None
+            # Keep setup as waiting-for-61.8 even if price bounced back above 23.6
+            # after touching it; the setup stays valid until 61.8 is reached/patterned
+            # or invalidated by stop-loss/other guards.
             status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
         stop_loss = float(low.iloc[pattern_idx])
         next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
@@ -1522,9 +1522,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if crossed_618:
             _log("Rejected short: 61.8 crossed but no valid pattern.")
             return None
-        if float(close.iloc[-1]) < fib_236:
-            _log("Rejected short: current close is below 23.6, so not waiting-for-61.8 anymore.")
-            return None
+        # Symmetric to long: keep waiting setup even if price rebounds below/above
+        # 23.6 after first touch of correction threshold.
         status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
     stop_loss = float(high.iloc[pattern_idx])
     next5 = w.iloc[pattern_idx + 1:pattern_idx + 6]
