@@ -1666,7 +1666,7 @@ def run_fibo_search(target: str) -> int:
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
-            for off in [0, 5, 10, 15, 20, 30, 40]:
+            for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120]:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
@@ -1709,7 +1709,7 @@ def run_fibo_search(target: str) -> int:
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
                 short_offset0 = _find_fibo_setup(df, "short", end_offset=0)
-                for off in [0, 5, 10, 15, 20, 30, 40]:
+                for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120]:
                     cand = _find_fibo_setup(df, "short", end_offset=off)
                     if cand:
                         short_candidates.append(cand)
@@ -1930,7 +1930,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
-        for off in [0, 5, 10, 15, 20, 30, 40]:
+        for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120]:
             steps: list[str] = []
             res = _find_fibo_setup(df, direction, end_offset=off, explain=steps)
             print(f"- offset={off}: {'MATCH' if res else 'NO MATCH'}")
