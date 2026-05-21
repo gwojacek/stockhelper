@@ -89,7 +89,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             t=r.get('ticker','').strip(); link=_stooq_chart_url(t) if t else ''
             if link:
                 links.add(link)
-                r["stooq_link"] = link
+                r["stooq_link"] = f"[stooq]({link})"
             else:
                 r["stooq_link"] = ""
 
@@ -165,8 +165,15 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Touched_61.8_date", "first_61_8_touch_date"),
                 ("Link", "stooq_link"),
             ]
-            rows_w1 = [r for r in rows if str(r.get("status", "")) == "reached_23_6_waiting_for_61_8"]
-            rows_w2 = [r for r in rows if str(r.get("status", "")) == "valid_reversal"]
+            if csv_path.name.endswith("_w1.csv"):
+                rows_w1 = rows
+                rows_w2 = []
+            elif csv_path.name.endswith("_w2.csv"):
+                rows_w1 = []
+                rows_w2 = rows
+            else:
+                rows_w1 = [r for r in rows if str(r.get("status", "")) == "reached_23_6_waiting_for_61_8"]
+                rows_w2 = [r for r in rows if str(r.get("status", "")) == "valid_reversal"]
             def _dedupe(items):
                 seen = set()
                 out = []
@@ -179,8 +186,10 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 return out
             rows_w1 = _dedupe(rows_w1)
             rows_w2 = _dedupe(rows_w2)
-            _write_table(out, "WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", rows_w1, cols_w1)
-            _write_table(out, "WYNIKI FIBO #2 (valid formation, last 4 months)", rows_w2, cols_w2)
+            if rows_w1:
+                _write_table(out, "WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", rows_w1, cols_w1)
+            if rows_w2:
+                _write_table(out, "WYNIKI FIBO #2 (valid formation, last 4 months)", rows_w2, cols_w2)
         else:
             for r in rows:
                 side = str(r.get("side", ""))
@@ -276,10 +285,13 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
         after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new_f = [p for p in after_f if p.name not in before_f or p.stat().st_mtime > before_f[p.name]]
+        fibo_split_present = any(p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv") for p in new_f)
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
         for p in new_f:
             if _is_fibo_csv(p.name):
+                if fibo_split_present and not (p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv")):
+                    continue
                 _append_csv_section(report, "FIBO", p, all_links, csv_refs)
         if code_f != 0:
             failures += 1
@@ -324,11 +336,14 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
             out.write(f"\n\n========== {scope.upper()} ==========\n")
         normal = [p for p in new if not p.name.endswith("_flips.csv")]
         flips = [p for p in new if p.name.endswith("_flips.csv")]
+        fibo_split_present = any(p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv") for p in new)
         for p in normal + flips:
             if mode == 'ichimoku' and _is_ichimoku_csv(p.name):
                 label = "WYNIKI 2" if p.name.endswith("_flips.csv") else "WYNIKI 1"
                 _append_csv_section(report, label, p, all_links, csv_refs)
             if mode == 'fibo' and _is_fibo_csv(p.name):
+                if fibo_split_present and not (p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv")):
+                    continue
                 _append_csv_section(report, "FIBO", p, all_links, csv_refs)
         if code!=0: failures+=1
     with report.open("a", encoding="utf-8") as out:

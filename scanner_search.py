@@ -1880,6 +1880,22 @@ def run_fibo_search(target: str) -> int:
     )
     rows2_keys = {(r.ticker, r.direction) for r in rows2}
     rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
+
+    # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
+    # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
+    out_csv_w1 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w1.csv"
+    out_csv_w2 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w2.csv"
+    with out_csv_w1.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
+        for row in rows1:
+            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+    with out_csv_w2.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
+        for row in rows2:
+            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
