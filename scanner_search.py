@@ -1880,8 +1880,8 @@ def run_fibo_search(target: str) -> int:
         key=lambda r: (r.ticker, r.direction, r.incline_start_date, r.first_61_8_touch_date),
         reverse=False,
     )
-    # Allow the same instrument to appear in both WYNIKI #1 and #2
-    # when distinct valid setups exist (e.g. older valid reversal + newer waiting leg).
+    rows2_keys = {(r.ticker, r.direction) for r in rows2}
+    rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
