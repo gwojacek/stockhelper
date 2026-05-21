@@ -1326,7 +1326,10 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         status = "valid_reversal"
         pattern = "none"
         pattern_idx = touch_idxs[-1] if touch_idxs else i_end
-        detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
+        # Allow pattern detection after first 61.8 touch on a wider horizon.
+        # Some valid reversals appear days/weeks later (e.g. bullish engulfing
+        # after stabilization), not only within 1-2 candles.
+        detect_end = min(i_end, (touch_idxs[0] + 60) if touch_idxs else i_end)
         # 1-candle: hammer touching 61.8 and closing above 61.8
         for i in touch_idxs[:1]:
             c = w.iloc[i]
@@ -1466,7 +1469,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     status = "valid_reversal"
     pattern = "none"
     pattern_idx = touch_idxs[-1] if touch_idxs else i_end
-    detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
+    detect_end = min(i_end, (touch_idxs[0] + 60) if touch_idxs else i_end)
     for i in touch_idxs:
         c = w.iloc[i]
         if _is_bearish_shooting_star(c) and _touches_level(c, fib_618) and float(c["Close"]) < fib_618:
