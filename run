@@ -194,6 +194,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             out.write(f"\n\n========== {scope.upper()} ==========\n")
 
         print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: ICHIMOKU ===\033[0m")
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         before_i = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
         after_i = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
@@ -208,6 +209,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             failures += 1
 
         print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: FIBO ===\033[0m")
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         before_f = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
         code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
         after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
@@ -219,6 +221,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
                 _append_csv_section(report, "WYNIKI 1+2", p, all_links, csv_refs)
         if code_f != 0:
             failures += 1
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
 
     with report.open("a", encoding="utf-8") as out:
         out.write("\n\n========== PODSUMOWANIE ==========\n")

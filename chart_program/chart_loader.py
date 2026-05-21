@@ -599,6 +599,15 @@ def load_or_update_daily_data(
         else:
             local = None
 
+    cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    if cache_only and local is not None and not local.empty:
+        return _last_year_only(local), csv_path, {
+            "source": "cache",
+            "symbol": symbol,
+            "name": symbol.title(),
+            "fallback_reason": "Cache-only mode enabled.",
+        }
+
     try:
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
     except ValueError:
