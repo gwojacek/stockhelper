@@ -113,10 +113,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Link", "stooq_link"),
             ]
             rows = sorted(rows, key=lambda r: (str(r.get("current_side", "")) != "below", -float(str(r.get("months_since_flip", "0") or "0"))))
-            rows_w1 = [r for r in rows if str(r.get("status", "")) != "valid_reversal"]
-            rows_w2 = [r for r in rows if str(r.get("status", "")) == "valid_reversal"]
-            _write_table(out, "WYNIKI 1 (status waiting 23.6->61.8)", rows_w1, cols)
-            _write_table(out, "WYNIKI 2 (valid formation, touch<=4 months)", rows_w2, cols)
+            _write_table(out, section, rows, cols)
         elif csv_path.name.startswith("fibo_search_"):
             for r in rows:
                 status = str(r.get("status", ""))
@@ -126,18 +123,38 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                     r["status_marker"] = "🟡 waiting_for_61.8"
                 else:
                     r["status_marker"] = f"🔴 {status}"
-            cols = [
+            for r in rows:
+                r["incline"] = f"{r.get('incline_start_date','')}->{r.get('incline_end_date','')}"
+                try:
+                    ratio = float(str(r.get("incline_decline_duration_ratio", "0") or "0"))
+                except Exception:
+                    ratio = 0.0
+                i_d = str(r.get("incline_duration_days", "0") or "0")
+                d_d = str(r.get("decline_duration_days", "0") or "0")
+                r["ratio_txt"] = f"{i_d}/{d_d} ({ratio:.2f}:1)"
+            cols_w1 = [
                 ("Ticker", "ticker"),
                 ("Dir", "direction"),
                 ("Status", "status_marker"),
                 ("Pattern", "reversal_pattern_name"),
-                ("Incline start", "incline_start_date"),
-                ("Incline end", "incline_end_date"),
-                ("Touch 61.8", "first_61_8_touch_date"),
-                ("Close", "current_close"),
+                ("Incline", "incline"),
+                ("Ratio(d)", "ratio_txt"),
+                ("Touched_61.8_date", "first_61_8_touch_date"),
                 ("Link", "stooq_link"),
             ]
-            _write_table(out, section, rows, cols)
+            cols_w2 = [
+                ("Ticker", "ticker"),
+                ("Dir", "direction"),
+                ("Pattern", "reversal_pattern_name"),
+                ("Incline", "incline"),
+                ("Ratio(d)", "ratio_txt"),
+                ("Touched_61.8_date", "first_61_8_touch_date"),
+                ("Link", "stooq_link"),
+            ]
+            rows_w1 = [r for r in rows if str(r.get("status", "")) != "valid_reversal"]
+            rows_w2 = [r for r in rows if str(r.get("status", "")) == "valid_reversal"]
+            _write_table(out, "WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", rows_w1, cols_w1)
+            _write_table(out, "WYNIKI FIBO #2 (valid formation, last 4 months)", rows_w2, cols_w2)
         else:
             for r in rows:
                 side = str(r.get("side", ""))
@@ -152,7 +169,6 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Świece", "respect_days"),
                 ("Mies.", "respect_months"),
                 ("Start", "start_date"),
-                ("Close", "close"),
                 ("Link", "stooq_link"),
             ]
             is_stock_like = any("." in str(r.get("ticker", "")) or str(r.get("ticker", "")).isalpha() for r in rows)
@@ -204,7 +220,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         with report.open("a", encoding="utf-8") as out:
             out.write("\n\n" + _section_banner(f" {scope.upper()} ", width=108, fill="■") + "\n")
 
-        print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: ICHIMOKU ===\033[0m")
+        print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
+        print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         before_i = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
@@ -226,7 +243,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         if code_i != 0:
             failures += 1
 
-        print(f"\n\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} :: FIBO ===\033[0m")
+        print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
+        print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         before_f = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
         code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
@@ -242,14 +260,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
 
     with report.open("a", encoding="utf-8") as out:
-        out.write("\n\n========== PODSUMOWANIE ==========\n")
-        out.write("\nCSV files:\n")
-        for p in csv_refs:
-            out.write(f"- {p}\n")
-        out.write("\nLinks:\n")
-        for l in sorted(all_links):
-            out.write(f"- {l}\n")
-        out.write(f"\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+        out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[allsearch] combo report saved: {report}")
     if all_links:
         try:
@@ -259,9 +270,6 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         if open_all == "y":
             for l in sorted(all_links):
                 webbrowser.open_new_tab(l)
-    print("CSV files:")
-    for p in csv_refs:
-        print(f" - {p}")
     print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
     return 1 if failures else 0
 
@@ -298,14 +306,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
                 _append_csv_section(report, "FIBO", p, all_links, csv_refs)
         if code!=0: failures+=1
     with report.open("a", encoding="utf-8") as out:
-        out.write("\n\n========== PODSUMOWANIE ==========\n")
-        out.write("\nCSV files:\n")
-        for p in csv_refs:
-            out.write(f"- {p}\n")
-        out.write("\nLinks:\n")
-        for l in sorted(all_links):
-            out.write(f"- {l}\n")
-        out.write(f"\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+        out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
     if ask_open_links and all_links:
         try: open_all=input('Czy otworzyć wszystkie linki? [y/N]: ').strip().lower()
