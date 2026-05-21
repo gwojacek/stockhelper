@@ -1666,7 +1666,7 @@ def run_fibo_search(target: str) -> int:
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
-            for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120]:
+            for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120, 140, 160, 180, 200]:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
@@ -1709,7 +1709,7 @@ def run_fibo_search(target: str) -> int:
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
                 short_offset0 = _find_fibo_setup(df, "short", end_offset=0)
-                for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120]:
+                for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120, 140, 160, 180, 200]:
                     cand = _find_fibo_setup(df, "short", end_offset=off)
                     if cand:
                         short_candidates.append(cand)
@@ -1878,8 +1878,13 @@ def run_fibo_search(target: str) -> int:
         key=lambda r: (r.ticker, r.direction, r.incline_start_date, r.first_61_8_touch_date),
         reverse=False,
     )
-    rows2_keys = {(r.ticker, r.direction) for r in rows2}
-    rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
+    rows2_keys = {(r.ticker, r.direction, r.incline_start_date, r.incline_end_date) for r in rows2}
+    # Allow the same instrument to be present in both sections when they refer
+    # to different formations. Remove only exact duplicates by formation key.
+    rows1 = [
+        r for r in rows1
+        if (r.ticker, r.direction, r.incline_start_date, r.incline_end_date) not in rows2_keys
+    ]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
@@ -1930,7 +1935,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
-        for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120]:
+        for off in [0, 5, 10, 15, 20, 30, 40, 60, 80, 100, 120, 140, 160, 180, 200]:
             steps: list[str] = []
             res = _find_fibo_setup(df, direction, end_offset=off, explain=steps)
             print(f"- offset={off}: {'MATCH' if res else 'NO MATCH'}")
