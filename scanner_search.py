@@ -36,25 +36,36 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out)
 
 
+def _stockhelper_chart_link(ticker: str, *, ichimoku: bool = False, fibo: FiboScanResult | None = None) -> str:
+    cmd = ["python", "run", "-c", (ticker or "").strip()]
+    if ichimoku:
+        cmd.append("--show-ichimoku")
+    if fibo is not None:
+        cmd.extend(["--fibo-anchor", fibo.direction, fibo.incline_start_date, fibo.incline_end_date])
+        cmd.extend(["--fibo-levels", "0,23.6,38.2,61.8,100"])
+    encoded = quote(" ".join(cmd), safe="")
+    return f"[show_chart](command:{encoded})"
+
+
 def _write_ichimoku_report_md(group_name: str, rows1: list[ScanResult], rows2: list[FlipResult], out_path: Path) -> None:
     lines: list[str] = [f"# ICHIMOKU REPORT ({group_name.upper()})", ""]
     lines += ["## WYNIKI #1", ""]
     if not rows1:
         lines.append("Brak wyników.")
     else:
-        hdr = ["Ticker", "Pozycja", "Świece", "Mies.", "Start", "Close", "Avg10d PLN", "Low<Th20", "Link"]
+        hdr = ["Ticker", "Pozycja", "Świece", "Mies.", "Start", "Close", "Avg10d PLN", "Low<Th20", "Link", "stockhelper_chart"]
         body = []
         for r in sorted(rows1, key=lambda x: x.respect_days, reverse=True):
-            body.append([r.ticker, r.side, r.respect_days, f"{r.respect_months:.1f}", r.start_date, f"{r.close:.4f}", f"{r.avg_turnover_10d_pln:,.0f}" if r.avg_turnover_10d_pln is not None else "-", r.low_turnover_days_20d if r.low_turnover_days_20d is not None else "-", f"[stooq]({_stooq_chart_url(r.ticker)})"])
+            body.append([r.ticker, r.side, r.respect_days, f"{r.respect_months:.1f}", r.start_date, f"{r.close:.4f}", f"{r.avg_turnover_10d_pln:,.0f}" if r.avg_turnover_10d_pln is not None else "-", r.low_turnover_days_20d if r.low_turnover_days_20d is not None else "-", f"[stooq]({_stooq_chart_url(r.ticker)})", _stockhelper_chart_link(r.ticker, ichimoku=True)])
         lines += [_md_table(hdr, body)]
     lines += ["", "## WYNIKI #2", ""]
     if not rows2:
         lines.append("Brak wyników.")
     else:
-        hdr = ["Ticker", "Było", "Jest", "Data wybicia", "Mies. od wybicia", "Latest Retest status", "Retest count", "Link"]
+        hdr = ["Ticker", "Było", "Jest", "Data wybicia", "Mies. od wybicia", "Latest Retest status", "Retest count", "Link", "stockhelper_chart"]
         body = []
         for r in sorted(rows2, key=lambda x: x.months_since_flip, reverse=True):
-            body.append([r.ticker, r.previous_side, r.current_side, r.flip_date, f"{r.months_since_flip:.1f}", r.retest_status, r.valid_retests_count, f"[stooq]({_stooq_chart_url(r.ticker)})"])
+            body.append([r.ticker, r.previous_side, r.current_side, r.flip_date, f"{r.months_since_flip:.1f}", r.retest_status, r.valid_retests_count, f"[stooq]({_stooq_chart_url(r.ticker)})", _stockhelper_chart_link(r.ticker, ichimoku=True)])
         lines += [_md_table(hdr, body)]
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -64,19 +75,19 @@ def _write_fibo_report_md(group_name: str, rows1: list[FiboScanResult], rows2: l
     if not rows1:
         lines.append("Brak wyników.")
     else:
-        hdr = ["Ticker", "Dir", "Status", "Pattern", "Incline", "Ratio(d)", "Touched_61.8_date", "Link"]
+        hdr = ["Ticker", "Dir", "Status", "Pattern", "Incline", "Ratio(d)", "Touched_61.8_date", "Link", "stockhelper_chart"]
         body = []
         for r in rows1:
-            body.append([r.ticker, r.direction, r.status, r.reversal_pattern_name, f"{r.incline_start_date}->{r.incline_end_date}", f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)", r.first_61_8_touch_date or "-", f"[stooq]({_stooq_chart_url(r.ticker)})"])
+            body.append([r.ticker, r.direction, r.status, r.reversal_pattern_name, f"{r.incline_start_date}->{r.incline_end_date}", f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)", r.first_61_8_touch_date or "-", f"[stooq]({_stooq_chart_url(r.ticker)})", _stockhelper_chart_link(r.ticker, fibo=r)])
         lines += [_md_table(hdr, body)]
     lines += ["", "## WYNIKI FIBO #2", ""]
     if not rows2:
         lines.append("Brak wyników.")
     else:
-        hdr = ["Ticker", "Dir", "Pattern", "Incline", "Ratio(d)", "Touched_61.8_date", "Link"]
+        hdr = ["Ticker", "Dir", "Pattern", "Incline", "Ratio(d)", "Touched_61.8_date", "Link", "stockhelper_chart"]
         body = []
         for r in rows2:
-            body.append([r.ticker, r.direction, r.reversal_pattern_name, f"{r.incline_start_date}->{r.incline_end_date}", f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)", r.first_61_8_touch_date or "-", f"[stooq]({_stooq_chart_url(r.ticker)})"])
+            body.append([r.ticker, r.direction, r.reversal_pattern_name, f"{r.incline_start_date}->{r.incline_end_date}", f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)", r.first_61_8_touch_date or "-", f"[stooq]({_stooq_chart_url(r.ticker)})", _stockhelper_chart_link(r.ticker, fibo=r)])
         lines += [_md_table(hdr, body)]
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
