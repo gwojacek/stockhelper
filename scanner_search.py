@@ -45,8 +45,16 @@ def _stockhelper_chart_link(ticker: str, *, ichimoku: bool = False, fibo: FiboSc
         cmd.extend(["--fibo-levels", "0,23.6,38.2,61.8,100"])
     shell_cmd = " ".join(cmd)
     encoded = quote(shell_cmd, safe="")
-    # Markdown renderers differ: keep command: URI + visible fallback command text.
-    return f"<a href=\"command:{encoded}\">show_chart</a><br/><sub><code>{shell_cmd}</code></sub>"
+    # VS Code-compatible: send command to integrated terminal + Enter.
+    seq_arg = quote(f'[{{"text":"{shell_cmd}\\\\u000D"}}]', safe="")
+    vscode_uri = f"command:workbench.action.terminal.sendSequence?{seq_arg}"
+    generic_uri = f"command:{encoded}"
+    # Keep both URIs + visible fallback command text (for non-supporting renderers).
+    return (
+        f"<a href=\"{vscode_uri}\">show_chart</a>"
+        f" / <a href=\"{generic_uri}\">alt</a>"
+        f"<br/><sub><code>{shell_cmd}</code></sub>"
+    )
 
 
 def _write_ichimoku_report_md(group_name: str, rows1: list[ScanResult], rows2: list[FlipResult], out_path: Path) -> None:
@@ -1736,11 +1744,13 @@ def run_fibo_search(target: str) -> int:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
-            long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
+            long_offset0 = None
             for off in [0, 5, 10, 15, 20, 30, 40]:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
+                    if off == 0:
+                        long_offset0 = cand
             if long_candidates:
                 # If current window (offset 0) no longer qualifies as "waiting",
                 # drop stale waiting candidates coming from older offsets.
@@ -1779,11 +1789,13 @@ def run_fibo_search(target: str) -> int:
                     out_rows.append(c)
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
-                short_offset0 = _find_fibo_setup(df, "short", end_offset=0)
+                short_offset0 = None
                 for off in [0, 5, 10, 15, 20, 30, 40]:
                     cand = _find_fibo_setup(df, "short", end_offset=off)
                     if cand:
                         short_candidates.append(cand)
+                        if off == 0:
+                            short_offset0 = cand
                 if short_candidates:
                     if short_offset0 is None or short_offset0.status != "reached_23_6_waiting_for_61_8":
                         short_candidates = [c for c in short_candidates if c.status != "reached_23_6_waiting_for_61_8"]
@@ -1858,13 +1870,21 @@ def run_fibo_search(target: str) -> int:
             continue
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] = {}
 
+    liquidity_cache: dict[tuple[str, str], tuple[bool, float]] = {}
+
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
         if row is None:
             return False
         symbol = row[0]
+        instrument_type = row[1]
+        cache_key = (symbol, instrument_type)
+        if cache_key in liquidity_cache:
+            ok, avg_10d_pln = liquidity_cache[cache_key]
+            avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
+            return ok
         try:
-            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=row[1], persist=True)
+            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
         except Exception:
             return False
         if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
@@ -1884,7 +1904,9 @@ def run_fibo_search(target: str) -> int:
         avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
         avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
-        return avg_10d_pln >= min_avg
+        ok = avg_10d_pln >= min_avg
+        liquidity_cache[cache_key] = (ok, avg_10d_pln)
+        return ok
 
     rows_by_key: dict[tuple[str, str, str, str], tuple[str, str]] = {}
     # Build lookup using the same symbol normalization as scanner.
