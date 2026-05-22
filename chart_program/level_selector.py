@@ -63,6 +63,9 @@ def _parse_args(raw_args=None):
     parser.add_argument("--pip-size", type=float, default=0.0001)
     parser.add_argument("--api-key", help="Optional API key forwarded to Stooq query parameters")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
+    parser.add_argument("--show-ichimoku", action="store_true", help="Open chart with Ichimoku cloud visible")
+    parser.add_argument("--fibo-anchor", nargs=3, metavar=("DIRECTION", "START_DATE", "END_DATE"), help="Preload fibo direction and incline dates")
+    parser.add_argument("--fibo-levels", default="0,23.6,38.2,61.8,100", help="Comma-separated fib levels for preload")
     return parser.parse_args(raw_args)
 
 
@@ -430,6 +433,8 @@ def run_level_selector(raw_args=None):
     session_state = _load_session_state(config_path)
     if session_state:
         existing.update(session_state)
+    if args.show_ichimoku:
+        existing["__show_ichimoku__"] = True
 
     if instrument_type == "forex":
         symbol = existing.get("pair", base_target if "/" in base_target else f"{base_target[:3].upper()}/{base_target[3:6].upper()}")

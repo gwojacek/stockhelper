@@ -687,7 +687,7 @@ class ChartLevelSelectorUI:
                     x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
 
                 delta = y_end - y_start
-                retrace_levels = [0.0, 0.618, 1.0]
+                retrace_levels = [0.0, 0.236, 0.382, 0.618, 1.0]
                 fib_group_id = str(uuid4())
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end

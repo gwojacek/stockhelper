@@ -371,6 +371,9 @@ def main()->int:
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
+    parser.add_argument('--show-ichimoku', action='store_true')
+    parser.add_argument('--fibo-anchor', nargs=3, metavar=('DIRECTION','START_DATE','END_DATE'))
+    parser.add_argument('--fibo-levels')
     args=parser.parse_args()
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.debug_stooq:
@@ -407,6 +410,12 @@ def main()->int:
                 cmd.extend(['--instrument', instrument_type])
         else:
             cmd=[sys.executable,'-m','chart_program',target]
+        if args.show_ichimoku:
+            cmd.append('--show-ichimoku')
+        if args.fibo_anchor:
+            cmd.extend(['--fibo-anchor', *args.fibo_anchor])
+        if args.fibo_levels:
+            cmd.extend(['--fibo-levels', args.fibo_levels])
     else:
         instrument_type=_instrument_type_from_path(resolved_path) or detect_instrument_type(target,None)
         if resolved_path is None: print(f'Instrument config not found: {target}.'); return 1
