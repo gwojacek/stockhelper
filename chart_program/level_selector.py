@@ -473,6 +473,15 @@ def run_level_selector(raw_args=None):
         and args.fibo_61_8 is not None
     ):
         fib_color = "#22c55e" if args.fibo_direction == "long" else "#ef4444"
+        start_ts = pd.to_datetime(args.fibo_incline_start, errors="coerce")
+        end_ts = pd.to_datetime(args.fibo_incline_end, errors="coerce")
+        if pd.isna(start_ts) or pd.isna(end_ts):
+            x_right = args.fibo_incline_end
+        else:
+            last_ts = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce") if not df.empty else end_ts
+            x_right = (last_ts + abs(end_ts - start_ts) * 3).strftime("%Y-%m-%d")
+        top_val = max(float(args.fibo_23_6), float(args.fibo_38_2), float(args.fibo_61_8))
+        bot_val = min(float(args.fibo_23_6), float(args.fibo_38_2), float(args.fibo_61_8))
         existing["drawn_objects"] = [
             {
                 "id": f"prefib-{k}",
@@ -480,12 +489,18 @@ def run_level_selector(raw_args=None):
                 "type": "fib",
                 "label": f"FIB {k}%",
                 "x0": args.fibo_incline_start,
-                "x1": args.fibo_incline_end,
+                "x1": x_right,
                 "y0": float(val),
                 "y1": float(val),
                 "color": fib_color,
             }
-            for k, val in [("23.6", args.fibo_23_6), ("38.2", args.fibo_38_2), ("61.8", args.fibo_61_8)]
+            for k, val in [
+                ("0", top_val),
+                ("23.6", args.fibo_23_6),
+                ("38.2", args.fibo_38_2),
+                ("61.8", args.fibo_61_8),
+                ("100", bot_val),
+            ]
         ]
 
     if instrument_type in ("commodity", "forex"):

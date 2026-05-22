@@ -27,6 +27,8 @@ from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
+ICHIMOKU_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
+FIBO_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 
 COMMODITIES_SEARCH_TICKERS = [
     "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
@@ -685,12 +687,12 @@ def _stockhelper_chart_cmd(
 ) -> str:
     symbol = (ticker or "").strip().upper()
     parts: list[str] = ["python", "run", "-c", symbol]
+    extra: list[str] = []
     if show_ichimoku:
-        parts.extend(["--", "--show-ichimoku"])
+        extra.append("--show-ichimoku")
     if fibo is not None:
-        parts.extend(
+        extra.extend(
             [
-                "--",
                 "--fibo-direction", fibo.direction,
                 "--fibo-incline-start", fibo.incline_start_date,
                 "--fibo-incline-end", fibo.incline_end_date,
@@ -699,6 +701,8 @@ def _stockhelper_chart_cmd(
                 "--fibo-61-8", f"{fibo.fib_61_8:.6f}",
             ]
         )
+    if extra:
+        parts.extend(["--", *extra])
     return " ".join(parts)
 
 
@@ -722,7 +726,7 @@ def _scan_source_label(src: str) -> str:
 
 def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
     base = f"search_{group_name.lower()}_"
-    files = [p for p in SEARCH_OUTPUT_DIR.glob(f"{base}*.csv") if p.is_file()]
+    files = [p for p in ICHIMOKU_OUTPUT_DIR.glob(f"{base}*.csv") if p.is_file()]
     if len(files) <= keep_last:
         return
     files_sorted = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
@@ -1061,8 +1065,8 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
 
-        SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+        ICHIMOKU_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        out_csv = ICHIMOKU_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
         with out_csv.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln", "stooq_link", "stockhelper_link"])
@@ -1072,7 +1076,7 @@ def run_ichimoku_search(target: str) -> int:
         print(f"\nZapisano CSV: {out_csv}")
         print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
         links_flip = _print_flip_results_with_links(flip_results)
-        out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
+        out_csv_flip = ICHIMOKU_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
         with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
@@ -1161,8 +1165,8 @@ def run_ichimoku_search(target: str) -> int:
                 if flip:
                     flip_results.append(flip)
 
-    SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    ICHIMOKU_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_csv = ICHIMOKU_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln", "stooq_link", "stockhelper_link"])
@@ -1175,7 +1179,7 @@ def run_ichimoku_search(target: str) -> int:
 
     links_flip = _print_flip_results_with_links(flip_results)
 
-    out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
+    out_csv_flip = ICHIMOKU_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
     with out_csv_flip.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
@@ -1783,8 +1787,8 @@ def run_fibo_search(target: str) -> int:
             if err:
                 print(f"  pominięto ({err})")
             rows.extend(found)
-    SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_csv = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    FIBO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_csv = FIBO_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow([*([f.name for f in FiboScanResult.__dataclass_fields__.values()]), "stooq_link", "stockhelper_link"])
@@ -1912,8 +1916,8 @@ def run_fibo_search(target: str) -> int:
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
-    out_csv_w1 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w1.csv"
-    out_csv_w2 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w2.csv"
+    out_csv_w1 = FIBO_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w1.csv"
+    out_csv_w2 = FIBO_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w2.csv"
     with out_csv_w1.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow([*([f.name for f in FiboScanResult.__dataclass_fields__.values()]), "stooq_link", "stockhelper_link"])

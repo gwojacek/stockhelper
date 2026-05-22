@@ -265,10 +265,10 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-        before_i = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        before_i = {str(p.relative_to(SEARCH_OUTPUT_DIR)): p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("**/*.csv")}
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
-        after_i = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
-        new_i = [p for p in after_i if p.name not in before_i or p.stat().st_mtime > before_i[p.name]]
+        after_i = sorted(SEARCH_OUTPUT_DIR.glob("**/*.csv"), key=lambda p: p.stat().st_mtime)
+        new_i = [p for p in after_i if str(p.relative_to(SEARCH_OUTPUT_DIR)) not in before_i or p.stat().st_mtime > before_i[str(p.relative_to(SEARCH_OUTPUT_DIR))]]
         main_ichimoku_csv = next((p for p in new_i if _is_ichimoku_csv(p.name) and not p.name.endswith("_flips.csv")), None)
         th10, th20 = _extract_progi_from_csv(main_ichimoku_csv) if main_ichimoku_csv else (None, None)
         with report.open("a", encoding="utf-8") as out:
@@ -288,10 +288,10 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-        before_f = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        before_f = {str(p.relative_to(SEARCH_OUTPUT_DIR)): p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("**/*.csv")}
         code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
-        after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
-        new_f = [p for p in after_f if p.name not in before_f or p.stat().st_mtime > before_f[p.name]]
+        after_f = sorted(SEARCH_OUTPUT_DIR.glob("**/*.csv"), key=lambda p: p.stat().st_mtime)
+        new_f = [p for p in after_f if str(p.relative_to(SEARCH_OUTPUT_DIR)) not in before_f or p.stat().st_mtime > before_f[str(p.relative_to(SEARCH_OUTPUT_DIR))]]
         fibo_split_present = any(p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv") for p in new_f)
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
@@ -335,11 +335,11 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
-        before_mtime = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        before_mtime = {str(p.relative_to(SEARCH_OUTPUT_DIR)): p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("**/*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
-        after = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
-        new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
+        after = sorted(SEARCH_OUTPUT_DIR.glob("**/*.csv"), key=lambda p: p.stat().st_mtime)
+        new = [p for p in after if str(p.relative_to(SEARCH_OUTPUT_DIR)) not in before_mtime or p.stat().st_mtime > before_mtime[str(p.relative_to(SEARCH_OUTPUT_DIR))]]
         with report.open("a", encoding="utf-8") as out:
             out.write(f"\n\n{_section_banner(f' {_scope_label(scope)} ', width=108, fill='■')}\n")
         normal = [p for p in new if not p.name.endswith("_flips.csv")]
