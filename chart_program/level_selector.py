@@ -63,6 +63,13 @@ def _parse_args(raw_args=None):
     parser.add_argument("--pip-size", type=float, default=0.0001)
     parser.add_argument("--api-key", help="Optional API key forwarded to Stooq query parameters")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
+    parser.add_argument("--show-ichimoku", action="store_true", help="Start chart with Ichimoku visibility enabled")
+    parser.add_argument("--fibo-direction", choices=["long", "short"], help="Preload fibo drawing direction")
+    parser.add_argument("--fibo-incline-start", help="Incline start date (YYYY-MM-DD) for preloaded fibo")
+    parser.add_argument("--fibo-incline-end", help="Incline end date (YYYY-MM-DD) for preloaded fibo")
+    parser.add_argument("--fibo-23-6", type=float, dest="fibo_23_6", help="Preloaded fib 23.6 level value")
+    parser.add_argument("--fibo-38-2", type=float, dest="fibo_38_2", help="Preloaded fib 38.2 level value")
+    parser.add_argument("--fibo-61-8", type=float, dest="fibo_61_8", help="Preloaded fib 61.8 level value")
     return parser.parse_args(raw_args)
 
 
@@ -430,6 +437,8 @@ def run_level_selector(raw_args=None):
     session_state = _load_session_state(config_path)
     if session_state:
         existing.update(session_state)
+    if args.show_ichimoku:
+        existing["__show_ichimoku__"] = True
 
     if instrument_type == "forex":
         symbol = existing.get("pair", base_target if "/" in base_target else f"{base_target[:3].upper()}/{base_target[3:6].upper()}")
@@ -454,6 +463,30 @@ def run_level_selector(raw_args=None):
         api_key=args.api_key,
         data_source=args.data_source,
     )
+
+    if (
+        args.fibo_direction
+        and args.fibo_incline_start
+        and args.fibo_incline_end
+        and args.fibo_23_6 is not None
+        and args.fibo_38_2 is not None
+        and args.fibo_61_8 is not None
+    ):
+        fib_color = "#22c55e" if args.fibo_direction == "long" else "#ef4444"
+        existing["drawn_objects"] = [
+            {
+                "id": f"prefib-{k}",
+                "group_id": "prefib",
+                "type": "fib",
+                "label": f"FIB {k}%",
+                "x0": args.fibo_incline_start,
+                "x1": args.fibo_incline_end,
+                "y0": float(val),
+                "y1": float(val),
+                "color": fib_color,
+            }
+            for k, val in [("23.6", args.fibo_23_6), ("38.2", args.fibo_38_2), ("61.8", args.fibo_61_8)]
+        ]
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
