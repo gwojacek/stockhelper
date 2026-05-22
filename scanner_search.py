@@ -677,6 +677,31 @@ def _stooq_chart_url(ticker: str) -> str:
     return f"https://stooq.pl/q/a2/?s={symbol_q}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
 
 
+def _stockhelper_chart_url(
+    ticker: str,
+    *,
+    show_ichimoku: bool = False,
+    fibo: FiboScanResult | None = None,
+) -> str:
+    symbol_q = quote((ticker or "").strip().upper(), safe="")
+    params: list[str] = [f"symbol={symbol_q}"]
+    if show_ichimoku:
+        params.append("ichimoku=1")
+    if fibo is not None:
+        params.extend(
+            [
+                "fibo=1",
+                f"direction={quote(fibo.direction, safe='')}",
+                f"incline_start={quote(fibo.incline_start_date, safe='')}",
+                f"incline_end={quote(fibo.incline_end_date, safe='')}",
+                f"fib_23_6={fibo.fib_23_6:.6f}",
+                f"fib_38_2={fibo.fib_38_2:.6f}",
+                f"fib_61_8={fibo.fib_61_8:.6f}",
+            ]
+        )
+    return f"http://127.0.0.1:8050/?{'&'.join(params)}"
+
+
 def _compact_error(err: str | None) -> str:
     text = (err or "").strip()
     if "url=" in text:
@@ -713,7 +738,7 @@ def _print_results_with_links(results: list[ScanResult]) -> list[str]:
     if not results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Link':<0} {'Stockhelper':<0}")
     print("-" * 140)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
     links: list[str] = []
@@ -722,7 +747,8 @@ def _print_results_with_links(results: list[ScanResult]) -> list[str]:
         low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {ANSI_CYAN}{link}{ANSI_RESET}")
+        stockhelper_link = _stockhelper_chart_url(row.ticker, show_ichimoku=True)
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {ANSI_CYAN}{link}{ANSI_RESET} {ANSI_GREEN}{stockhelper_link}{ANSI_RESET}")
     return links
 
 
@@ -734,7 +760,7 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
     base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12}"
     event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
-    print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
+    print(f"{base_header} {event_headers} {'Link':<0} {'Stockhelper':<0}".rstrip())
     print("-" * 150)
     links: list[str] = []
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
@@ -748,7 +774,8 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
             else:
                 event_cells.append("-")
         event_cols = " ".join([f"{cell:<34}" for cell in event_cells])
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
+        stockhelper_link = _stockhelper_chart_url(row.ticker, show_ichimoku=True)
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET} {ANSI_GREEN}{stockhelper_link}{ANSI_RESET}".rstrip())
     return links
 
 
@@ -1038,9 +1065,9 @@ def run_ichimoku_search(target: str) -> int:
         out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
         with out_csv.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
-            writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln"])
+            writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln", "stooq_link", "stockhelper_link"])
             for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-                writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
+                writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "", _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, show_ichimoku=True)])
         links_primary = _print_results_with_links(results)
         print(f"\nZapisano CSV: {out_csv}")
         print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
@@ -1052,7 +1079,7 @@ def run_ichimoku_search(target: str) -> int:
             dynamic_cols: list[str] = []
             for i in range(1, max_events + 1):
                 dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
-            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
+            writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols, "stooq_link", "stockhelper_link"])
             for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
                 ev = row.retest_events or []
                 dynamic_vals: list[str] = []
@@ -1061,7 +1088,7 @@ def run_ichimoku_search(target: str) -> int:
                         dynamic_vals.extend([ev[i][0], ev[i][1]])
                     else:
                         dynamic_vals.extend(["", ""])
-                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
+                writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals, _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, show_ichimoku=True)])
         print(f"Zapisano CSV #2: {out_csv_flip}")
         _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
@@ -1138,9 +1165,9 @@ def run_ichimoku_search(target: str) -> int:
     out_csv = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln"])
+        writer.writerow(["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln", "stooq_link", "stockhelper_link"])
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else ""])
+            writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "", _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, show_ichimoku=True)])
 
     links_primary = _print_results_with_links(results)
     print(f"\nZapisano CSV: {out_csv}")
@@ -1155,7 +1182,7 @@ def run_ichimoku_search(target: str) -> int:
         dynamic_cols: list[str] = []
         for i in range(1, max_events + 1):
             dynamic_cols.extend([f"retest_date_{i}", f"formation_{i}"])
-        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols])
+        writer.writerow(["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", *dynamic_cols, "stooq_link", "stockhelper_link"])
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             ev = row.retest_events or []
             dynamic_vals: list[str] = []
@@ -1164,7 +1191,7 @@ def run_ichimoku_search(target: str) -> int:
                     dynamic_vals.extend([ev[i][0], ev[i][1]])
                 else:
                     dynamic_vals.extend(["", ""])
-            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals])
+            writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals, _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, show_ichimoku=True)])
     print(f"Zapisano CSV #2: {out_csv_flip}")
     _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
@@ -1562,7 +1589,7 @@ def _print_fibo_results(
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0} {'Stockhelper':<0}")
         print("-" * 185)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
@@ -1591,12 +1618,13 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
+        stockhelper_link = _stockhelper_chart_url(r.ticker, fibo=r)
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET} {ANSI_GREEN}{stockhelper_link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
         return links
-    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Dir':<6} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Link':<0} {'Stockhelper':<0}")
     print("-" * 128)
     for r in rows2:
         link = _stooq_chart_url(r.ticker)
@@ -1604,7 +1632,8 @@ def _print_fibo_results(
             links.append(link)
         incline = f"{r.incline_start_date}->{r.incline_end_date}"
         ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {ANSI_CYAN}{link}{ANSI_RESET}")
+        stockhelper_link = _stockhelper_chart_url(r.ticker, fibo=r)
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {ANSI_GREEN}{r.reversal_pattern_name:<22}{ANSI_RESET} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {ANSI_CYAN}{link}{ANSI_RESET} {ANSI_GREEN}{stockhelper_link}{ANSI_RESET}")
     return links
 
 
@@ -1758,9 +1787,9 @@ def run_fibo_search(target: str) -> int:
     out_csv = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
+        w.writerow([*([f.name for f in FiboScanResult.__dataclass_fields__.values()]), "stooq_link", "stockhelper_link"])
         for row in rows:
-            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+            w.writerow([*([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()]), _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, fibo=row)])
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
     rows2 = [
         r for r in rows
@@ -1887,14 +1916,14 @@ def run_fibo_search(target: str) -> int:
     out_csv_w2 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_w2.csv"
     with out_csv_w1.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
+        w.writerow([*([f.name for f in FiboScanResult.__dataclass_fields__.values()]), "stooq_link", "stockhelper_link"])
         for row in rows1:
-            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+            w.writerow([*([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()]), _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, fibo=row)])
     with out_csv_w2.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
+        w.writerow([*([f.name for f in FiboScanResult.__dataclass_fields__.values()]), "stooq_link", "stockhelper_link"])
         for row in rows2:
-            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+            w.writerow([*([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()]), _stooq_chart_url(row.ticker), _stockhelper_chart_url(row.ticker, fibo=row)])
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
