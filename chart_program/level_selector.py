@@ -457,10 +457,11 @@ def run_level_selector(raw_args=None):
         existing["currency_conversion_fee_pct"] = float(existing.get("currency_conversion_fee_pct", 0.01) or 0.01)
         existing["__currency_fee_eligible__"] = _default_currency_conversion_fee(instrument_type, symbol)
 
+    force_cached = bool(args.fibo_direction or args.show_ichimoku)
     df, data_path, fetch_info = load_or_update_daily_data(
         symbol=symbol,
         instrument_type=instrument_type,
-        persist=True,
+        persist=not force_cached,
         api_key=args.api_key,
         data_source=args.data_source,
     )
@@ -481,8 +482,15 @@ def run_level_selector(raw_args=None):
         else:
             last_ts = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce") if not df.empty else end_ts
             x_right = (last_ts + abs(end_ts - start_ts) * 3).strftime("%Y-%m-%d")
-        top_val = max(float(args.fibo_23_6), float(args.fibo_38_2), float(args.fibo_61_8))
-        bot_val = min(float(args.fibo_23_6), float(args.fibo_38_2), float(args.fibo_61_8))
+        f23 = float(args.fibo_23_6)
+        f61 = float(args.fibo_61_8)
+        delta = abs(f23 - f61) / 0.382 if abs(f23 - f61) > 1e-9 else 0.0
+        if args.fibo_direction == "long":
+            bot_val = f61 - 0.382 * delta
+            top_val = bot_val + delta
+        else:
+            top_val = f61 + 0.382 * delta
+            bot_val = top_val - delta
         existing["drawn_objects"] = [
             {
                 "id": f"prefib-{k}",

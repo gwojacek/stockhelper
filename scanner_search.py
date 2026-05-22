@@ -1083,7 +1083,7 @@ def run_ichimoku_search(target: str) -> int:
                 "below_threshold_days_20d": str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "",
                 "threshold_10d_pln": f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "",
                 "threshold_20d_pln": f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "",
-                "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True, absolute_run_path=True),
+                "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _md_exec_link(_stockhelper_chart_cmd(row.ticker, show_ichimoku=True, absolute_run_path=True)),
             })
         _write_md_from_dict_rows(out_csv.with_suffix(".md"), f"Ichimoku {group_name} WYNIKI 1", md_headers, md_rows)
         links_primary = _print_results_with_links(results)
@@ -1108,7 +1108,7 @@ def run_ichimoku_search(target: str) -> int:
                         dynamic_vals.extend(["", ""])
                 writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals, _stooq_chart_url(row.ticker), _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)])
         md_headers_flip = ["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "stooq_link", "stockhelper_link"]
-        md_rows_flip = [{"ticker": row.ticker, "previous_side": row.previous_side, "current_side": row.current_side, "flip_date": row.flip_date, "months_since_flip": f"{row.months_since_flip:.1f}", "latest_retest_status": row.retest_status, "retest_depth": row.retest_depth, "valid_retests_count": str(row.valid_retests_count), "first_valid_retest_pattern_date": row.first_valid_retest_pattern_date, "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)} for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True)]
+        md_rows_flip = [{"ticker": row.ticker, "previous_side": row.previous_side, "current_side": row.current_side, "flip_date": row.flip_date, "months_since_flip": f"{row.months_since_flip:.1f}", "latest_retest_status": row.retest_status, "retest_depth": row.retest_depth, "valid_retests_count": str(row.valid_retests_count), "first_valid_retest_pattern_date": row.first_valid_retest_pattern_date, "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _md_exec_link(_stockhelper_chart_cmd(row.ticker, show_ichimoku=True, absolute_run_path=True))} for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True)]
         with out_csv.with_suffix(".md").open("a", encoding="utf-8") as fh:
             fh.write("\n## WYNIKI 2\n")
             fh.write("| " + " | ".join(md_headers_flip) + " |\n")
@@ -1194,7 +1194,7 @@ def run_ichimoku_search(target: str) -> int:
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             writer.writerow([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "", f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "", _stooq_chart_url(row.ticker), _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)])
     md_headers = ["ticker", "side", "respect_days", "respect_months", "start_date", "close", "avg_turnover_10d_pln", "below_threshold_days_20d", "threshold_10d_pln", "threshold_20d_pln", "stooq_link", "stockhelper_link"]
-    md_rows = [{"ticker": row.ticker, "side": row.side, "respect_days": str(row.respect_days), "respect_months": f"{row.respect_months:.1f}", "start_date": row.start_date, "close": f"{row.close:.4f}", "avg_turnover_10d_pln": f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", "below_threshold_days_20d": str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "", "threshold_10d_pln": f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", "threshold_20d_pln": f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "", "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)} for row in sorted(results, key=lambda r: r.respect_days, reverse=True)]
+    md_rows = [{"ticker": row.ticker, "side": row.side, "respect_days": str(row.respect_days), "respect_months": f"{row.respect_months:.1f}", "start_date": row.start_date, "close": f"{row.close:.4f}", "avg_turnover_10d_pln": f"{row.avg_turnover_10d_pln:.2f}" if row.avg_turnover_10d_pln is not None else "", "below_threshold_days_20d": str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "", "threshold_10d_pln": f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "", "threshold_20d_pln": f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "", "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _md_exec_link(_stockhelper_chart_cmd(row.ticker, show_ichimoku=True, absolute_run_path=True))} for row in sorted(results, key=lambda r: r.respect_days, reverse=True)]
     _write_md_from_dict_rows(out_csv.with_suffix(".md"), f"Ichimoku {group_name} WYNIKI 1", md_headers, md_rows)
 
     links_primary = _print_results_with_links(results)
@@ -1221,7 +1221,7 @@ def run_ichimoku_search(target: str) -> int:
                     dynamic_vals.extend(["", ""])
             writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals, _stooq_chart_url(row.ticker), _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)])
     md_headers_flip = ["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "stooq_link", "stockhelper_link"]
-    md_rows_flip = [{"ticker": row.ticker, "previous_side": row.previous_side, "current_side": row.current_side, "flip_date": row.flip_date, "months_since_flip": f"{row.months_since_flip:.1f}", "latest_retest_status": row.retest_status, "retest_depth": row.retest_depth, "valid_retests_count": str(row.valid_retests_count), "first_valid_retest_pattern_date": row.first_valid_retest_pattern_date, "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)} for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True)]
+    md_rows_flip = [{"ticker": row.ticker, "previous_side": row.previous_side, "current_side": row.current_side, "flip_date": row.flip_date, "months_since_flip": f"{row.months_since_flip:.1f}", "latest_retest_status": row.retest_status, "retest_depth": row.retest_depth, "valid_retests_count": str(row.valid_retests_count), "first_valid_retest_pattern_date": row.first_valid_retest_pattern_date, "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _md_exec_link(_stockhelper_chart_cmd(row.ticker, show_ichimoku=True, absolute_run_path=True))} for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True)]
     with out_csv.with_suffix(".md").open("a", encoding="utf-8") as fh:
         fh.write("\n## WYNIKI 2\n")
         fh.write("| " + " | ".join(md_headers_flip) + " |\n")
@@ -1688,6 +1688,11 @@ def _write_md_from_dict_rows(path: Path, title: str, headers: list[str], rows: l
     _write_simple_md_report(path, title, headers, vals)
 
 
+def _md_exec_link(cmd: str) -> str:
+    encoded = quote(cmd, safe="")
+    return f"[run](command:{encoded}) {cmd}"
+
+
 def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
@@ -1985,7 +1990,7 @@ def run_fibo_search(target: str) -> int:
                     near_txt = f"{closeness*100:5.1f}%"
                 except Exception:
                     pass
-                r1.append([r.ticker, r.direction, r.status, r.reversal_pattern_name, incline, ratio_txt, (r.first_61_8_touch_date or "-"), avg_turn, near_txt, _stooq_chart_url(r.ticker), _stockhelper_chart_cmd(r.ticker, fibo=r)])
+                r1.append([r.ticker, r.direction, r.status, r.reversal_pattern_name, incline, ratio_txt, (r.first_61_8_touch_date or "-"), avg_turn, near_txt, _stooq_chart_url(r.ticker), _md_exec_link(_stockhelper_chart_cmd(r.ticker, fibo=r, absolute_run_path=True))])
             fh.write("| " + " | ".join(h1) + " |\n")
             fh.write("| " + " | ".join(["---"] * len(h1)) + " |\n")
             for row in r1:
@@ -2000,7 +2005,7 @@ def run_fibo_search(target: str) -> int:
             for r in rows2:
                 incline = f"{r.incline_start_date}->{r.incline_end_date}"
                 ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
-                r2.append([r.ticker, r.direction, r.reversal_pattern_name, incline, ratio_txt, (r.first_61_8_touch_date or "-"), _stooq_chart_url(r.ticker), _stockhelper_chart_cmd(r.ticker, fibo=r)])
+                r2.append([r.ticker, r.direction, r.reversal_pattern_name, incline, ratio_txt, (r.first_61_8_touch_date or "-"), _stooq_chart_url(r.ticker), _md_exec_link(_stockhelper_chart_cmd(r.ticker, fibo=r, absolute_run_path=True))])
             # append second table manually to same file
             fh.write("| " + " | ".join(h2) + " |\n")
             fh.write("| " + " | ".join(["---"] * len(h2)) + " |\n")
