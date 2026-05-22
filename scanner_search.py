@@ -1952,24 +1952,55 @@ def run_fibo_search(target: str) -> int:
     rows2_keys = {(r.ticker, r.direction) for r in rows2}
     rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
 
-    md_headers_fibo = [*([f.name for f in FiboScanResult.__dataclass_fields__.values()]), "stooq_link", "stockhelper_link"]
-    md_rows_fibo = []
-    for row in rows:
-        md_rows_fibo.append({
-            **{f: str(getattr(row, f)) for f in FiboScanResult.__dataclass_fields__.keys()},
-            "stooq_link": _stooq_chart_url(row.ticker),
-            "stockhelper_link": _stockhelper_chart_cmd(row.ticker, fibo=row),
-        })
-    _write_simple_md_report(
-        out_csv.with_suffix(".md"),
-        f"Fibo {group_name} results",
-        md_headers_fibo,
-        [[r.get(h, "") for h in md_headers_fibo] for r in md_rows_fibo],
-    )
+    md_path = out_csv.with_suffix(".md")
+    with md_path.open("w", encoding="utf-8") as fh:
+        fh.write(f"# Fibo {group_name} results\n\n")
+        fh.write("## WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)\n")
+        if not rows1:
+            fh.write("Brak wyników.\n\n")
+        else:
+            h1 = ["Ticker", "Dir", "Status", "Pattern", "Incline", "Ratio(d)", "Touched_61.8_date", "Avg10Turn", "Near61.8", "Link", "Stockhelper"]
+            r1: list[list[str]] = []
+            for r in rows1:
+                incline = f"{r.incline_start_date}->{r.incline_end_date}"
+                ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
+                avg_turn = "-"
+                key = (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
+                if avg_turnover_10d_by_key and key in avg_turnover_10d_by_key:
+                    avg_turn = f"{avg_turnover_10d_by_key[key]:,.0f}"
+                near_txt = "-"
+                try:
+                    dist = abs(float(r.current_close) - float(r.fib_61_8))
+                    band = max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9)
+                    closeness = max(0.0, 1.0 - (dist / band))
+                    near_txt = f"{closeness*100:5.1f}%"
+                except Exception:
+                    pass
+                r1.append([r.ticker, r.direction, r.status, r.reversal_pattern_name, incline, ratio_txt, (r.first_61_8_touch_date or "-"), avg_turn, near_txt, _stooq_chart_url(r.ticker), _stockhelper_chart_cmd(r.ticker, fibo=r)])
+            fh.write("| " + " | ".join(h1) + " |\n")
+            fh.write("| " + " | ".join(["---"] * len(h1)) + " |\n")
+            for row in r1:
+                fh.write("| " + " | ".join(str(x).replace("\n", " ") for x in row) + " |\n")
+            fh.write("\n")
+        fh.write("\n## WYNIKI FIBO #2 (valid formation, last 4 months)\n")
+        if not rows2:
+            fh.write("Brak wyników.\n")
+        else:
+            h2 = ["Ticker", "Dir", "Pattern", "Incline", "Ratio(d)", "Touched_61.8_date", "Link", "Stockhelper"]
+            r2: list[list[str]] = []
+            for r in rows2:
+                incline = f"{r.incline_start_date}->{r.incline_end_date}"
+                ratio_txt = f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)"
+                r2.append([r.ticker, r.direction, r.reversal_pattern_name, incline, ratio_txt, (r.first_61_8_touch_date or "-"), _stooq_chart_url(r.ticker), _stockhelper_chart_cmd(r.ticker, fibo=r)])
+            # append second table manually to same file
+            fh.write("| " + " | ".join(h2) + " |\n")
+            fh.write("| " + " | ".join(["---"] * len(h2)) + " |\n")
+            for row in r2:
+                fh.write("| " + " | ".join(row) + " |\n")
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
-    print(f"[fibo] md: {out_csv.with_suffix('.md')}")
+    print(f"[fibo] md: {md_path}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()

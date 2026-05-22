@@ -503,6 +503,32 @@ def run_level_selector(raw_args=None):
                 ("100", bot_val),
             ]
         ]
+        existing["drawn_objects"].extend(
+            [
+                {
+                    "id": "prefib-incline-start",
+                    "group_id": "prefib",
+                    "type": "line",
+                    "label": "INCLINE_START",
+                    "x0": args.fibo_incline_start,
+                    "x1": args.fibo_incline_start,
+                    "y0": bot_val,
+                    "y1": top_val,
+                    "color": "#a855f7",
+                },
+                {
+                    "id": "prefib-incline-end",
+                    "group_id": "prefib",
+                    "type": "line",
+                    "label": "INCLINE_END",
+                    "x0": args.fibo_incline_end,
+                    "x1": args.fibo_incline_end,
+                    "y0": bot_val,
+                    "y1": top_val,
+                    "color": "#a855f7",
+                },
+            ]
+        )
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
