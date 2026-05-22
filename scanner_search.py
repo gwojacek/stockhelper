@@ -43,8 +43,10 @@ def _stockhelper_chart_link(ticker: str, *, ichimoku: bool = False, fibo: FiboSc
     if fibo is not None:
         cmd.extend(["--fibo-anchor", fibo.direction, fibo.incline_start_date, fibo.incline_end_date])
         cmd.extend(["--fibo-levels", "0,23.6,38.2,61.8,100"])
-    encoded = quote(" ".join(cmd), safe="")
-    return f"[show_chart](command:{encoded})"
+    shell_cmd = " ".join(cmd)
+    encoded = quote(shell_cmd, safe="")
+    # Markdown renderers differ: keep command: URI + visible fallback command text.
+    return f"<a href=\"command:{encoded}\">show_chart</a><br/><sub><code>{shell_cmd}</code></sub>"
 
 
 def _write_ichimoku_report_md(group_name: str, rows1: list[ScanResult], rows2: list[FlipResult], out_path: Path) -> None:
@@ -1950,20 +1952,15 @@ def run_fibo_search(target: str) -> int:
     rows2_keys = {(r.ticker, r.direction) for r in rows2}
     rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
 
-    # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
-    # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
-    out_csv_w1 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_w1.csv"
-    out_csv_w2 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_w2.csv"
-    with out_csv_w1.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
-        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
-        for row in rows1:
-            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
-    with out_csv_w2.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
-        w.writerow([f.name for f in FiboScanResult.__dataclass_fields__.values()])
-        for row in rows2:
-            w.writerow([getattr(row, f) for f in FiboScanResult.__dataclass_fields__.keys()])
+    # Keep one CSV + one MD per fibo search scope/day.
+    legacy_w1 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_w1.csv"
+    legacy_w2 = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_w2.csv"
+    for p in (legacy_w1, legacy_w2):
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
     out_md = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}.md"
