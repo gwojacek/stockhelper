@@ -684,10 +684,11 @@ def _stockhelper_chart_cmd(
     *,
     show_ichimoku: bool = False,
     fibo: FiboScanResult | None = None,
+    absolute_run_path: bool = False,
 ) -> str:
     symbol = (ticker or "").strip().upper()
-    run_script = PROJECT_ROOT / "run"
-    parts: list[str] = [f"python {run_script}", "-c", symbol]
+    run_cmd = f"python {PROJECT_ROOT / 'run'}" if absolute_run_path else "python run"
+    parts: list[str] = [run_cmd, "-c", symbol]
     extra: list[str] = []
     if show_ichimoku:
         extra.append("--show-ichimoku")
@@ -1082,7 +1083,7 @@ def run_ichimoku_search(target: str) -> int:
                 "below_threshold_days_20d": str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "",
                 "threshold_10d_pln": f"{row.liquidity_threshold_10d_pln:.2f}" if row.liquidity_threshold_10d_pln is not None else "",
                 "threshold_20d_pln": f"{row.liquidity_threshold_20d_pln:.2f}" if row.liquidity_threshold_20d_pln is not None else "",
-                "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True),
+                "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True, absolute_run_path=True),
             })
         _write_md_from_dict_rows(out_csv.with_suffix(".md"), f"Ichimoku {group_name} WYNIKI 1", md_headers, md_rows)
         links_primary = _print_results_with_links(results)
@@ -1108,8 +1109,12 @@ def run_ichimoku_search(target: str) -> int:
                 writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals, _stooq_chart_url(row.ticker), _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)])
         md_headers_flip = ["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "stooq_link", "stockhelper_link"]
         md_rows_flip = [{"ticker": row.ticker, "previous_side": row.previous_side, "current_side": row.current_side, "flip_date": row.flip_date, "months_since_flip": f"{row.months_since_flip:.1f}", "latest_retest_status": row.retest_status, "retest_depth": row.retest_depth, "valid_retests_count": str(row.valid_retests_count), "first_valid_retest_pattern_date": row.first_valid_retest_pattern_date, "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)} for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True)]
-        _write_md_from_dict_rows(out_csv_flip.with_suffix(".md"), f"Ichimoku {group_name} WYNIKI 2", md_headers_flip, md_rows_flip)
-        print(f"Zapisano MD #2: {out_csv_flip.with_suffix('.md')}")
+        with out_csv.with_suffix(".md").open("a", encoding="utf-8") as fh:
+            fh.write("\n## WYNIKI 2\n")
+            fh.write("| " + " | ".join(md_headers_flip) + " |\n")
+            fh.write("| " + " | ".join(["---"] * len(md_headers_flip)) + " |\n")
+            for r in md_rows_flip:
+                fh.write("| " + " | ".join(str(r.get(h, "")) for h in md_headers_flip) + " |\n")
         _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
         if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
@@ -1217,8 +1222,12 @@ def run_ichimoku_search(target: str) -> int:
             writer.writerow([row.ticker, row.previous_side, row.current_side, row.flip_date, f"{row.months_since_flip:.1f}", row.retest_status, row.retest_depth, row.valid_retests_count, row.first_valid_retest_pattern_date, *dynamic_vals, _stooq_chart_url(row.ticker), _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)])
     md_headers_flip = ["ticker", "previous_side", "current_side", "flip_date", "months_since_flip", "latest_retest_status", "retest_depth", "valid_retests_count", "first_valid_retest_pattern_date", "stooq_link", "stockhelper_link"]
     md_rows_flip = [{"ticker": row.ticker, "previous_side": row.previous_side, "current_side": row.current_side, "flip_date": row.flip_date, "months_since_flip": f"{row.months_since_flip:.1f}", "latest_retest_status": row.retest_status, "retest_depth": row.retest_depth, "valid_retests_count": str(row.valid_retests_count), "first_valid_retest_pattern_date": row.first_valid_retest_pattern_date, "stooq_link": _stooq_chart_url(row.ticker), "stockhelper_link": _stockhelper_chart_cmd(row.ticker, show_ichimoku=True)} for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True)]
-    _write_md_from_dict_rows(out_csv_flip.with_suffix(".md"), f"Ichimoku {group_name} WYNIKI 2", md_headers_flip, md_rows_flip)
-    print(f"Zapisano MD #2: {out_csv_flip.with_suffix('.md')}")
+    with out_csv.with_suffix(".md").open("a", encoding="utf-8") as fh:
+        fh.write("\n## WYNIKI 2\n")
+        fh.write("| " + " | ".join(md_headers_flip) + " |\n")
+        fh.write("| " + " | ".join(["---"] * len(md_headers_flip)) + " |\n")
+        for r in md_rows_flip:
+            fh.write("| " + " | ".join(str(r.get(h, "")) for h in md_headers_flip) + " |\n")
     _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
