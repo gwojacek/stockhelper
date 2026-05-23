@@ -505,8 +505,9 @@ def run_level_selector(raw_args=None):
                         "group_id": gid,
                     })
                 existing["drawn_objects"] = objs
-        except Exception:
-            pass
+                print(f"[chart] auto-fibo preloaded: {len(objs)} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}")
+        except Exception as exc:
+            print(f"[chart] auto-fibo preload failed: {exc}")
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
