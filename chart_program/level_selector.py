@@ -484,18 +484,19 @@ def run_level_selector(raw_args=None):
                     x_right = e_ts
                 extension = abs(x_end - x_start) * 3
                 x_common_end = x_right + extension if args.fibo_right else x_right
-                levels = [0.0, 0.236, 0.382, 0.618, 1.0][: max(1, min(args.fibo_lines, 5))]
+                # Requested layout: 100, 0, 23.6, 38.2, 61.8
+                levels = [1.0, 0.0, 0.236, 0.382, 0.618][: max(1, min(args.fibo_lines, 5))]
                 objs = []
                 gid = "auto-fibo"
                 delta = y_end - y_start
                 for idx, r in enumerate(levels):
                     if idx == 0:
-                        # First line anchored at the first anchor point.
-                        y_val = round(y_start, 5)
+                        # First line is 100% (anchor1 low) and starts from anchor1.
+                        y_val = round(y_end - delta * r, 5)
                         x_level_start = x_start
-                        pct_label = "ANCHOR 1"
+                        pct_label = "FIB 100%"
                     else:
-                        # Remaining lines are drawn from second anchor point to the right.
+                        # Remaining lines (0/23.6/38.2/61.8) start at anchor2 and extend right.
                         y_val = round(y_end - delta * r, 5)
                         x_level_start = x_end
                         pct_label = f"FIB {r*100:.1f}%"
