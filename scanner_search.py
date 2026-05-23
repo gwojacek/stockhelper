@@ -701,7 +701,7 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     if mode == "fibo":
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"
-        return f"{base}  # incline:{start}->{end}; fibo_lines=5; fibo_right=on"
+        return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
     return base + " --ichimoku-mode on"
 
 
@@ -1061,7 +1061,8 @@ def run_ichimoku_search(target: str) -> int:
         out_md = _daily_report_path("search", group_name)
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            rows_md.append([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+            side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
+            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(out_md, "WYNIKI", ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"], rows_md)
         links_primary = _print_results_with_links(results)
         print(f"\nZapisano MD: {out_md}")
@@ -1070,7 +1071,8 @@ def run_ichimoku_search(target: str) -> int:
         out_md_flip = out_md
         rows_flip_md=[]
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-            rows_flip_md.append([row.ticker,row.previous_side,row.current_side,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
+            cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
+            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md, append=True)
         print(f"Zapisano MD: {out_md_flip}")
         _prune_search_history(group_name, keep_last=3)
@@ -1148,7 +1150,8 @@ def run_ichimoku_search(target: str) -> int:
     out_md = _daily_report_path("search", group_name)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-        rows_md.append([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), f"`{_build_chart_command(row.ticker, 'ichimoku')}`"])
+        side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
     _write_md_table(out_md, "WYNIKI", ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"], rows_md)
 
     links_primary = _print_results_with_links(results)
@@ -1160,7 +1163,8 @@ def run_ichimoku_search(target: str) -> int:
     out_md_flip = out_md
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-        rows_flip_md.append([row.ticker,row.previous_side,row.current_side,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),f"`{_build_chart_command(row.ticker, 'ichimoku')}`"])
+        cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
     _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md, append=True)
     print(f"Zapisano MD: {out_md_flip}")
     _prune_search_history(group_name, keep_last=3)
@@ -1875,7 +1879,7 @@ def run_fibo_search(target: str) -> int:
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
-    rows1_md=[[r.ticker,r.direction,r.status,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
+    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows2]
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows1_md)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows2_md, append=True)
