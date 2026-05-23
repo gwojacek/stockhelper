@@ -36,6 +36,33 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out)
 
 
+def _write_notebook(path: Path, markdown_sections: list[str], commands: list[str]) -> None:
+    cells: list[dict] = []
+    for md in markdown_sections:
+        cells.append(
+            {
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": md.splitlines(keepends=True),
+            }
+        )
+    if commands:
+        code_lines = ["# Click Run on selected line/cell to open chart\n"]
+        for c in commands:
+            code_lines.append(f"!{c}\n")
+        cells.append(
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": code_lines,
+            }
+        )
+    nb = {"cells": cells, "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}}, "nbformat": 4, "nbformat_minor": 5}
+    path.write_text(json.dumps(nb, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _stockhelper_chart_link(ticker: str, *, ichimoku: bool = False, fibo: FiboScanResult | None = None) -> str:
     ticker_q = quote((ticker or "").strip(), safe="")
     if fibo is not None:
@@ -80,6 +107,10 @@ def _write_ichimoku_report_md(group_name: str, rows1: list[ScanResult], rows2: l
             body.append([r.ticker, r.previous_side, r.current_side, r.flip_date, f"{r.months_since_flip:.1f}", r.retest_status, r.valid_retests_count, f"[stooq]({_stooq_chart_url(r.ticker)})", _stockhelper_chart_link(r.ticker, ichimoku=True)])
         lines += [_md_table(hdr, body)]
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ipynb_path = out_path.with_suffix(".ipynb")
+    cmd_rows = [f"python run -c {r.ticker} --show-ichimoku" for r in sorted(rows1, key=lambda x: x.respect_days, reverse=True)]
+    cmd_rows += [f"python run -c {r.ticker} --show-ichimoku" for r in sorted(rows2, key=lambda x: x.months_since_flip, reverse=True)]
+    _write_notebook(ipynb_path, ["\n".join(lines)], cmd_rows)
 
 
 def _write_fibo_report_md(group_name: str, rows1: list[FiboScanResult], rows2: list[FiboScanResult], out_path: Path) -> None:
@@ -102,6 +133,12 @@ def _write_fibo_report_md(group_name: str, rows1: list[FiboScanResult], rows2: l
             body.append([r.ticker, r.direction, r.reversal_pattern_name, f"{r.incline_start_date}->{r.incline_end_date}", f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)", r.first_61_8_touch_date or "-", f"[stooq]({_stooq_chart_url(r.ticker)})", _stockhelper_chart_link(r.ticker, fibo=r)])
         lines += [_md_table(hdr, body)]
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ipynb_path = out_path.with_suffix(".ipynb")
+    cmd_rows = [
+        f"python run -c {r.ticker} --fibo-anchor {r.direction} {r.incline_start_date} {r.incline_end_date} --fibo-levels 0,23.6,38.2,61.8,100"
+        for r in rows1 + rows2
+    ]
+    _write_notebook(ipynb_path, ["\n".join(lines)], cmd_rows)
 
 COMMODITIES_SEARCH_TICKERS = [
     "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
@@ -1121,6 +1158,7 @@ def run_ichimoku_search(target: str) -> int:
         _write_ichimoku_report_md(group_name, results, flip_results, out_md)
         print(f"\nZapisano CSV: {out_csv}")
         print(f"Zapisano MD: {out_md}")
+        print(f"Zapisano IPYNB: {out_md.with_suffix('.ipynb')}")
         print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
         links_flip = _print_flip_results_with_links(flip_results)
         out_csv_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.csv"
@@ -1225,6 +1263,7 @@ def run_ichimoku_search(target: str) -> int:
     _write_ichimoku_report_md(group_name, results, flip_results, out_md)
     print(f"\nZapisano CSV: {out_csv}")
     print(f"Zapisano MD: {out_md}")
+    print(f"Zapisano IPYNB: {out_md.with_suffix('.ipynb')}")
     print(f"Źródło danych CSV instrumentów: {UNIFIED_DATA_DIR}")
 
     links_flip = _print_flip_results_with_links(flip_results)
@@ -1992,6 +2031,7 @@ def run_fibo_search(target: str) -> int:
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] csv: {out_csv}")
     print(f"[fibo] md: {out_md}")
+    print(f"[fibo] ipynb: {out_md.with_suffix('.ipynb')}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
