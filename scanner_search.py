@@ -37,15 +37,22 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 def _stockhelper_chart_link(ticker: str, *, ichimoku: bool = False, fibo: FiboScanResult | None = None) -> str:
-    cmd = ["python", "run", "-c", (ticker or "").strip()]
-    if ichimoku:
-        cmd.append("--show-ichimoku")
+    ticker_q = quote((ticker or "").strip(), safe="")
     if fibo is not None:
-        cmd.extend(["--fibo-anchor", fibo.direction, fibo.incline_start_date, fibo.incline_end_date])
-        cmd.extend(["--fibo-levels", "0,23.6,38.2,61.8,100"])
-    shell_cmd = " ".join(cmd)
-    chart_uri = f"chart:{quote(shell_cmd, safe='')}"
-    # Prefer custom OS-level chart:// handler; keep fallback command visible.
+        dir_q = quote(fibo.direction, safe="")
+        d1_q = quote(fibo.incline_start_date, safe="")
+        d2_q = quote(fibo.incline_end_date, safe="")
+        chart_uri = f"chart://{ticker_q}/{dir_q}/{d1_q}/{d2_q}"
+        shell_cmd = (
+            f"python run -c {ticker} --fibo-anchor {fibo.direction} "
+            f"{fibo.incline_start_date} {fibo.incline_end_date} --fibo-levels 0,23.6,38.2,61.8,100"
+        )
+    elif ichimoku:
+        chart_uri = f"chart://{ticker_q}/ichimoku"
+        shell_cmd = f"python run -c {ticker} --show-ichimoku"
+    else:
+        chart_uri = f"chart://{ticker_q}"
+        shell_cmd = f"python run -c {ticker}"
     return (
         f"<a href=\"{chart_uri}\">show_chart</a>"
         f"<br/><sub><code>{shell_cmd}</code></sub>"

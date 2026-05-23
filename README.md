@@ -161,7 +161,8 @@ update-desktop-database ~/.local/share/applications
 Test with:
 
 ```bash
-xdg-open "chart:python%20run%20-c%20TPE%20--show-ichimoku"
+xdg-open "chart://TPE/ichimoku"
+xdg-open "chart://TPE/long/2026-03-23/2026-04-10"
 ```
 
 ### Ichimoku scanner (`-ichimoku_search`)
