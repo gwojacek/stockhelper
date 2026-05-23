@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser
+import argparse, subprocess, os, sys, csv, webbrowser, shlex
 from datetime import UTC, datetime
 from pathlib import Path
 try:
@@ -371,10 +371,22 @@ def main()->int:
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
+    parser.add_argument('--open-chart-cmd', dest='open_chart_cmd', help='Execute chart launcher command payload, e.g. \"python run -c TPE --show-ichimoku\"')
     parser.add_argument('--show-ichimoku', action='store_true')
     parser.add_argument('--fibo-anchor', nargs=3, metavar=('DIRECTION','START_DATE','END_DATE'))
     parser.add_argument('--fibo-levels')
     args=parser.parse_args()
+    if args.open_chart_cmd:
+        payload = args.open_chart_cmd.strip()
+        if not payload:
+            print("Empty --open-chart-cmd payload.")
+            return 2
+        parts = shlex.split(payload)
+        if len(parts) < 4 or parts[0] != "python" or parts[1] != "run" or parts[2] != "-c":
+            print("Unsupported --open-chart-cmd payload. Expected: python run -c <target> [args]")
+            return 2
+        forwarded = [sys.executable, str(PROJECT_ROOT / "run"), *parts[2:]]
+        return subprocess.call(forwarded)
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page
