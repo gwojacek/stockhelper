@@ -44,17 +44,11 @@ def _stockhelper_chart_link(ticker: str, *, ichimoku: bool = False, fibo: FiboSc
         cmd.extend(["--fibo-anchor", fibo.direction, fibo.incline_start_date, fibo.incline_end_date])
         cmd.extend(["--fibo-levels", "0,23.6,38.2,61.8,100"])
     shell_cmd = " ".join(cmd)
-    wrapper_cmd = f'python run --open-chart-cmd "{shell_cmd}"'
-    encoded = quote(wrapper_cmd, safe="")
-    # VS Code-compatible: send wrapper command to integrated terminal + Enter.
-    seq_arg = quote(f'[{{"text":"{wrapper_cmd}\\\\u000D"}}]', safe="")
-    vscode_uri = f"command:workbench.action.terminal.sendSequence?{seq_arg}"
-    generic_uri = f"command:{encoded}"
-    # Keep both URIs + visible fallback command text (for non-supporting renderers).
+    chart_uri = f"chart:{quote(shell_cmd, safe='')}"
+    # Prefer custom OS-level chart:// handler; keep fallback command visible.
     return (
-        f"<a href=\"{vscode_uri}\">show_chart</a>"
-        f" / <a href=\"{generic_uri}\">alt</a>"
-        f"<br/><sub><code>{wrapper_cmd}</code></sub>"
+        f"<a href=\"{chart_uri}\">show_chart</a>"
+        f"<br/><sub><code>{shell_cmd}</code></sub>"
     )
 
 

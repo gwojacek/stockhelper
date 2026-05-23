@@ -122,6 +122,48 @@ python run -c ena
 python run -c eurusd_long
 ```
 
+### Custom `chart:` protocol (Ubuntu) for one-click MD links
+
+If your Markdown viewer blocks `command:` links, use OS-level protocol handler:
+
+1. Create handler script:
+
+```bash
+mkdir -p ~/bin
+cat > ~/bin/open_chart.sh <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+python /ABS/PATH/TO/stockhelper/tools/open_chart_uri.py "$1"
+SH
+chmod +x ~/bin/open_chart.sh
+```
+
+2. Register desktop handler:
+
+```ini
+# ~/.local/share/applications/chart-opener.desktop
+[Desktop Entry]
+Name=StockHelper Chart Opener
+Exec=/home/YOURUSER/bin/open_chart.sh %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/chart;
+Categories=Utility;
+```
+
+3. Activate:
+
+```bash
+xdg-mime default chart-opener.desktop x-scheme-handler/chart
+update-desktop-database ~/.local/share/applications
+```
+
+Test with:
+
+```bash
+xdg-open "chart:python%20run%20-c%20TPE%20--show-ichimoku"
+```
+
 ### Ichimoku scanner (`-ichimoku_search`)
 
 You can run bulk scanner workflows directly from launcher:
