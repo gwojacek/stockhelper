@@ -244,6 +244,38 @@ def _is_ichimoku_csv(name: str) -> bool:
 def _is_fibo_csv(name: str) -> bool:
     return name.startswith("fibo_search_") and name.endswith(".csv")
 
+def _latest_scope_md(prefix: str, scope: str) -> Path | None:
+    key = scope.strip().lower()
+    candidates = [p for p in SEARCH_OUTPUT_DIR.glob(f"{prefix}_{key}_*.md") if p.is_file()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
+    if not source_md or not source_md.exists():
+        return
+    text = source_md.read_text(encoding="utf-8")
+    with report.open("a", encoding="utf-8") as out:
+        out.write(f"\n### {header}\n")
+        out.write(text.strip() + "\n")
+
+def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
+    key = (scope or "").strip().lower()
+    candidates = [p for p in SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.md") if p.is_file()]
+    candidates += [p for p in SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.md") if p.is_file()]
+    if not candidates:
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        return False
+    latest = max(candidates, key=lambda p: p.stat().st_mtime)
+    age_h = (datetime.now(UTC).timestamp() - latest.stat().st_mtime) / 3600.0
+    if age_h <= float(hours):
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        print(f"[cache-rule] {key}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON")
+        return True
+    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+    print(f"[cache-rule] {key}: last search {age_h:.2f}h ago ({latest.name}) -> refresh mode ON")
+    return False
+
 def _run_allsearch_combo(scopes: list[str]) -> int:
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -264,43 +296,28 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
         print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-        before_i = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        _enable_cache_only_if_recent(scope, hours=6)
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
-        after_i = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
-        new_i = [p for p in after_i if p.name not in before_i or p.stat().st_mtime > before_i[p.name]]
-        main_ichimoku_csv = next((p for p in new_i if _is_ichimoku_csv(p.name) and not p.name.endswith("_flips.csv")), None)
-        th10, th20 = _extract_progi_from_csv(main_ichimoku_csv) if main_ichimoku_csv else (None, None)
+        main_ichimoku_md = _latest_scope_md("search", scope)
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" PROGI ", width=96, fill="=") + "\n\n")
-            if th10 and th20:
-                out.write(f"Th10d (min. średni obrót 10d, PLN) = {th10}\n")
-                out.write(f"Th20d (dolny próg dziennego obrotu, PLN) = {th20}\n")
             out.write("Liczba dni (z ostatnich 20), gdy obrót był poniżej progu 20d.\n")
             out.write("\n" + _section_banner(" ICHIMOKU ", width=96, fill="-") + "\n")
-        for p in new_i:
-            if _is_ichimoku_csv(p.name):
-                label = "WYNIKI 2" if p.name.endswith("_flips.csv") else "WYNIKI 1"
-                _append_csv_section(report, label, p, all_links, csv_refs)
+        if main_ichimoku_md:
+            _append_md_sections(report, main_ichimoku_md, f"ICHIMOKU SOURCE ({main_ichimoku_md.name})")
         if code_i != 0:
             failures += 1
 
         print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
-        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-        before_f = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        _enable_cache_only_if_recent(scope, hours=6)
         code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
-        after_f = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
-        new_f = [p for p in after_f if p.name not in before_f or p.stat().st_mtime > before_f[p.name]]
-        fibo_split_present = any(p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv") for p in new_f)
+        main_fibo_md = _latest_scope_md("fibo_search", scope)
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
             out.write("PROGI FIBO: Th10d (min. średni obrót 10d, PLN) = 500000 × mnożnik kraju.\n")
-        for p in new_f:
-            if _is_fibo_csv(p.name):
-                if fibo_split_present and not (p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv")):
-                    continue
-                _append_csv_section(report, "FIBO", p, all_links, csv_refs)
+        if main_fibo_md:
+            _append_md_sections(report, main_fibo_md, f"FIBO SOURCE ({main_fibo_md.name})")
         if code_f != 0:
             failures += 1
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
@@ -335,6 +352,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
+        _enable_cache_only_if_recent(scope, hours=6)
         before_mtime = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
@@ -363,6 +381,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
         if open_all=='y':
             for l in sorted(all_links): webbrowser.open_new_tab(l)
     os.environ.pop('STOCKHELPER_BATCH_MODE',None); os.environ.pop('STOCKHELPER_DEFER_OPEN_LINKS',None)
+    os.environ.pop('STOCKHELPER_CACHE_ONLY',None)
     return 1 if failures else 0
 
 def main()->int:
@@ -390,6 +409,7 @@ def main()->int:
         return 0
     if args.search_target:
         if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
+        _enable_cache_only_if_recent(args.search_target, hours=6)
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
     if args.allsearch_target:
         normalized = args.allsearch_target.strip().lower()
@@ -400,6 +420,7 @@ def main()->int:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
         if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo',['wig','dax','us100','forex','commodities'])
+        _enable_cache_only_if_recent(args.fibo_search_target, hours=6)
         from scanner_search import run_fibo_search; return run_fibo_search(args.fibo_search_target)
     target=(args.target or '').strip()
     if not target: parser.error('target is required unless -ichimoku_search is used')
