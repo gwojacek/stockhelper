@@ -697,11 +697,9 @@ def _scan_source_label(src: str) -> str:
 
 
 def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "") -> str:
-    base = f"python run -c chart {ticker}"
+    base = f"python run -c {ticker}"
     if mode == "fibo":
-        start = anchor_start or "YYYY-MM-DD"
-        end = anchor_end or "YYYY-MM-DD"
-        return base + f" --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        return base
     return base + " --ichimoku-mode on"
 
 
