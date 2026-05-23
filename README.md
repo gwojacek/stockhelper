@@ -7,8 +7,9 @@ StockHelper is a Python project for **position sizing, risk analysis, and trade 
 - **Commodities / CFDs**
 
 It combines:
-1. A configurable strategy engine (`main.py`, `main_stock.py`, `core/`, `strategies/`), and
-2. An interactive chart workflow (`chart_program/`) to select levels and generate/update configs.
+1. A configurable strategy engine (`main.py`, `main_stock.py`, `core/`, `strategies/`),
+2. A launcher (`run`) that auto-detects config/instrument and exposes scanner/debug workflows, and
+3. An interactive chart workflow (`chart_program/`) to select levels and generate/update configs.
 
 ---
 
@@ -150,6 +151,29 @@ python run -ichimoku_search wig_part2
 python run -ichimoku_search wig_part3
 ```
 
+### Combined scanner report (`-allsearch`)
+
+Use `-allsearch` to run a combined **Ichimoku + Fibonacci** scan and produce a single markdown report.
+
+```bash
+python run -allsearch all
+python run -allsearch wig
+python run -allsearch dax
+python run -allsearch us100
+python run -allsearch forex
+python run -allsearch commodities
+```
+
+Behavior:
+- `-allsearch` **always runs both** scanners (Ichimoku + Fibonacci) for the selected scope(s),
+- `-allsearch all` runs all major scopes: `wig`, `dax`, `us100`, `forex`, `commodities`,
+- per-scope outputs are written under `chart_program/data/all_insturments_search/`,
+- combined report is saved as `chart_program/data/all_insturments_search/allsearch/allsearch_latest.md`.
+
+If you want only one scanner:
+- Ichimoku only: `python run -ichimoku_search <scope>`
+- Fibonacci only: `python run -fibo_search <scope>`
+
 ### Stooq debug / scraper helpers
 
 To inspect Stooq/captcha/debug artifacts:
@@ -171,12 +195,14 @@ Notes:
 Run with a generated or existing stock config:
 
 ```bash
-python -m mainstock bft
+python -m main_stock bft
 ```
 
-You can also pass a full path (`python -m mainstock configs/stocks/bft.py`).
+(Compatibility alias also works: `python -m mainstock bft`.)
 
-Case-insensitive and normalized matching is supported (e.g. `python -m mainstock dnp` -> `configs/stocks/DNP.py`). Prefix matching is also supported if unambiguous (e.g. `python -m mainstock ena` -> `configs/stocks/enea.py`).
+You can also pass a full path (`python -m main_stock configs/stocks/bft.py`).
+
+Case-insensitive and normalized matching is supported (e.g. `python -m main_stock dnp` -> `configs/stocks/DNP.py`). Prefix matching is also supported if unambiguous (e.g. `python -m main_stock ena` -> `configs/stocks/enea.py`).
 
 If you run without config argument, the default demo config is used (`BFT`).
 
@@ -189,7 +215,7 @@ python -m main eurusd_long
 
 You can also pass full paths, e.g. `python -m main configs/commodities/Cocoa_short.py`.
 
-If you run without config argument, `main.py` uses a default demo commodity config.
+If you run without config argument, `main.py` currently falls back to `configs/commodities/Lockhead_Martin_long.py`.
 
 ---
 
