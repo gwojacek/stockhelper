@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser
+import argparse, subprocess, os, sys, csv, webbrowser, json, html
 from datetime import UTC, datetime
+from dataclasses import dataclass, field
 from pathlib import Path
 try:
     from tabulate import tabulate
@@ -15,6 +16,20 @@ ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
+@dataclass
+class ScannerRow:
+    market: str
+    scanner: str
+    category: str
+    ticker: str
+    status: str
+    pattern: str = ""
+    direction: str = ""
+    dates: dict[str, str] = field(default_factory=dict)
+    metrics: dict[str, str] = field(default_factory=dict)
+    chart_url: str | None = None
+    python_command: str | None = None
+    priority: str = "LOW"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
@@ -276,6 +291,89 @@ def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
     print(f"[cache-rule] {key}: last search {age_h:.2f}h ago ({latest.name}) -> refresh mode ON")
     return False
 
+def _safe_int(v: str, default: int = 0) -> int:
+    try:
+        return int(float(str(v or default).replace(",", "")))
+    except Exception:
+        return default
+
+def _build_html_report(scopes: list[str], output_path: Path) -> None:
+    rows: list[ScannerRow] = []
+    for scope in scopes:
+        market = scope.upper()
+        i_md = _latest_scope_md("search", scope)
+        f_md = _latest_scope_md("fibo_search", scope)
+        if i_md:
+            csv_name = i_md.stem.replace("search_", "search_") + ".csv"
+            flips_name = i_md.stem.replace("search_", "search_") + "_flips.csv"
+            for p, cat in [(SEARCH_OUTPUT_DIR / flips_name, "retest_breakout"), (SEARCH_OUTPUT_DIR / csv_name, "position")]:
+                if not p.exists():
+                    continue
+                with p.open(newline="", encoding="utf-8") as fh:
+                    for r in csv.DictReader(fh):
+                        status = str(r.get("latest_retest_status") or r.get("side") or "")
+                        prio = "HIGH" if "returned_to_cloud_waiting_for_pattern" in status else ("MEDIUM" if cat == "retest_breakout" else "LOW")
+                        rows.append(ScannerRow(
+                            market=market, scanner="ICHIMOKU", category=cat, ticker=str(r.get("ticker", "")),
+                            status=status, dates={"start_date": str(r.get("start_date", "")), "flip_date": str(r.get("flip_date", ""))},
+                            metrics={"candles": str(r.get("respect_days", "")), "months": str(r.get("respect_months", "")), "close": str(r.get("last_close", "")),
+                                     "avg10d": str(r.get("avg_turnover_10d_pln", "")), "low_th20": str(r.get("below_threshold_days_20d", ""))},
+                            chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
+                            python_command=f"python run -c {r.get('ticker','')}",
+                            priority=prio))
+        if f_md:
+            for suf, cat in [("_w2.csv", "valid"), ("_w1.csv", "waiting"), (".csv", "mixed")]:
+                p = SEARCH_OUTPUT_DIR / (f_md.stem + suf)
+                if not p.exists():
+                    continue
+                with p.open(newline="", encoding="utf-8") as fh:
+                    for r in csv.DictReader(fh):
+                        st = str(r.get("status", ""))
+                        actual_cat = "valid" if st == "valid_reversal" else ("waiting" if st == "reached_23_6_waiting_for_61_8" else cat)
+                        rows.append(ScannerRow(
+                            market=market, scanner="FIBO", category=actual_cat, ticker=str(r.get("ticker", "")),
+                            status=st, pattern=str(r.get("reversal_pattern_name", "")), direction=str(r.get("direction", "")),
+                            dates={"touch_61": str(r.get("first_61_8_touch_date", "")), "incline_start": str(r.get("incline_start_date", "")), "incline_end": str(r.get("incline_end_date", ""))},
+                            metrics={"ratio": str(r.get("incline_decline_duration_ratio", ""))},
+                            chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
+                            python_command=str(r.get("python_command", "")),
+                            priority="HIGH" if actual_cat == "valid" else "MEDIUM"))
+                if suf == ".csv":
+                    break
+    def key(r: ScannerRow):
+        cat_order = {"valid": 0, "retest_breakout": 1, "waiting": 2, "position": 3}
+        date = r.dates.get("touch_61") or r.dates.get("flip_date") or r.dates.get("incline_end") or ""
+        return (cat_order.get(r.category, 9), date)
+    rows = sorted(rows, key=key, reverse=False)
+    counts = {
+        "ichimoku_active": sum(1 for r in rows if r.scanner == "ICHIMOKU"),
+        "ichimoku_retests": sum(1 for r in rows if r.category == "retest_breakout"),
+        "fibo_waiting": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "waiting"),
+        "fibo_valid": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "valid"),
+    }
+    by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
+    empty_markets = sum(1 for _, vals in by_market.items() if not vals)
+    html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
+                  "<style>body{font-family:Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px}th{position:sticky;top:0;background:#f1f5f9}th,td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none}.muted{color:#64748b}</style>",
+                  "</head><body>"]
+    html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now(UTC).isoformat()}</p>")
+    html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
+    html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
+    for mkt, mrows in by_market.items():
+        html_parts.append(f"<div class='market'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
+        if not mrows:
+            html_parts.append("<p class='muted'>No scanner results for this market.</p></div>")
+            continue
+        html_parts.append("<div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Scanner</th><th>Category</th><th>Status</th><th>Pattern</th><th>Dates</th><th>Metrics</th><th>Priority</th><th>Chart</th><th>Command</th></tr></thead><tbody>")
+        for r in mrows:
+            cmd = html.escape(r.python_command or "")
+            date_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.dates.items() if v]))
+            met_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.metrics.items() if v]))
+            html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{r.scanner}</td><td>{r.category}</td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{date_txt}</td><td>{met_txt}</td><td><span class='badge {r.priority.lower()}'>{r.priority}</span></td><td>{'<a class=\"btn\" href=\"'+html.escape(r.chart_url)+'\" target=\"_blank\">Open chart</a>' if r.chart_url else ''}</td><td><code>{cmd[:80]}</code> <button class='btn' onclick='copyCmd(this)' data-cmd='{cmd}'>Copy command</button></td></tr>")
+        html_parts.append("</tbody></table></div></div>")
+    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Copy command',1200);}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});}q.oninput=f;m.onchange=f;</script></body></html>")
+    output_path.write_text("".join(html_parts), encoding="utf-8")
+
 def _run_allsearch_combo(scopes: list[str]) -> int:
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -285,6 +383,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         except Exception:
             pass
     report = report_dir / "allsearch_latest.md"
+    report_html = report_dir / "allsearch_latest.html"
     report.write_text("ALLSEARCH COMBO REPORT\n", encoding="utf-8")
 
     failures = 0
@@ -324,7 +423,9 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+    _build_html_report(scopes, report_html)
     print(f"\n[allsearch] combo report saved: {report}")
+    print(f"[allsearch] html report saved: {report_html}")
     if all_links:
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
