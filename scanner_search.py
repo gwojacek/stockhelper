@@ -699,7 +699,9 @@ def _scan_source_label(src: str) -> str:
 def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "") -> str:
     base = f"python run -c {ticker}"
     if mode == "fibo":
-        return base
+        start = anchor_start or "YYYY-MM-DD"
+        end = anchor_end or "YYYY-MM-DD"
+        return f"{base}  # incline:{start}->{end}; fibo_lines=5; fibo_right=on"
     return base + " --ichimoku-mode on"
 
 
@@ -711,6 +713,11 @@ def _write_md_table(path: Path, title: str, headers: list[str], rows: list[list[
         for row in rows:
             safe = [str(c).replace("\n", " ").replace("|", "\\|") for c in row]
             fh.write("| " + " | ".join(safe) + " |\n")
+
+
+def _daily_report_path(prefix: str, group_name: str) -> Path:
+    day = datetime.now(UTC).strftime("%Y%m%d")
+    return SEARCH_OUTPUT_DIR / f"{prefix}_{group_name.lower()}_{day}.md"
 def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
     base = f"search_{group_name.lower()}_"
     files = [p for p in SEARCH_OUTPUT_DIR.glob(f"{base}*.md") if p.is_file()]
@@ -1051,7 +1058,7 @@ def run_ichimoku_search(target: str) -> int:
                         break
 
         SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        out_md = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
+        out_md = _daily_report_path("search", group_name)
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             rows_md.append([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
@@ -1060,12 +1067,12 @@ def run_ichimoku_search(target: str) -> int:
         print(f"\nZapisano MD: {out_md}")
         print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
         links_flip = _print_flip_results_with_links(flip_results)
-        out_md_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.md"
+        out_md_flip = out_md
         rows_flip_md=[]
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             rows_flip_md.append([row.ticker,row.previous_side,row.current_side,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md)
-        print(f"Zapisano MD #2: {out_md_flip}")
+        _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md, append=True)
+        print(f"Zapisano MD: {out_md_flip}")
         _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
         if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
@@ -1138,7 +1145,7 @@ def run_ichimoku_search(target: str) -> int:
                     flip_results.append(flip)
 
     SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_md = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
+    out_md = _daily_report_path("search", group_name)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         rows_md.append([row.ticker, row.side, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), f"`{_build_chart_command(row.ticker, 'ichimoku')}`"])
@@ -1150,12 +1157,12 @@ def run_ichimoku_search(target: str) -> int:
 
     links_flip = _print_flip_results_with_links(flip_results)
 
-    out_md_flip = SEARCH_OUTPUT_DIR / f"search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d')}_flips.md"
+    out_md_flip = out_md
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         rows_flip_md.append([row.ticker,row.previous_side,row.current_side,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),f"`{_build_chart_command(row.ticker, 'ichimoku')}`"])
-    _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md)
-    print(f"Zapisano MD #2: {out_md_flip}")
+    _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md, append=True)
+    print(f"Zapisano MD: {out_md_flip}")
     _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
@@ -1745,7 +1752,7 @@ def run_fibo_search(target: str) -> int:
                 print(f"  pominięto ({err})")
             rows.extend(found)
     SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_md = SEARCH_OUTPUT_DIR / f"fibo_search_{group_name.lower()}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
+    out_md = _daily_report_path("fibo_search", group_name)
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
     rows2 = [
         r for r in rows
