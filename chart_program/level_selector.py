@@ -475,7 +475,14 @@ def run_level_selector(raw_args=None):
                 x_start = pd.to_datetime(s_row["Date"], errors="coerce")
                 x_end = pd.to_datetime(e_row["Date"], errors="coerce")
                 x_right = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce")
-                x_common_end = x_right + abs(x_end - x_start) * 3 if args.fibo_right else x_right
+                if pd.isna(x_start):
+                    x_start = s_ts
+                if pd.isna(x_end):
+                    x_end = e_ts
+                if pd.isna(x_right):
+                    x_right = e_ts
+                extension = abs(x_end - x_start) * 3
+                x_common_end = x_right + extension if args.fibo_right else x_right
                 levels = [0.0, 0.236, 0.382, 0.618, 1.0][: max(1, min(args.fibo_lines, 5))]
                 objs = []
                 gid = "auto-fibo"
@@ -483,12 +490,14 @@ def run_level_selector(raw_args=None):
                 for r in levels:
                     y_val = round(y_end - delta * r, 5)
                     x_level_start = x_end
+                    x0_txt = str(pd.to_datetime(x_level_start, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_level_start, errors="coerce")) else str(s_row["Date"])
+                    x1_txt = str(pd.to_datetime(x_common_end, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_common_end, errors="coerce")) else str(df.iloc[-1]["Date"])
                     objs.append({
                         "id": f"auto-fibo-{int(r*1000)}",
                         "type": "fib",
                         "label": f"FIB {r*100:.1f}% ({y_val})",
-                        "x0": str(pd.to_datetime(x_level_start).date()),
-                        "x1": str(pd.to_datetime(x_common_end).date()),
+                        "x0": x0_txt,
+                        "x1": x1_txt,
                         "y0": y_val,
                         "y1": y_val,
                         "price": y_val,
