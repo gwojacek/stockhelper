@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import os
+import shlex
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -48,8 +49,10 @@ def _write_notebook(path: Path, markdown_sections: list[str], commands: list[str
         )
     if commands:
         code_lines = ["# Click Run on selected line/cell to open chart\n"]
+        project_root_q = shlex.quote(str(PROJECT_ROOT))
         for c in commands:
-            code_lines.append(f"!{c}\n")
+            # Jupyter runs in notebook file directory by default; force project cwd.
+            code_lines.append(f"!cd {project_root_q} && {c}\n")
         cells.append(
             {
                 "cell_type": "code",
