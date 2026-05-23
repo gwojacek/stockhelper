@@ -5,6 +5,7 @@ import importlib.util
 import json
 import re
 from pathlib import Path
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,6 +64,11 @@ def _parse_args(raw_args=None):
     parser.add_argument("--pip-size", type=float, default=0.0001)
     parser.add_argument("--api-key", help="Optional API key forwarded to Stooq query parameters")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
+    parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
+    parser.add_argument("--fibo-lines", type=int, default=0)
+    parser.add_argument("--fibo-anchor-start")
+    parser.add_argument("--fibo-anchor-end")
+    parser.add_argument("--fibo-right", action="store_true")
     return parser.parse_args(raw_args)
 
 
@@ -454,6 +460,64 @@ def run_level_selector(raw_args=None):
         api_key=args.api_key,
         data_source=args.data_source,
     )
+
+    if args.fibo_lines and args.fibo_anchor_start and args.fibo_anchor_end:
+        try:
+            s_ts = pd.to_datetime(args.fibo_anchor_start, errors="coerce")
+            e_ts = pd.to_datetime(args.fibo_anchor_end, errors="coerce")
+            if not pd.isna(s_ts) and not pd.isna(e_ts):
+                dts = pd.to_datetime(df["Date"], errors="coerce")
+                s_idx = int((dts - s_ts).abs().idxmin())
+                e_idx = int((dts - e_ts).abs().idxmin())
+                s_row = df.iloc[s_idx]
+                e_row = df.iloc[e_idx]
+                y_start = float(s_row.get("Low", s_row.get("Close", 0.0)))
+                y_end = float(e_row.get("High", e_row.get("Close", 0.0)))
+                x_start = pd.to_datetime(s_row["Date"], errors="coerce")
+                x_end = pd.to_datetime(e_row["Date"], errors="coerce")
+                x_right = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce")
+                if pd.isna(x_start):
+                    x_start = s_ts
+                if pd.isna(x_end):
+                    x_end = e_ts
+                if pd.isna(x_right):
+                    x_right = e_ts
+                extension = abs(x_end - x_start) * 3
+                x_common_end = x_right + extension if args.fibo_right else x_right
+                # Requested layout: 100, 0, 23.6, 38.2, 61.8
+                levels = [1.0, 0.0, 0.236, 0.382, 0.618][: max(1, min(args.fibo_lines, 5))]
+                objs = []
+                gid = "auto-fibo"
+                delta = y_end - y_start
+                for idx, r in enumerate(levels):
+                    if idx == 0:
+                        # First line is 100% (anchor1 low) and starts from anchor1.
+                        y_val = round(y_end - delta * r, 5)
+                        x_level_start = x_start
+                        pct_label = "FIB 100%"
+                    else:
+                        # Remaining lines (0/23.6/38.2/61.8) start at anchor2 and extend right.
+                        y_val = round(y_end - delta * r, 5)
+                        x_level_start = x_end
+                        pct_label = f"FIB {r*100:.1f}%"
+                    x0_txt = str(pd.to_datetime(x_level_start, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_level_start, errors="coerce")) else str(s_row["Date"])
+                    x1_txt = str(pd.to_datetime(x_common_end, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_common_end, errors="coerce")) else str(df.iloc[-1]["Date"])
+                    objs.append({
+                        "id": f"auto-fibo-{int(r*1000)}",
+                        "type": "fib",
+                        "label": f"{pct_label} ({y_val})",
+                        "x0": x0_txt,
+                        "x1": x1_txt,
+                        "y0": y_val,
+                        "y1": y_val,
+                        "price": y_val,
+                        "color": "#f59e0b",
+                        "group_id": gid,
+                    })
+                existing["drawn_objects"] = objs
+                print(f"[chart] auto-fibo preloaded: {len(objs)} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}")
+        except Exception as exc:
+            print(f"[chart] auto-fibo preload failed: {exc}")
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
