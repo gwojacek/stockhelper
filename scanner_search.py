@@ -588,6 +588,22 @@ def _compute_stock_liquidity_metrics(df: pd.DataFrame, fetch_symbol: str) -> tup
     return avg_10d, below_20d, threshold_10d, threshold_20d
 
 
+
+
+def _debug_symbol_target() -> str | None:
+    raw = os.environ.get("STOCKHELPER_DEBUG_SYMBOL", "").strip().upper()
+    return raw or None
+
+
+def _debug_enabled_for(ticker: str) -> bool:
+    target = _debug_symbol_target()
+    return bool(target and ticker.upper() == target)
+
+
+def _debug_log_scan(ticker: str, message: str) -> None:
+    if _debug_enabled_for(ticker):
+        print(f"[debug:{ticker.upper()}] {message}")
+
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
@@ -606,6 +622,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
     if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
         fetch_symbol = f"{ticker}{exchange_suffix}"
         display_symbol = fetch_symbol
+    _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
         mapped = COMMODITY_STOOQ_MAP.get(t_upper)
@@ -628,6 +645,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         enriched = _ichimoku(df)
         result = _qualifies(enriched)
         flip = _flip_after_long_respect(enriched)
+        _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
         stock_liquidity_ok = True
         if instrument == "stock" and (result or flip):
             metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
@@ -635,6 +653,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 return display_symbol, None, None, "insufficient turnover data", source_label
             avg_10d, below_20d, threshold_10d, threshold_20d = metrics
             stock_liquidity_ok = avg_10d >= threshold_10d and below_20d <= 2
+            _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
             result.ticker = ticker
             if instrument == "stock":
@@ -643,6 +662,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 result.liquidity_threshold_10d_pln = threshold_10d
                 result.liquidity_threshold_20d_pln = threshold_20d
                 if not stock_liquidity_ok:
+                    _debug_log_scan(ticker, "excluded from WYNIKI 1 by liquidity filter")
                     return display_symbol, None, flip, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
@@ -652,6 +672,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+        _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
         return display_symbol, None, None, str(exc), "unknown"
@@ -1099,6 +1120,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
+    dbg = _debug_symbol_target()
+    if dbg:
+        print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
 
