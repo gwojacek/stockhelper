@@ -1891,15 +1891,10 @@ def run_fibo_search(target: str) -> int:
         reverse=False,
     )
     rows2_keys = {(r.ticker, r.direction, r.incline_start_date, r.incline_end_date) for r in rows2}
-    rows2_ticker_dir = {(r.ticker, r.direction) for r in rows2}
     rows1 = [
         r
         for r in rows1
         if (r.ticker, r.direction, r.incline_start_date, r.incline_end_date) not in rows2_keys
-        and not (
-            r.status == "reached_23_6_waiting_for_61_8"
-            and (r.ticker, r.direction) in rows2_ticker_dir
-        )
     ]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
