@@ -260,11 +260,34 @@ def _is_fibo_csv(name: str) -> bool:
     return name.startswith("fibo_search_") and name.endswith(".csv")
 
 def _latest_scope_md(prefix: str, scope: str) -> Path | None:
-    key = scope.strip().lower()
-    candidates = [p for p in SEARCH_OUTPUT_DIR.glob(f"{prefix}_{key}_*.md") if p.is_file()]
+    keys = _scope_file_keys(scope)
+    candidates: list[Path] = []
+    for key in keys:
+        candidates.extend([p for p in SEARCH_OUTPUT_DIR.glob(f"{prefix}_{key}_*.md") if p.is_file()])
     if not candidates:
         return None
     return max(candidates, key=lambda p: p.stat().st_mtime)
+
+def _scope_file_keys(scope: str) -> list[str]:
+    key = (scope or "").strip().lower()
+    aliases = {
+        "us100": ["us100", "ndx100", "ndx", "nasdaq100"],
+        "dax": ["dax", "dax40"],
+        "wig": ["wig"],
+        "forex": ["forex", "fx"],
+        "commodities": ["commodities", "commodity"],
+    }
+    return aliases.get(key, [key])
+
+def _allsearch_report_stem(scopes: list[str]) -> str:
+    if not scopes:
+        return "allsearch_latest"
+    normalized = [s.strip().lower() for s in scopes if s.strip()]
+    if normalized == ["wig", "dax", "us100", "forex", "commodities"] or normalized == ["all"]:
+        return "allsearch_latest_all"
+    if len(normalized) == 1:
+        return f"allsearch_latest_{normalized[0]}"
+    return "allsearch_latest_" + "_".join(normalized)
 
 def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
     if not source_md or not source_md.exists():
@@ -275,9 +298,11 @@ def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
         out.write(text.strip() + "\n")
 
 def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
-    key = (scope or "").strip().lower()
-    candidates = [p for p in SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.md") if p.is_file()]
-    candidates += [p for p in SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.md") if p.is_file()]
+    keys = _scope_file_keys(scope)
+    candidates: list[Path] = []
+    for key in keys:
+        candidates += [p for p in SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.md") if p.is_file()]
+        candidates += [p for p in SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.md") if p.is_file()]
     if not candidates:
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         return False
@@ -285,10 +310,10 @@ def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
     age_h = (datetime.now(UTC).timestamp() - latest.stat().st_mtime) / 3600.0
     if age_h <= float(hours):
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-        print(f"[cache-rule] {key}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON")
+        print(f"[cache-rule] {scope}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON")
         return True
     os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-    print(f"[cache-rule] {key}: last search {age_h:.2f}h ago ({latest.name}) -> refresh mode ON")
+    print(f"[cache-rule] {scope}: last search {age_h:.2f}h ago ({latest.name}) -> refresh mode ON")
     return False
 
 def _safe_int(v: str, default: int = 0) -> int:
@@ -301,8 +326,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     rows: list[ScannerRow] = []
     for scope in scopes:
         market = scope.upper()
-        ichimoku_csv = sorted(SEARCH_OUTPUT_DIR.glob(f"search_{scope.lower()}_*.csv"), key=lambda p: p.stat().st_mtime)
-        fibo_csv = sorted(SEARCH_OUTPUT_DIR.glob(f"fibo_search_{scope.lower()}_*.csv"), key=lambda p: p.stat().st_mtime)
+        ichimoku_csv: list[Path] = []
+        fibo_csv: list[Path] = []
+        for key in _scope_file_keys(scope):
+            ichimoku_csv.extend(SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.csv"))
+            fibo_csv.extend(SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.csv"))
+        ichimoku_csv = sorted([p for p in ichimoku_csv if p.is_file()], key=lambda p: p.stat().st_mtime)
+        fibo_csv = sorted([p for p in fibo_csv if p.is_file()], key=lambda p: p.stat().st_mtime)
         if ichimoku_csv:
             base = [p for p in ichimoku_csv if not p.name.endswith("_flips.csv")]
             flips = [p for p in ichimoku_csv if p.name.endswith("_flips.csv")]
@@ -385,8 +415,9 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             old.unlink()
         except Exception:
             pass
-    report = report_dir / "allsearch_latest.md"
-    report_html = report_dir / "allsearch_latest.html"
+    stem = _allsearch_report_stem(scopes)
+    report = report_dir / f"{stem}.md"
+    report_html = report_dir / f"{stem}.html"
     report.write_text(
         "ALLSEARCH COMBO REPORT\n\n"
         "Legenda (progi): Ichimoku: Low<Th20 = liczba dni z ostatnich 20 poniżej progu 20d. "
