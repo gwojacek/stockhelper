@@ -301,14 +301,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     rows: list[ScannerRow] = []
     for scope in scopes:
         market = scope.upper()
-        i_md = _latest_scope_md("search", scope)
-        f_md = _latest_scope_md("fibo_search", scope)
-        if i_md:
-            csv_name = i_md.stem.replace("search_", "search_") + ".csv"
-            flips_name = i_md.stem.replace("search_", "search_") + "_flips.csv"
-            for p, cat in [(SEARCH_OUTPUT_DIR / flips_name, "retest_breakout"), (SEARCH_OUTPUT_DIR / csv_name, "position")]:
-                if not p.exists():
-                    continue
+        ichimoku_csv = sorted(SEARCH_OUTPUT_DIR.glob(f"search_{scope.lower()}_*.csv"), key=lambda p: p.stat().st_mtime)
+        fibo_csv = sorted(SEARCH_OUTPUT_DIR.glob(f"fibo_search_{scope.lower()}_*.csv"), key=lambda p: p.stat().st_mtime)
+        if ichimoku_csv:
+            base = [p for p in ichimoku_csv if not p.name.endswith("_flips.csv")]
+            flips = [p for p in ichimoku_csv if p.name.endswith("_flips.csv")]
+            for p, cat in ([(flips[-1], "retest_breakout")] if flips else []) + ([(base[-1], "position")] if base else []):
                 with p.open(newline="", encoding="utf-8") as fh:
                     for r in csv.DictReader(fh):
                         status = str(r.get("latest_retest_status") or r.get("side") or "")
@@ -321,11 +319,17 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                             chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
                             python_command=f"python run -c {r.get('ticker','')}",
                             priority=prio))
-        if f_md:
-            for suf, cat in [("_w2.csv", "valid"), ("_w1.csv", "waiting"), (".csv", "mixed")]:
-                p = SEARCH_OUTPUT_DIR / (f_md.stem + suf)
-                if not p.exists():
-                    continue
+        if fibo_csv:
+            w2 = [p for p in fibo_csv if p.name.endswith("_w2.csv")]
+            w1 = [p for p in fibo_csv if p.name.endswith("_w1.csv")]
+            generic = [p for p in fibo_csv if not p.name.endswith("_w1.csv") and not p.name.endswith("_w2.csv")]
+            ordered_files: list[tuple[Path, str]] = []
+            if w2 or w1:
+                if w2: ordered_files.append((w2[-1], "valid"))
+                if w1: ordered_files.append((w1[-1], "waiting"))
+            elif generic:
+                ordered_files.append((generic[-1], "mixed"))
+            for p, cat in ordered_files:
                 with p.open(newline="", encoding="utf-8") as fh:
                     for r in csv.DictReader(fh):
                         st = str(r.get("status", ""))
@@ -338,8 +342,6 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                             chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
                             python_command=str(r.get("python_command", "")),
                             priority="HIGH" if actual_cat == "valid" else "MEDIUM"))
-                if suf == ".csv":
-                    break
     def key(r: ScannerRow):
         cat_order = {"valid": 0, "retest_breakout": 1, "waiting": 2, "position": 3}
         date = r.dates.get("touch_61") or r.dates.get("flip_date") or r.dates.get("incline_end") or ""
@@ -358,6 +360,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now(UTC).isoformat()}</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
+    html_parts.append("<p class='muted'><b>Legend (progi):</b> Ichimoku: Low&lt;Th20 = liczba dni z ostatnich 20 poniżej progu 20d. Fibo: skaner używa progu płynności Th10d (bazowo 500k PLN × mnożnik kraju).</p>")
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
@@ -384,7 +387,12 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
             pass
     report = report_dir / "allsearch_latest.md"
     report_html = report_dir / "allsearch_latest.html"
-    report.write_text("ALLSEARCH COMBO REPORT\n", encoding="utf-8")
+    report.write_text(
+        "ALLSEARCH COMBO REPORT\n\n"
+        "Legenda (progi): Ichimoku: Low<Th20 = liczba dni z ostatnich 20 poniżej progu 20d. "
+        "Fibo: próg płynności Th10d (bazowo 500000 PLN × mnożnik kraju).\n",
+        encoding="utf-8",
+    )
 
     failures = 0
     csv_refs: list[Path] = []
@@ -399,8 +407,6 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
         main_ichimoku_md = _latest_scope_md("search", scope)
         with report.open("a", encoding="utf-8") as out:
-            out.write("\n" + _section_banner(" PROGI ", width=96, fill="=") + "\n\n")
-            out.write("Liczba dni (z ostatnich 20), gdy obrót był poniżej progu 20d.\n")
             out.write("\n" + _section_banner(" ICHIMOKU ", width=96, fill="-") + "\n")
         if main_ichimoku_md:
             _append_md_sections(report, main_ichimoku_md, f"ICHIMOKU SOURCE ({main_ichimoku_md.name})")
@@ -414,7 +420,6 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         main_fibo_md = _latest_scope_md("fibo_search", scope)
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
-            out.write("PROGI FIBO: Th10d (min. średni obrót 10d, PLN) = 500000 × mnożnik kraju.\n")
         if main_fibo_md:
             _append_md_sections(report, main_fibo_md, f"FIBO SOURCE ({main_fibo_md.name})")
         if code_f != 0:
