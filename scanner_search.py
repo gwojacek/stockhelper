@@ -481,52 +481,64 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
 
 
-def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
+def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = None) -> ScanResult | None:
     if len(df) < min_days + 2:
+        if debug_ticker:
+            _debug_log_scan(debug_ticker, f"qualifies failed: insufficient rows len={len(df)} required={min_days+2}")
         return None
+
+    def _qdbg(msg: str) -> None:
+        if debug_ticker:
+            _debug_log_scan(debug_ticker, msg)
 
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
-
-    # Dla trendu poniżej chmury: korpus może wejść w chmurę, ale nie może przebić górnej granicy.
-    # Dla trendu powyżej chmury: korpus może wejść w chmurę, ale nie może przebić dolnej granicy.
-    below_respected = body_high <= top
-    above_respected = body_low >= bottom
-
     close = df["Close"]
-    current_side = "below" if close.iloc[-1] < bottom.iloc[-1] else "above" if close.iloc[-1] > top.iloc[-1] else "inside"
-    if current_side not in {"below", "above"}:
-        return None
 
-    respect_mask = below_respected if current_side == "below" else above_respected
+    # WYNIKI 1 aligned with WYNIKI 2 retest-style tolerance:
+    # side is maintained through "inside cloud" closes; only opposite-side close breaks trend.
+    above_respected = close >= bottom
+    below_respected = close <= top
 
-    run = 0
-    for ok in reversed(respect_mask.tolist()):
-        if ok:
+    def _run_with_inside_tolerance(target_side: str) -> int:
+        run = 0
+        for i in range(len(df) - 1, -1, -1):
+            c = float(close.iloc[i])
+            t = float(top.iloc[i])
+            b = float(bottom.iloc[i])
+            if target_side == "above":
+                if c < b:  # opposite side break
+                    break
+            else:
+                if c > t:  # opposite side break
+                    break
             run += 1
-        else:
-            break
+        return run
+
+    run_above = _run_with_inside_tolerance("above")
+    run_below = _run_with_inside_tolerance("below")
+    current_side = "above" if run_above >= run_below else "below"
+    run = run_above if current_side == "above" else run_below
+
     if run < min_days:
+        _qdbg(f"qualifies failed: current_side={current_side}, run={run} < min_days={min_days} (inside-cloud tolerated, opposite-side close breaks)")
         return None
 
     window_start = len(df) - run
-
-    # Start liczenia: świeca, na której korpus przebił odpowiednią granicę chmury
-    # (dla below: przebicie dolnej linii chmury w dół; dla above: przebicie górnej linii chmury w górę).
     start_idx = window_start
     for i in range(window_start, len(df)):
         prev_i = i - 1
         if current_side == "below":
-            crossed_now = body_high.iloc[i] < bottom.iloc[i]
-            prev_not_below = True if i == 0 else body_high.iloc[prev_i] >= bottom.iloc[prev_i]
+            crossed_now = close.iloc[i] < bottom.iloc[i]
+            prev_not_below = True if i == 0 else close.iloc[prev_i] >= bottom.iloc[prev_i]
             if crossed_now and prev_not_below:
                 start_idx = i
                 break
         else:
-            crossed_now = body_low.iloc[i] > top.iloc[i]
-            prev_not_above = True if i == 0 else body_low.iloc[prev_i] <= top.iloc[prev_i]
+            crossed_now = close.iloc[i] > top.iloc[i]
+            prev_not_above = True if i == 0 else close.iloc[prev_i] <= top.iloc[prev_i]
             if crossed_now and prev_not_above:
                 start_idx = i
                 break
@@ -535,6 +547,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - start_ts).days + 1) / 30.44
 
+    _qdbg(f"qualifies ok: current_side={current_side}, run={run}, start={start_ts.strftime('%Y-%m-%d')}, end={end_ts.strftime('%Y-%m-%d')} (inside-cloud tolerated)")
     return ScanResult(
         ticker="",
         side=current_side,
@@ -546,10 +559,17 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
 
 
 
-
 def _country_code_from_ticker(symbol: str) -> str:
-    suffix = symbol.split(".")[-1].upper() if "." in symbol else "US"
-    return SUFFIX_TO_COUNTRY.get(suffix, "US")
+    sym = (symbol or "").strip().upper()
+    if "." in sym:
+        suffix = sym.split(".")[-1]
+        return SUFFIX_TO_COUNTRY.get(suffix, "US")
+    # Heuristic for Polish stocks frequently used without .WA suffix
+    # in single-symbol mode (e.g., BNP). If symbol exists in WIG list,
+    # treat as PL for liquidity/GDP threshold calculations.
+    if sym in WIG_SEARCH_TICKERS:
+        return "PL"
+    return "US"
 
 
 def _gdp_multiplier_for_ticker(symbol: str) -> float:
@@ -588,6 +608,22 @@ def _compute_stock_liquidity_metrics(df: pd.DataFrame, fetch_symbol: str) -> tup
     return avg_10d, below_20d, threshold_10d, threshold_20d
 
 
+
+
+def _debug_symbol_target() -> str | None:
+    raw = os.environ.get("STOCKHELPER_DEBUG_SYMBOL", "").strip().upper()
+    return raw or None
+
+
+def _debug_enabled_for(ticker: str) -> bool:
+    target = _debug_symbol_target()
+    return bool(target and ticker.upper() == target)
+
+
+def _debug_log_scan(ticker: str, message: str) -> None:
+    if _debug_enabled_for(ticker):
+        print(f"[debug:{ticker.upper()}] {message}")
+
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
@@ -606,6 +642,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
     if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
         fetch_symbol = f"{ticker}{exchange_suffix}"
         display_symbol = fetch_symbol
+    _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
         mapped = COMMODITY_STOOQ_MAP.get(t_upper)
@@ -626,8 +663,9 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
         source_label = str((meta or {}).get("source", "unknown")).lower()
         enriched = _ichimoku(df)
-        result = _qualifies(enriched)
+        result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
         flip = _flip_after_long_respect(enriched)
+        _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
         stock_liquidity_ok = True
         if instrument == "stock" and (result or flip):
             metrics = _compute_stock_liquidity_metrics(df, fetch_symbol)
@@ -635,6 +673,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 return display_symbol, None, None, "insufficient turnover data", source_label
             avg_10d, below_20d, threshold_10d, threshold_20d = metrics
             stock_liquidity_ok = avg_10d >= threshold_10d and below_20d <= 2
+            _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
             result.ticker = ticker
             if instrument == "stock":
@@ -643,6 +682,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 result.liquidity_threshold_10d_pln = threshold_10d
                 result.liquidity_threshold_20d_pln = threshold_20d
                 if not stock_liquidity_ok:
+                    _debug_log_scan(ticker, "excluded from WYNIKI 1 by liquidity filter")
                     return display_symbol, None, flip, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
@@ -652,6 +692,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+        _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
         return display_symbol, None, None, str(exc), "unknown"
@@ -746,13 +787,13 @@ def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
             pass
 
 
-def _print_results_with_links(results: list[ScanResult]) -> list[str]:
+def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI (instrumenty spełniające warunki):{ANSI_RESET}")
     if not results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Link':<0}")
-    print("-" * 140)
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest(W2)':<28} {'Link':<0}")
+    print("-" * 178)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
     links: list[str] = []
     for row in sorted_rows:
@@ -760,9 +801,11 @@ def _print_results_with_links(results: list[ScanResult]) -> list[str]:
         low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {ANSI_CYAN}{link}{ANSI_RESET}")
+        retest = "-"
+        if retest_by_ticker_side is not None:
+            retest = retest_by_ticker_side.get((row.ticker, row.side), "-")
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {retest:<28} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
-
 
 def run_checkavg(target: str) -> int:
     ticker = (target or "").strip()
@@ -1097,6 +1140,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
+    dbg = _debug_symbol_target()
+    if dbg:
+        print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
 
@@ -1134,20 +1180,21 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
 
+        retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
         ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_md = _daily_report_path("search", group_name)
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", retest_by_ticker_side.get((row.ticker, row.side), "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest(W2)","Link","Python command"],
             rows_md,
             description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
         )
-        links_primary = _print_results_with_links(results)
+        links_primary = _print_results_with_links(results, retest_by_ticker_side)
         print(f"\nZapisano MD: {out_md}")
         print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
         links_flip = _print_flip_results_with_links(flip_results)
@@ -1236,6 +1283,7 @@ def run_ichimoku_search(target: str) -> int:
                 if flip:
                     flip_results.append(flip)
 
+    retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
     ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("search", group_name)
     rows_md = []
@@ -1245,12 +1293,12 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest(W2)","Link","Python command"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
     )
 
-    links_primary = _print_results_with_links(results)
+    links_primary = _print_results_with_links(results, retest_by_ticker_side)
     print(f"\nZapisano MD: {out_md}")
     print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
 
@@ -1675,14 +1723,15 @@ def _print_fibo_results(
     rows1: list[FiboScanResult],
     rows2: list[FiboScanResult],
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] | None = None,
+    ichimoku_retest_by_key: dict[tuple[str, str, str, str], str] | None = None,
 ) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
-        print("-" * 185)
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'IchiRetest':<12} {'Link':<0}")
+        print("-" * 199)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
     if avg_turnover_10d_by_key:
@@ -1710,7 +1759,10 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
+        ichi_txt = '-'
+        if ichimoku_retest_by_key is not None:
+            ichi_txt = ichimoku_retest_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), '-')
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ichi_txt:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -1994,14 +2046,34 @@ def run_fibo_search(target: str) -> int:
         if (r.ticker, r.direction, r.incline_start_date, r.incline_end_date) not in rows2_keys
     ]
 
+    ichimoku_retest_by_ticker: dict[tuple[str, str], str] = {}
+    ichimoku_retest_by_key: dict[tuple[str, str, str, str], str] = {}
+    for r in rows1:
+        side = 'long' if r.direction == 'long' else 'short'
+        tk = (r.ticker, side)
+        if tk not in ichimoku_retest_by_ticker:
+            try:
+                _, _, flip, _, _ = _scan_one(r.ticker, group_name, exchange_suffix)
+                target_side = 'above' if side == 'long' else 'below'
+                if flip and flip.current_side == target_side:
+                    if flip.valid_retests_count > 0:
+                        ichimoku_retest_by_ticker[tk] = f"{flip.retest_status} ({flip.valid_retests_count})"
+                    else:
+                        ichimoku_retest_by_ticker[tk] = flip.retest_status
+                else:
+                    ichimoku_retest_by_ticker[tk] = 'no_flip_for_side'
+            except Exception:
+                ichimoku_retest_by_ticker[tk] = '-'
+        ichimoku_retest_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = ichimoku_retest_by_ticker[tk]
+
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
-    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
+    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,ichimoku_retest_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), '-'),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows1_md)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","IchiRetest","Link","Python command"],rows1_md)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows2_md, append=True)
 
-    links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
+    links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] md: {out_md}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
@@ -2052,11 +2124,11 @@ def main() -> int:
     args = parser.parse_args()
     return run_ichimoku_search(args.target)
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
 ANSI_BOLD = "\033[1m"
 ANSI_GREEN = "\033[32m"
 ANSI_CYAN = "\033[36m"
 ANSI_YELLOW = "\033[33m"
 ANSI_RESET = "\033[0m"
+
+if __name__ == "__main__":
+    raise SystemExit(main())
