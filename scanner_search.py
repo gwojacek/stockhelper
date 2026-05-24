@@ -495,59 +495,50 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = 
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
-
-    # Dla trendu poniżej chmury: korpus może wejść w chmurę, ale nie może przebić górnej granicy.
-    # Dla trendu powyżej chmury: korpus może wejść w chmurę, ale nie może przebić dolnej granicy.
-    below_respected = body_high <= top
-    above_respected = body_low >= bottom
-
     close = df["Close"]
-    current_side = "below" if close.iloc[-1] < bottom.iloc[-1] else "above" if close.iloc[-1] > top.iloc[-1] else "inside"
-    if current_side not in {"below", "above"}:
-        _qdbg(f"qualifies failed: current_side={current_side} close={float(close.iloc[-1]):.4f} top={float(top.iloc[-1]):.4f} bottom={float(bottom.iloc[-1]):.4f}")
-        return None
 
-    respect_mask = below_respected if current_side == "below" else above_respected
+    # WYNIKI 1 aligned with WYNIKI 2 retest-style tolerance:
+    # side is maintained through "inside cloud" closes; only opposite-side close breaks trend.
+    above_respected = close >= bottom
+    below_respected = close <= top
 
-    run = 0
-    for ok in reversed(respect_mask.tolist()):
-        if ok:
+    def _run_with_inside_tolerance(target_side: str) -> int:
+        run = 0
+        for i in range(len(df) - 1, -1, -1):
+            c = float(close.iloc[i])
+            t = float(top.iloc[i])
+            b = float(bottom.iloc[i])
+            if target_side == "above":
+                if c < b:  # opposite side break
+                    break
+            else:
+                if c > t:  # opposite side break
+                    break
             run += 1
-        else:
-            break
+        return run
+
+    run_above = _run_with_inside_tolerance("above")
+    run_below = _run_with_inside_tolerance("below")
+    current_side = "above" if run_above >= run_below else "below"
+    run = run_above if current_side == "above" else run_below
+
     if run < min_days:
-        violating_idxs = [i for i, ok in enumerate(respect_mask.tolist()) if not ok]
-        first_violation = "-"
-        last_violation = "-"
-        if violating_idxs:
-            try:
-                first_violation = str(pd.to_datetime(df.iloc[violating_idxs[0]]["Date"]).date())
-                last_violation = str(pd.to_datetime(df.iloc[violating_idxs[-1]]["Date"]).date())
-            except Exception:
-                first_violation = str(violating_idxs[0])
-                last_violation = str(violating_idxs[-1])
-        _qdbg(
-            f"qualifies failed: current_side={current_side}, run={run} < min_days={min_days}, "
-            f"window_len={len(df)}, first_violation={first_violation}, last_violation={last_violation}"
-        )
+        _qdbg(f"qualifies failed: current_side={current_side}, run={run} < min_days={min_days} (inside-cloud tolerated, opposite-side close breaks)")
         return None
 
     window_start = len(df) - run
-
-    # Start liczenia: świeca, na której korpus przebił odpowiednią granicę chmury
-    # (dla below: przebicie dolnej linii chmury w dół; dla above: przebicie górnej linii chmury w górę).
     start_idx = window_start
     for i in range(window_start, len(df)):
         prev_i = i - 1
         if current_side == "below":
-            crossed_now = body_high.iloc[i] < bottom.iloc[i]
-            prev_not_below = True if i == 0 else body_high.iloc[prev_i] >= bottom.iloc[prev_i]
+            crossed_now = close.iloc[i] < bottom.iloc[i]
+            prev_not_below = True if i == 0 else close.iloc[prev_i] >= bottom.iloc[prev_i]
             if crossed_now and prev_not_below:
                 start_idx = i
                 break
         else:
-            crossed_now = body_low.iloc[i] > top.iloc[i]
-            prev_not_above = True if i == 0 else body_low.iloc[prev_i] <= top.iloc[prev_i]
+            crossed_now = close.iloc[i] > top.iloc[i]
+            prev_not_above = True if i == 0 else close.iloc[prev_i] <= top.iloc[prev_i]
             if crossed_now and prev_not_above:
                 start_idx = i
                 break
@@ -556,7 +547,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = 
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - start_ts).days + 1) / 30.44
 
-    _qdbg(f"qualifies ok: current_side={current_side}, run={run}, start={start_ts.strftime('%Y-%m-%d')}, end={end_ts.strftime('%Y-%m-%d')}")
+    _qdbg(f"qualifies ok: current_side={current_side}, run={run}, start={start_ts.strftime('%Y-%m-%d')}, end={end_ts.strftime('%Y-%m-%d')} (inside-cloud tolerated)")
     return ScanResult(
         ticker="",
         side=current_side,
@@ -565,7 +556,6 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = 
         start_date=start_ts.strftime("%Y-%m-%d"),
         respect_months=round(months, 1),
     )
-
 
 
 
