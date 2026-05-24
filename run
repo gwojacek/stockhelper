@@ -488,7 +488,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append("<div class='legend muted'><b>Legenda (progi)</b><br>• Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju.<br>• Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju.<br>• Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</div>")
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
-        html_parts.append(f"<div class='market'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
+        html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         if not mrows:
             html_parts.append("<p class='muted'>No scanner results for this market.</p></div>")
             continue
@@ -499,15 +499,32 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         for gname, grows in groups:
             if not grows:
                 continue
-            html_parts.append(f"<div class='subhead'>{html.escape(gname)} ({len(grows)})</div><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Status</th><th>Pattern</th><th>Dates</th><th>Metrics</th><th>Priority</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
+            is_i1 = gname.startswith("WYNIKI 1 ICHIMOKU")
+            is_i2 = gname.startswith("WYNIKI 2 ICHIMOKU")
+            is_f1 = gname.startswith("WYNIKI FIBO #1")
+            if is_i1:
+                thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Low&lt;Th20</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+            elif is_i2:
+                thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Retest count</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+            elif is_f1:
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+            else:
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+            html_parts.append(f"<div class='subhead'>{html.escape(gname)} ({len(grows)})</div><div style='overflow:auto'><table class='data'><thead>{thead}</thead><tbody>")
             for r in grows:
                 cmd = html.escape(r.python_command or "")
-                date_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.dates.items() if v]))
-                met_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.metrics.items() if v]))
-                html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{date_txt}</td><td>{met_txt}</td><td><span class='badge {r.priority.lower()}'>{r.priority}</span></td><td>{'<a class=\"btn\" href=\"'+html.escape(r.chart_url)+'\" target=\"_blank\" title=\"Open stooq chart\">📈</a>' if r.chart_url else ''}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
+                if is_i1:
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(r.metrics.get('avg10d',''))}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                elif is_i2:
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                elif is_f1:
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                else:
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}function runOrCopy(btn){const c=btn.dataset.cmd||'';const u='stockhelper://run?command='+encodeURIComponent(c);let moved=false;try{window.location.href=u;moved=true;}catch(e){}setTimeout(()=>{if(!moved){copyCmd(btn);}else{copyCmd(btn);}},220);}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});}q.oninput=f;m.onchange=f;</script></body></html>")
+    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}function runOrCopy(btn){const c=btn.dataset.cmd||'';const u='stockhelper://run?command='+encodeURIComponent(c);try{window.location.href=u;}catch(e){}copyCmd(btn);}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const anyVisibleRow=[...b.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});}q.oninput=f;m.onchange=f;f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 def _run_allsearch_combo(scopes: list[str]) -> int:
