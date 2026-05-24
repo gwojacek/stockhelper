@@ -1692,7 +1692,7 @@ def run_fibo_search(target: str) -> int:
                 if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
                     long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
-                # Keep at most two distinct formations, preferring:
+                # Keep at most three distinct formations, preferring:
                 # 1) valid setups over waiting ones,
                 # 2) broader setups (earlier incline start),
                 # 3) newer setup ends.
@@ -1718,7 +1718,7 @@ def run_fibo_search(target: str) -> int:
                     seen_long.add(k)
                     seen_long_start.add(c.incline_start_date)
                     picked_long.append(c)
-                    if len(picked_long) >= 2:
+                    if len(picked_long) >= 3:
                         break
                 for c in picked_long:
                     c.ticker = ticker
@@ -1749,7 +1749,7 @@ def run_fibo_search(target: str) -> int:
                         seen_short.add(k)
                         seen_short_start.add(c.incline_start_date)
                         picked_short.append(c)
-                        if len(picked_short) >= 2:
+                        if len(picked_short) >= 3:
                             break
                     for c in picked_short:
                         c.ticker = ticker
@@ -1891,10 +1891,15 @@ def run_fibo_search(target: str) -> int:
         reverse=False,
     )
     rows2_keys = {(r.ticker, r.direction, r.incline_start_date, r.incline_end_date) for r in rows2}
+    rows2_ticker_dir = {(r.ticker, r.direction) for r in rows2}
     rows1 = [
         r
         for r in rows1
         if (r.ticker, r.direction, r.incline_start_date, r.incline_end_date) not in rows2_keys
+        and not (
+            r.status == "reached_23_6_waiting_for_61_8"
+            and (r.ticker, r.direction) in rows2_ticker_dir
+        )
     ]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
