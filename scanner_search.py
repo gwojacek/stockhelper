@@ -788,13 +788,21 @@ def run_checkavg(target: str) -> int:
         print(f"[checkavg] insufficient turnover data for {ticker} (need >= 10 bars)")
         return 1
 
+    source = str((meta or {}).get("source", "unknown")).lower()
+
     try:
         if instrument == "stock":
-            cc = _country_code_from_ticker(fetch_symbol)
-            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
-            currency = country_to_currency.get(cc, "USD")
-            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
-            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+            # Stooq often returns PL equities without country suffix (e.g. "BNP").
+            # In such case prices are already PLN, so do not apply USD->PLN multiplier.
+            has_suffix = "." in fetch_symbol
+            if source.startswith("stooq") and not has_suffix:
+                fx_to_pln = 1.0
+            else:
+                cc = _country_code_from_ticker(fetch_symbol)
+                country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
+                currency = country_to_currency.get(cc, "USD")
+                _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+                fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
         elif instrument == "forex":
             fx_to_pln = 1.0
         else:
@@ -807,7 +815,6 @@ def run_checkavg(target: str) -> int:
         fx_to_pln = 1.0
 
     avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
-    source = str((meta or {}).get("source", "unknown")).lower()
     print(f"[checkavg] instrument={instrument} ticker={ticker} fetch_symbol={fetch_symbol} source={source}")
     print(f"[checkavg] Avg10d PLN: {avg_10d_pln:,.0f}")
     return 0
