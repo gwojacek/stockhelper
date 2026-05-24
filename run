@@ -482,9 +482,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px}th{position:sticky;top:0;background:#f1f5f9}th,td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none}.muted{color:#64748b}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px}th{position:sticky;top:0;background:#f1f5f9}th,td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155}</style>",
                   "</head><body>"]
-    html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now(UTC).isoformat()}</p>")
+    html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
     html_parts.append("<p class='muted'><b>Legenda (progi):</b> Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</p>")
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
@@ -493,14 +493,22 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if not mrows:
             html_parts.append("<p class='muted'>No scanner results for this market.</p></div>")
             continue
-        html_parts.append("<div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Scanner</th><th>Category</th><th>Status</th><th>Pattern</th><th>Dates</th><th>Metrics</th><th>Priority</th><th>Chart</th><th>Command</th></tr></thead><tbody>")
-        for r in mrows:
-            cmd = html.escape(r.python_command or "")
-            date_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.dates.items() if v]))
-            met_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.metrics.items() if v]))
-            html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{r.scanner}</td><td>{r.category}</td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{date_txt}</td><td>{met_txt}</td><td><span class='badge {r.priority.lower()}'>{r.priority}</span></td><td>{'<a class=\"btn\" href=\"'+html.escape(r.chart_url)+'\" target=\"_blank\">Open chart</a>' if r.chart_url else ''}</td><td><code>{cmd[:80]}</code> <button class='btn' onclick='copyCmd(this)' data-cmd='{cmd}'>Copy command</button></td></tr>")
-        html_parts.append("</tbody></table></div></div>")
-    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Copy command',1200);}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});}q.oninput=f;m.onchange=f;</script></body></html>")
+        groups = [("FIBO Valid", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"]),
+                  ("Ichimoku Retest/Breakout", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
+                  ("FIBO Waiting", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
+                  ("Ichimoku Position", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"])]
+        for gname, grows in groups:
+            if not grows:
+                continue
+            html_parts.append(f"<div class='subhead'>{html.escape(gname)} ({len(grows)})</div><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Status</th><th>Pattern</th><th>Dates</th><th>Metrics</th><th>Priority</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
+            for r in grows:
+                cmd = html.escape(r.python_command or "")
+                date_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.dates.items() if v]))
+                met_txt = html.escape(" | ".join([f"{k}:{v}" for k,v in r.metrics.items() if v]))
+                html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{date_txt}</td><td>{met_txt}</td><td><span class='badge {r.priority.lower()}'>{r.priority}</span></td><td>{'<a class=\"btn\" href=\"'+html.escape(r.chart_url)+'\" target=\"_blank\" title=\"Open stooq chart\">📈</a>' if r.chart_url else ''}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+            html_parts.append("</tbody></table></div>")
+        html_parts.append("</div>")
+    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}function runOrCopy(btn){const c=btn.dataset.cmd||'';const u='stockhelper://run?command='+encodeURIComponent(c);let moved=false;try{window.location.href=u;moved=true;}catch(e){}setTimeout(()=>{if(!moved){copyCmd(btn);}else{copyCmd(btn);}},220);}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});}q.oninput=f;m.onchange=f;</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 def _run_allsearch_combo(scopes: list[str]) -> int:
