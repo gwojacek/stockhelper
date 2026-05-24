@@ -12,6 +12,8 @@ from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import COMMODITY_STOOQ_MAP
 PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
+ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
+FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_search"
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
@@ -332,7 +334,8 @@ def _latest_scope_md(prefix: str, scope: str) -> Path | None:
     keys = _scope_file_keys(scope)
     candidates: list[Path] = []
     for key in keys:
-        candidates.extend([p for p in SEARCH_OUTPUT_DIR.glob(f"{prefix}_{key}_*.md") if p.is_file()])
+        search_dir = FIBO_SEARCH_OUTPUT_DIR if prefix.startswith("fibo") else ICHIMOKU_SEARCH_OUTPUT_DIR
+        candidates.extend([p for p in search_dir.glob(f"{prefix}_{key}_*.md") if p.is_file()])
     if not candidates:
         return None
     return max(candidates, key=lambda p: p.stat().st_mtime)
@@ -381,8 +384,8 @@ def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
     keys = _scope_file_keys(scope)
     candidates: list[Path] = []
     for key in keys:
-        candidates += [p for p in SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.md") if p.is_file()]
-        candidates += [p for p in SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.md") if p.is_file()]
+        candidates += [p for p in ICHIMOKU_SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.md") if p.is_file()]
+        candidates += [p for p in FIBO_SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.md") if p.is_file()]
     if not candidates:
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         return False
@@ -575,8 +578,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         ichimoku_csv: list[Path] = []
         fibo_csv: list[Path] = []
         for key in _scope_file_keys(scope):
-            ichimoku_csv.extend(SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.csv"))
-            fibo_csv.extend(SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.csv"))
+            ichimoku_csv.extend(ICHIMOKU_SEARCH_OUTPUT_DIR.glob(f"search_{key}_*.csv"))
+            fibo_csv.extend(FIBO_SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.csv"))
         ichimoku_csv = sorted([p for p in ichimoku_csv if p.is_file()], key=lambda p: p.stat().st_mtime)
         fibo_csv = sorted([p for p in fibo_csv if p.is_file()], key=lambda p: p.stat().st_mtime)
         if ichimoku_csv:
@@ -767,10 +770,11 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         _enable_cache_only_if_recent(scope, hours=6)
-        before_mtime = {p.name: p.stat().st_mtime for p in SEARCH_OUTPUT_DIR.glob("*.csv")}
+        csv_dir = ICHIMOKU_SEARCH_OUTPUT_DIR if mode=="ichimoku" else FIBO_SEARCH_OUTPUT_DIR
+        before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
-        after = sorted(SEARCH_OUTPUT_DIR.glob("*.csv"), key=lambda p: p.stat().st_mtime)
+        after = sorted(csv_dir.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
         with report.open("a", encoding="utf-8") as out:
             out.write(f"\n\n{_section_banner(f' {_scope_label(scope)} ', width=108, fill='■')}\n")
