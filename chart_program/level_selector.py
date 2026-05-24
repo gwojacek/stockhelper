@@ -460,6 +460,7 @@ def run_level_selector(raw_args=None):
         api_key=args.api_key,
         data_source=args.data_source,
     )
+    existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
 
     if args.fibo_lines and args.fibo_anchor_start and args.fibo_anchor_end:
         try:
