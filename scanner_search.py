@@ -560,8 +560,16 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = 
 
 
 def _country_code_from_ticker(symbol: str) -> str:
-    suffix = symbol.split(".")[-1].upper() if "." in symbol else "US"
-    return SUFFIX_TO_COUNTRY.get(suffix, "US")
+    sym = (symbol or "").strip().upper()
+    if "." in sym:
+        suffix = sym.split(".")[-1]
+        return SUFFIX_TO_COUNTRY.get(suffix, "US")
+    # Heuristic for Polish stocks frequently used without .WA suffix
+    # in single-symbol mode (e.g., BNP). If symbol exists in WIG list,
+    # treat as PL for liquidity/GDP threshold calculations.
+    if sym in WIG_SEARCH_TICKERS:
+        return "PL"
+    return "US"
 
 
 def _gdp_multiplier_for_ticker(symbol: str) -> float:
