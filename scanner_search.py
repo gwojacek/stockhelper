@@ -1687,12 +1687,8 @@ def run_fibo_search(target: str) -> int:
                 if cand:
                     long_candidates.append(cand)
             if long_candidates:
-                # If current window (offset 0) no longer qualifies as "waiting",
-                # drop stale waiting candidates coming from older offsets.
-                if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
-                    long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
-                # Keep at most two distinct formations, preferring:
+                # Keep at most three distinct formations, preferring:
                 # 1) valid setups over waiting ones,
                 # 2) broader setups (earlier incline start),
                 # 3) newer setup ends.
@@ -1718,7 +1714,7 @@ def run_fibo_search(target: str) -> int:
                     seen_long.add(k)
                     seen_long_start.add(c.incline_start_date)
                     picked_long.append(c)
-                    if len(picked_long) >= 2:
+                    if len(picked_long) >= 3:
                         break
                 for c in picked_long:
                     c.ticker = ticker
@@ -1731,8 +1727,6 @@ def run_fibo_search(target: str) -> int:
                     if cand:
                         short_candidates.append(cand)
                 if short_candidates:
-                    if short_offset0 is None or short_offset0.status != "reached_23_6_waiting_for_61_8":
-                        short_candidates = [c for c in short_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                     short_candidates = [c for c in short_candidates if not _is_waiting_candidate_stale(df, c)]
                     short_candidates = sorted(
                         short_candidates,
@@ -1749,7 +1743,7 @@ def run_fibo_search(target: str) -> int:
                         seen_short.add(k)
                         seen_short_start.add(c.incline_start_date)
                         picked_short.append(c)
-                        if len(picked_short) >= 2:
+                        if len(picked_short) >= 3:
                             break
                     for c in picked_short:
                         c.ticker = ticker

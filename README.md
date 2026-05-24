@@ -179,6 +179,22 @@ If you want only one scanner:
 - Ichimoku only: `python run -ichimoku_search <scope>`
 - Fibonacci only: `python run -fibo_search <scope>`
 
+### Fibonacci debug (why setup is or is not matched)
+
+To debug a single symbol with step-by-step explanations from the FIBO detector:
+
+```bash
+python - <<'PY'
+import scanner_search
+scanner_search.run_fibo_explain('single', 'MPWR.US')
+PY
+```
+
+What this prints:
+- result for each offset (`0, 5, 10, 15, 20, 30, 40`) as `MATCH`/`NO MATCH`,
+- detected status/pattern/touch date for matches,
+- detailed rejection reasons for non-matches (e.g. stale impulse start, non-dominant peak).
+
 ### Stooq debug / scraper helpers
 
 To inspect Stooq/captcha/debug artifacts:
