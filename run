@@ -323,9 +323,76 @@ def _safe_int(v: str, default: int = 0) -> int:
         return default
 
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
+    def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
+        out: dict[str, list[dict[str, str]]] = {}
+        if not md_path.exists():
+            return out
+        lines = md_path.read_text(encoding="utf-8").splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith("### "):
+                title = line[4:].strip()
+                if i + 2 < len(lines) and lines[i + 1].strip().startswith("|") and lines[i + 2].strip().startswith("|"):
+                    headers = [h.strip() for h in lines[i + 1].strip().strip("|").split("|")]
+                    rows: list[dict[str, str]] = []
+                    j = i + 3
+                    while j < len(lines) and lines[j].strip().startswith("|"):
+                        vals = [v.strip() for v in lines[j].strip().strip("|").split("|")]
+                        if len(vals) == len(headers):
+                            rows.append({headers[k]: vals[k] for k in range(len(headers))})
+                        j += 1
+                    out[title] = rows
+                    i = j
+                    continue
+            i += 1
+        return out
+
     rows: list[ScannerRow] = []
     for scope in scopes:
         market = scope.upper()
+        i_md = _latest_scope_md("search", scope)
+        f_md = _latest_scope_md("fibo_search", scope)
+        i_tables = _parse_md_tables(i_md) if i_md else {}
+        f_tables = _parse_md_tables(f_md) if f_md else {}
+        for r in i_tables.get("WYNIKI 2", []):
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(
+                market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
+                status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
+                metrics={"months": str(r.get("Mies. od wybicia", "")), "retest_count": str(r.get("Retest count", ""))},
+                chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
+            ))
+        for r in i_tables.get("WYNIKI", []):
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(
+                market=market, scanner="ICHIMOKU", category="position", ticker=t,
+                status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))},
+                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "low_th20": str(r.get("Low<Th20", ""))},
+                chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
+            ))
+        for r in f_tables.get("WYNIKI FIBO #2 (valid formation, last 4 months)", []):
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(
+                market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal",
+                pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
+                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
+                metrics={"ratio": str(r.get("Ratio(d)", ""))}, chart_url=str(r.get("Link", "")),
+                python_command=str(r.get("Python command", "")), priority="HIGH"
+            ))
+        for r in f_tables.get("WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", []):
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(
+                market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")),
+                pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
+                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
+                metrics={"ratio": str(r.get("Ratio(d)", ""))}, chart_url=str(r.get("Link", "")),
+                python_command=str(r.get("Python command", "")), priority="MEDIUM"
+            ))
+
+        if i_tables or f_tables:
+            continue
+
         ichimoku_csv: list[Path] = []
         fibo_csv: list[Path] = []
         for key in _scope_file_keys(scope):
@@ -390,7 +457,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now(UTC).isoformat()}</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
-    html_parts.append("<p class='muted'><b>Legend (progi):</b> Ichimoku: Low&lt;Th20 = liczba dni z ostatnich 20 poniżej progu 20d. Fibo: skaner używa progu płynności Th10d (bazowo 500k PLN × mnożnik kraju).</p>")
+    html_parts.append("<p class='muted'><b>Legenda (progi):</b> Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 20d (300000 PLN × mnożnik kraju) — nie więcej niż 2.</p>")
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
@@ -420,8 +487,9 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     report_html = report_dir / f"{stem}.html"
     report.write_text(
         "ALLSEARCH COMBO REPORT\n\n"
-        "Legenda (progi): Ichimoku: Low<Th20 = liczba dni z ostatnich 20 poniżej progu 20d. "
-        "Fibo: próg płynności Th10d (bazowo 500000 PLN × mnożnik kraju).\n",
+        "Legenda (progi): Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. "
+        "Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. "
+        "Low<Th20: liczba dni z ostatnich 20 poniżej progu 20d (300000 PLN × mnożnik kraju) — nie więcej niż 2.\n",
         encoding="utf-8",
     )
 
