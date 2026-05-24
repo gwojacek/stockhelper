@@ -50,8 +50,8 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
-        return f"python run -c {ticker} --fibo-lines 5"
+                return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5"
     return f"python run -c {ticker}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
