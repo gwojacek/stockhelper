@@ -705,9 +705,18 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     return base + " --ichimoku-mode on"
 
 
-def _write_md_table(path: Path, title: str, headers: list[str], rows: list[list[str]], append: bool = False) -> None:
+def _write_md_table(
+    path: Path,
+    title: str,
+    headers: list[str],
+    rows: list[list[str]],
+    append: bool = False,
+    description: str | None = None,
+) -> None:
     with path.open("a" if append else "w", encoding="utf-8") as fh:
         fh.write(f"## {title}\n\n")
+        if description:
+            fh.write(description.strip() + "\n\n")
         fh.write("| " + " | ".join(headers) + " |\n")
         fh.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
         for row in rows:
@@ -1063,7 +1072,13 @@ def run_ichimoku_search(target: str) -> int:
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
             rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(out_md, "WYNIKI", ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"], rows_md)
+        _write_md_table(
+            out_md,
+            "WYNIKI",
+            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"],
+            rows_md,
+            description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
+        )
         links_primary = _print_results_with_links(results)
         print(f"\nZapisano MD: {out_md}")
         print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
@@ -1073,7 +1088,14 @@ def run_ichimoku_search(target: str) -> int:
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
             rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md, append=True)
+        _write_md_table(
+            out_md_flip,
+            "WYNIKI 2",
+            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],
+            rows_flip_md,
+            append=True,
+            description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
+        )
         print(f"Zapisano MD: {out_md_flip}")
         _prune_search_history(group_name, keep_last=3)
         all_links = links_primary + [x for x in links_flip if x not in links_primary]
@@ -1152,7 +1174,13 @@ def run_ichimoku_search(target: str) -> int:
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
         rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
-    _write_md_table(out_md, "WYNIKI", ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"], rows_md)
+    _write_md_table(
+        out_md,
+        "WYNIKI",
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"],
+        rows_md,
+        description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
+    )
 
     links_primary = _print_results_with_links(results)
     print(f"\nZapisano MD: {out_md}")
@@ -1165,7 +1193,14 @@ def run_ichimoku_search(target: str) -> int:
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
         rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
-    _write_md_table(out_md_flip,"WYNIKI 2",["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],rows_flip_md, append=True)
+    _write_md_table(
+        out_md_flip,
+        "WYNIKI 2",
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Link","Python command"],
+        rows_flip_md,
+        append=True,
+        description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
+    )
     print(f"Zapisano MD: {out_md_flip}")
     _prune_search_history(group_name, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
