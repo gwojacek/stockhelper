@@ -80,9 +80,9 @@ def _liquidity_legend_html() -> str:
     low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
     return (
         "<div class='legend muted'><b>Legenda (progi)</b><br>"
-        f"• Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}).<br>"
-        f"• Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}).<br>"
-        f"• Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2."
+        f"🟨 • Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}).<br>"
+        f"☁️ • Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}).<br>"
+        f"🧪 • Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2."
         "</div>"
     )
 
@@ -100,9 +100,9 @@ def _liquidity_legend_text() -> str:
     low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
     return (
         "Legenda (progi): "
-        f"Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}). "
-        f"Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}). "
-        f"Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2.\n"
+        f"🟨 Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}). "
+        f"☁️ Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}). "
+        f"🧪 Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2.\n"
     )
 
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
@@ -689,6 +689,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     _build_html_report(scopes, report_html)
     print(f"\n[allsearch] combo report saved: {report}")
     print(f"[allsearch] html report saved: {report_html}")
+    reopen_scope = "all" if [s.lower() for s in scopes] == ["wig", "dax", "us100", "forex", "commodities"] else ",".join(scopes).lower()
+    print(f"[allsearch] reopen command: python run -allsearch {reopen_scope}")
     _open_html_report(report_html)
     if all_links:
         try:
@@ -740,6 +742,10 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
+    if batch == ["wig", "dax", "us100", "forex", "commodities"]:
+        print(f"[batch] reopen command: python run -{mode}_search all")
+    elif len(batch) == 1:
+        print(f"[batch] reopen command: python run -{mode}_search {batch[0]}")
     if ask_open_links and all_links:
         try: open_all=input('Czy otworzyć wszystkie linki? [y/N]: ').strip().lower()
         except EOFError: open_all='n'
