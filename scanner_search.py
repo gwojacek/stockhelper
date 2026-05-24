@@ -1038,7 +1038,7 @@ def run_ichimoku_search(target: str) -> int:
                 for fut in as_completed(fut_map):
                     idx, ticker = fut_map[fut]
                     display_symbol, result, flip, err, src = fut.result()
-                    print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
+                    print(f"[{idx}/{len(members)}] {ticker}")
                     if err:
                         print(f"  pominięto ({_compact_error(err)})")
                     elif result:
@@ -1089,9 +1089,9 @@ def run_ichimoku_search(target: str) -> int:
 
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
-    print(f"[1/{len(members)}] skanuję {first}...")
+    print(f"[1/{len(members)}] {first}")
     display_symbol, first_result, first_flip, first_err, first_source = _scan_one(first, group_name, exchange_suffix)
-    print(f"[1/{len(members)}] skanuję {first} ({display_symbol})... [skanuję przez {_scan_source_label(first_source)}]")
+    print(f"[1/{len(members)}] {first}")
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = True
@@ -1123,7 +1123,7 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
             display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
-            print(f"[{offset}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
+            print(f"[{offset}/{len(members)}] {ticker}")
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
             elif result:
@@ -1138,7 +1138,7 @@ def run_ichimoku_search(target: str) -> int:
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
                 display_symbol, result, flip, err, src = fut.result()
-                print(f"[{idx}/{len(members)}] skanuję {ticker} ({display_symbol})... [skanuję przez {_scan_source_label(src)}]")
+                print(f"[{idx}/{len(members)}] {ticker}")
                 if err:
                     print(f"  pominięto ({_compact_error(err)})")
                 elif result:
