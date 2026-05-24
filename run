@@ -380,7 +380,23 @@ def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         return False
     latest = max(candidates, key=lambda p: p.stat().st_mtime)
-    age_h = (datetime.now(UTC).timestamp() - latest.stat().st_mtime) / 3600.0
+    now_utc = datetime.now(UTC)
+    latest_dt = datetime.fromtimestamp(latest.stat().st_mtime, UTC)
+    age_h = (now_utc.timestamp() - latest.stat().st_mtime) / 3600.0
+    # Extra guardrails:
+    # 1) if a search finished in the last hour -> always use cache
+    # 2) if a search was completed today after 18:00 UTC ("market closed") -> cache for the rest of day
+    if age_h <= 1.0:
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        print(f"[cache-rule] {scope}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON (<=1h)")
+        return True
+    if latest_dt.date() == now_utc.date() and latest_dt.hour >= 18:
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        print(
+            f"[cache-rule] {scope}: last search today at {latest_dt.strftime('%H:%M UTC')} ({latest.name})"
+            " -> cache-only mode ON (after 18:00)"
+        )
+        return True
     if age_h <= float(hours):
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         print(f"[cache-rule] {scope}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON")
@@ -667,6 +683,9 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     failures = 0
     csv_refs: list[Path] = []
     all_links: set[str] = set()
+    # Phase 1: run all Ichimoku scans first across all scopes.
+    ichimoku_md_by_scope: dict[str, Path | None] = {}
+    fibo_md_by_scope: dict[str, Path | None] = {}
     for scope in scopes:
         with report.open("a", encoding="utf-8") as out:
             out.write("\n\n" + _section_banner(f" {_scope_label(scope)} ", width=108, fill="■") + "\n")
@@ -675,26 +694,35 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
         _enable_cache_only_if_recent(scope, hours=6)
         code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
-        main_ichimoku_md = _latest_scope_md("search", scope)
-        with report.open("a", encoding="utf-8") as out:
-            out.write("\n" + _section_banner(" ICHIMOKU ", width=96, fill="-") + "\n")
-        if main_ichimoku_md:
-            _append_md_sections(report, main_ichimoku_md, f"ICHIMOKU SOURCE ({main_ichimoku_md.name})")
+        ichimoku_md_by_scope[scope] = _latest_scope_md("search", scope)
         if code_i != 0:
             failures += 1
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
 
+    # Phase 2: run all Fibo scans after Ichimoku is complete.
+    for scope in scopes:
         print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
         print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
         _enable_cache_only_if_recent(scope, hours=6)
         code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
-        main_fibo_md = _latest_scope_md("fibo_search", scope)
-        with report.open("a", encoding="utf-8") as out:
-            out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
-        if main_fibo_md:
-            _append_md_sections(report, main_fibo_md, f"FIBO SOURCE ({main_fibo_md.name})")
+        fibo_md_by_scope[scope] = _latest_scope_md("fibo_search", scope)
         if code_f != 0:
             failures += 1
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+
+    # Final report sections: keep "table under table" grouped by scope.
+    for scope in scopes:
+        with report.open("a", encoding="utf-8") as out:
+            out.write("\n\n" + _section_banner(f" {_scope_label(scope)} ", width=108, fill="■") + "\n")
+            out.write("\n" + _section_banner(" ICHIMOKU ", width=96, fill="-") + "\n")
+        md_i = ichimoku_md_by_scope.get(scope)
+        if md_i:
+            _append_md_sections(report, md_i, f"ICHIMOKU SOURCE ({md_i.name})")
+        with report.open("a", encoding="utf-8") as out:
+            out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
+        md_f = fibo_md_by_scope.get(scope)
+        if md_f:
+            _append_md_sections(report, md_f, f"FIBO SOURCE ({md_f.name})")
 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
