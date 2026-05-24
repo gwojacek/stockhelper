@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil
+from urllib.request import urlopen
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,13 @@ ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
+GDP_PPP_VALUE = {
+    "PL": 2120569,
+    "US": 31821293,
+    "DE": 6323531,
+    "FR": 4657190,
+    "CN": 43491520,
+}
 @dataclass
 class ScannerRow:
     market: str
@@ -30,6 +38,21 @@ class ScannerRow:
     chart_url: str | None = None
     python_command: str | None = None
     priority: str = "LOW"
+
+def _chart_command_for_row(row: ScannerRow) -> str:
+    ticker = (row.ticker or "").strip()
+    if not ticker:
+        return ""
+    if row.scanner == "ICHIMOKU":
+        return f"python run -c {ticker} --ichimoku-mode on"
+    if row.scanner == "FIBO":
+        incline = (row.dates.get("incline", "") or "").strip()
+        if "->" in incline:
+            start, end = [p.strip() for p in incline.split("->", 1)]
+            if start and end:
+                return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5"
+    return f"python run -c {ticker}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
@@ -42,6 +65,45 @@ def _scope_label(scope: str) -> str:
     s = scope.upper()
     flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️"}
     return f"{flags.get(s, '📊')} {s}"
+
+def _liquidity_legend_html() -> str:
+    base = GDP_PPP_VALUE["PL"]
+    multipliers = {
+        "WIG/PL": GDP_PPP_VALUE["PL"] / base,
+        "DAX/DE": GDP_PPP_VALUE["DE"] / base,
+        "US100/US": GDP_PPP_VALUE["US"] / base,
+    }
+    def _fmt(v: float) -> str:
+        return f"{v:,.0f}".replace(",", " ")
+    fibo_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(500000*m)} PLN" for k, m in multipliers.items()])
+    ichi_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(700000*m)} PLN" for k, m in multipliers.items()])
+    low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
+    return (
+        "<div class='legend muted'><b>Legenda (progi)</b><br>"
+        f"🟨 • Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}).<br>"
+        f"☁️ • Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}).<br>"
+        f"🧪 • Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2."
+        "</div>"
+    )
+
+def _liquidity_legend_text() -> str:
+    base = GDP_PPP_VALUE["PL"]
+    multipliers = {
+        "WIG/PL": GDP_PPP_VALUE["PL"] / base,
+        "DAX/DE": GDP_PPP_VALUE["DE"] / base,
+        "US100/US": GDP_PPP_VALUE["US"] / base,
+    }
+    def _fmt(v: float) -> str:
+        return f"{v:,.0f}".replace(",", " ")
+    fibo_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(500000*m)} PLN" for k, m in multipliers.items()])
+    ichi_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(700000*m)} PLN" for k, m in multipliers.items()])
+    low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
+    return (
+        "Legenda (progi): "
+        f"🟨 Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}). "
+        f"☁️ Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}). "
+        f"🧪 Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2.\n"
+    )
 
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
@@ -289,6 +351,18 @@ def _allsearch_report_stem(scopes: list[str]) -> str:
         return f"allsearch_latest_{normalized[0]}"
     return "allsearch_latest_" + "_".join(normalized)
 
+def _open_existing_allsearch_report(scope: str) -> int:
+    normalized = (scope or "all").strip().lower()
+    scopes = ["wig", "dax", "us100", "forex", "commodities"] if normalized == "all" else [normalized]
+    stem = _allsearch_report_stem(scopes)
+    report_html = ALL_REPORT_DIR / "allsearch" / f"{stem}.html"
+    if not report_html.exists():
+        print(f"[allsearch] report not found: {report_html}")
+        return 1
+    print(f"[allsearch] opening existing html report: {report_html}")
+    _open_html_report(report_html)
+    return 0
+
 def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
     if not source_md or not source_md.exists():
         return
@@ -322,7 +396,8 @@ def _safe_int(v: str, default: int = 0) -> int:
         return default
 
 def _open_html_report(path: Path) -> None:
-    file_url = path.resolve().as_uri()
+    report_url = _serve_report_locally(path)
+    file_url = report_url or path.resolve().as_uri()
     chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
     if chrome:
         try:
@@ -339,8 +414,51 @@ def _open_html_report(path: Path) -> None:
             return
         except Exception:
             pass
-    print(f"[allsearch] opening report via xdg-open: {path}")
-    subprocess.call(["xdg-open", str(path)])
+    print(f"[allsearch] opening report via xdg-open: {file_url}")
+    subprocess.call(["xdg-open", file_url])
+
+def _serve_report_locally(path: Path) -> str | None:
+    rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
+    report_url_path = "/".join(rel.parts)
+    host = "127.0.0.1"
+    candidate_ports = [8765, 8766, 8767, 8768, 8769]
+
+    def _healthy(base_url: str) -> bool:
+        try:
+            with urlopen(base_url, timeout=0.6) as resp:
+                return 200 <= int(getattr(resp, "status", 200)) < 500
+        except Exception:
+            return False
+
+    for port in candidate_ports:
+        base = f"http://{host}:{port}/"
+        if _healthy(base):
+            return f"http://{host}:{port}/{report_url_path}"
+        try:
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    str(PROJECT_ROOT / "utilities" / "report_server.py"),
+                    "--root",
+                    str(PROJECT_ROOT),
+                    "--project-root",
+                    str(PROJECT_ROOT),
+                    "--host",
+                    host,
+                    "--port",
+                    str(port),
+                ],
+                cwd=str(PROJECT_ROOT),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            continue
+        for _ in range(10):
+            if _healthy(base):
+                return f"http://{host}:{port}/{report_url_path}"
+    return None
 
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
@@ -486,7 +604,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs).</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
-    html_parts.append("<div class='legend muted'><b>Legenda (progi)</b><br>• Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju.<br>• Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju.<br>• Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</div>")
+    html_parts.append(_liquidity_legend_html())
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
@@ -513,7 +631,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             html_parts.append(f"<div class='subhead'>{html.escape(gname)} ({len(grows)}) <button class='iconbtn' title='Open all stooq links from this table' onclick='openTableStooqLinks(this)'>🔗</button></div><div style='overflow:auto'><table class='data'><thead>{thead}</thead><tbody>")
             for r in grows:
-                cmd = html.escape(r.python_command or "")
+                cmd = html.escape(_chart_command_for_row(r))
                 chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
                 if is_i1:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(r.metrics.get('avg10d',''))}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
@@ -525,7 +643,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}function runOrCopy(btn){const c=btn.dataset.cmd||'';const u='stockhelper://run?command='+encodeURIComponent(c);try{window.location.href=u;}catch(e){}copyCmd(btn);}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}function _openLinks(links){const uniq=[...new Set(links)];const opened=[];for(let i=0;i<uniq.length;i++){opened.push(window.open('about:blank','_blank'));}let blocked=0;for(let i=0;i<uniq.length;i++){const w=opened[i];if(w){w.location.href=uniq[i];}else{blocked++;}}if(blocked>0){alert('Browser blocked '+blocked+' tab(s). Allow popups for this page to open all links.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const anyVisibleRow=[...b.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
+    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}async function runOrCopy(btn){const c=btn.dataset.cmd||'';if(c){try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});btn.textContent='Executed';setTimeout(()=>btn.textContent='Run/Copy',1200);}catch(e){copyCmd(btn);}}else{copyCmd(btn);}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const anyVisibleRow=[...b.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 def _run_allsearch_combo(scopes: list[str]) -> int:
@@ -541,9 +659,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     report_html = report_dir / f"{stem}.html"
     report.write_text(
         "ALLSEARCH COMBO REPORT\n\n"
-        "Legenda (progi): Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. "
-        "Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. "
-        "Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.\n",
+        +
+        _liquidity_legend_text(),
         encoding="utf-8",
     )
 
@@ -584,6 +701,9 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     _build_html_report(scopes, report_html)
     print(f"\n[allsearch] combo report saved: {report}")
     print(f"[allsearch] html report saved: {report_html}")
+    reopen_scope = "all" if [s.lower() for s in scopes] == ["wig", "dax", "us100", "forex", "commodities"] else ",".join(scopes).lower()
+    print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
+    print(f"[allsearch] reopen html command: python run --open-allsearch-report {reopen_scope}")
     _open_html_report(report_html)
     if all_links:
         try:
@@ -635,6 +755,10 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
+    if batch == ["wig", "dax", "us100", "forex", "commodities"]:
+        print(f"[batch] reopen command: python run -{mode}_search all")
+    elif len(batch) == 1:
+        print(f"[batch] reopen command: python run -{mode}_search {batch[0]}")
     if ask_open_links and all_links:
         try: open_all=input('Czy otworzyć wszystkie linki? [y/N]: ').strip().lower()
         except EOFError: open_all='n'
@@ -648,6 +772,7 @@ def main()->int:
     parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
+    parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
@@ -657,6 +782,8 @@ def main()->int:
     parser.add_argument('--fibo-right', action='store_true')
     args=parser.parse_args()
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
+    if args.open_allsearch_report is not None:
+        return _open_existing_allsearch_report(args.open_allsearch_report)
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page
         raw = args.debug_stooq.strip(); upper_raw = raw.upper(); mapped = COMMODITY_STOOQ_MAP.get(upper_raw)

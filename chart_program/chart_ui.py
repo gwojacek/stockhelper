@@ -5,6 +5,7 @@ from uuid import uuid4
 import threading
 import time
 import webbrowser
+import socket
 from urllib.request import Request, urlopen
 
 import numpy as np
@@ -59,6 +60,13 @@ class ChartLevelSelectorUI:
         self.source_name = source_name
         self.source_provider = (source_provider or "unknown").upper()
         self.price_precision = 3 if instrument_type == "forex" else 2
+        self.server_port = self._pick_free_port()
+
+    @staticmethod
+    def _pick_free_port() -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            return int(s.getsockname()[1])
 
     def _precision_for_price(self, value: float | None = None) -> int:
         if value is None:
@@ -1041,7 +1049,7 @@ class ChartLevelSelectorUI:
                 self._finished = True
                 def trigger_shutdown():
                     try:
-                        req = Request("http://127.0.0.1:8050/shutdown", method="POST")
+                        req = Request(f"http://127.0.0.1:{self.server_port}/shutdown", method="POST")
                         urlopen(req, timeout=1)
                     except Exception:
                         pass
@@ -1068,8 +1076,8 @@ class ChartLevelSelectorUI:
             prevent_initial_call=False,
         )
 
-        threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:8050/")).start()
-        server = make_server("127.0.0.1", 8050, app.server, threaded=True, request_handler=QuietRequestHandler)
+        threading.Timer(0.8, lambda: webbrowser.open(f"http://127.0.0.1:{self.server_port}/")).start()
+        server = make_server("127.0.0.1", self.server_port, app.server, threaded=True, request_handler=QuietRequestHandler)
         server_holder["server"] = server
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
