@@ -1675,14 +1675,15 @@ def _print_fibo_results(
     rows1: list[FiboScanResult],
     rows2: list[FiboScanResult],
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] | None = None,
+    ichimoku_retest_by_key: dict[tuple[str, str, str, str], str] | None = None,
 ) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
-        print("-" * 185)
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'IchiRetest':<12} {'Link':<0}")
+        print("-" * 199)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
     if avg_turnover_10d_by_key:
@@ -1710,7 +1711,10 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
+        ichi_txt = '-'
+        if ichimoku_retest_by_key is not None:
+            ichi_txt = ichimoku_retest_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), '-')
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ichi_txt:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -1994,14 +1998,34 @@ def run_fibo_search(target: str) -> int:
         if (r.ticker, r.direction, r.incline_start_date, r.incline_end_date) not in rows2_keys
     ]
 
+    ichimoku_retest_by_ticker: dict[tuple[str, str], str] = {}
+    ichimoku_retest_by_key: dict[tuple[str, str, str, str], str] = {}
+    for r in rows1:
+        side = 'long' if r.direction == 'long' else 'short'
+        tk = (r.ticker, side)
+        if tk not in ichimoku_retest_by_ticker:
+            try:
+                _, _, flip, _, _ = _scan_one(r.ticker, group_name, exchange_suffix)
+                target_side = 'above' if side == 'long' else 'below'
+                if flip and flip.current_side == target_side:
+                    if flip.valid_retests_count > 0:
+                        ichimoku_retest_by_ticker[tk] = f"{flip.retest_status} ({flip.valid_retests_count})"
+                    else:
+                        ichimoku_retest_by_ticker[tk] = flip.retest_status
+                else:
+                    ichimoku_retest_by_ticker[tk] = 'no_flip_for_side'
+            except Exception:
+                ichimoku_retest_by_ticker[tk] = '-'
+        ichimoku_retest_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = ichimoku_retest_by_ticker[tk]
+
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
-    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
+    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,ichimoku_retest_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), '-'),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows1_md)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","IchiRetest","Link","Python command"],rows1_md)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows2_md, append=True)
 
-    links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key)
+    links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
     print(f"[fibo] md: {out_md}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
