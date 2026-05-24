@@ -1785,7 +1785,7 @@ def run_fibo_search(target: str) -> int:
             continue
         if r.status == "touched_61_8_no_pattern":
             continue
-        if r.direction == "long" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_61_8 <= r.current_close <= r.fib_23_6:
+        if r.direction == "long" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_61_8 <= r.current_close < r.fib_23_6:
             rows1.append(r)
             continue
         if r.direction == "short" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_23_6 <= r.current_close <= r.fib_61_8:

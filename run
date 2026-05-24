@@ -43,16 +43,18 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
         return ""
+    market = (row.market or "").upper()
+    instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market == "COMMODITIES" else "stock"))
     if row.scanner == "ICHIMOKU":
-        return f"python run -c {ticker} --ichimoku-mode on"
+        return f"python -m chart_program {ticker} --instrument {instrument} --ichimoku-mode on"
     if row.scanner == "FIBO":
         incline = (row.dates.get("incline", "") or "").strip()
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
-        return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5"
-    return f"python run -c {ticker}"
+                return f"python -m chart_program {ticker} --instrument {instrument} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        return f"python -m chart_program {ticker} --instrument {instrument} --ichimoku-mode off --fibo-lines 5"
+    return f"python -m chart_program {ticker} --instrument {instrument}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
