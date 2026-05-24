@@ -174,6 +174,8 @@ Behavior:
   - `python run -allsearch us100` -> `allsearch_latest_us100.md` + `allsearch_latest_us100.html`,
 - HTML report is auto-opened after generation,
 - HTML includes per-market grouped tables (`WYNIKI 1/2 ICHIMOKU`, `WYNIKI FIBO #1/#2`), search/filter, and sortable columns.
+- in HTML report, `stockhelper_chart` commands for **commodities** use mapped Stooq symbols (e.g. `COFFEE` -> `KC.F`) so chart opening works correctly,
+- PDF export button sets a date-based filename suggestion, e.g. `stockhelper_report_2026-05-24.pdf` (depends on browser print dialog behavior).
 
 If you want only one scanner:
 - Ichimoku only: `python run -ichimoku_search <scope>`
