@@ -30,6 +30,16 @@ class ScannerRow:
     chart_url: str | None = None
     python_command: str | None = None
     priority: str = "LOW"
+
+def _chart_command_for_row(row: ScannerRow) -> str:
+    ticker = (row.ticker or "").strip()
+    if not ticker:
+        return ""
+    if row.scanner == "ICHIMOKU":
+        return f"python run -c {ticker} --ichimoku-mode on"
+    if row.scanner == "FIBO":
+        return f"python run -c {ticker}"
+    return f"python run -c {ticker}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
@@ -543,7 +553,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             html_parts.append(f"<div class='subhead'>{html.escape(gname)} ({len(grows)}) <button class='iconbtn' title='Open all stooq links from this table' onclick='openTableStooqLinks(this)'>🔗</button></div><div style='overflow:auto'><table class='data'><thead>{thead}</thead><tbody>")
             for r in grows:
-                cmd = html.escape(r.python_command or "")
+                cmd = html.escape(_chart_command_for_row(r))
                 chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
                 if is_i1:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(r.metrics.get('avg10d',''))}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
