@@ -351,6 +351,18 @@ def _allsearch_report_stem(scopes: list[str]) -> str:
         return f"allsearch_latest_{normalized[0]}"
     return "allsearch_latest_" + "_".join(normalized)
 
+def _open_existing_allsearch_report(scope: str) -> int:
+    normalized = (scope or "all").strip().lower()
+    scopes = ["wig", "dax", "us100", "forex", "commodities"] if normalized == "all" else [normalized]
+    stem = _allsearch_report_stem(scopes)
+    report_html = ALL_REPORT_DIR / "allsearch" / f"{stem}.html"
+    if not report_html.exists():
+        print(f"[allsearch] report not found: {report_html}")
+        return 1
+    print(f"[allsearch] opening existing html report: {report_html}")
+    _open_html_report(report_html)
+    return 0
+
 def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
     if not source_md or not source_md.exists():
         return
@@ -690,7 +702,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     print(f"\n[allsearch] combo report saved: {report}")
     print(f"[allsearch] html report saved: {report_html}")
     reopen_scope = "all" if [s.lower() for s in scopes] == ["wig", "dax", "us100", "forex", "commodities"] else ",".join(scopes).lower()
-    print(f"[allsearch] reopen command: python run -allsearch {reopen_scope}")
+    print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
+    print(f"[allsearch] reopen html command: python run --open-allsearch-report {reopen_scope}")
     _open_html_report(report_html)
     if all_links:
         try:
@@ -759,6 +772,7 @@ def main()->int:
     parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
+    parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
@@ -768,6 +782,8 @@ def main()->int:
     parser.add_argument('--fibo-right', action='store_true')
     args=parser.parse_args()
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
+    if args.open_allsearch_report is not None:
+        return _open_existing_allsearch_report(args.open_allsearch_report)
     if args.debug_stooq:
         from utilities.stooq_playwright import debug_stooq_page
         raw = args.debug_stooq.strip(); upper_raw = raw.upper(); mapped = COMMODITY_STOOQ_MAP.get(upper_raw)
