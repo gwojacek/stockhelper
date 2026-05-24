@@ -17,6 +17,13 @@ ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
+GDP_PPP_VALUE = {
+    "PL": 2120569,
+    "US": 31821293,
+    "DE": 6323531,
+    "FR": 4657190,
+    "CN": 43491520,
+}
 @dataclass
 class ScannerRow:
     market: str
@@ -58,6 +65,45 @@ def _scope_label(scope: str) -> str:
     s = scope.upper()
     flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️"}
     return f"{flags.get(s, '📊')} {s}"
+
+def _liquidity_legend_html() -> str:
+    base = GDP_PPP_VALUE["PL"]
+    multipliers = {
+        "WIG/PL": GDP_PPP_VALUE["PL"] / base,
+        "DAX/DE": GDP_PPP_VALUE["DE"] / base,
+        "US100/US": GDP_PPP_VALUE["US"] / base,
+    }
+    def _fmt(v: float) -> str:
+        return f"{v:,.0f}".replace(",", " ")
+    fibo_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(500000*m)} PLN" for k, m in multipliers.items()])
+    ichi_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(700000*m)} PLN" for k, m in multipliers.items()])
+    low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
+    return (
+        "<div class='legend muted'><b>Legenda (progi)</b><br>"
+        f"• Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}).<br>"
+        f"• Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}).<br>"
+        f"• Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2."
+        "</div>"
+    )
+
+def _liquidity_legend_text() -> str:
+    base = GDP_PPP_VALUE["PL"]
+    multipliers = {
+        "WIG/PL": GDP_PPP_VALUE["PL"] / base,
+        "DAX/DE": GDP_PPP_VALUE["DE"] / base,
+        "US100/US": GDP_PPP_VALUE["US"] / base,
+    }
+    def _fmt(v: float) -> str:
+        return f"{v:,.0f}".replace(",", " ")
+    fibo_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(500000*m)} PLN" for k, m in multipliers.items()])
+    ichi_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(700000*m)} PLN" for k, m in multipliers.items()])
+    low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
+    return (
+        "Legenda (progi): "
+        f"Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}). "
+        f"Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}). "
+        f"Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2.\n"
+    )
 
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
@@ -546,7 +592,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs).</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
-    html_parts.append("<div class='legend muted'><b>Legenda (progi)</b><br>• Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju.<br>• Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju.<br>• Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</div>")
+    html_parts.append(_liquidity_legend_html())
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
@@ -601,9 +647,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     report_html = report_dir / f"{stem}.html"
     report.write_text(
         "ALLSEARCH COMBO REPORT\n\n"
-        "Legenda (progi): Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. "
-        "Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. "
-        "Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.\n",
+        +
+        _liquidity_legend_text(),
         encoding="utf-8",
     )
 
