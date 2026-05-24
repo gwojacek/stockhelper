@@ -764,6 +764,68 @@ def _print_results_with_links(results: list[ScanResult]) -> list[str]:
     return links
 
 
+def run_checkavg(target: str) -> int:
+    ticker = (target or "").strip()
+    if not ticker:
+        print("Usage: python run -checkavg <instrument>")
+        return 2
+
+    detected = detect_instrument_type(ticker, None)
+    instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+    fetch_symbol = ticker
+    if instrument == "commodity":
+        mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
+        if mapped:
+            fetch_symbol = str(mapped).upper()
+
+    try:
+        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+    except Exception as exc:
+        print(f"[checkavg] failed to load data for {ticker}: {exc}")
+        return 1
+
+    if "Close" not in df.columns or "Volume" not in df.columns:
+        print(f"[checkavg] missing Close/Volume for {ticker}")
+        return 1
+
+    turnover_native = pd.to_numeric(df["Close"], errors="coerce") * pd.to_numeric(df["Volume"], errors="coerce")
+    turnover_native = turnover_native.dropna()
+    if len(turnover_native) < 10:
+        print(f"[checkavg] insufficient turnover data for {ticker} (need >= 10 bars)")
+        return 1
+
+    source = str((meta or {}).get("source", "unknown")).lower()
+
+    try:
+        if instrument == "stock":
+            # Stooq often returns PL equities without country suffix (e.g. "BNP").
+            # In such case prices are already PLN, so do not apply USD->PLN multiplier.
+            has_suffix = "." in fetch_symbol
+            if source.startswith("stooq") and not has_suffix:
+                fx_to_pln = 1.0
+            else:
+                cc = _country_code_from_ticker(fetch_symbol)
+                country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
+                currency = country_to_currency.get(cc, "USD")
+                _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+                fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+        elif instrument == "forex":
+            fx_to_pln = 1.0
+        else:
+            try:
+                _, fx_to_pln = get_fx_to_pln_rate_yahoo("USD")
+                fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+            except Exception:
+                fx_to_pln = 1.0
+    except Exception:
+        fx_to_pln = 1.0
+
+    avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
+    print(f"[checkavg] instrument={instrument} ticker={ticker} fetch_symbol={fetch_symbol} source={source}")
+    print(f"[checkavg] Avg10d PLN: {avg_10d_pln:,.0f}")
+    return 0
+
+
 def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI 2 (po >=4 mies. po jednej stronie, potem wybicie i utrzymanie po drugiej):{ANSI_RESET}")
     if not flip_results:

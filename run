@@ -810,6 +810,7 @@ def main()->int:
     parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
+    parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
     parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
@@ -836,6 +837,8 @@ def main()->int:
         if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
         _enable_cache_only_if_recent(args.search_target, hours=6)
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
+    if args.checkavg_target:
+        from scanner_search import run_checkavg; return run_checkavg(args.checkavg_target)
     if args.allsearch_target:
         normalized = args.allsearch_target.strip().lower()
         if normalized == "all":
