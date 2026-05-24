@@ -481,9 +481,15 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
 
 
-def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
+def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = None) -> ScanResult | None:
     if len(df) < min_days + 2:
+        if debug_ticker:
+            _debug_log_scan(debug_ticker, f"qualifies failed: insufficient rows len={len(df)} required={min_days+2}")
         return None
+
+    def _qdbg(msg: str) -> None:
+        if debug_ticker:
+            _debug_log_scan(debug_ticker, msg)
 
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
@@ -498,6 +504,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
     close = df["Close"]
     current_side = "below" if close.iloc[-1] < bottom.iloc[-1] else "above" if close.iloc[-1] > top.iloc[-1] else "inside"
     if current_side not in {"below", "above"}:
+        _qdbg(f"qualifies failed: current_side={current_side} close={float(close.iloc[-1]):.4f} top={float(top.iloc[-1]):.4f} bottom={float(bottom.iloc[-1]):.4f}")
         return None
 
     respect_mask = below_respected if current_side == "below" else above_respected
@@ -509,6 +516,20 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
         else:
             break
     if run < min_days:
+        violating_idxs = [i for i, ok in enumerate(respect_mask.tolist()) if not ok]
+        first_violation = "-"
+        last_violation = "-"
+        if violating_idxs:
+            try:
+                first_violation = str(pd.to_datetime(df.iloc[violating_idxs[0]]["Date"]).date())
+                last_violation = str(pd.to_datetime(df.iloc[violating_idxs[-1]]["Date"]).date())
+            except Exception:
+                first_violation = str(violating_idxs[0])
+                last_violation = str(violating_idxs[-1])
+        _qdbg(
+            f"qualifies failed: current_side={current_side}, run={run} < min_days={min_days}, "
+            f"window_len={len(df)}, first_violation={first_violation}, last_violation={last_violation}"
+        )
         return None
 
     window_start = len(df) - run
@@ -535,6 +556,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80) -> ScanResult | None:
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - start_ts).days + 1) / 30.44
 
+    _qdbg(f"qualifies ok: current_side={current_side}, run={run}, start={start_ts.strftime('%Y-%m-%d')}, end={end_ts.strftime('%Y-%m-%d')}")
     return ScanResult(
         ticker="",
         side=current_side,
@@ -643,7 +665,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
         source_label = str((meta or {}).get("source", "unknown")).lower()
         enriched = _ichimoku(df)
-        result = _qualifies(enriched)
+        result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
         flip = _flip_after_long_respect(enriched)
         _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
         stock_liquidity_ok = True
