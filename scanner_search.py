@@ -746,13 +746,13 @@ def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
             pass
 
 
-def _print_results_with_links(results: list[ScanResult]) -> list[str]:
+def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI (instrumenty spełniające warunki):{ANSI_RESET}")
     if not results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Link':<0}")
-    print("-" * 140)
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest(W2)':<28} {'Link':<0}")
+    print("-" * 178)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
     links: list[str] = []
     for row in sorted_rows:
@@ -760,9 +760,11 @@ def _print_results_with_links(results: list[ScanResult]) -> list[str]:
         low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {ANSI_CYAN}{link}{ANSI_RESET}")
+        retest = "-"
+        if retest_by_ticker_side is not None:
+            retest = retest_by_ticker_side.get((row.ticker, row.side), "-")
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {retest:<28} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
-
 
 def run_checkavg(target: str) -> int:
     ticker = (target or "").strip()
@@ -1134,20 +1136,21 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
 
+        retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
         ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_md = _daily_report_path("search", group_name)
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", retest_by_ticker_side.get((row.ticker, row.side), "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest(W2)","Link","Python command"],
             rows_md,
             description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
         )
-        links_primary = _print_results_with_links(results)
+        links_primary = _print_results_with_links(results, retest_by_ticker_side)
         print(f"\nZapisano MD: {out_md}")
         print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
         links_flip = _print_flip_results_with_links(flip_results)
@@ -1236,6 +1239,7 @@ def run_ichimoku_search(target: str) -> int:
                 if flip:
                     flip_results.append(flip)
 
+    retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
     ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("search", group_name)
     rows_md = []
@@ -1245,12 +1249,12 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest(W2)","Link","Python command"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
     )
 
-    links_primary = _print_results_with_links(results)
+    links_primary = _print_results_with_links(results, retest_by_ticker_side)
     print(f"\nZapisano MD: {out_md}")
     print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
 
