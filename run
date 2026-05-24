@@ -294,8 +294,7 @@ def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
         return
     text = source_md.read_text(encoding="utf-8")
     with report.open("a", encoding="utf-8") as out:
-        out.write(f"\n### {header}\n")
-        out.write(text.strip() + "\n")
+        out.write("\n" + text.strip() + "\n")
 
 def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
     keys = _scope_file_keys(scope)
@@ -482,21 +481,21 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px}th{position:sticky;top:0;background:#f1f5f9}th,td{border-bottom:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
-    html_parts.append("<p class='muted'><b>Legenda (progi):</b> Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</p>")
+    html_parts.append("<div class='legend muted'><b>Legenda (progi)</b><br>• Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju.<br>• Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju.<br>• Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</div>")
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         if not mrows:
             html_parts.append("<p class='muted'>No scanner results for this market.</p></div>")
             continue
-        groups = [("FIBO Valid", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"]),
-                  ("Ichimoku Retest/Breakout", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
-                  ("FIBO Waiting", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
-                  ("Ichimoku Position", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"])]
+        groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
+                  ("WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
+                  ("WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
+                  ("WYNIKI FIBO #2 (valid formation, last 4 months)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
         for gname, grows in groups:
             if not grows:
                 continue
