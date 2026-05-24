@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, threading
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -322,7 +324,8 @@ def _safe_int(v: str, default: int = 0) -> int:
         return default
 
 def _open_html_report(path: Path) -> None:
-    file_url = path.resolve().as_uri()
+    report_url = _serve_report_locally(path)
+    file_url = report_url or path.resolve().as_uri()
     chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
     if chrome:
         try:
@@ -341,6 +344,52 @@ def _open_html_report(path: Path) -> None:
             pass
     print(f"[allsearch] opening report via xdg-open: {path}")
     subprocess.call(["xdg-open", str(path)])
+
+def _serve_report_locally(path: Path) -> str | None:
+    report_root = path.resolve().parent
+    report_name = path.name
+    class _StockHelperReportHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(report_root), **kwargs)
+        def log_message(self, fmt, *args):
+            return
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            if parsed.path == "/run-command":
+                qs = parse_qs(parsed.query)
+                command = (qs.get("command", [""])[0] or "").strip()
+                if not command:
+                    self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
+                try:
+                    subprocess.Popen(command, shell=True, cwd=str(PROJECT_ROOT))
+                    self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/open-links":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    links = payload.get("links") or []
+                    opened = 0
+                    for link in links:
+                        if isinstance(link, str) and link.startswith("http"):
+                            webbrowser.open_new_tab(link)
+                            opened += 1
+                    self.send_response(200); self.end_headers(); self.wfile.write(json.dumps({"opened": opened}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            self.send_response(404); self.end_headers()
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _StockHelperReportHandler)
+    except Exception:
+        return None
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    port = server.server_address[1]
+    return f"http://127.0.0.1:{port}/{report_name}"
 
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
@@ -525,7 +574,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}function runOrCopy(btn){const c=btn.dataset.cmd||'';const u='stockhelper://run?command='+encodeURIComponent(c);try{window.location.href=u;}catch(e){}copyCmd(btn);}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}function _openLinks(links){const uniq=[...new Set(links)];const opened=[];for(let i=0;i<uniq.length;i++){opened.push(window.open('about:blank','_blank'));}let blocked=0;for(let i=0;i<uniq.length;i++){const w=opened[i];if(w){w.location.href=uniq[i];}else{blocked++;}}if(blocked>0){alert('Browser blocked '+blocked+' tab(s). Allow popups for this page to open all links.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const anyVisibleRow=[...b.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
+    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}async function runOrCopy(btn){const c=btn.dataset.cmd||'';if(c){try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});btn.textContent='Executed';setTimeout(()=>btn.textContent='Run/Copy',1200);}catch(e){copyCmd(btn);}}else{copyCmd(btn);}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const anyVisibleRow=[...b.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 def _run_allsearch_combo(scopes: list[str]) -> int:
