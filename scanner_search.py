@@ -26,6 +26,12 @@ from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
+ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
+FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
+
+
+def _search_output_dir(prefix: str) -> Path:
+    return FIBO_SEARCH_OUTPUT_DIR if prefix.startswith("fibo") else ICHIMOKU_SEARCH_OUTPUT_DIR
 
 COMMODITIES_SEARCH_TICKERS = [
     "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
@@ -726,10 +732,10 @@ def _write_md_table(
 
 def _daily_report_path(prefix: str, group_name: str) -> Path:
     day = datetime.now(UTC).strftime("%Y%m%d")
-    return SEARCH_OUTPUT_DIR / f"{prefix}_{group_name.lower()}_{day}.md"
+    return _search_output_dir(prefix) / f"{prefix}_{group_name.lower()}_{day}.md"
 def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
     base = f"search_{group_name.lower()}_"
-    files = [p for p in SEARCH_OUTPUT_DIR.glob(f"{base}*.md") if p.is_file()]
+    files = [p for p in ICHIMOKU_SEARCH_OUTPUT_DIR.glob(f"{base}*.md") if p.is_file()]
     if len(files) <= keep_last:
         return
     files_sorted = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
@@ -1066,7 +1072,7 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
 
-        SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_md = _daily_report_path("search", group_name)
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
@@ -1168,7 +1174,7 @@ def run_ichimoku_search(target: str) -> int:
                 if flip:
                     flip_results.append(flip)
 
-    SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("search", group_name)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
@@ -1800,7 +1806,7 @@ def run_fibo_search(target: str) -> int:
             if err:
                 print(f"  pominięto ({err})")
             rows.extend(found)
-    SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
     rows2 = [

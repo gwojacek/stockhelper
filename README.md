@@ -137,7 +137,7 @@ python run -ichimoku_search ndx
 
 Scanner details:
 - supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
-- writes CSV outputs to `chart_program/data/search/`,
+- writes CSV outputs to `chart_program/data/search/ichimoku/` (Ichimoku) and `chart_program/data/search/fibo/` (Fibonacci),
 - prints **WYNIKI** and **WYNIKI 2** (flip results),
 - prints per-row Stooq chart links and can open all links after confirmation.
 
