@@ -483,7 +483,10 @@ def run_level_selector(raw_args=None):
                     x_end = e_ts
                 if pd.isna(x_right):
                     x_right = e_ts
-                extension = abs(x_end - x_start) * 3
+                span = abs(x_end - x_start)
+                if span == pd.Timedelta(0):
+                    span = pd.Timedelta(days=7)
+                extension = span * 3
                 x_common_end = x_right + extension if args.fibo_right else x_right
                 # Requested layout: 100, 0, 23.6, 38.2, 61.8
                 levels = [1.0, 0.0, 0.236, 0.382, 0.618][: max(1, min(args.fibo_lines, 5))]

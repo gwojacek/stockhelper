@@ -699,7 +699,10 @@ class ChartLevelSelectorUI:
                 fib_group_id = str(uuid4())
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
-                x_common_end = x_right + abs(x_end - x_start) * 3
+                span = abs(x_end - x_start)
+                if span == pd.Timedelta(0):
+                    span = pd.Timedelta(days=7)
+                x_common_end = x_right + span * 3
 
                 for r in retrace_levels:
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
@@ -709,6 +712,8 @@ class ChartLevelSelectorUI:
                     x_level_start = x_start + (x_end - x_start) * (1 - r)
                     if abs(r - 0.618) < 1e-9:
                         x_level_start = x_end
+                    if pd.isna(x_level_start):
+                        x_level_start = x_start
                     objects_store.append(
                         {
                             "id": str(uuid4()),

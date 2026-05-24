@@ -43,16 +43,23 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
         return ""
+    ticker_cmd = ticker
+    market = (row.market or "").upper()
+    if market == "COMMODITIES":
+        mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
+        if mapped:
+            ticker_cmd = str(mapped).upper()
+    instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market == "COMMODITIES" else "stock"))
     if row.scanner == "ICHIMOKU":
-        return f"python run -c {ticker} --ichimoku-mode on"
+        return f"python run -c {ticker_cmd} --ichimoku-mode on"
     if row.scanner == "FIBO":
         incline = (row.dates.get("incline", "") or "").strip()
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
-        return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5"
-    return f"python run -c {ticker}"
+                return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5"
+    return f"python run -c {ticker_cmd}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
@@ -380,7 +387,23 @@ def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         return False
     latest = max(candidates, key=lambda p: p.stat().st_mtime)
-    age_h = (datetime.now(UTC).timestamp() - latest.stat().st_mtime) / 3600.0
+    now_utc = datetime.now(UTC)
+    latest_dt = datetime.fromtimestamp(latest.stat().st_mtime, UTC)
+    age_h = (now_utc.timestamp() - latest.stat().st_mtime) / 3600.0
+    # Extra guardrails:
+    # 1) if a search finished in the last hour -> always use cache
+    # 2) if a search was completed today after 18:00 UTC ("market closed") -> cache for the rest of day
+    if age_h <= 1.0:
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        print(f"[cache-rule] {scope}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON (<=1h)")
+        return True
+    if latest_dt.date() == now_utc.date() and latest_dt.hour >= 18:
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        print(
+            f"[cache-rule] {scope}: last search today at {latest_dt.strftime('%H:%M UTC')} ({latest.name})"
+            " -> cache-only mode ON (after 18:00)"
+        )
+        return True
     if age_h <= float(hours):
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         print(f"[cache-rule] {scope}: last search {age_h:.2f}h ago ({latest.name}) -> cache-only mode ON")
@@ -394,6 +417,16 @@ def _safe_int(v: str, default: int = 0) -> int:
         return int(float(str(v or default).replace(",", "")))
     except Exception:
         return default
+
+def _format_avg10d_value(value: str) -> str:
+    txt = (value or "").strip()
+    if not txt or txt == "-":
+        return txt
+    try:
+        number = float(txt.replace(" ", "").replace(",", ""))
+    except Exception:
+        return txt
+    return f"{number:,.0f}".replace(",", ".")
 
 def _open_html_report(path: Path) -> None:
     report_url = _serve_report_locally(path)
@@ -602,22 +635,17 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                   "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
-    html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs).</p>")
+    html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
     html_parts.append(_liquidity_legend_html())
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
-        if not mrows:
-            html_parts.append("<p class='muted'>No scanner results for this market.</p></div>")
-            continue
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
                   ("WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
                   ("WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
                   ("WYNIKI FIBO #2 (valid formation, last 4 months)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
         for gname, grows in groups:
-            if not grows:
-                continue
             is_i1 = gname.startswith("WYNIKI 1 ICHIMOKU")
             is_i2 = gname.startswith("WYNIKI 2 ICHIMOKU")
             is_f1 = gname.startswith("WYNIKI FIBO #1")
@@ -629,12 +657,18 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             else:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
-            html_parts.append(f"<div class='subhead'>{html.escape(gname)} ({len(grows)}) <button class='iconbtn' title='Open all stooq links from this table' onclick='openTableStooqLinks(this)'>🔗</button></div><div style='overflow:auto'><table class='data'><thead>{thead}</thead><tbody>")
+            empty_cls = " empty-group" if not grows else ""
+            html_parts.append(f"<div class='subhead{empty_cls}' data-empty='{1 if not grows else 0}'>{html.escape(gname)} ({len(grows)}) <button class='iconbtn' title='Open all stooq links from this table' onclick='openTableStooqLinks(this)'>🔗</button></div><div style='overflow:auto'>")
+            if not grows:
+                html_parts.append("<div class='muted empty-table-msg'>Brak wyników.</div></div>")
+                continue
+            html_parts.append(f"<table class='data'><thead>{thead}</thead><tbody>")
             for r in grows:
                 cmd = html.escape(_chart_command_for_row(r))
                 chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
                 if is_i1:
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(r.metrics.get('avg10d',''))}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_i2:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_f1:
@@ -643,7 +677,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}async function runOrCopy(btn){const c=btn.dataset.cmd||'';if(c){try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});btn.textContent='Executed';setTimeout(()=>btn.textContent='Run/Copy',1200);}catch(e){copyCmd(btn);}}else{copyCmd(btn);}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const anyVisibleRow=[...b.querySelectorAll('tbody tr')].some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
+    html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}async function runOrCopy(btn){const c=btn.dataset.cmd||'';if(c){try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});btn.textContent='Executed';setTimeout(()=>btn.textContent='Run/Copy',1200);}catch(e){copyCmd(btn);}}else{copyCmd(btn);}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 def _run_allsearch_combo(scopes: list[str]) -> int:
@@ -667,34 +701,34 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     failures = 0
     csv_refs: list[Path] = []
     all_links: set[str] = set()
+    # Phase 1: run all Ichimoku scans first across all scopes.
+    print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
+    code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False)
+    if code_i != 0:
+        failures += 1
+
+    # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
+    print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
+    code_f = _run_batch_search("fibo", scopes, ask_open_links=False)
+    if code_f != 0:
+        failures += 1
+
+    ichimoku_md_by_scope: dict[str, Path | None] = {scope: _latest_scope_md("search", scope) for scope in scopes}
+    fibo_md_by_scope: dict[str, Path | None] = {scope: _latest_scope_md("fibo_search", scope) for scope in scopes}
+
+    # Final report sections: keep "table under table" grouped by scope.
     for scope in scopes:
         with report.open("a", encoding="utf-8") as out:
             out.write("\n\n" + _section_banner(f" {_scope_label(scope)} ", width=108, fill="■") + "\n")
-
-        print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
-        print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
-        _enable_cache_only_if_recent(scope, hours=6)
-        code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
-        main_ichimoku_md = _latest_scope_md("search", scope)
-        with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" ICHIMOKU ", width=96, fill="-") + "\n")
-        if main_ichimoku_md:
-            _append_md_sections(report, main_ichimoku_md, f"ICHIMOKU SOURCE ({main_ichimoku_md.name})")
-        if code_i != 0:
-            failures += 1
-
-        print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
-        print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
-        _enable_cache_only_if_recent(scope, hours=6)
-        code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
-        main_fibo_md = _latest_scope_md("fibo_search", scope)
+        md_i = ichimoku_md_by_scope.get(scope)
+        if md_i:
+            _append_md_sections(report, md_i, f"ICHIMOKU SOURCE ({md_i.name})")
         with report.open("a", encoding="utf-8") as out:
             out.write("\n" + _section_banner(" FIBO ", width=96, fill="-") + "\n")
-        if main_fibo_md:
-            _append_md_sections(report, main_fibo_md, f"FIBO SOURCE ({main_fibo_md.name})")
-        if code_f != 0:
-            failures += 1
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        md_f = fibo_md_by_scope.get(scope)
+        if md_f:
+            _append_md_sections(report, md_f, f"FIBO SOURCE ({md_f.name})")
 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
