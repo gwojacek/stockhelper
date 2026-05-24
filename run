@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, threading
-from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, socket
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -342,53 +340,36 @@ def _open_html_report(path: Path) -> None:
             return
         except Exception:
             pass
-    print(f"[allsearch] opening report via xdg-open: {path}")
-    subprocess.call(["xdg-open", str(path)])
+    print(f"[allsearch] opening report via xdg-open: {file_url}")
+    subprocess.call(["xdg-open", file_url])
 
 def _serve_report_locally(path: Path) -> str | None:
     report_root = path.resolve().parent
     report_name = path.name
-    class _StockHelperReportHandler(SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=str(report_root), **kwargs)
-        def log_message(self, fmt, *args):
-            return
-        def do_POST(self):
-            parsed = urlparse(self.path)
-            if parsed.path == "/run-command":
-                qs = parse_qs(parsed.query)
-                command = (qs.get("command", [""])[0] or "").strip()
-                if not command:
-                    self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
-                try:
-                    subprocess.Popen(command, shell=True, cwd=str(PROJECT_ROOT))
-                    self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
-                except Exception as exc:
-                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
-                return
-            if parsed.path == "/open-links":
-                try:
-                    ln = int(self.headers.get("content-length", "0") or "0")
-                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
-                    payload = json.loads(raw or "{}")
-                    links = payload.get("links") or []
-                    opened = 0
-                    for link in links:
-                        if isinstance(link, str) and link.startswith("http"):
-                            webbrowser.open_new_tab(link)
-                            opened += 1
-                    self.send_response(200); self.end_headers(); self.wfile.write(json.dumps({"opened": opened}).encode("utf-8"))
-                except Exception as exc:
-                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
-                return
-            self.send_response(404); self.end_headers()
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), _StockHelperReportHandler)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = int(sock.getsockname()[1])
+        subprocess.Popen(
+            [
+                sys.executable,
+                str(PROJECT_ROOT / "utilities" / "report_server.py"),
+                "--root",
+                str(report_root),
+                "--project-root",
+                str(PROJECT_ROOT),
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ],
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
     except Exception:
         return None
-    t = threading.Thread(target=server.serve_forever, daemon=True)
-    t.start()
-    port = server.server_address[1]
     return f"http://127.0.0.1:{port}/{report_name}"
 
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
