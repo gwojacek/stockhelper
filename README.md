@@ -151,6 +151,22 @@ python run -ichimoku_search wig_part2
 python run -ichimoku_search wig_part3
 ```
 
+### Quick liquidity check (`-checkavg`)
+
+You can quickly ask for the **Avg10d PLN** metric for a single instrument:
+
+```bash
+python run -checkavg ena
+python run -checkavg eurusd
+python run -checkavg gold
+```
+
+What it does:
+- auto-detects instrument type (stock / forex / commodity),
+- downloads/loads daily data,
+- calculates turnover (`Close * Volume`) for each day,
+- converts to PLN and prints `Avg10d PLN` from the last 10 bars.
+
 ### Combined scanner report (`-allsearch`)
 
 Use `-allsearch` to run a combined **Ichimoku + Fibonacci** scan and produce combined **MD + HTML** reports.
