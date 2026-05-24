@@ -2104,11 +2104,11 @@ def main() -> int:
     args = parser.parse_args()
     return run_ichimoku_search(args.target)
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
 ANSI_BOLD = "\033[1m"
 ANSI_GREEN = "\033[32m"
 ANSI_CYAN = "\033[36m"
 ANSI_YELLOW = "\033[33m"
 ANSI_RESET = "\033[0m"
+
+if __name__ == "__main__":
+    raise SystemExit(main())
