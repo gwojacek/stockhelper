@@ -153,7 +153,7 @@ python run -ichimoku_search wig_part3
 
 ### Combined scanner report (`-allsearch`)
 
-Use `-allsearch` to run a combined **Ichimoku + Fibonacci** scan and produce a single markdown report.
+Use `-allsearch` to run a combined **Ichimoku + Fibonacci** scan and produce combined **MD + HTML** reports.
 
 ```bash
 python run -allsearch all
@@ -168,7 +168,12 @@ Behavior:
 - `-allsearch` **always runs both** scanners (Ichimoku + Fibonacci) for the selected scope(s),
 - `-allsearch all` runs all major scopes: `wig`, `dax`, `us100`, `forex`, `commodities`,
 - per-scope outputs are written under `chart_program/data/all_insturments_search/`,
-- combined report is saved as `chart_program/data/all_insturments_search/allsearch/allsearch_latest.md`.
+- combined reports are saved under `chart_program/data/all_insturments_search/allsearch/`,
+- report filename is scope-aware:
+  - `python run -allsearch all` -> `allsearch_latest_all.md` + `allsearch_latest_all.html`,
+  - `python run -allsearch us100` -> `allsearch_latest_us100.md` + `allsearch_latest_us100.html`,
+- HTML report is auto-opened after generation,
+- HTML includes per-market grouped tables (`WYNIKI 1/2 ICHIMOKU`, `WYNIKI FIBO #1/#2`), search/filter, and sortable columns.
 
 If you want only one scanner:
 - Ichimoku only: `python run -ichimoku_search <scope>`
