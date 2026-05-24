@@ -1692,19 +1692,20 @@ def run_fibo_search(target: str) -> int:
                 if long_offset0 is None or long_offset0.status != "reached_23_6_waiting_for_61_8":
                     long_candidates = [c for c in long_candidates if c.status != "reached_23_6_waiting_for_61_8"]
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
-                # If multiple candidates end on the same impulse top, keep only the broadest leg
-                # (earliest start). This removes nested mini-impulses like 2026-04-16->2026-05-11
-                # when the proper formation is 2026-04-07->2026-05-11.
-                by_end: dict[str, FiboScanResult] = {}
-                for c in long_candidates:
-                    prev = by_end.get(c.incline_end_date)
-                    if prev is None or c.incline_start_date < prev.incline_start_date:
-                        by_end[c.incline_end_date] = c
-                long_candidates = list(by_end.values())
-                # Keep at most two distinct formations (e.g. bigger + recent smaller).
+                # Keep at most two distinct formations, preferring:
+                # 1) valid setups over waiting ones,
+                # 2) broader setups (earlier incline start),
+                # 3) newer setup ends.
+                # Do not collapse same-end candidates to only one broad leg: nested
+                # formations are useful and should be visible when they differ.
                 long_candidates = sorted(
                     long_candidates,
-                    key=lambda r: (r.status == "valid_reversal", r.incline_end_date, r.first_61_8_touch_date),
+                    key=lambda r: (
+                        r.status == "valid_reversal",
+                        r.incline_duration_days,
+                        r.incline_end_date,
+                        r.first_61_8_touch_date,
+                    ),
                     reverse=True,
                 )
                 seen_long: set[tuple[str, str]] = set()
@@ -1889,8 +1890,12 @@ def run_fibo_search(target: str) -> int:
         key=lambda r: (r.ticker, r.direction, r.incline_start_date, r.first_61_8_touch_date),
         reverse=False,
     )
-    rows2_keys = {(r.ticker, r.direction) for r in rows2}
-    rows1 = [r for r in rows1 if (r.ticker, r.direction) not in rows2_keys]
+    rows2_keys = {(r.ticker, r.direction, r.incline_start_date, r.incline_end_date) for r in rows2}
+    rows1 = [
+        r
+        for r in rows1
+        if (r.ticker, r.direction, r.incline_start_date, r.incline_end_date) not in rows2_keys
+    ]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
