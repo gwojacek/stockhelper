@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -322,27 +322,52 @@ def _safe_int(v: str, default: int = 0) -> int:
     except Exception:
         return default
 
+def _open_html_report(path: Path) -> None:
+    file_url = path.resolve().as_uri()
+    chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
+    if chrome:
+        try:
+            print(f"[allsearch] opening report (blocking window): {path}")
+            subprocess.call([chrome, "--new-window", "--app=" + file_url])
+            return
+        except Exception:
+            pass
+    firefox = shutil.which("firefox")
+    if firefox:
+        try:
+            print(f"[allsearch] opening report (blocking window): {path}")
+            subprocess.call([firefox, "--new-window", file_url])
+            return
+        except Exception:
+            pass
+    print(f"[allsearch] opening report via xdg-open: {path}")
+    subprocess.call(["xdg-open", str(path)])
+
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
         out: dict[str, list[dict[str, str]]] = {}
         if not md_path.exists():
             return out
         lines = md_path.read_text(encoding="utf-8").splitlines()
+        last_heading = ""
         i = 0
         while i < len(lines):
             line = lines[i].strip()
-            if line.startswith("### "):
-                title = line[4:].strip()
-                if i + 2 < len(lines) and lines[i + 1].strip().startswith("|") and lines[i + 2].strip().startswith("|"):
-                    headers = [h.strip() for h in lines[i + 1].strip().strip("|").split("|")]
+            if line.startswith("#"):
+                last_heading = line.lstrip("#").strip()
+            if i + 2 < len(lines) and lines[i].strip().startswith("|") and lines[i + 1].strip().startswith("|"):
+                headers = [h.strip() for h in lines[i].strip().strip("|").split("|")]
+                separator = [s.strip() for s in lines[i + 1].strip().strip("|").split("|")]
+                if headers and separator and all(set(s) <= {"-", ":"} and s for s in separator):
                     rows: list[dict[str, str]] = []
-                    j = i + 3
+                    j = i + 2
                     while j < len(lines) and lines[j].strip().startswith("|"):
                         vals = [v.strip() for v in lines[j].strip().strip("|").split("|")]
                         if len(vals) == len(headers):
                             rows.append({headers[k]: vals[k] for k in range(len(headers))})
                         j += 1
-                    out[title] = rows
+                    title = last_heading or "TABLE"
+                    out.setdefault(title, []).extend(rows)
                     i = j
                     continue
             i += 1
@@ -355,7 +380,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         f_md = _latest_scope_md("fibo_search", scope)
         i_tables = _parse_md_tables(i_md) if i_md else {}
         f_tables = _parse_md_tables(f_md) if f_md else {}
-        for r in i_tables.get("WYNIKI 2", []):
+        i_w2 = next((v for k, v in i_tables.items() if "WYNIKI 2" in k.upper()), [])
+        i_w1 = next((v for k, v in i_tables.items() if k.upper().strip() == "WYNIKI" or "WYNIKI 1" in k.upper()), [])
+        f_w2 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #2" in k.upper()), [])
+        f_w1 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #1" in k.upper()), [])
+        for r in i_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
@@ -363,7 +392,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 metrics={"months": str(r.get("Mies. od wybicia", "")), "retest_count": str(r.get("Retest count", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
-        for r in i_tables.get("WYNIKI", []):
+        for r in i_w1:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="position", ticker=t,
@@ -371,7 +400,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "low_th20": str(r.get("Low<Th20", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
             ))
-        for r in f_tables.get("WYNIKI FIBO #2 (valid formation, last 4 months)", []):
+        for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
                 market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal",
@@ -380,7 +409,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 metrics={"ratio": str(r.get("Ratio(d)", ""))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="HIGH"
             ))
-        for r in f_tables.get("WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", []):
+        for r in f_w1:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
                 market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")),
@@ -457,7 +486,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now(UTC).isoformat()}</p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
-    html_parts.append("<p class='muted'><b>Legenda (progi):</b> Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 20d (300000 PLN × mnożnik kraju) — nie więcej niż 2.</p>")
+    html_parts.append("<p class='muted'><b>Legenda (progi):</b> Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.</p>")
     html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select></p>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
@@ -489,7 +518,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
         "ALLSEARCH COMBO REPORT\n\n"
         "Legenda (progi): Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju. "
         "Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju. "
-        "Low<Th20: liczba dni z ostatnich 20 poniżej progu 20d (300000 PLN × mnożnik kraju) — nie więcej niż 2.\n",
+        "Low<Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju — nie może być więcej niż 2.\n",
         encoding="utf-8",
     )
 
@@ -530,6 +559,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     _build_html_report(scopes, report_html)
     print(f"\n[allsearch] combo report saved: {report}")
     print(f"[allsearch] html report saved: {report_html}")
+    _open_html_report(report_html)
     if all_links:
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
