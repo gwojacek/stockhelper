@@ -43,16 +43,24 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
         return ""
+    instrument = ""
+    market = (row.market or "").upper()
+    if market in {"COMMODITIES"}:
+        instrument = " --instrument commodity"
+    elif market in {"FOREX"}:
+        instrument = " --instrument forex"
+    elif market in {"WIG", "DAX", "US100"}:
+        instrument = " --instrument stock"
     if row.scanner == "ICHIMOKU":
-        return f"python run -c {ticker} --ichimoku-mode on"
+        return f"python run -c {ticker}{instrument} --ichimoku-mode on"
     if row.scanner == "FIBO":
         incline = (row.dates.get("incline", "") or "").strip()
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
-        return f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5"
-    return f"python run -c {ticker}"
+                return f"python run -c {ticker}{instrument} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        return f"python run -c {ticker}{instrument} --ichimoku-mode off --fibo-lines 5"
+    return f"python run -c {ticker}{instrument}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
@@ -411,6 +419,16 @@ def _safe_int(v: str, default: int = 0) -> int:
     except Exception:
         return default
 
+def _format_avg10d_value(value: str) -> str:
+    txt = (value or "").strip()
+    if not txt or txt == "-":
+        return txt
+    try:
+        number = float(txt.replace(" ", "").replace(",", ""))
+    except Exception:
+        return txt
+    return f"{number:,.0f}".replace(",", ".")
+
 def _open_html_report(path: Path) -> None:
     report_url = _serve_report_locally(path)
     file_url = report_url or path.resolve().as_uri()
@@ -650,7 +668,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 cmd = html.escape(_chart_command_for_row(r))
                 chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
                 if is_i1:
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(r.metrics.get('avg10d',''))}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_i2:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_f1:
@@ -684,31 +703,19 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     csv_refs: list[Path] = []
     all_links: set[str] = set()
     # Phase 1: run all Ichimoku scans first across all scopes.
-    ichimoku_md_by_scope: dict[str, Path | None] = {}
-    fibo_md_by_scope: dict[str, Path | None] = {}
-    for scope in scopes:
-        with report.open("a", encoding="utf-8") as out:
-            out.write("\n\n" + _section_banner(f" {_scope_label(scope)} ", width=108, fill="■") + "\n")
+    print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
+    code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False)
+    if code_i != 0:
+        failures += 1
 
-        print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
-        print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
-        _enable_cache_only_if_recent(scope, hours=6)
-        code_i = _run_batch_search("ichimoku", [scope], ask_open_links=False)
-        ichimoku_md_by_scope[scope] = _latest_scope_md("search", scope)
-        if code_i != 0:
-            failures += 1
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+    # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
+    print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
+    code_f = _run_batch_search("fibo", scopes, ask_open_links=False)
+    if code_f != 0:
+        failures += 1
 
-    # Phase 2: run all Fibo scans after Ichimoku is complete.
-    for scope in scopes:
-        print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
-        print(f"\033[1m\033[36m=== ALLSEARCH :: {scope.upper()} ===\033[0m")
-        _enable_cache_only_if_recent(scope, hours=6)
-        code_f = _run_batch_search("fibo", [scope], ask_open_links=False)
-        fibo_md_by_scope[scope] = _latest_scope_md("fibo_search", scope)
-        if code_f != 0:
-            failures += 1
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+    ichimoku_md_by_scope: dict[str, Path | None] = {scope: _latest_scope_md("search", scope) for scope in scopes}
+    fibo_md_by_scope: dict[str, Path | None] = {scope: _latest_scope_md("fibo_search", scope) for scope in scopes}
 
     # Final report sections: keep "table under table" grouped by scope.
     for scope in scopes:
