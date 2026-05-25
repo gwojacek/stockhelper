@@ -3,13 +3,7 @@ import math
 
 from core import DisplayHandler, calculator, risk_manager
 from strategies.base_strategy import BaseStrategy
-from utilities.yahoo_finance import (
-    get_avg_daily_turnover_yahoo,
-    get_daily_turnovers_yahoo,
-    get_fx_to_pln_rate_yahoo,
-    get_last_turnover_source,
-    get_symbol_currency_yahoo,
-)
+from chart_program.chart_loader import load_or_update_daily_data
 
 
 class StockStrategy(BaseStrategy):
@@ -66,28 +60,27 @@ class StockStrategy(BaseStrategy):
         self.turnover_data_source = "unknown"
 
         try:
-            avg_daily_turnover = get_avg_daily_turnover_yahoo(
-                self.config.symbol, period="10d"
+            df, _, meta = load_or_update_daily_data(
+                symbol=self.config.symbol,
+                instrument_type="stock",
+                persist=True,
             )
-            daily_turnovers_20d = get_daily_turnovers_yahoo(
-                self.config.symbol, period="20d"
-            )
-            self.stock_currency = get_symbol_currency_yahoo(self.config.symbol)
-            self.turnover_data_source = get_last_turnover_source()
-            self.currency_pair_used, self.fx_rate_to_pln = get_fx_to_pln_rate_yahoo(
-                self.stock_currency
-            )
-            if not math.isfinite(avg_daily_turnover) or avg_daily_turnover <= 0:
-                raise ValueError(
-                    f"Nieprawidłowy średni dzienny obrót z Yahoo: {avg_daily_turnover}"
-                )
-            if not math.isfinite(self.fx_rate_to_pln) or self.fx_rate_to_pln <= 0:
-                raise ValueError(
-                    f"Nieprawidłowy kurs FX do PLN z Yahoo: {self.fx_rate_to_pln}"
-                )
+            source = str((meta or {}).get("source", "unknown")).lower()
+            if source != "stooq":
+                raise ValueError(f"Expected stooq source, got: {source}")
+            turnover = (
+                df["Close"].astype(float) * df["Volume"].astype(float)
+            ).dropna()
+            if len(turnover) < 20:
+                raise ValueError("Insufficient turnover history from stooq (need >=20 bars)")
+            avg_daily_turnover = float(turnover.tail(10).mean())
+            daily_turnovers_20d = [float(v) for v in turnover.tail(20).tolist()]
+            self.turnover_data_source = "stooq"
+            self.currency_pair_used = "PLNPLN=X"
+            self.fx_rate_to_pln = 1.0
+            self.stock_currency = "PLN"
         except Exception as e:
-            print(f"Błąd podczas pobierania danych z Yahoo Finance: {e}")
-            # Fallback: użycie domyślnego średniego obrotu
+            print(f"Błąd podczas pobierania danych ze Stooq: {e}")
             avg_daily_turnover = 30000000
             daily_turnovers_20d = []
             self.currency_pair_used = "PLNPLN=X"
@@ -200,7 +193,7 @@ class StockStrategy(BaseStrategy):
         disp = DisplayHandler(self.config)
         header_symbol = getattr(self.config, "symbol", self.config.name).upper()
         disp.show_header(f"{header_symbol} Stock")
-        preferred_source = getattr(self.config, "market_data_source", None) or self.turnover_data_source
+        preferred_source = self.turnover_data_source or getattr(self.config, "market_data_source", None)
         if preferred_source:
             print(f"Data source: {preferred_source.capitalize()}")
         if self.stock_currency != "PLN":
