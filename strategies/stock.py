@@ -111,8 +111,16 @@ class StockStrategy(BaseStrategy):
 
         self.entry_pln = self.config.entry * self.pricing_fx_rate
         self.stop_loss_pln = self.config.stop_loss * self.pricing_fx_rate
-        self.high_pln = self.config.high * self.pricing_fx_rate
-        self.low_pln = self.config.low * self.pricing_fx_rate
+        self.high_pln = (
+            self.config.high * self.pricing_fx_rate
+            if self.config.high is not None
+            else None
+        )
+        self.low_pln = (
+            self.config.low * self.pricing_fx_rate
+            if self.config.low is not None
+            else None
+        )
 
         # Obliczenie max_capital jako 1% średniego dziennego obrotu
         self.config.max_capital = (avg_daily_turnover if use_native_currency else avg_daily_turnover_pln) * 0.01
@@ -160,7 +168,7 @@ class StockStrategy(BaseStrategy):
 
         self.profit = 0.0
         self.profit_pct = 0.0
-        if line_cross_value is not None:
+        if line_cross_value is not None and self.config.high is not None and self.config.low is not None:
             self.take_profit_display = risk_manager.calculate_take_profit(
                 self.config.entry,
                 self.config.high,
@@ -251,9 +259,14 @@ class StockStrategy(BaseStrategy):
             )
 
         if self.take_profit_display is None:
-            notes.append(
-                "Take Profit not calculated because line_cross_value is not set."
-            )
+            if getattr(self.config, "line_cross_value", None) is None:
+                notes.append(
+                    "Take Profit not calculated because line_cross_value is not set."
+                )
+            else:
+                notes.append(
+                    "Take Profit not calculated because high/low is not set."
+                )
             if notes:
                 print(f"\n{Fore.BLUE}--- Notes ---{Style.RESET_ALL}")
                 for note in notes:
