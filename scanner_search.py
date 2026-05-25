@@ -631,15 +631,18 @@ def _debug_log_scan(ticker: str, message: str) -> None:
 
 def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None:
     close = df["Close"]
+    body_high = df[["Open", "Close"]].max(axis=1)
+    body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
-    for i in range(len(df) - 1, 0, -1):
+    # breakout day = first cross+close to opposite side that is never body-invalidated later.
+    for i in range(1, len(df)):
         if current_side == "below":
             crossed = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
-            maintained = bool((close.iloc[i:] <= top.iloc[i:]).all())
+            maintained = bool((body_high.iloc[i:] <= top.iloc[i:]).all())
         else:
             crossed = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
-            maintained = bool((close.iloc[i:] >= bottom.iloc[i:]).all())
+            maintained = bool((body_low.iloc[i:] >= bottom.iloc[i:]).all())
         if crossed and maintained:
             return i
     return None
@@ -1214,7 +1217,7 @@ def run_ichimoku_search(target: str) -> int:
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies. od wybicia","Breakout day","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies. od wybicia","Breakout day","Close","Avg10d PLN","Low<Th20","Retest count","Retest date","Retest pattern","Link","Python command"],
             rows_md,
             description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
         )
@@ -1230,7 +1233,7 @@ def run_ichimoku_search(target: str) -> int:
         _write_md_table(
             out_md_flip,
             "WYNIKI 2",
-            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Retest date","Retest pattern","Link","Python command"],
             rows_flip_md,
             append=True,
             description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
@@ -1317,7 +1320,7 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies. od wybicia","Breakout day","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies. od wybicia","Breakout day","Close","Avg10d PLN","Low<Th20","Retest count","Retest date","Retest pattern","Link","Python command"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
     )
@@ -1336,7 +1339,7 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Retest date","Retest pattern","Link","Python command"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
