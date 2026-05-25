@@ -111,8 +111,9 @@ def get_daily_turnovers_yahoo(symbol: str, period: str = "20d") -> list[float]:
         hist = stock.history(period=period)
     if hist is None or hist.empty:
         raise ValueError(f"Brak danych dla symbolu {symbol}")
-    hist["AveragePrice"] = (hist["Open"] + hist["Close"] + hist["High"] + hist["Low"]) / 4
-    hist["DailyTurnover"] = hist["Volume"] * hist["AveragePrice"]
+    # Avg10d turnover should mirror exchange-style "średnie obroty" (daily traded value).
+    # Use Close * Volume consistently across app paths.
+    hist["DailyTurnover"] = hist["Volume"] * hist["Close"]
     return hist["DailyTurnover"].tolist()
 def get_avg_daily_turnover_yahoo(symbol: str, period: str = "10d") -> float:
     daily_turnovers = get_daily_turnovers_yahoo(symbol, period=period)
