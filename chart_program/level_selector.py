@@ -459,6 +459,7 @@ def run_level_selector(raw_args=None):
         persist=True,
         api_key=args.api_key,
         data_source=args.data_source,
+        fetch_older_data=True,
     )
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
 
