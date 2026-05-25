@@ -833,7 +833,7 @@ def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: 
     if not results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest(W2)':<28} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies. od wyb.':<12} {'Breakout day':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest(W2)':<28} {'Link':<0}")
     print("-" * 178)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
     links: list[str] = []
@@ -1214,7 +1214,7 @@ def run_ichimoku_search(target: str) -> int:
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Latest Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies. od wybicia","Breakout day","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
             rows_md,
             description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
         )
@@ -1317,7 +1317,7 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Latest Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies. od wybicia","Breakout day","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
     )
