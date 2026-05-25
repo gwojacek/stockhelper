@@ -924,7 +924,8 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     close = df["Close"]
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
-
+    body_high = df[["Open", "Close"]].max(axis=1)
+    body_low = df[["Open", "Close"]].min(axis=1)
 
     # Respect definitions match _qualifies:
     # - trend below: body may enter cloud, but cannot break above cloud top
