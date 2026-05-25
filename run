@@ -823,6 +823,7 @@ def main()->int:
     parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older 364-day window before current oldest cached date.')
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
+    parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
     args=parser.parse_args()
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
@@ -833,11 +834,17 @@ def main()->int:
                 return target
             candidates = [k.upper() for k, v in COMMODITY_STOOQ_MAP.items() if str(v).upper() == target]
             if not candidates:
-                return target
+                return target.replace("^", "")
             def _score(name: str) -> tuple[int, int, int, str]:
                 # Prefer allsearch-friendly symbols (no "/" and no dot), then shorter.
-                return (0 if "/" not in name else 1, 0 if "." not in name else 1, len(name), name)
+                return (0 if "/" not in name else 1, 0 if "." not in name else 1, 0 if "^" not in name else 1, len(name), name)
             return sorted(set(candidates), key=_score)[0]
+        def _dedup_key(instrument: str, symbol: str) -> tuple[str, str]:
+            s = (symbol or "").strip().upper()
+            if instrument == "commodity":
+                # Avoid duplicates like AEX.csv and ^AEX.csv in older-data fetch queue.
+                s = s.replace("^", "")
+            return instrument, s
         def _xdist_worker_slot() -> tuple[int, int] | None:
             if args.xdist_worker_index is not None and args.xdist_worker_count is not None:
                 idx = int(args.xdist_worker_index)
@@ -874,7 +881,10 @@ def main()->int:
                 if instrument == "commodity":
                     sym = _canonical_commodity_name_from_stooq_symbol(sym)
                 targets.append((instrument, sym))
-        targets = sorted(set(targets), key=lambda t: (0 if t[0] == "commodity" else 1 if t[0] == "stock" else 2, t[1]))
+        deduped: dict[tuple[str, str], tuple[str, str]] = {}
+        for instrument, symbol in targets:
+            deduped[_dedup_key(instrument, symbol)] = (instrument, symbol)
+        targets = sorted(deduped.values(), key=lambda t: (0 if t[0] == "commodity" else 1 if t[0] == "stock" else 2, t[1]))
         xslot = _xdist_worker_slot()
         if xslot:
             worker_idx, worker_total = xslot
@@ -887,7 +897,8 @@ def main()->int:
         if not targets:
             print("[fetch-older-data] No local CSV files found in data/* folders.")
             return 0
-        print(f"[fetch-older-data] Starting older-window fetch for {len(targets)} instruments.")
+        local_workers = max(1, int(args.fetch_workers or 1))
+        print(f"[fetch-older-data] Starting older-window fetch for {len(targets)} instruments (local_workers={local_workers}).")
         failures = 0
         data_dir_by_instrument = {
             "commodity": PROJECT_ROOT / "data" / "commodities",
@@ -910,7 +921,7 @@ def main()->int:
                 return d.date().isoformat()
             except Exception:
                 return "-"
-        for instrument, symbol in targets:
+        def _fetch_one(instrument: str, symbol: str) -> tuple[bool, str]:
             try:
                 original_csv_path = _csv_path_for_target(instrument, symbol)
                 oldest_before = _oldest_date_in_csv(original_csv_path)
@@ -921,10 +932,24 @@ def main()->int:
                     except Exception:
                         aim_date = "-"
                 df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
-                print(f"[fetch-older-data] ok {instrument}:{symbol} last_found_data={oldest_before} aim_date={aim_date} rows={len(df)} source={meta.get('source')} -> {csv_path}")
+                return True, f"[fetch-older-data] ok {instrument}:{symbol} last_found_data={oldest_before} aim_date={aim_date} rows={len(df)} source={meta.get('source')} -> {csv_path}"
             except Exception as exc:
-                failures += 1
-                print(f"[fetch-older-data] fail {instrument}:{symbol}: {exc}")
+                return False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
+        if local_workers == 1:
+            for instrument, symbol in targets:
+                ok, line = _fetch_one(instrument, symbol)
+                print(line)
+                if not ok:
+                    failures += 1
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
+                fut_map = {ex.submit(_fetch_one, instrument, symbol): (instrument, symbol) for instrument, symbol in targets}
+                for fut in as_completed(fut_map):
+                    ok, line = fut.result()
+                    print(line)
+                    if not ok:
+                        failures += 1
         return 1 if failures else 0
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.open_allsearch_report is not None:
