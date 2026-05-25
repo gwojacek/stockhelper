@@ -829,38 +829,25 @@ def main()->int:
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
         import pandas as pd
-        preferred_commodity_symbol_by_stooq = {
-            "XAUUSD": "XAUUSD",
-            "XAGUSD": "XAGUSD",
-            "XPDUSD": "XPDUSD",
-            "CL.F": "WTI",
-            "CB.F": "OIL",
-            "KC.F": "COFFEE",
-            "CC.F": "COCOA",
-            "SB.F": "SUGAR",
-            "ZW.F": "WHEAT",
-            "ZC.F": "CORN",
-            "HG.F": "COPPER",
-            "AL.F": "ALUMINIUM",
-        }
-        def _canonical_commodity_name_from_stooq_symbol(stooq_symbol: str) -> str:
-            target = (stooq_symbol or "").strip().upper()
-            if not target:
-                return target
-            if target in preferred_commodity_symbol_by_stooq:
-                return preferred_commodity_symbol_by_stooq[target]
-            candidates = [k.upper() for k, v in COMMODITY_STOOQ_MAP.items() if str(v).upper() == target]
-            if not candidates:
-                return target.replace("^", "")
-            def _score(name: str) -> tuple[int, int, int, str]:
-                # Prefer allsearch-friendly symbols (no "/" and no dot), then shorter.
-                return (0 if "/" not in name else 1, 0 if "." not in name else 1, 0 if "^" not in name else 1, len(name), name)
-            return sorted(set(candidates), key=_score)[0]
+        def _commodity_symbol_to_stooq_ticker(symbol: str) -> str:
+            raw = (symbol or "").strip().upper()
+            if not raw:
+                return raw
+            # Already stooq-like ticker in file naming style (e.g. CB_F).
+            if raw.endswith("_F"):
+                return raw.replace("_", ".")
+            # Already stooq ticker with dot.
+            if raw.endswith(".F"):
+                return raw
+            mapped = COMMODITY_STOOQ_MAP.get(raw)
+            if mapped:
+                return str(mapped).upper()
+            return raw.replace("^", "")
         def _dedup_key(instrument: str, symbol: str) -> tuple[str, str]:
             s = (symbol or "").strip().upper()
             if instrument == "commodity":
-                # Avoid duplicates like AEX.csv and ^AEX.csv in older-data fetch queue.
-                s = s.replace("^", "")
+                # Avoid duplicates like AEX.csv and ^AEX.csv and unify *.F ticker notation.
+                s = s.replace("^", "").replace("_", ".")
             return instrument, s
         def _xdist_worker_slot() -> tuple[int, int] | None:
             if args.xdist_worker_index is not None and args.xdist_worker_count is not None:
@@ -904,7 +891,7 @@ def main()->int:
             for p in sorted(folder.glob("*.csv")):
                 sym = p.stem.replace("_", ".").upper()
                 if instrument == "commodity":
-                    sym = _canonical_commodity_name_from_stooq_symbol(sym)
+                    sym = _commodity_symbol_to_stooq_ticker(sym)
                 targets.append((instrument, sym, p))
         deduped: dict[tuple[str, str], tuple[str, str, Path]] = {}
         for instrument, symbol, csv_path in targets:
