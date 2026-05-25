@@ -477,8 +477,10 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     low26 = out["Low"].rolling(26).min()
     out["tenkan"] = (high9 + low9) / 2
     out["kijun"] = (high26 + low26) / 2
-    span_a = ((out["tenkan"] + out["kijun"]) / 2).shift(26)
-    span_b = ((out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2).shift(26)
+    # For scanner breakout/retest logic we use cloud values aligned to the current candle.
+    # (No +26 forward displacement), so breakout day reflects trade-time signal candle.
+    span_a = (out["tenkan"] + out["kijun"]) / 2
+    span_b = (out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2
     out["cloud_top"] = pd.concat([span_a, span_b], axis=1).max(axis=1)
     out["cloud_bottom"] = pd.concat([span_a, span_b], axis=1).min(axis=1)
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
