@@ -826,6 +826,7 @@ def main()->int:
     args=parser.parse_args()
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
+        import pandas as pd
         def _canonical_commodity_name_from_stooq_symbol(stooq_symbol: str) -> str:
             target = (stooq_symbol or "").strip().upper()
             if not target:
@@ -888,10 +889,39 @@ def main()->int:
             return 0
         print(f"[fetch-older-data] Starting older-window fetch for {len(targets)} instruments.")
         failures = 0
+        data_dir_by_instrument = {
+            "commodity": PROJECT_ROOT / "data" / "commodities",
+            "stock": PROJECT_ROOT / "data" / "stocks",
+            "forex": PROJECT_ROOT / "data" / "forex",
+        }
+        def _csv_path_for_target(instrument: str, symbol: str) -> Path:
+            safe = (symbol or "").replace("/", "").replace(".", "_").upper()
+            return data_dir_by_instrument[instrument] / f"{safe}.csv"
+        def _oldest_date_in_csv(path: Path) -> str:
+            try:
+                if not path.exists():
+                    return "-"
+                df = pd.read_csv(path)
+                if "Date" not in df.columns or df.empty:
+                    return "-"
+                d = pd.to_datetime(df["Date"], errors="coerce").min()
+                if pd.isna(d):
+                    return "-"
+                return d.date().isoformat()
+            except Exception:
+                return "-"
         for instrument, symbol in targets:
             try:
+                original_csv_path = _csv_path_for_target(instrument, symbol)
+                oldest_before = _oldest_date_in_csv(original_csv_path)
+                aim_date = "-"
+                if oldest_before != "-":
+                    try:
+                        aim_date = (pd.Timestamp(oldest_before) - pd.Timedelta(days=364)).date().isoformat()
+                    except Exception:
+                        aim_date = "-"
                 df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
-                print(f"[fetch-older-data] ok {instrument}:{symbol} rows={len(df)} source={meta.get('source')} -> {csv_path}")
+                print(f"[fetch-older-data] ok {instrument}:{symbol} last_found_data={oldest_before} aim_date={aim_date} rows={len(df)} source={meta.get('source')} -> {csv_path}")
             except Exception as exc:
                 failures += 1
                 print(f"[fetch-older-data] fail {instrument}:{symbol}: {exc}")
