@@ -821,6 +821,7 @@ def main()->int:
     parser.add_argument('--fibo-anchor-end')
     parser.add_argument('--fibo-right', action='store_true')
     parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older 364-day window before current oldest cached date.')
+    parser.add_argument('--fetch-older-data-scope', choices=['all', 'commodities', 'stocks', 'forex'], default='all', help='Limit older-data fetch to one instrument group.')
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
@@ -828,10 +829,26 @@ def main()->int:
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
         import pandas as pd
+        preferred_commodity_symbol_by_stooq = {
+            "XAUUSD": "XAUUSD",
+            "XAGUSD": "XAGUSD",
+            "XPDUSD": "XPDUSD",
+            "CL.F": "WTI",
+            "CB.F": "OIL",
+            "KC.F": "COFFEE",
+            "CC.F": "COCOA",
+            "SB.F": "SUGAR",
+            "ZW.F": "WHEAT",
+            "ZC.F": "CORN",
+            "HG.F": "COPPER",
+            "AL.F": "ALUMINIUM",
+        }
         def _canonical_commodity_name_from_stooq_symbol(stooq_symbol: str) -> str:
             target = (stooq_symbol or "").strip().upper()
             if not target:
                 return target
+            if target in preferred_commodity_symbol_by_stooq:
+                return preferred_commodity_symbol_by_stooq[target]
             candidates = [k.upper() for k, v in COMMODITY_STOOQ_MAP.items() if str(v).upper() == target]
             if not candidates:
                 return target.replace("^", "")
@@ -873,7 +890,15 @@ def main()->int:
             return idx, total
         targets: list[tuple[str, str, Path]] = []
         # Keep commodities first (UI/table issues happen there most often).
-        for instrument, folder in [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]:
+        groups = [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
+        scope = (args.fetch_older_data_scope or "all").lower()
+        if scope == "commodities":
+            groups = [("commodity", PROJECT_ROOT / "data" / "commodities")]
+        elif scope == "stocks":
+            groups = [("stock", PROJECT_ROOT / "data" / "stocks")]
+        elif scope == "forex":
+            groups = [("forex", PROJECT_ROOT / "data" / "forex")]
+        for instrument, folder in groups:
             if not folder.exists():
                 continue
             for p in sorted(folder.glob("*.csv")):
