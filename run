@@ -550,7 +550,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="position", ticker=t,
                 status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))},
-                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "low_th20": str(r.get("Low<Th20", "")), "latest_retest_status": str(r.get("Latest Retest status", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", ""))},
+                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "low_th20": str(r.get("Low<Th20", "")), "latest_retest_count": str(r.get("Latest Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
             ))
         for r in f_w2:
@@ -595,7 +595,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                             status=status, dates={"start_date": str(r.get("start_date", "")), "flip_date": str(r.get("flip_date", ""))},
                             metrics={"candles": str(r.get("respect_days", "")), "months": str(r.get("respect_months", "")), "close": str(r.get("last_close", "")),
                                      "avg10d": str(r.get("avg_turnover_10d_pln", "")), "low_th20": str(r.get("below_threshold_days_20d", "")),
-                                     "latest_retest_status": str(r.get("latest_retest_status", "")), "latest_retest_date": str(r.get("last_valid_retest_pattern_date", "")), "latest_retest_pattern": str(r.get("last_valid_retest_pattern_name", ""))},
+                                     "latest_retest_count": str(r.get("latest_retest_count", "")), "latest_retest_date": str(r.get("last_valid_retest_pattern_date", "")), "latest_retest_pattern": str(r.get("last_valid_retest_pattern_name", ""))},
                             chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
                             python_command=f"python run -c {r.get('ticker','')}",
                             priority=prio))
@@ -654,7 +654,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             is_i2 = gname.startswith("WYNIKI 2 ICHIMOKU")
             is_f1 = gname.startswith("WYNIKI FIBO #1")
             if is_i1:
-                thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Low&lt;Th20</th><th>Latest Retest status</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Low&lt;Th20</th><th>Latest Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             elif is_i2:
                 thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             elif is_f1:
@@ -672,7 +672,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{html.escape(r.metrics.get('latest_retest_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('low_th20',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_i2:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_f1:
