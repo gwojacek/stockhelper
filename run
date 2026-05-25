@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re
 from urllib.request import urlopen
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
@@ -820,7 +820,171 @@ def main()->int:
     parser.add_argument('--fibo-anchor-start')
     parser.add_argument('--fibo-anchor-end')
     parser.add_argument('--fibo-right', action='store_true')
+    parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older 364-day window before current oldest cached date.')
+    parser.add_argument('--fetch-older-data-scope', choices=['all', 'commodities', 'stocks', 'forex'], default='all', help='Limit older-data fetch to one instrument group.')
+    parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
+    parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
+    parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
     args=parser.parse_args()
+    if args.fetch_older_data:
+        from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
+        import pandas as pd
+        def _commodity_symbol_to_stooq_ticker(symbol: str) -> str:
+            raw = (symbol or "").strip().upper()
+            if not raw:
+                return raw
+            # Already stooq-like ticker in file naming style (e.g. CB_F).
+            if raw.endswith("_F"):
+                return raw.replace("_", ".")
+            # Already stooq ticker with dot.
+            if raw.endswith(".F"):
+                return raw
+            mapped = COMMODITY_STOOQ_MAP.get(raw)
+            if mapped:
+                return str(mapped).upper()
+            return raw.replace("^", "")
+        def _dedup_key(instrument: str, symbol: str) -> tuple[str, str]:
+            s = (symbol or "").strip().upper()
+            if instrument == "commodity":
+                # Avoid duplicates like AEX.csv and ^AEX.csv and unify *.F ticker notation.
+                s = s.replace("^", "").replace("_", ".")
+            return instrument, s
+        def _xdist_worker_slot() -> tuple[int, int] | None:
+            if args.xdist_worker_index is not None and args.xdist_worker_count is not None:
+                idx = int(args.xdist_worker_index)
+                total = int(args.xdist_worker_count)
+                if total > 0 and 0 <= idx < total:
+                    return idx, total
+                return None
+
+            # pytest-xdist convention: PYTEST_XDIST_WORKER=gw0 and PYTEST_XDIST_WORKER_COUNT=<N>
+            worker = (os.getenv("PYTEST_XDIST_WORKER") or os.getenv("XDIST_WORKER") or "").strip()
+            total_raw = (os.getenv("PYTEST_XDIST_WORKER_COUNT") or os.getenv("XDIST_WORKER_COUNT") or "").strip()
+            if not worker:
+                return None
+            m = re.fullmatch(r"gw(\d+)", worker)
+            if not m:
+                return None
+            try:
+                idx = int(m.group(1))
+                total = int(total_raw) if total_raw else 0
+            except Exception:
+                return None
+            if total <= 0:
+                return None
+            if idx < 0 or idx >= total:
+                return None
+            return idx, total
+        targets: list[tuple[str, str, Path]] = []
+        # Keep commodities first (UI/table issues happen there most often).
+        groups = [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
+        scope = (args.fetch_older_data_scope or "all").lower()
+        if scope == "commodities":
+            groups = [("commodity", PROJECT_ROOT / "data" / "commodities")]
+        elif scope == "stocks":
+            groups = [("stock", PROJECT_ROOT / "data" / "stocks")]
+        elif scope == "forex":
+            groups = [("forex", PROJECT_ROOT / "data" / "forex")]
+        for instrument, folder in groups:
+            if not folder.exists():
+                continue
+            for p in sorted(folder.glob("*.csv")):
+                sym = p.stem.replace("_", ".").upper()
+                if instrument == "commodity":
+                    sym = _commodity_symbol_to_stooq_ticker(sym)
+                targets.append((instrument, sym, p))
+        deduped: dict[tuple[str, str], tuple[str, str, Path]] = {}
+        for instrument, symbol, csv_path in targets:
+            # Keep first discovered file as source of truth to avoid alias/duplicate csv paths.
+            deduped.setdefault(_dedup_key(instrument, symbol), (instrument, symbol, csv_path))
+        targets = sorted(deduped.values(), key=lambda t: (0 if t[0] == "commodity" else 1 if t[0] == "stock" else 2, t[1]))
+        xslot = _xdist_worker_slot()
+        if xslot:
+            worker_idx, worker_total = xslot
+            print(f"[fetch-older-data] xdist detected: workers_total={worker_total}, this_worker={worker_idx+1}")
+            sharded = [t for i, t in enumerate(targets) if i % worker_total == worker_idx]
+            print(f"[fetch-older-data] xdist shard active: worker={worker_idx+1}/{worker_total}, assigned={len(sharded)}/{len(targets)}")
+            targets = sharded
+        else:
+            print(
+                "[fetch-older-data] xdist not detected (single-worker mode). "
+                f"PYTEST_XDIST_WORKER={os.getenv('PYTEST_XDIST_WORKER','')!r} "
+                f"PYTEST_XDIST_WORKER_COUNT={os.getenv('PYTEST_XDIST_WORKER_COUNT','')!r} "
+                f"XDIST_WORKER={os.getenv('XDIST_WORKER','')!r} "
+                f"XDIST_WORKER_COUNT={os.getenv('XDIST_WORKER_COUNT','')!r}."
+            )
+            print("[fetch-older-data] Tip: run with pytest -n N or pass --xdist-worker-index/--xdist-worker-count explicitly.")
+        if not targets:
+            print("[fetch-older-data] No local CSV files found in data/* folders.")
+            return 0
+        local_workers = max(1, int(args.fetch_workers or 1))
+        print(f"[fetch-older-data] Starting older-window fetch for {len(targets)} instruments (local_workers={local_workers}).")
+        failures = 0
+        data_dir_by_instrument = {
+            "commodity": PROJECT_ROOT / "data" / "commodities",
+            "stock": PROJECT_ROOT / "data" / "stocks",
+            "forex": PROJECT_ROOT / "data" / "forex",
+        }
+        def _oldest_date_in_csv(path: Path) -> str:
+            try:
+                if not path.exists():
+                    return "-"
+                df = pd.read_csv(path)
+                if "Date" not in df.columns or df.empty:
+                    return "-"
+                d = pd.to_datetime(df["Date"], errors="coerce").min()
+                if pd.isna(d):
+                    return "-"
+                return d.date().isoformat()
+            except Exception:
+                return "-"
+        two_years_ago = (pd.Timestamp.utcnow().normalize() - pd.Timedelta(days=730)).date()
+        def _fetch_one(instrument: str, symbol: str, source_csv_path: Path) -> tuple[bool, str]:
+            try:
+                oldest_before = _oldest_date_in_csv(source_csv_path)
+                aim_date = "-"
+                if oldest_before != "-":
+                    try:
+                        oldest_before_date = pd.Timestamp(oldest_before).date()
+                        if oldest_before_date <= two_years_ago:
+                            return True, (
+                                f"[fetch-older-data] skip {instrument}:{symbol} "
+                                f"last_found_data={oldest_before} reason=already_have_2y_or_more"
+                            )
+                    except Exception:
+                        pass
+                if oldest_before != "-":
+                    try:
+                        aim_date = (pd.Timestamp(oldest_before) - pd.Timedelta(days=364)).date().isoformat()
+                    except Exception:
+                        aim_date = "-"
+                df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+                return True, (
+                    f"[fetch-older-data] ok {instrument}:{symbol} "
+                    f"last_found_data={oldest_before} aim_date={aim_date} "
+                    f"rows={len(df)} source={meta.get('source')} src_csv={source_csv_path} -> {csv_path}"
+                )
+            except Exception as exc:
+                return False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
+        if local_workers == 1:
+            for instrument, symbol, source_csv_path in targets:
+                ok, line = _fetch_one(instrument, symbol, source_csv_path)
+                print(line)
+                if not ok:
+                    failures += 1
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
+                fut_map = {
+                    ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
+                    for instrument, symbol, source_csv_path in targets
+                }
+                for fut in as_completed(fut_map):
+                    ok, line = fut.result()
+                    print(line)
+                    if not ok:
+                        failures += 1
+        return 1 if failures else 0
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.open_allsearch_report is not None:
         return _open_existing_allsearch_report(args.open_allsearch_report)

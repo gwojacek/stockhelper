@@ -453,20 +453,33 @@ def _merge_stooq_current_quote(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return _last_year_only(result)
 
 
-def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
-    end = datetime.now(timezone.utc).date()
-    start = end - timedelta(days=364)
+def _stooq_url(
+    symbol: str,
+    api_key: str | None = None,
+    param_name: str | None = None,
+    domain: str = "stooq.pl",
+    lookback_days: int = 364,
+    end_date: datetime | None = None,
+) -> str:
+    end = (end_date.date() if isinstance(end_date, datetime) else datetime.now(timezone.utc).date())
+    start = end - timedelta(days=lookback_days)
     query = {"s": symbol, "i": "d", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")}
     if api_key and param_name:
         query[param_name] = api_key
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
 
 
-def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> tuple[pd.DataFrame, str]:
+def _stooq_download(
+    symbol: str,
+    instrument_type: str,
+    api_key: str | None = None,
+    lookback_days: int = 364,
+    end_date: datetime | None = None,
+) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
         effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
-        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl")
+        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl", lookback_days=lookback_days, end_date=end_date)
 
         try:
             text = _download_text(url)
@@ -495,7 +508,7 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
-def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str, fetch_older_data: bool = False) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     def _incremental_lookback_days(csv_path: Path, default_days: int = 364) -> int:
         try:
             if not csv_path.exists():
@@ -510,11 +523,31 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             return max(30, min(default_days, int(days)))
         except Exception:
             return default_days
+    def _older_fetch_anchor(csv_path: Path) -> datetime | None:
+        try:
+            if not csv_path.exists():
+                return None
+            local_df = pd.read_csv(csv_path)
+            if "Date" not in local_df.columns or local_df.empty:
+                return None
+            oldest = pd.to_datetime(local_df["Date"], errors="coerce").min()
+            if pd.isna(oldest):
+                return None
+            return oldest.to_pydatetime()
+        except Exception:
+            return None
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
+    older_anchor = _older_fetch_anchor(DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv") if fetch_older_data else None
     if data_source == "stooq":
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        df, candidate = _stooq_download(
+            symbol,
+            instrument_type,
+            api_key=None if instrument_type == "commodity" else api_key,
+            lookback_days=364 if fetch_older_data else 364,
+            end_date=older_anchor,
+        )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
@@ -543,10 +576,12 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
-                symbol=symbol,
+                symbol=stooq_fetch_symbol,
                 csv_path=csv_path,
-                lookback_days=_incremental_lookback_days(csv_path),
+                lookback_days=364 if fetch_older_data else _incremental_lookback_days(csv_path),
+                end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=False,
             )
@@ -556,7 +591,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     primary_error = None
     try:
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+        df, candidate = _stooq_download(
+            symbol,
+            instrument_type,
+            api_key=api_key,
+            lookback_days=364,
+            end_date=older_anchor,
+        )
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
@@ -564,10 +605,12 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
-                symbol=symbol,
+                symbol=stooq_fetch_symbol,
                 csv_path=csv_path,
-                lookback_days=_incremental_lookback_days(csv_path),
+                lookback_days=364 if fetch_older_data else _incremental_lookback_days(csv_path),
+                end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=False,
             )
@@ -584,6 +627,7 @@ def load_or_update_daily_data(
     persist: bool = True,
     api_key: str | None = None,
     data_source: str = "auto",
+    fetch_older_data: bool = False,
 ) -> tuple[pd.DataFrame, Path, dict]:
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -601,7 +645,8 @@ def load_or_update_daily_data(
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     if cache_only and local is not None and not local.empty:
-        return _last_year_only(local), csv_path, {
+        cached_df = local if fetch_older_data else _last_year_only(local)
+        return cached_df, csv_path, {
             "source": "cache",
             "symbol": symbol,
             "name": symbol.title(),
@@ -609,10 +654,11 @@ def load_or_update_daily_data(
         }
 
     try:
-        remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source)
+        remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
     except ValueError:
         if local is not None and not local.empty:
-            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
+            cached_df = local if fetch_older_data else _last_year_only(local)
+            return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
         raise
 
     if local is not None and not local.empty:
@@ -622,7 +668,8 @@ def load_or_update_daily_data(
     else:
         merged = remote
 
-    merged = _last_year_only(merged)
+    if not fetch_older_data:
+        merged = _last_year_only(merged)
 
     if persist:
         merged.to_csv(csv_path, index=False)

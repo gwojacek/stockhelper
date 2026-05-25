@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 from pathlib import Path
 import pandas as pd
@@ -453,13 +454,23 @@ def run_level_selector(raw_args=None):
         existing["currency_conversion_fee_pct"] = float(existing.get("currency_conversion_fee_pct", 0.01) or 0.01)
         existing["__currency_fee_eligible__"] = _default_currency_conversion_fee(instrument_type, symbol)
 
-    df, data_path, fetch_info = load_or_update_daily_data(
-        symbol=symbol,
-        instrument_type=instrument_type,
-        persist=True,
-        api_key=args.api_key,
-        data_source=args.data_source,
-    )
+    prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+    try:
+        df, data_path, fetch_info = load_or_update_daily_data(
+            symbol=symbol,
+            instrument_type=instrument_type,
+            persist=True,
+            api_key=args.api_key,
+            data_source=args.data_source,
+            fetch_older_data=True,
+        )
+        fetch_info["source"] = "local_csv"
+    finally:
+        if prev_cache_only is None:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        else:
+            os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
 
     if args.fibo_lines and args.fibo_anchor_start and args.fibo_anchor_end:
