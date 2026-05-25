@@ -477,8 +477,23 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     low26 = out["Low"].rolling(26).min()
     out["tenkan"] = (high9 + low9) / 2
     out["kijun"] = (high26 + low26) / 2
-    # For scanner breakout/retest logic we use cloud values aligned to the current candle.
-    # (No +26 forward displacement), so breakout day reflects trade-time signal candle.
+    # Scanner qualification logic is calibrated to displaced cloud (+26).
+    span_a = ((out["tenkan"] + out["kijun"]) / 2).shift(26)
+    span_b = ((out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2).shift(26)
+    out["cloud_top"] = pd.concat([span_a, span_b], axis=1).max(axis=1)
+    out["cloud_bottom"] = pd.concat([span_a, span_b], axis=1).min(axis=1)
+    return out.dropna(subset=["cloud_top", "cloud_bottom"])
+
+
+def _ichimoku_signal(df: pd.DataFrame) -> pd.DataFrame:
+    """Current-candle cloud (no +26 shift) used only for breakout-day/retest metadata."""
+    out = df.copy()
+    high9 = out["High"].rolling(9).max()
+    low9 = out["Low"].rolling(9).min()
+    high26 = out["High"].rolling(26).max()
+    low26 = out["Low"].rolling(26).min()
+    out["tenkan"] = (high9 + low9) / 2
+    out["kijun"] = (high26 + low26) / 2
     span_a = (out["tenkan"] + out["kijun"]) / 2
     span_b = (out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2
     out["cloud_top"] = pd.concat([span_a, span_b], axis=1).max(axis=1)
@@ -711,6 +726,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
         source_label = str((meta or {}).get("source", "unknown")).lower()
         enriched = _ichimoku(df)
+        signal_view = _ichimoku_signal(df)
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
         flip = _flip_after_long_respect(enriched)
         _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
@@ -725,14 +741,14 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         if result:
             result.ticker = ticker
             bidx = _find_latest_breakout_idx(
-                enriched,
+                signal_view,
                 result.side,
                 ticker if _debug_enabled_for(ticker) else None,
             )
             if bidx is not None:
-                result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
+                result.start_date = pd.to_datetime(signal_view.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
                 _debug_log_scan(ticker, f"selected breakout idx={bidx} date={result.start_date} side={result.side}")
-                rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side)
+                rc, rd, rp = _retest_meta_for_side(signal_view, bidx, result.side)
                 result.retest_count = rc
                 result.latest_retest_date = rd
                 result.latest_retest_pattern = rp
