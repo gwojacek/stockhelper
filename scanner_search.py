@@ -1006,6 +1006,8 @@ def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: f
 
 
 def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+    body_high = df[["Open", "Close"]].max(axis=1)
+    body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     post = range(flip_idx + 1, len(df))
