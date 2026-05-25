@@ -820,6 +820,10 @@ def run_checkavg(target: str) -> int:
         mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
         if mapped:
             fetch_symbol = str(mapped).upper()
+    elif instrument == "stock":
+        # Keep parity with stock analysis path: short raw tickers default to Warsaw suffix.
+        if "." not in fetch_symbol and len(fetch_symbol) <= 5:
+            fetch_symbol = f"{fetch_symbol}.WA"
 
     source = "unknown"
     try:
