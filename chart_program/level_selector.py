@@ -465,6 +465,7 @@ def run_level_selector(raw_args=None):
             data_source=args.data_source,
             fetch_older_data=True,
         )
+        fetch_info["source"] = "local_csv"
     finally:
         if prev_cache_only is None:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
