@@ -627,7 +627,7 @@ def _debug_log_scan(ticker: str, message: str) -> None:
 
 
 
-def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None:
+def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str, debug_ticker: str | None = None) -> int | None:
     close = df["Close"]
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
@@ -640,6 +640,11 @@ def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None
             if not on_side:
                 continue
             future_ok = bool((close.iloc[i:] <= (top.iloc[i:] * (1 + tol))).all())
+            if debug_ticker:
+                _debug_log_scan(
+                    debug_ticker,
+                    f"breakout-candidate below i={i} date={pd.to_datetime(df.iloc[i]['Date']).strftime('%Y-%m-%d')} close={close.iloc[i]:.4f} top={top.iloc[i]:.4f} bottom={bottom.iloc[i]:.4f} future_ok={future_ok}",
+                )
             if future_ok:
                 return i
     else:
@@ -648,6 +653,11 @@ def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None
             if not on_side:
                 continue
             future_ok = bool((close.iloc[i:] >= (bottom.iloc[i:] * (1 - tol))).all())
+            if debug_ticker:
+                _debug_log_scan(
+                    debug_ticker,
+                    f"breakout-candidate above i={i} date={pd.to_datetime(df.iloc[i]['Date']).strftime('%Y-%m-%d')} close={close.iloc[i]:.4f} top={top.iloc[i]:.4f} bottom={bottom.iloc[i]:.4f} future_ok={future_ok}",
+                )
             if future_ok:
                 return i
     return None
@@ -712,9 +722,14 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
             _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
             result.ticker = ticker
-            bidx = _find_latest_breakout_idx(enriched, result.side)
+            bidx = _find_latest_breakout_idx(
+                enriched,
+                result.side,
+                ticker if _debug_enabled_for(ticker) else None,
+            )
             if bidx is not None:
                 result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
+                _debug_log_scan(ticker, f"selected breakout idx={bidx} date={result.start_date} side={result.side}")
                 rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side)
                 result.retest_count = rc
                 result.latest_retest_date = rd
