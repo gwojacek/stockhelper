@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re
 from urllib.request import urlopen
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
@@ -824,6 +824,25 @@ def main()->int:
     args=parser.parse_args()
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
+        def _xdist_worker_slot() -> tuple[int, int] | None:
+            # pytest-xdist convention: PYTEST_XDIST_WORKER=gw0 and PYTEST_XDIST_WORKER_COUNT=<N>
+            worker = (os.getenv("PYTEST_XDIST_WORKER") or "").strip()
+            total_raw = (os.getenv("PYTEST_XDIST_WORKER_COUNT") or "").strip()
+            if not worker:
+                return None
+            m = re.fullmatch(r"gw(\d+)", worker)
+            if not m:
+                return None
+            try:
+                idx = int(m.group(1))
+                total = int(total_raw) if total_raw else 0
+            except Exception:
+                return None
+            if total <= 0:
+                return None
+            if idx < 0 or idx >= total:
+                return None
+            return idx, total
         targets: list[tuple[str, str]] = []
         for instrument, folder in [("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex"), ("commodity", PROJECT_ROOT / "data" / "commodities")]:
             if not folder.exists():
@@ -834,6 +853,13 @@ def main()->int:
                     reverse_map = {str(v).upper(): k for k, v in COMMODITY_STOOQ_MAP.items()}
                     sym = reverse_map.get(sym, sym)
                 targets.append((instrument, sym))
+        targets = sorted(set(targets), key=lambda t: (t[0], t[1]))
+        xslot = _xdist_worker_slot()
+        if xslot:
+            worker_idx, worker_total = xslot
+            sharded = [t for i, t in enumerate(targets) if i % worker_total == worker_idx]
+            print(f"[fetch-older-data] xdist shard active: worker={worker_idx+1}/{worker_total}, assigned={len(sharded)}/{len(targets)}")
+            targets = sharded
         if not targets:
             print("[fetch-older-data] No local CSV files found in data/* folders.")
             return 0
