@@ -1148,7 +1148,16 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "evening_doji_star"))
             for pattern_idx, formation in sorted(set(pattern_candidates), key=lambda x: x[0]):
                 pattern_abs = w_start + pattern_idx
-                local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
+                reaction_start = min(cycle_start, pattern_abs)
+                reaction_end = max(cycle_start, pattern_abs)
+                reaction_window = df.iloc[reaction_start:reaction_end + 1]
+                if reaction_window.empty:
+                    continue
+                local_reaction_abs = (
+                    int(reaction_window["Low"].idxmin())
+                    if current_side == "above"
+                    else int(reaction_window["High"].idxmax())
+                )
                 if pattern_abs - local_reaction_abs >= 2:
                     found_too_late = True
                     continue
