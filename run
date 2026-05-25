@@ -893,7 +893,14 @@ def main()->int:
             print(f"[fetch-older-data] xdist shard active: worker={worker_idx+1}/{worker_total}, assigned={len(sharded)}/{len(targets)}")
             targets = sharded
         else:
-            print("[fetch-older-data] xdist not detected (single-worker mode).")
+            print(
+                "[fetch-older-data] xdist not detected (single-worker mode). "
+                f"PYTEST_XDIST_WORKER={os.getenv('PYTEST_XDIST_WORKER','')!r} "
+                f"PYTEST_XDIST_WORKER_COUNT={os.getenv('PYTEST_XDIST_WORKER_COUNT','')!r} "
+                f"XDIST_WORKER={os.getenv('XDIST_WORKER','')!r} "
+                f"XDIST_WORKER_COUNT={os.getenv('XDIST_WORKER_COUNT','')!r}."
+            )
+            print("[fetch-older-data] Tip: run with pytest -n N or pass --xdist-worker-index/--xdist-worker-count explicitly.")
         if not targets:
             print("[fetch-older-data] No local CSV files found in data/* folders.")
             return 0
@@ -921,11 +928,22 @@ def main()->int:
                 return d.date().isoformat()
             except Exception:
                 return "-"
+        two_years_ago = (pd.Timestamp.utcnow().normalize() - pd.Timedelta(days=730)).date()
         def _fetch_one(instrument: str, symbol: str) -> tuple[bool, str]:
             try:
                 original_csv_path = _csv_path_for_target(instrument, symbol)
                 oldest_before = _oldest_date_in_csv(original_csv_path)
                 aim_date = "-"
+                if oldest_before != "-":
+                    try:
+                        oldest_before_date = pd.Timestamp(oldest_before).date()
+                        if oldest_before_date <= two_years_ago:
+                            return True, (
+                                f"[fetch-older-data] skip {instrument}:{symbol} "
+                                f"last_found_data={oldest_before} reason=already_have_2y_or_more"
+                            )
+                    except Exception:
+                        pass
                 if oldest_before != "-":
                     try:
                         aim_date = (pd.Timestamp(oldest_before) - pd.Timedelta(days=364)).date().isoformat()
