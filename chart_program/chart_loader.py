@@ -453,20 +453,33 @@ def _merge_stooq_current_quote(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return _last_year_only(result)
 
 
-def _stooq_url(symbol: str, api_key: str | None = None, param_name: str | None = None, domain: str = "stooq.pl") -> str:
-    end = datetime.now(timezone.utc).date()
-    start = end - timedelta(days=364)
+def _stooq_url(
+    symbol: str,
+    api_key: str | None = None,
+    param_name: str | None = None,
+    domain: str = "stooq.pl",
+    lookback_days: int = 364,
+    end_date: datetime | None = None,
+) -> str:
+    end = (end_date.date() if isinstance(end_date, datetime) else datetime.now(timezone.utc).date())
+    start = end - timedelta(days=lookback_days)
     query = {"s": symbol, "i": "d", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")}
     if api_key and param_name:
         query[param_name] = api_key
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
 
 
-def _stooq_download(symbol: str, instrument_type: str, api_key: str | None = None) -> tuple[pd.DataFrame, str]:
+def _stooq_download(
+    symbol: str,
+    instrument_type: str,
+    api_key: str | None = None,
+    lookback_days: int = 364,
+    end_date: datetime | None = None,
+) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
         effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
-        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl")
+        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl", lookback_days=lookback_days, end_date=end_date)
 
         try:
             text = _download_text(url)
@@ -526,8 +539,15 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
+    older_anchor = _older_fetch_anchor(DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv") if fetch_older_data else None
     if data_source == "stooq":
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=None if instrument_type == "commodity" else api_key)
+        df, candidate = _stooq_download(
+            symbol,
+            instrument_type,
+            api_key=None if instrument_type == "commodity" else api_key,
+            lookback_days=364 if fetch_older_data else 364,
+            end_date=older_anchor,
+        )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
@@ -571,7 +591,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     primary_error = None
     try:
-        df, candidate = _stooq_download(symbol, instrument_type, api_key=api_key)
+        df, candidate = _stooq_download(
+            symbol,
+            instrument_type,
+            api_key=api_key,
+            lookback_days=364,
+            end_date=older_anchor,
+        )
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
