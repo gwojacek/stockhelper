@@ -877,9 +877,12 @@ def main()->int:
         xslot = _xdist_worker_slot()
         if xslot:
             worker_idx, worker_total = xslot
+            print(f"[fetch-older-data] xdist detected: workers_total={worker_total}, this_worker={worker_idx+1}")
             sharded = [t for i, t in enumerate(targets) if i % worker_total == worker_idx]
             print(f"[fetch-older-data] xdist shard active: worker={worker_idx+1}/{worker_total}, assigned={len(sharded)}/{len(targets)}")
             targets = sharded
+        else:
+            print("[fetch-older-data] xdist not detected (single-worker mode).")
         if not targets:
             print("[fetch-older-data] No local CSV files found in data/* folders.")
             return 0
