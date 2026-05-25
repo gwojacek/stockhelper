@@ -821,6 +821,8 @@ def main()->int:
     parser.add_argument('--fibo-anchor-end')
     parser.add_argument('--fibo-right', action='store_true')
     parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older 364-day window before current oldest cached date.')
+    parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
+    parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     args=parser.parse_args()
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
@@ -836,9 +838,16 @@ def main()->int:
                 return (0 if "/" not in name else 1, 0 if "." not in name else 1, len(name), name)
             return sorted(set(candidates), key=_score)[0]
         def _xdist_worker_slot() -> tuple[int, int] | None:
+            if args.xdist_worker_index is not None and args.xdist_worker_count is not None:
+                idx = int(args.xdist_worker_index)
+                total = int(args.xdist_worker_count)
+                if total > 0 and 0 <= idx < total:
+                    return idx, total
+                return None
+
             # pytest-xdist convention: PYTEST_XDIST_WORKER=gw0 and PYTEST_XDIST_WORKER_COUNT=<N>
-            worker = (os.getenv("PYTEST_XDIST_WORKER") or "").strip()
-            total_raw = (os.getenv("PYTEST_XDIST_WORKER_COUNT") or "").strip()
+            worker = (os.getenv("PYTEST_XDIST_WORKER") or os.getenv("XDIST_WORKER") or "").strip()
+            total_raw = (os.getenv("PYTEST_XDIST_WORKER_COUNT") or os.getenv("XDIST_WORKER_COUNT") or "").strip()
             if not worker:
                 return None
             m = re.fullmatch(r"gw(\d+)", worker)
@@ -855,7 +864,8 @@ def main()->int:
                 return None
             return idx, total
         targets: list[tuple[str, str]] = []
-        for instrument, folder in [("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex"), ("commodity", PROJECT_ROOT / "data" / "commodities")]:
+        # Keep commodities first (UI/table issues happen there most often).
+        for instrument, folder in [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]:
             if not folder.exists():
                 continue
             for p in sorted(folder.glob("*.csv")):
@@ -863,7 +873,7 @@ def main()->int:
                 if instrument == "commodity":
                     sym = _canonical_commodity_name_from_stooq_symbol(sym)
                 targets.append((instrument, sym))
-        targets = sorted(set(targets), key=lambda t: (t[0], t[1]))
+        targets = sorted(set(targets), key=lambda t: (0 if t[0] == "commodity" else 1 if t[0] == "stock" else 2, t[1]))
         xslot = _xdist_worker_slot()
         if xslot:
             worker_idx, worker_total = xslot
