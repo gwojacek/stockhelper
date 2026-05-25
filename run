@@ -871,7 +871,7 @@ def main()->int:
             if idx < 0 or idx >= total:
                 return None
             return idx, total
-        targets: list[tuple[str, str]] = []
+        targets: list[tuple[str, str, Path]] = []
         # Keep commodities first (UI/table issues happen there most often).
         for instrument, folder in [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]:
             if not folder.exists():
@@ -880,10 +880,11 @@ def main()->int:
                 sym = p.stem.replace("_", ".").upper()
                 if instrument == "commodity":
                     sym = _canonical_commodity_name_from_stooq_symbol(sym)
-                targets.append((instrument, sym))
-        deduped: dict[tuple[str, str], tuple[str, str]] = {}
-        for instrument, symbol in targets:
-            deduped[_dedup_key(instrument, symbol)] = (instrument, symbol)
+                targets.append((instrument, sym, p))
+        deduped: dict[tuple[str, str], tuple[str, str, Path]] = {}
+        for instrument, symbol, csv_path in targets:
+            # Keep first discovered file as source of truth to avoid alias/duplicate csv paths.
+            deduped.setdefault(_dedup_key(instrument, symbol), (instrument, symbol, csv_path))
         targets = sorted(deduped.values(), key=lambda t: (0 if t[0] == "commodity" else 1 if t[0] == "stock" else 2, t[1]))
         xslot = _xdist_worker_slot()
         if xslot:
@@ -912,9 +913,6 @@ def main()->int:
             "stock": PROJECT_ROOT / "data" / "stocks",
             "forex": PROJECT_ROOT / "data" / "forex",
         }
-        def _csv_path_for_target(instrument: str, symbol: str) -> Path:
-            safe = (symbol or "").replace("/", "").replace(".", "_").upper()
-            return data_dir_by_instrument[instrument] / f"{safe}.csv"
         def _oldest_date_in_csv(path: Path) -> str:
             try:
                 if not path.exists():
@@ -929,10 +927,9 @@ def main()->int:
             except Exception:
                 return "-"
         two_years_ago = (pd.Timestamp.utcnow().normalize() - pd.Timedelta(days=730)).date()
-        def _fetch_one(instrument: str, symbol: str) -> tuple[bool, str]:
+        def _fetch_one(instrument: str, symbol: str, source_csv_path: Path) -> tuple[bool, str]:
             try:
-                original_csv_path = _csv_path_for_target(instrument, symbol)
-                oldest_before = _oldest_date_in_csv(original_csv_path)
+                oldest_before = _oldest_date_in_csv(source_csv_path)
                 aim_date = "-"
                 if oldest_before != "-":
                     try:
@@ -950,19 +947,26 @@ def main()->int:
                     except Exception:
                         aim_date = "-"
                 df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
-                return True, f"[fetch-older-data] ok {instrument}:{symbol} last_found_data={oldest_before} aim_date={aim_date} rows={len(df)} source={meta.get('source')} -> {csv_path}"
+                return True, (
+                    f"[fetch-older-data] ok {instrument}:{symbol} "
+                    f"last_found_data={oldest_before} aim_date={aim_date} "
+                    f"rows={len(df)} source={meta.get('source')} src_csv={source_csv_path} -> {csv_path}"
+                )
             except Exception as exc:
                 return False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
         if local_workers == 1:
-            for instrument, symbol in targets:
-                ok, line = _fetch_one(instrument, symbol)
+            for instrument, symbol, source_csv_path in targets:
+                ok, line = _fetch_one(instrument, symbol, source_csv_path)
                 print(line)
                 if not ok:
                     failures += 1
         else:
             from concurrent.futures import ThreadPoolExecutor, as_completed
             with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
-                fut_map = {ex.submit(_fetch_one, instrument, symbol): (instrument, symbol) for instrument, symbol in targets}
+                fut_map = {
+                    ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
+                    for instrument, symbol, source_csv_path in targets
+                }
                 for fut in as_completed(fut_map):
                     ok, line = fut.result()
                     print(line)
