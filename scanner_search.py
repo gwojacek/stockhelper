@@ -821,50 +821,31 @@ def run_checkavg(target: str) -> int:
         if mapped:
             fetch_symbol = str(mapped).upper()
     elif instrument == "stock":
-        # Keep parity with stock analysis path: short raw tickers default to Warsaw suffix.
         if "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
 
-    source = "unknown"
     try:
-        if instrument == "stock":
-            from utilities.yahoo_finance import (
-                get_avg_daily_turnover_yahoo,
-                get_last_turnover_source,
-                get_symbol_currency_yahoo,
-                get_fx_to_pln_rate_yahoo,
-            )
-
-            avg_10d_native = float(get_avg_daily_turnover_yahoo(fetch_symbol, period="10d"))
-            source = get_last_turnover_source()
-            stock_currency = get_symbol_currency_yahoo(fetch_symbol)
-            _, fx_to_pln = get_fx_to_pln_rate_yahoo(stock_currency)
-            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
-            avg_10d_pln = avg_10d_native * fx_to_pln
-        else:
-            df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
-            source = str((meta or {}).get("source", "unknown")).lower()
-            if "Close" not in df.columns or "Volume" not in df.columns:
-                print(f"[checkavg] missing Close/Volume for {ticker}")
-                return 1
-            turnover_native = pd.to_numeric(df["Close"], errors="coerce") * pd.to_numeric(df["Volume"], errors="coerce")
-            turnover_native = turnover_native.dropna()
-            if len(turnover_native) < 10:
-                print(f"[checkavg] insufficient turnover data for {ticker} (need >= 10 bars)")
-                return 1
-            if instrument == "forex":
-                fx_to_pln = 1.0
-            else:
-                try:
-                    _, fx_to_pln = get_fx_to_pln_rate_yahoo("USD")
-                    fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
-                except Exception:
-                    fx_to_pln = 1.0
-            avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
+        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
     except Exception as exc:
-        print(f"[checkavg] failed to calculate for {ticker}: {exc}")
+        print(f"[checkavg] failed to load data for {ticker}: {exc}")
         return 1
 
+    source = str((meta or {}).get("source", "unknown")).lower()
+    if source != "stooq":
+        print(f"[checkavg] expected stooq source, got: {source}")
+        return 1
+
+    if "Close" not in df.columns or "Volume" not in df.columns:
+        print(f"[checkavg] missing Close/Volume for {ticker}")
+        return 1
+
+    turnover_pln = pd.to_numeric(df["Close"], errors="coerce") * pd.to_numeric(df["Volume"], errors="coerce")
+    turnover_pln = turnover_pln.dropna()
+    if len(turnover_pln) < 10:
+        print(f"[checkavg] insufficient turnover data for {ticker} (need >= 10 bars)")
+        return 1
+
+    avg_10d_pln = float(turnover_pln.tail(10).mean())
     print(f"[checkavg] instrument={instrument} ticker={ticker} fetch_symbol={fetch_symbol} source={source}")
     print(f"[checkavg] Avg10d PLN: {avg_10d_pln:,.0f}")
     print(f"[checkavg] 1% max capital: {avg_10d_pln * 0.01:,.2f} PLN")
