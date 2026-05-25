@@ -126,6 +126,9 @@ class ScanResult:
     low_turnover_days_20d: int | None = None
     liquidity_threshold_10d_pln: float | None = None
     liquidity_threshold_20d_pln: float | None = None
+    retest_count: int | None = None
+    latest_retest_date: str | None = None
+    latest_retest_pattern: str | None = None
 
 
 @dataclass
@@ -624,6 +627,31 @@ def _debug_log_scan(ticker: str, message: str) -> None:
     if _debug_enabled_for(ticker):
         print(f"[debug:{ticker.upper()}] {message}")
 
+
+
+def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None:
+    close = df["Close"]
+    top = df["cloud_top"]
+    bottom = df["cloud_bottom"]
+    for i in range(len(df) - 1, 0, -1):
+        if current_side == "below":
+            crossed = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
+            maintained = bool((close.iloc[i:] <= top.iloc[i:]).all())
+        else:
+            crossed = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
+            maintained = bool((close.iloc[i:] >= bottom.iloc[i:]).all())
+        if crossed and maintained:
+            return i
+    return None
+
+
+def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str) -> tuple[int, str, str]:
+    _status, _depth, count, _first_date, events = _detect_ichimoku_retest(df, breakout_idx, current_side)
+    if count > 0 and events:
+        d, pattern, _ = events[-1]
+        return count, d, pattern
+    return 0, "-", "-"
+
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
@@ -676,6 +704,17 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
             _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
             result.ticker = ticker
+            bidx = _find_latest_breakout_idx(enriched, result.side)
+            if bidx is not None:
+                result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
+                rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side)
+                result.retest_count = rc
+                result.latest_retest_date = rd
+                result.latest_retest_pattern = rp
+            else:
+                result.retest_count = 0
+                result.latest_retest_date = "-"
+                result.latest_retest_pattern = "-"
             if instrument == "stock":
                 result.avg_turnover_10d_pln = avg_10d
                 result.low_turnover_days_20d = below_20d
@@ -805,7 +844,7 @@ def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: 
         links.append(link)
         retest = "-"
         if retest_by_ticker_side is not None:
-            retest = str(next((f.valid_retests_count for f in flip_results if f.ticker == row.ticker and f.current_side == row.side), "-"))
+            retest = str(row.retest_count if row.retest_count is not None else "-")
         print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {retest:<28} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
@@ -1166,28 +1205,12 @@ def run_ichimoku_search(target: str) -> int:
                         break
 
         retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
-    retest_pattern_by_ticker_side = {}
-    for f in flip_results:
-        events = f.retest_events or []
-        if events:
-            d, formation, _depth = events[-1]
-            retest_pattern_by_ticker_side[(f.ticker, f.current_side)] = (d, formation)
-        else:
-            retest_pattern_by_ticker_side[(f.ticker, f.current_side)] = ("-", "-")
-        retest_pattern_by_ticker_side = {}
-        for f in flip_results:
-            events = f.retest_events or []
-            if events:
-                d, formation, _depth = events[-1]
-                retest_pattern_by_ticker_side[(f.ticker, f.current_side)] = (d, formation)
-            else:
-                retest_pattern_by_ticker_side[(f.ticker, f.current_side)] = ("-", "-")
         ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         out_md = _daily_report_path("search", group_name)
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", str(next((f.valid_retests_count for f in flip_results if f.ticker == row.ticker and f.current_side == row.side), "-")), retest_pattern_by_ticker_side.get((row.ticker, row.side), ("-", "-"))[0], retest_pattern_by_ticker_side.get((row.ticker, row.side), ("-", "-"))[1], _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(
             out_md,
             "WYNIKI",
@@ -1290,7 +1313,7 @@ def run_ichimoku_search(target: str) -> int:
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", str(next((f.valid_retests_count for f in flip_results if f.ticker == row.ticker and f.current_side == row.side), "-")), retest_pattern_by_ticker_side.get((row.ticker, row.side), ("-", "-"))[0], retest_pattern_by_ticker_side.get((row.ticker, row.side), ("-", "-"))[1], _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
     _write_md_table(
         out_md,
         "WYNIKI",
