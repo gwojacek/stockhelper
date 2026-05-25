@@ -824,6 +824,17 @@ def main()->int:
     args=parser.parse_args()
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
+        def _canonical_commodity_name_from_stooq_symbol(stooq_symbol: str) -> str:
+            target = (stooq_symbol or "").strip().upper()
+            if not target:
+                return target
+            candidates = [k.upper() for k, v in COMMODITY_STOOQ_MAP.items() if str(v).upper() == target]
+            if not candidates:
+                return target
+            def _score(name: str) -> tuple[int, int, int, str]:
+                # Prefer allsearch-friendly symbols (no "/" and no dot), then shorter.
+                return (0 if "/" not in name else 1, 0 if "." not in name else 1, len(name), name)
+            return sorted(set(candidates), key=_score)[0]
         def _xdist_worker_slot() -> tuple[int, int] | None:
             # pytest-xdist convention: PYTEST_XDIST_WORKER=gw0 and PYTEST_XDIST_WORKER_COUNT=<N>
             worker = (os.getenv("PYTEST_XDIST_WORKER") or "").strip()
@@ -850,8 +861,7 @@ def main()->int:
             for p in sorted(folder.glob("*.csv")):
                 sym = p.stem.replace("_", ".").upper()
                 if instrument == "commodity":
-                    reverse_map = {str(v).upper(): k for k, v in COMMODITY_STOOQ_MAP.items()}
-                    sym = reverse_map.get(sym, sym)
+                    sym = _canonical_commodity_name_from_stooq_symbol(sym)
                 targets.append((instrument, sym))
         targets = sorted(set(targets), key=lambda t: (t[0], t[1]))
         xslot = _xdist_worker_slot()

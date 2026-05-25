@@ -556,8 +556,9 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
-                symbol=symbol,
+                symbol=stooq_fetch_symbol,
                 csv_path=csv_path,
                 lookback_days=_incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
@@ -578,8 +579,9 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
-                symbol=symbol,
+                symbol=stooq_fetch_symbol,
                 csv_path=csv_path,
                 lookback_days=_incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
