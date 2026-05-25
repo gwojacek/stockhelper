@@ -636,7 +636,7 @@ def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None
     # breakout day = earliest close on target side that stays without opposite-side close afterwards.
     if current_side == "below":
         for i in range(len(df)):
-            on_side = close.iloc[i] < (bottom.iloc[i] * (1 - tol))
+            on_side = close.iloc[i] < (top.iloc[i] * (1 - tol))
             if not on_side:
                 continue
             future_ok = bool((close.iloc[i:] <= (top.iloc[i:] * (1 + tol))).all())
@@ -644,7 +644,7 @@ def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None
                 return i
     else:
         for i in range(len(df)):
-            on_side = close.iloc[i] > (top.iloc[i] * (1 + tol))
+            on_side = close.iloc[i] > (bottom.iloc[i] * (1 + tol))
             if not on_side:
                 continue
             future_ok = bool((close.iloc[i:] >= (bottom.iloc[i:] * (1 - tol))).all())
