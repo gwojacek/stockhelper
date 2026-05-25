@@ -645,7 +645,8 @@ def load_or_update_daily_data(
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     if cache_only and local is not None and not local.empty:
-        return _last_year_only(local), csv_path, {
+        cached_df = local if fetch_older_data else _last_year_only(local)
+        return cached_df, csv_path, {
             "source": "cache",
             "symbol": symbol,
             "name": symbol.title(),
@@ -656,7 +657,8 @@ def load_or_update_daily_data(
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
     except ValueError:
         if local is not None and not local.empty:
-            return _last_year_only(local), csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
+            cached_df = local if fetch_older_data else _last_year_only(local)
+            return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
         raise
 
     if local is not None and not local.empty:
