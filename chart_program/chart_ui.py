@@ -792,6 +792,12 @@ class ChartLevelSelectorUI:
             if str(selected_id).startswith("fib-group:"):
                 fib_group_id = str(selected_id).split(":", 1)[1]
                 return [obj for obj in objects_store if obj.get("group_id") != fib_group_id]
+            if str(selected_id).startswith("obj-index:"):
+                try:
+                    remove_idx = int(str(selected_id).split(":", 1)[1])
+                except (TypeError, ValueError):
+                    return objects_store
+                return [obj for idx, obj in enumerate(objects_store) if idx != remove_idx]
             return [obj for obj in objects_store if obj.get("id") != selected_id]
 
         @app.callback(
@@ -890,7 +896,7 @@ class ChartLevelSelectorUI:
 
             obj_options = []
             seen_fib_groups = set()
-            for obj in objects_store:
+            for idx, obj in enumerate(objects_store):
                 if obj.get("type") == "fib" and obj.get("group_id"):
                     group_id = obj.get("group_id")
                     if group_id in seen_fib_groups:
@@ -898,7 +904,11 @@ class ChartLevelSelectorUI:
                     seen_fib_groups.add(group_id)
                     obj_options.append({"label": f"FIB ({group_id[:8]})", "value": f"fib-group:{group_id}"})
                     continue
-                obj_options.append({"label": f"{obj.get('label', 'OBJ')} ({obj.get('id')[:8]})", "value": obj.get("id")})
+                obj_id = obj.get("id")
+                if obj_id:
+                    obj_options.append({"label": f"{obj.get('label', 'OBJ')} ({str(obj_id)[:8]})", "value": obj_id})
+                else:
+                    obj_options.append({"label": f"{obj.get('label', 'OBJ')} (#{idx + 1})", "value": f"obj-index:{idx}"})
 
             btn_styles = []
             for field in SELECTION_SEQUENCE:
