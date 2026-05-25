@@ -631,21 +631,24 @@ def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None
     close = df["Close"]
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
+    tol = 0.001  # 0.1% tolerance to avoid tiny cloud-boundary noise resets.
 
-    # Durable breakout definition:
-    # - choose the first close on the current side after the last close on the opposite side,
-    # - after that point, opposite-side close must not happen again.
+    # breakout day = earliest close on target side that stays without opposite-side close afterwards.
     if current_side == "below":
-        opposite_idx = [i for i in range(len(df)) if close.iloc[i] > top.iloc[i]]
-        last_opposite = max(opposite_idx) if opposite_idx else -1
-        for i in range(last_opposite + 1, len(df)):
-            if close.iloc[i] < bottom.iloc[i]:
+        for i in range(len(df)):
+            on_side = close.iloc[i] < (bottom.iloc[i] * (1 - tol))
+            if not on_side:
+                continue
+            future_ok = bool((close.iloc[i:] <= (top.iloc[i:] * (1 + tol))).all())
+            if future_ok:
                 return i
     else:
-        opposite_idx = [i for i in range(len(df)) if close.iloc[i] < bottom.iloc[i]]
-        last_opposite = max(opposite_idx) if opposite_idx else -1
-        for i in range(last_opposite + 1, len(df)):
-            if close.iloc[i] > top.iloc[i]:
+        for i in range(len(df)):
+            on_side = close.iloc[i] > (top.iloc[i] * (1 + tol))
+            if not on_side:
+                continue
+            future_ok = bool((close.iloc[i:] >= (bottom.iloc[i:] * (1 - tol))).all())
+            if future_ok:
                 return i
     return None
 
