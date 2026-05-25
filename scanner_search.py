@@ -650,30 +650,35 @@ def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str, debug_ticker:
     bottom = df["cloud_bottom"]
     tol = 0.001  # 0.1% tolerance to avoid tiny cloud-boundary noise resets.
 
-    # breakout day = earliest close on target side that stays without opposite-side close afterwards.
+    # breakout day = earliest close outside the cloud on target side,
+    # with no future close on opposite side of the cloud.
     if current_side == "below":
         for i in range(len(df)):
-            on_side = close.iloc[i] < (top.iloc[i] * (1 - tol))
+            # Below breakout requires body close under cloud bottom.
+            on_side = close.iloc[i] < (bottom.iloc[i] * (1 - tol))
             if not on_side:
                 continue
+            # Future must never close above cloud top (opposite side).
             future_ok = bool((close.iloc[i:] <= (top.iloc[i:] * (1 + tol))).all())
             if debug_ticker:
                 _debug_log_scan(
                     debug_ticker,
-                    f"breakout-candidate below i={i} date={pd.to_datetime(df.iloc[i]['Date']).strftime('%Y-%m-%d')} close={close.iloc[i]:.4f} top={top.iloc[i]:.4f} bottom={bottom.iloc[i]:.4f} future_ok={future_ok}",
+                    f"breakout-candidate below i={i} date={pd.to_datetime(df.iloc[i]['Date']).strftime('%Y-%m-%d')} close={close.iloc[i]:.4f} top={top.iloc[i]:.4f} bottom={bottom.iloc[i]:.4f} on_side={on_side} future_ok={future_ok}",
                 )
             if future_ok:
                 return i
     else:
         for i in range(len(df)):
-            on_side = close.iloc[i] > (bottom.iloc[i] * (1 + tol))
+            # Above breakout requires body close above cloud top.
+            on_side = close.iloc[i] > (top.iloc[i] * (1 + tol))
             if not on_side:
                 continue
+            # Future must never close below cloud bottom (opposite side).
             future_ok = bool((close.iloc[i:] >= (bottom.iloc[i:] * (1 - tol))).all())
             if debug_ticker:
                 _debug_log_scan(
                     debug_ticker,
-                    f"breakout-candidate above i={i} date={pd.to_datetime(df.iloc[i]['Date']).strftime('%Y-%m-%d')} close={close.iloc[i]:.4f} top={top.iloc[i]:.4f} bottom={bottom.iloc[i]:.4f} future_ok={future_ok}",
+                    f"breakout-candidate above i={i} date={pd.to_datetime(df.iloc[i]['Date']).strftime('%Y-%m-%d')} close={close.iloc[i]:.4f} top={top.iloc[i]:.4f} bottom={bottom.iloc[i]:.4f} on_side={on_side} future_ok={future_ok}",
                 )
             if future_ok:
                 return i
