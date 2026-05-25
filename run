@@ -820,7 +820,33 @@ def main()->int:
     parser.add_argument('--fibo-anchor-start')
     parser.add_argument('--fibo-anchor-end')
     parser.add_argument('--fibo-right', action='store_true')
+    parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older 364-day window before current oldest cached date.')
     args=parser.parse_args()
+    if args.fetch_older_data:
+        from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
+        targets: list[tuple[str, str]] = []
+        for instrument, folder in [("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex"), ("commodity", PROJECT_ROOT / "data" / "commodities")]:
+            if not folder.exists():
+                continue
+            for p in sorted(folder.glob("*.csv")):
+                sym = p.stem.replace("_", ".").upper()
+                if instrument == "commodity":
+                    reverse_map = {str(v).upper(): k for k, v in COMMODITY_STOOQ_MAP.items()}
+                    sym = reverse_map.get(sym, sym)
+                targets.append((instrument, sym))
+        if not targets:
+            print("[fetch-older-data] No local CSV files found in data/* folders.")
+            return 0
+        print(f"[fetch-older-data] Starting older-window fetch for {len(targets)} instruments.")
+        failures = 0
+        for instrument, symbol in targets:
+            try:
+                df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+                print(f"[fetch-older-data] ok {instrument}:{symbol} rows={len(df)} source={meta.get('source')} -> {csv_path}")
+            except Exception as exc:
+                failures += 1
+                print(f"[fetch-older-data] fail {instrument}:{symbol}: {exc}")
+        return 1 if failures else 0
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.open_allsearch_report is not None:
         return _open_existing_allsearch_report(args.open_allsearch_report)

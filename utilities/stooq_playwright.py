@@ -183,9 +183,10 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
         return ""
     return str(path)
 
-def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, _retried_interactive: bool = False) -> pd.DataFrame:
+def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, _retried_interactive: bool = False, end_date: datetime | None = None) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    start_date = (datetime.now(UTC).date() - timedelta(days=lookback_days))
+    anchor_date = (end_date.date() if isinstance(end_date, datetime) else datetime.now(UTC).date())
+    start_date = (anchor_date - timedelta(days=lookback_days))
 
     local = pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
     if csv_path.exists():
@@ -195,7 +196,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             local = local.dropna(subset=["Date"])
 
     min_required = pd.Timestamp(start_date)
-    if not local.empty and local["Date"].min() <= min_required and local["Date"].max().date() >= datetime.now(UTC).date() - timedelta(days=2):
+    if not local.empty and local["Date"].min() <= min_required and local["Date"].max().date() >= anchor_date - timedelta(days=2):
         return local.sort_values("Date").reset_index(drop=True)
 
     rows: list[dict] = []
@@ -336,7 +337,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     else:
         merged = pd.concat([local, remote], ignore_index=True)
     merged = merged.drop_duplicates(subset=["Date"], keep="last").sort_values("Date").reset_index(drop=True)
-    merged = merged[merged["Date"] >= min_required]
+    if end_date is None:
+        merged = merged[merged["Date"] >= min_required]
     merged.to_csv(csv_path, index=False)
     return merged
 
