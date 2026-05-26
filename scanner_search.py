@@ -715,7 +715,7 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
         symbol=symbol,
         instrument_type=instrument_type,
         persist=True,
-        fetch_older_data=True,
+        fetch_older_data=(instrument_type != "commodity"),
     )
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:

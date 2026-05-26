@@ -550,6 +550,55 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
+def _local_csv_has_fresh_year(csv_path: Path) -> bool:
+    try:
+        if not csv_path.exists():
+            return False
+        local_df = pd.read_csv(csv_path)
+        if local_df.empty or "Date" not in local_df.columns:
+            return False
+        dts = pd.to_datetime(local_df["Date"], errors="coerce").dropna()
+        if dts.empty:
+            return False
+        latest = dts.max().date()
+        oldest = dts.min().date()
+        today = datetime.now(UTC).date()
+        if latest < (today - timedelta(days=1)):
+            return False
+        return (latest - oldest).days >= 360
+    except Exception:
+        return False
+
+
+def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, datetime | None]:
+    """When older-data mode is requested, fetch only bounded extra history.
+
+    Non-commodity: if local already covers >=364 days, fetch only 180 older days
+    (max target span ~544 days). Otherwise fetch up to 364 older days.
+    Commodity keeps legacy 364-day older fetch behavior.
+    """
+    try:
+        if not csv_path.exists():
+            return 364, None
+        local_df = pd.read_csv(csv_path)
+        if local_df.empty or "Date" not in local_df.columns:
+            return 364, None
+        dts = pd.to_datetime(local_df["Date"], errors="coerce").dropna().sort_values()
+        if dts.empty:
+            return 364, None
+        oldest = dts.min().to_pydatetime()
+        newest = dts.max()
+        span = int((newest - dts.min()).days)
+        if instrument_type != "commodity" and span >= 364:
+            target_max = 364 + 180
+            remaining = max(0, target_max - span)
+            if remaining <= 0:
+                return 0, oldest
+            return min(180, remaining), oldest
+        return 364, oldest
+    except Exception:
+        return 364, None
+
 def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str, fetch_older_data: bool = False) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     def _incremental_lookback_days(csv_path: Path, default_days: int = 364) -> int:
         try:
@@ -581,13 +630,14 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
-    older_anchor = _older_fetch_anchor(DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv") if fetch_older_data else None
+    csv_path_ref = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+    older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
     if data_source == "stooq":
         df, candidate = _stooq_download(
             symbol,
             instrument_type,
             api_key=None if instrument_type == "commodity" else api_key,
-            lookback_days=364 if fetch_older_data else 364,
+            lookback_days=older_days if fetch_older_data else 364,
             end_date=older_anchor,
         )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
@@ -622,7 +672,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             df = update_stooq_history_with_playwright(
                 symbol=stooq_fetch_symbol,
                 csv_path=csv_path,
-                lookback_days=364 if fetch_older_data else _incremental_lookback_days(csv_path),
+                lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=True,
@@ -637,7 +687,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             symbol,
             instrument_type,
             api_key=api_key,
-            lookback_days=364,
+            lookback_days=older_days if fetch_older_data else 364,
             end_date=older_anchor,
         )
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
@@ -651,7 +701,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             df = update_stooq_history_with_playwright(
                 symbol=stooq_fetch_symbol,
                 csv_path=csv_path,
-                lookback_days=364 if fetch_older_data else _incremental_lookback_days(csv_path),
+                lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=True,
@@ -703,6 +753,15 @@ def load_or_update_daily_data(
             "symbol": symbol,
             "name": symbol.title(),
             "fallback_reason": "Cache-only mode enabled.",
+        }
+
+    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_fresh_year(csv_path):
+        cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
+        return cached_df, csv_path, {
+            "source": "cache",
+            "symbol": symbol,
+            "name": symbol.title(),
+            "fallback_reason": "Commodity local CSV already has fresh >=1y data.",
         }
 
     try:
