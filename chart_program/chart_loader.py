@@ -499,6 +499,25 @@ def _stooq_download(
 
 
 
+
+
+def _sanitize_ohlc_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    rename_map = {
+        "date": "Date", "Data": "Date", "Datetime": "Date",
+        "open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume",
+    }
+    out = out.rename(columns={c: rename_map.get(c, c) for c in out.columns})
+    required = ["Date", "Open", "High", "Low", "Close"]
+    if not set(required).issubset(out.columns):
+        return pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+    out = out.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    out = out.sort_values("Date").drop_duplicates(subset=["Date"], keep="last").reset_index(drop=True)
+    return out
 def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -637,11 +656,8 @@ def load_or_update_daily_data(
 
     local = None
     if csv_path.exists():
-        local = pd.read_csv(csv_path)
-        if not local.empty and "Date" in local.columns:
-            local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
-            local = local.dropna(subset=["Date"])
-        else:
+        local = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+        if local.empty:
             local = None
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
@@ -663,11 +679,9 @@ def load_or_update_daily_data(
         raise
 
     if local is not None and not local.empty:
-        merged_full = pd.concat([local, remote], ignore_index=True)
-        merged_full = merged_full.drop_duplicates(subset=["Date"], keep="last")
-        merged_full = merged_full.sort_values("Date").reset_index(drop=True)
+        merged_full = _sanitize_ohlc_dataframe(pd.concat([local, remote], ignore_index=True))
     else:
-        merged_full = remote
+        merged_full = _sanitize_ohlc_dataframe(remote)
 
     # Runtime callers typically need only the recent window for indicators,
     # but cache on disk must keep full history (never shrink on regular refresh).
@@ -679,11 +693,8 @@ def load_or_update_daily_data(
             try:
                 current = pd.read_csv(csv_path)
                 if not current.empty and "Date" in current.columns:
-                    current["Date"] = pd.to_datetime(current["Date"], errors="coerce")
-                    current = current.dropna(subset=["Date"])
-                    merged_full = pd.concat([current, merged_full], ignore_index=True)
-                    merged_full = merged_full.drop_duplicates(subset=["Date"], keep="last")
-                    merged_full = merged_full.sort_values("Date").reset_index(drop=True)
+                    current = _sanitize_ohlc_dataframe(current)
+                    merged_full = _sanitize_ohlc_dataframe(pd.concat([current, merged_full], ignore_index=True))
             except Exception:
                 pass
 

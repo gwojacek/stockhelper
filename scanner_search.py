@@ -240,7 +240,7 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     if not (cl1 > o1 and cl2 < o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
+    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
 
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
@@ -634,6 +634,7 @@ def _find_latest_breakout_idx(
     current_side: str,
     min_age_days: int = 80,
     min_age_calendar_days: int = 120,
+    debug_ticker: str | None = None,
 ) -> int | None:
     close = df["Close"]
     top = df["cloud_top"]
@@ -642,23 +643,60 @@ def _find_latest_breakout_idx(
     # WYNIKI 1 breakout day = earliest candle that closes on the other side
     # and then does NOT close back to the opposite side for at least 4 months.
     date_series = pd.to_datetime(df["Date"], errors="coerce")
+    fallback_transition_idx: int | None = None
     for i in range(1, n):
+        i_date = pd.to_datetime(df.iloc[i]["Date"]).strftime("%Y-%m-%d") if not pd.isna(date_series.iloc[i]) else "-"
         if (n - i) < min_age_days:
+            if debug_ticker:
+                _debug_log_scan(debug_ticker, f"breakout candidate {i_date} rejected: fewer than min_age_days bars ({n-i} < {min_age_days})")
             continue
         if pd.isna(date_series.iloc[i]):
             continue
         age_days = int((date_series.iloc[-1] - date_series.iloc[i]).days)
         if age_days < min_age_calendar_days:
+            if debug_ticker:
+                _debug_log_scan(debug_ticker, f"breakout candidate {i_date} rejected: age_days={age_days} < min_age_calendar_days={min_age_calendar_days}")
             continue
+
         end_idx = min(n, i + min_age_days)
         if current_side == "below":
             crossed = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
             maintained = bool((close.iloc[i:end_idx] <= top.iloc[i:end_idx]).all())
+            in_side_now = bool(close.iloc[i] <= top.iloc[i])
+            prev_in_side = bool(close.iloc[i - 1] <= top.iloc[i - 1])
         else:
             crossed = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
             maintained = bool((close.iloc[i:end_idx] >= bottom.iloc[i:end_idx]).all())
+            in_side_now = bool(close.iloc[i] >= bottom.iloc[i])
+            prev_in_side = bool(close.iloc[i - 1] >= bottom.iloc[i - 1])
+
+        # Primary rule: true breakout candle crossing opposite side boundary.
         if crossed and maintained:
+            if debug_ticker:
+                _debug_log_scan(debug_ticker, f"breakout accepted at {i_date}: crossed and maintained for {min_age_days} bars")
             return i
+
+        # Fallback only for transition into target side without strict boundary cross.
+        # This avoids picking arbitrary in-trend candles deep inside an existing run.
+        transitioned_into_side = in_side_now and (not prev_in_side)
+        if fallback_transition_idx is None and transitioned_into_side and maintained:
+            fallback_transition_idx = i
+            if debug_ticker:
+                _debug_log_scan(debug_ticker, f"fallback transition noted at {i_date}: entered target side and maintained for {min_age_days} bars")
+
+        if debug_ticker and crossed and not maintained:
+            fail_rel = (close.iloc[i:end_idx] > top.iloc[i:end_idx]) if current_side == "below" else (close.iloc[i:end_idx] < bottom.iloc[i:end_idx])
+            bad = fail_rel[fail_rel].index
+            if len(bad) > 0:
+                k = int(bad[0])
+                bad_date = pd.to_datetime(df.iloc[k]["Date"]).strftime("%Y-%m-%d")
+                _debug_log_scan(debug_ticker, f"breakout candidate {i_date} rejected: opposite-side close at {bad_date}")
+
+    if fallback_transition_idx is not None:
+        if debug_ticker:
+            d = pd.to_datetime(df.iloc[fallback_transition_idx]["Date"]).strftime("%Y-%m-%d")
+            _debug_log_scan(debug_ticker, f"using fallback transition start at {d} (no strict cross found)")
+        return fallback_transition_idx
     return None
 
 
@@ -669,6 +707,21 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
         return count, d, pattern
     return 0, "-", "-"
 
+
+
+def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
+    """Refresh data source, then always run calculations on full cached CSV history."""
+    _runtime_df, csv_path, meta = load_or_update_daily_data(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        persist=True,
+        fetch_older_data=True,
+    )
+    df = pd.read_csv(csv_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
+    return df, csv_path, meta
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
@@ -705,7 +758,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 display_symbol = canonical
 
     try:
-        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+        df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
         source_label = str((meta or {}).get("source", "unknown")).lower()
         enriched = _ichimoku(df)
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
@@ -721,7 +774,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
             _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
             result.ticker = ticker
-            bidx = _find_latest_breakout_idx(enriched, result.side)
+            bidx = _find_latest_breakout_idx(enriched, result.side, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
             if bidx is not None:
                 result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
                 rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side)
@@ -756,6 +809,14 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         return display_symbol, None, None, str(exc), "unknown"
 
 
+
+
+def _ensure_flip_ticker(flip: FlipResult | None, fallback_ticker: str) -> FlipResult | None:
+    if flip is None:
+        return None
+    if not getattr(flip, "ticker", ""):
+        flip.ticker = fallback_ticker
+    return flip
 def _rate_limit_detected(err: str | None) -> bool:
     text = (err or "").lower()
     return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
@@ -887,7 +948,7 @@ def run_checkavg(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
 
     try:
-        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+        df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
     except Exception as exc:
         print(f"[checkavg] failed to load data for {ticker}: {exc}")
         return 1
@@ -1042,12 +1103,14 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
     touch_idxs: list[int] = []
     for i in post:
         if current_side == "above":
-            if body_low.iloc[i] < bottom.iloc[i]:
-                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
+            # Retests may enter cloud; invalidate only when close breaks to opposite side.
+            if float(df["Close"].iloc[i]) < float(bottom.iloc[i]):
+                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
         else:
-            if body_high.iloc[i] > top.iloc[i]:
-                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
+            # Retests may enter cloud; invalidate only when close breaks to opposite side.
+            if float(df["Close"].iloc[i]) > float(top.iloc[i]):
+                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
         if touched:
             waiting = True
@@ -1117,6 +1180,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                 for j in range(0, len(w)):
                     if _is_bearish_shooting_star(w.iloc[j]):
                         pattern_candidates.append((j, "shooting_star"))
+                    # Accept bearish hammer-shaped rejection (same geometry as shooting star)
+                    # under explicit "hammer" naming used by some users.
+                    if _is_bearish_shooting_star(w.iloc[j]):
+                        pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
                     if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
@@ -1129,7 +1196,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "evening_star"))
                     if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
                         pattern_candidates.append((j, "evening_doji_star"))
-            for pattern_idx, formation in sorted(set(pattern_candidates), key=lambda x: x[0]):
+            # Prefer multi-candle formations over 1-candle ones when both exist in same retest cycle.
+            one_candle = {"hammer", "shooting_star", "bearish_hammer"}
+            ordered_candidates = sorted(set(pattern_candidates), key=lambda x: (0 if x[1] not in one_candle else 1, x[0]))
+            for pattern_idx, formation in ordered_candidates:
                 pattern_abs = w_start + pattern_idx
                 local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
                 if pattern_abs - local_reaction_abs >= 2:
@@ -1212,6 +1282,7 @@ def run_ichimoku_search(target: str) -> int:
                     elif result:
                         results.append(result)
                     if flip:
+                        flip = _ensure_flip_ticker(flip, ticker)
                         flip_results.append(flip)
             if chunk_idx < len(chunks):
                 if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
@@ -1286,6 +1357,7 @@ def run_ichimoku_search(target: str) -> int:
     elif first_result:
         results.append(first_result)
     if first_flip:
+        first_flip = _ensure_flip_ticker(first_flip, first)
         flip_results.append(first_flip)
 
     rest = members[1:]
@@ -1311,6 +1383,7 @@ def run_ichimoku_search(target: str) -> int:
             elif result:
                 results.append(result)
             if flip:
+                flip = _ensure_flip_ticker(flip, ticker)
                 flip_results.append(flip)
     else:
         max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
@@ -1326,6 +1399,7 @@ def run_ichimoku_search(target: str) -> int:
                 elif result:
                     results.append(result)
                 if flip:
+                    flip = _ensure_flip_ticker(flip, ticker)
                     flip_results.append(flip)
 
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
@@ -1878,7 +1952,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
-            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2149,7 +2223,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     if instrument == "commodity":
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
-    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True)
+    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:

@@ -16,6 +16,20 @@ from chart_program.config_writer import resolve_config_path, write_or_update_con
 from chart_program.instrument_detector import detect_instrument_type
 
 
+
+
+def _trim_chart_window(df: pd.DataFrame, max_days: int = 548) -> pd.DataFrame:
+    if df is None or df.empty or "Date" not in df.columns:
+        return df
+    out = df.copy()
+    out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
+    out = out.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
+    if out.empty:
+        return out
+    latest = out["Date"].max()
+    cutoff = latest - pd.Timedelta(days=max_days)
+    trimmed = out[out["Date"] >= cutoff].reset_index(drop=True)
+    return trimmed if not trimmed.empty else out.tail(min(len(out), 400)).reset_index(drop=True)
 def _load_existing_config_values(config_path: Path) -> dict:
     if not config_path.exists():
         return {}
@@ -472,6 +486,9 @@ def run_level_selector(raw_args=None):
         else:
             os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
+
+    # Chart UI should remain responsive: render at most ~2 years from latest bar.
+    df = _trim_chart_window(df, max_days=548)
 
     if args.fibo_lines and args.fibo_anchor_start and args.fibo_anchor_end:
         try:

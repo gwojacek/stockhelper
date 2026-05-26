@@ -85,6 +85,7 @@ Each generated config includes:
 - Line/Fib points are selected via chart clicks.
 - Line tool now shows a live preview after first anchor and before second click.
 - The chart x-range is padded before/after available candles so lines can be drawn beyond the raw candle window.
+- For responsiveness, chart renders only the latest ~**1.5 years** of candles (about 548 days) even if local CSV contains longer history.
 
 ---
 
@@ -102,13 +103,17 @@ Optional:
 
 ---
 
-## 6) Reliability / rollback
+## 6) Data normalization
+
+- Local and remote OHLC data is sanitized (column normalization, numeric/date coercion, invalid-row drop, date de-duplication) before chart/scanner usage.
+
+## 7) Reliability / rollback
 
 If final save fails at any stage (config update, chart snapshot write, data persistence), the workflow restores previous file snapshots to avoid partial writes.
 
 ---
 
-## 7) Helpful examples
+## 8) Helpful examples
 
 ```bash
 # Polish stock
@@ -130,7 +135,7 @@ python -m chart_program "algt.us cfd" --instrument commodity
 
 ---
 
-## 8) Effect of FX fee toggle for foreign stocks
+## 9) Effect of FX fee toggle for foreign stocks
 
 - **ON**: position sizing includes conversion fee on buy + sell-at-stop path, and analysis output shows % reduction in position size caused by conversion fees.
 - **OFF**: analysis assumes you already hold instrument currency, so stock monetary outputs are displayed in instrument currency (e.g. USD) instead of PLN.
