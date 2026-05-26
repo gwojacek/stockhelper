@@ -141,8 +141,10 @@ python run -ichimoku_search ndx
 ```
 
 Scanner details:
-- scanner calculations are based on full cached CSV history (refresh + read-cache flow),
-- scanner/fibo flows explicitly request older history (`fetch_older_data=True`) before calculations,
+- scanner calculations are based on cached CSV history (with conditional refresh),
+- commodities first check local CSV coverage (>= ~1 year span) and skip Playwright/browser fetch when enough data is already cached,
+- when commodity fetch is required, interactive Playwright mode can pause in inspector for manual captcha solving,
+- non-commodity scan refresh can use bounded older backfill logic (up to ~364 + 180 days total historical span target),
 - supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
 - writes CSV outputs to `chart_program/data/search/ichimoku/` (Ichimoku) and `chart_program/data/search/fibo/` (Fibonacci),
 - prints **WYNIKI** and **WYNIKI 2** (flip results),
@@ -386,3 +388,22 @@ Edit generated config values (`spread`, `pip_value`, `lot_cost`) and rerun analy
 - Keep config modules simple and explicit.
 - Prefer adding new instrument setups under `configs/` rather than hardcoding in entry scripts.
 - Keep strategy logic in `strategies/` and calculation primitives in `core/`.
+
+
+### Older-data fetch mode (`--fetch-older-data`)
+
+You can run explicit historical backfill:
+
+```bash
+python run --fetch-older-data
+python run --fetch-older-data --fetch-older-data-scope stocks
+python run --fetch-older-data --fetch-older-data-scope forex
+python run --fetch-older-data --fetch-older-data-scope commodities
+```
+
+Behavior summary:
+- for **non-commodities**, if CSV already has at least 364 days, backfill adds at most 180 older days,
+- non-commodity backfill target is capped around **544 days** (364 + 180),
+- if that cap is already reached, older backfill for that symbol is skipped,
+- commodity search path prefers cache-first checks and opens Playwright only when local coverage is insufficient.
+
