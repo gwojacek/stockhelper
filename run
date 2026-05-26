@@ -4,6 +4,7 @@ from urllib.request import urlopen
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NoReturn
 try:
     from tabulate import tabulate
 except Exception:
@@ -19,6 +20,15 @@ ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
+
+
+def _hard_exit(code: int) -> NoReturn:
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(int(code))
 GDP_PPP_VALUE = {
     "PL": 2120569,
     "US": 31821293,
@@ -1010,7 +1020,9 @@ def main()->int:
                 print("[fetch-older-data] Interrupted by user (Ctrl+C).")
                 print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
                 return 130
-        return 1 if failures else 0
+        exit_code = 1 if failures else 0
+        print(f"[fetch-older-data] completed assigned={len(targets)} failures={failures} exit_code={exit_code}")
+        _hard_exit(exit_code)
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.open_allsearch_report is not None:
         return _open_existing_allsearch_report(args.open_allsearch_report)
