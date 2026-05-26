@@ -189,7 +189,7 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
         return ""
     return str(path)
 
-def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, _retried_interactive: bool = False, end_date: datetime | None = None) -> pd.DataFrame:
+def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, end_date: datetime | None = None) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     anchor_date = (end_date.date() if isinstance(end_date, datetime) else datetime.now(UTC).date())
     start_date = (anchor_date - timedelta(days=lookback_days))
@@ -214,7 +214,6 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     attempted_urls: list[str] = []
     if verbose:
         print(f"[stooq-web] start symbol={symbol} csv={csv_path} lookback_days={lookback_days}")
-    retry_interactive_requested = False
     started_at = time.monotonic()
     max_runtime_s = max(30, int(os.getenv("STOCKHELPER_STOOQ_MAX_RUNTIME_S", "120")))
     # For older-data mode, jump directly to the likely history page to avoid
@@ -269,39 +268,9 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 if page_num == 1 and not extracted:
                     shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
                     if _is_rate_limited_html(page.content()):
-                        if not interactive_captcha and not _retried_interactive:
-                            if verbose:
-                                print("[stooq-web] rate limit detected -> retry once in interactive inspector mode")
-                            retry_interactive_requested = True
-                            break
-                        _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
-                        # After manual captcha/consent, try extraction again before failing.
-                        _accept_consent_if_present(page, first_page=True)
-                        _wait_for_table_or_limit_with_retry(page, retries=2)
-                        extracted = _extract_rows_from_frame(page)
-                        if not extracted:
-                            for fr in page.frames:
-                                extracted = _extract_rows_from_frame(fr)
-                                if extracted:
-                                    break
-                        if verbose:
-                            print(f"[stooq-web] post-resume extracted_rows={len(extracted)}")
-                        if not extracted:
-                            raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
+                        raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
                     else:
-                        _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
-                        _accept_consent_if_present(page, first_page=True)
-                        _wait_for_table_or_limit_with_retry(page, retries=2)
-                        extracted = _extract_rows_from_frame(page)
-                        if not extracted:
-                            for fr in page.frames:
-                                extracted = _extract_rows_from_frame(fr)
-                                if extracted:
-                                    break
-                        if verbose:
-                            print(f"[stooq-web] post-resume extracted_rows={len(extracted)}")
-                        if not extracted:
-                            raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
+                        raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
                 if not extracted:
                     break
@@ -356,8 +325,6 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             except Exception:
                 pass
 
-    if retry_interactive_requested:
-        return update_stooq_history_with_playwright(symbol=symbol, csv_path=csv_path, lookback_days=lookback_days, verbose=verbose, interactive_captcha=True, _retried_interactive=True)
 
     remote = pd.DataFrame(rows)
     if remote.empty:
