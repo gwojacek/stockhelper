@@ -530,6 +530,16 @@ def _sanitize_ohlc_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     out = out.dropna(subset=["Date", "Open", "High", "Low", "Close"])
     out = out.sort_values("Date").drop_duplicates(subset=["Date"], keep="last").reset_index(drop=True)
     return out
+def _last_two_years_only(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    latest = pd.to_datetime(df["Date"], errors="coerce").max()
+    if pd.isna(latest):
+        return df
+    cutoff = latest - pd.Timedelta(days=740)
+    trimmed = df[df["Date"] >= cutoff]
+    return trimmed.sort_values("Date").reset_index(drop=True)
+
 def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -723,6 +733,9 @@ def load_or_update_daily_data(
                     merged_full = _sanitize_ohlc_dataframe(pd.concat([current, merged_full], ignore_index=True))
             except Exception:
                 pass
+
+        if instrument_type == "commodity":
+            merged_full = _last_two_years_only(merged_full)
 
         # Atomic write prevents partial/truncated CSV if process is interrupted.
         with tempfile.NamedTemporaryFile("w", delete=False, dir=str(csv_path.parent), suffix=".tmp") as tf:

@@ -2018,7 +2018,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
-            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2138,6 +2138,18 @@ def run_fibo_search(target: str) -> int:
             continue
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] = {}
 
+    def _fx_to_pln_for_turnover(symbol: str, instrument_type: str) -> float:
+        if instrument_type in {"commodity", "forex"}:
+            return 1.0
+        try:
+            cc = _country_code_from_ticker(symbol)
+            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
+            currency = country_to_currency.get(cc, "USD")
+            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+            return float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+        except Exception:
+            return 1.0
+
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
         if row is None:
@@ -2153,14 +2165,7 @@ def run_fibo_search(target: str) -> int:
         turnover_native = turnover_native.dropna()
         if len(turnover_native) < 10:
             return False
-        try:
-            cc = _country_code_from_ticker(symbol)
-            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
-            currency = country_to_currency.get(cc, "USD")
-            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
-            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
-        except Exception:
-            fx_to_pln = 1.0
+        fx_to_pln = _fx_to_pln_for_turnover(symbol, row[1])
         avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
         avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
@@ -2201,11 +2206,7 @@ def run_fibo_search(target: str) -> int:
             turnover_native = turnover_native.dropna()
             if len(turnover_native) < 10:
                 continue
-            cc = _country_code_from_ticker(symbol)
-            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
-            currency = country_to_currency.get(cc, "USD")
-            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
-            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+            fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
             avg_turnover_10d_by_key[k] = float((turnover_native.tail(10) * fx_to_pln).mean())
         except Exception:
             continue
@@ -2294,7 +2295,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     if instrument == "commodity":
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
-    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:
