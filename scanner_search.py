@@ -707,6 +707,21 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
         return count, d, pattern
     return 0, "-", "-"
 
+
+
+def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
+    """Refresh data source, then always run calculations on full cached CSV history."""
+    _runtime_df, csv_path, meta = load_or_update_daily_data(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        persist=True,
+        fetch_older_data=True,
+    )
+    df = pd.read_csv(csv_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
+    return df, csv_path, meta
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
@@ -743,7 +758,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 display_symbol = canonical
 
     try:
-        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+        df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
         source_label = str((meta or {}).get("source", "unknown")).lower()
         enriched = _ichimoku(df)
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
@@ -925,7 +940,7 @@ def run_checkavg(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
 
     try:
-        df, _, meta = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+        df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
     except Exception as exc:
         print(f"[checkavg] failed to load data for {ticker}: {exc}")
         return 1
