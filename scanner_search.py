@@ -1454,7 +1454,7 @@ def run_ichimoku_search(target: str) -> int:
                 print(f"[{idx}/{len(members)}] {ticker}")
                 if err:
                     print(f"  pominięto ({_compact_error(err)})")
-                    if _rate_limit_detected(err):
+                    if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                         print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                         if not _prompt_vpn_continue_or_stop():
                             print("[search] Scan stopped by user after rate-limit detection.")
