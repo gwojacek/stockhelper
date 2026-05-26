@@ -256,7 +256,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     if verbose:
         print(f"[stooq-web] start symbol={symbol} csv={csv_path} lookback_days={lookback_days}")
     started_at = time.monotonic()
-    max_runtime_s = max(30, int(os.getenv("STOCKHELPER_STOOQ_MAX_RUNTIME_S", "120")))
+    # In interactive captcha mode user may need manual steps; allow a longer watchdog.
+    default_runtime = "900" if interactive_captcha else "120"
+    max_runtime_s = max(30, int(os.getenv("STOCKHELPER_STOOQ_MAX_RUNTIME_S", default_runtime)))
+    last_progress_at = started_at
     # For older-data mode, jump directly to the likely history page to avoid
     # re-reading the newest pages. Stooq shows ~40 rows/page.
     start_page = 1
@@ -275,10 +278,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             interactive_state = {"done": False, "forced_pause_done": False}
             max_page = max(30, start_page + 30)
             while page_num <= max_page:
-                if (time.monotonic() - started_at) > max_runtime_s:
+                now_mono = time.monotonic()
+                if (now_mono - last_progress_at) > max_runtime_s:
                     raise TimeoutError(
                         f"Timeout while fetching Stooq history for {symbol} "
-                        f"(>{max_runtime_s}s, last_page={page_num})."
+                        f"(>{max_runtime_s}s without progress, last_page={page_num})."
                     )
                 url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
                 attempted_urls.append(url)
@@ -366,6 +370,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     empty_pages += 1
                 else:
                     empty_pages = 0
+                    last_progress_at = time.monotonic()
 
                 if empty_pages >= 2:
                     break
