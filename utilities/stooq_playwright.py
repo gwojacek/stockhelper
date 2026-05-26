@@ -106,6 +106,23 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             page.wait_for_timeout(400)
         except Exception:
             pass
+
+
+def _consent_overlay_visible(page) -> bool:
+    probes = [
+        'text=Stooq prosi o zgodę',
+        'text=Stooq prosi o zgode',
+        'text=Zgadzam się',
+        'text=Zgadzam sie',
+    ]
+    for probe in probes:
+        try:
+            if page.locator(probe).first.count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         # Prefer strict Stooq history rows: ids like t03, t11 etc. (data only, no header).
@@ -147,6 +164,11 @@ def _wait_for_table_or_limit_with_retry(page, retries: int = 2) -> bool:
             page.reload(wait_until="domcontentloaded")
         except Exception:
             pass
+    try:
+        if page.locator("table#fth1 tr[id^='t']").count() > 0:
+            return True
+    except Exception:
+        pass
     return page.locator("table tr td").count() > 0
 
 
@@ -277,10 +299,20 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     print(f"[stooq-web] page={page_num} extracted_rows={len(extracted)}")
 
                 if page_num == 1 and not extracted:
+                    # Consent modal can still block table even when first click missed/lagged.
+                    if _consent_overlay_visible(page):
+                        _accept_consent_if_present(page, first_page=True)
+                        _wait_for_table_or_limit_with_retry(page, retries=4)
+                        extracted = _extract_rows_from_frame(page)
+                        if not extracted:
+                            for fr in page.frames:
+                                extracted = _extract_rows_from_frame(fr)
+                                if extracted:
+                                    break
                     shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
                     if _is_rate_limited_html(page.content()):
                         raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
-                    else:
+                    if not extracted:
                         raise ValueError(f"Stooq first-page check failed (no table rows). URL: {url} Screenshot: {shot}")
 
                 if not extracted:
