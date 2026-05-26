@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal
 from urllib.request import urlopen
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NoReturn
@@ -408,17 +408,48 @@ def _csv_has_data(path: Path) -> bool:
         return False
 
 
+def _csv_has_fresh_year(path: Path) -> bool:
+    if not _csv_has_data(path):
+        return False
+    try:
+        import pandas as pd
+        df = pd.read_csv(path)
+        if df.empty or 'Date' not in df.columns:
+            return False
+        dts = pd.to_datetime(df['Date'], errors='coerce').dropna()
+        if dts.empty:
+            return False
+        latest = dts.max().date()
+        oldest = dts.min().date()
+        today = datetime.now(UTC).date()
+        # Accept latest candle from today or yesterday.
+        if latest < (today - timedelta(days=1)):
+            return False
+        # Must cover roughly one year window.
+        if (latest - oldest).days < 360:
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def _scope_has_complete_cache(scope: str) -> bool:
     scope_n = (scope or '').strip().lower()
     if scope_n != 'commodities':
         return True
     data_dir = PROJECT_ROOT / 'data' / 'commodities'
+    missing: list[str] = []
     for ticker in COMMODITIES_SEARCH_TICKERS:
         stooq_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), ticker)).upper()
         fname = stooq_symbol.replace('/', '').replace('.', '_') + '.csv'
-        if not _csv_has_data(data_dir / fname):
-            return False
+        fp = data_dir / fname
+        if not _csv_has_fresh_year(fp):
+            missing.append(fname)
+    if missing:
+        print(f"[cache-rule] commodities cache not ready ({len(missing)} missing/stale): {', '.join(missing[:6])}{' ...' if len(missing)>6 else ''}")
+        return False
     return True
+
 
 def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
     keys = _scope_file_keys(scope)
