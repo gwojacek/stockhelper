@@ -629,17 +629,34 @@ def _debug_log_scan(ticker: str, message: str) -> None:
 
 
 
-def _find_latest_breakout_idx(df: pd.DataFrame, current_side: str) -> int | None:
+def _find_latest_breakout_idx(
+    df: pd.DataFrame,
+    current_side: str,
+    min_age_days: int = 80,
+    min_age_calendar_days: int = 120,
+) -> int | None:
     close = df["Close"]
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
-    for i in range(len(df) - 1, 0, -1):
+    n = len(df)
+    # WYNIKI 1 breakout day = earliest candle that closes on the other side
+    # and then does NOT close back to the opposite side for at least 4 months.
+    date_series = pd.to_datetime(df["Date"], errors="coerce")
+    for i in range(1, n):
+        if (n - i) < min_age_days:
+            continue
+        if pd.isna(date_series.iloc[i]):
+            continue
+        age_days = int((date_series.iloc[-1] - date_series.iloc[i]).days)
+        if age_days < min_age_calendar_days:
+            continue
+        end_idx = min(n, i + min_age_days)
         if current_side == "below":
             crossed = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
-            maintained = bool((close.iloc[i:] <= top.iloc[i:]).all())
+            maintained = bool((close.iloc[i:end_idx] <= top.iloc[i:end_idx]).all())
         else:
             crossed = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
-            maintained = bool((close.iloc[i:] >= bottom.iloc[i:]).all())
+            maintained = bool((close.iloc[i:end_idx] >= bottom.iloc[i:end_idx]).all())
         if crossed and maintained:
             return i
     return None
@@ -833,8 +850,8 @@ def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: 
     if not results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest(W2)':<28} {'Link':<0}")
-    print("-" * 178)
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest count':<13} {'Latest Retest date':<18} {'Latest Retest pattern':<22} {'Link':<0}")
+    print("-" * 230)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
     links: list[str] = []
     for row in sorted_rows:
@@ -842,10 +859,14 @@ def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: 
         low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
         link = _stooq_chart_url(row.ticker)
         links.append(link)
-        retest = "-"
+        retest_count = "-"
+        retest_date = "-"
+        retest_pattern = "-"
         if retest_by_ticker_side is not None:
-            retest = str(row.retest_count if row.retest_count is not None else "-")
-        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {retest:<28} {ANSI_CYAN}{link}{ANSI_RESET}")
+            retest_count = str(row.retest_count if row.retest_count is not None else "-")
+            retest_date = row.latest_retest_date if row.latest_retest_date else "-"
+            retest_pattern = row.latest_retest_pattern if row.latest_retest_pattern else "-"
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {retest_count:<13} {retest_date:<18} {retest_pattern:<22} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 def run_checkavg(target: str) -> int:

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal
 from urllib.request import urlopen
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NoReturn
 try:
     from tabulate import tabulate
 except Exception:
@@ -19,6 +20,15 @@ ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
+
+
+def _hard_exit(code: int) -> NoReturn:
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(int(code))
 GDP_PPP_VALUE = {
     "PL": 2120569,
     "US": 31821293,
@@ -966,25 +976,53 @@ def main()->int:
                 )
             except Exception as exc:
                 return False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
+        fetch_timeout_s = max(15, int(os.getenv("STOCKHELPER_FETCH_ONE_TIMEOUT_S", "90")))
         if local_workers == 1:
-            for instrument, symbol, source_csv_path in targets:
-                ok, line = _fetch_one(instrument, symbol, source_csv_path)
-                print(line)
-                if not ok:
-                    failures += 1
-        else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
-                fut_map = {
-                    ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
-                    for instrument, symbol, source_csv_path in targets
-                }
-                for fut in as_completed(fut_map):
-                    ok, line = fut.result()
+            def _timeout_handler(_signum, _frame):
+                raise TimeoutError("fetch_one_timeout")
+            try:
+                for instrument, symbol, source_csv_path in targets:
+                    if hasattr(signal, "SIGALRM"):
+                        prev = signal.signal(signal.SIGALRM, _timeout_handler)
+                        signal.alarm(fetch_timeout_s)
+                    try:
+                        ok, line = _fetch_one(instrument, symbol, source_csv_path)
+                    except TimeoutError:
+                        ok, line = False, (
+                            f"[fetch-older-data] fail {instrument}:{symbol}: timeout>{fetch_timeout_s}s "
+                            f"(set STOCKHELPER_FETCH_ONE_TIMEOUT_S to adjust)"
+                        )
+                    finally:
+                        if hasattr(signal, "SIGALRM"):
+                            signal.alarm(0)
+                            signal.signal(signal.SIGALRM, prev)
                     print(line)
                     if not ok:
                         failures += 1
-        return 1 if failures else 0
+            except KeyboardInterrupt:
+                print("[fetch-older-data] Interrupted by user (Ctrl+C).")
+                print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                return 130
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            try:
+                with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
+                    fut_map = {
+                        ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
+                        for instrument, symbol, source_csv_path in targets
+                    }
+                    for fut in as_completed(fut_map):
+                        ok, line = fut.result()
+                        print(line)
+                        if not ok:
+                            failures += 1
+            except KeyboardInterrupt:
+                print("[fetch-older-data] Interrupted by user (Ctrl+C).")
+                print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                return 130
+        exit_code = 1 if failures else 0
+        print(f"[fetch-older-data] completed assigned={len(targets)} failures={failures} exit_code={exit_code}")
+        _hard_exit(exit_code)
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.open_allsearch_report is not None:
         return _open_existing_allsearch_report(args.open_allsearch_report)
