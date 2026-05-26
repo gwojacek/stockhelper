@@ -1254,6 +1254,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
+    cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -1262,7 +1263,10 @@ def run_ichimoku_search(target: str) -> int:
     flip_results: list[FlipResult] = []
 
     if group_name == "WIG":
-        print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
+        if cache_only_mode:
+            print("[search] WIG mode: cache-only calculations (no VPN pause checkpoints).")
+        else:
+            print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
         chunk_size = WIG_PART_SIZE
         chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
         for chunk_idx, chunk in enumerate(chunks, start=1):
@@ -1285,7 +1289,9 @@ def run_ichimoku_search(target: str) -> int:
                         flip = _ensure_flip_ticker(flip, ticker)
                         flip_results.append(flip)
             if chunk_idx < len(chunks):
-                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                if cache_only_mode:
+                    print("[search] cache-only mode: auto-continue to next WIG chunk.")
+                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
                     print("[search] batch mode: auto-continue to next WIG chunk.")
                 else:
                     try:
@@ -1348,7 +1354,10 @@ def run_ichimoku_search(target: str) -> int:
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = True
-        print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+        if cache_only_mode:
+            print("[search] WIG mode: sequential cache-only scan (no VPN pause checkpoints).")
+        else:
+            print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
@@ -1366,7 +1375,9 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             if group_name == "WIG" and offset in {166, 331}:
-                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                if cache_only_mode:
+                    print("[search] cache-only mode: auto-continue after WIG checkpoint.")
+                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
                     print("[search] batch mode: auto-continue after WIG checkpoint.")
                 else:
                     try:
