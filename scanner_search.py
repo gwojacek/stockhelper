@@ -835,12 +835,30 @@ def _rate_limit_detected(err: str | None) -> bool:
 
 
 
+def _should_prompt_rate_limit(group_name: str) -> bool:
+    return (group_name or "").lower() != "commodities"
+
+
 def _prompt_vpn_continue_or_stop() -> bool:
     try:
         answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
     except EOFError:
         answer = "n"
     return answer == "y"
+
+
+
+def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None):
+    while True:
+        display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+        if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
+            if _prompt_vpn_continue_or_stop():
+                print("[search] Retrying same instrument after VPN change...")
+                continue
+            print("[search] Scan stopped by user after rate-limit detection.")
+            return display_symbol, result, flip, err, src, True
+        return display_symbol, result, flip, err, src, False
 
 def _stooq_symbol_for_link(ticker: str) -> str:
     raw = (ticker or "").strip().upper()
@@ -1303,7 +1321,7 @@ def run_ichimoku_search(target: str) -> int:
                     print(f"[{idx}/{len(members)}] {ticker}")
                     if err:
                         print(f"  pominięto ({_compact_error(err)})")
-                        if _rate_limit_detected(err):
+                        if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                             print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                             if not _prompt_vpn_continue_or_stop():
                                 print("[search] Scan stopped by user after rate-limit detection.")
@@ -1374,7 +1392,7 @@ def run_ichimoku_search(target: str) -> int:
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
     print(f"[1/{len(members)}] {first}")
-    display_symbol, first_result, first_flip, first_err, first_source = _scan_one(first, group_name, exchange_suffix)
+    display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
     print(f"[1/{len(members)}] {first}")
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
@@ -1386,6 +1404,8 @@ def run_ichimoku_search(target: str) -> int:
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
+    if first_stopped:
+        return 1
     if first_err:
         print(f"  pominięto ({first_err})")
     elif first_result:
@@ -1414,13 +1434,10 @@ def run_ichimoku_search(target: str) -> int:
                         break
             display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] {ticker}")
+            if stopped:
+                break
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
-                if _rate_limit_detected(err):
-                    print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
-                    if not _prompt_vpn_continue_or_stop():
-                        print("[search] Scan stopped by user after rate-limit detection.")
-                        break
             elif result:
                 results.append(result)
             if flip:
@@ -2084,7 +2101,7 @@ def run_fibo_search(target: str) -> int:
             print(f"[{idx}/{len(members)}] fibo {ticker}...")
             if err:
                 print(f"  pominięto ({err})")
-                if _rate_limit_detected(err):
+                if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                     print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
                     if not _prompt_vpn_continue_or_stop():
                         print("[fibo] Scan stopped by user after rate-limit detection.")
