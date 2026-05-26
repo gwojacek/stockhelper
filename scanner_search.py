@@ -240,7 +240,7 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     if not (cl1 > o1 and cl2 < o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
+    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
 
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
@@ -1282,6 +1282,7 @@ def run_ichimoku_search(target: str) -> int:
                     elif result:
                         results.append(result)
                     if flip:
+                        flip = _ensure_flip_ticker(flip, ticker)
                         flip_results.append(flip)
             if chunk_idx < len(chunks):
                 if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
