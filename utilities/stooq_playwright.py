@@ -73,7 +73,10 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
     if not first_page:
         return
 
+    # CMP can be in top page or iframe and selectors vary over time.
     selectors = [
+        'button:has-text("Zgadzam się")',
+        'button:has-text("Zgadzam sie")',
         'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Zgadzam się"]',
         '.fc-dialog-container button:has-text("Zgadzam się")',
@@ -84,17 +87,25 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
         contexts = [page] + list(page.frames)
     except Exception:
         contexts = [page]
-    for ctx in contexts:
-        for sel in selectors:
-            try:
-                loc = ctx.locator(sel).first
-                if loc.count() == 0:
+
+    # Try a few rounds because iframe content can appear slightly after DOM load.
+    for _ in range(3):
+        for ctx in contexts:
+            for sel in selectors:
+                try:
+                    loc = ctx.locator(sel).first
+                    if loc.count() == 0:
+                        continue
+                    loc.wait_for(state='visible', timeout=1200)
+                    loc.click(timeout=2500, force=True)
+                    page.wait_for_timeout(700)
+                    return
+                except Exception:
                     continue
-                loc.click(timeout=1500, force=True)
-                page.wait_for_timeout(350)
-                return
-            except Exception:
-                continue
+        try:
+            page.wait_for_timeout(400)
+        except Exception:
+            pass
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
         # Prefer strict Stooq history rows: ids like t03, t11 etc. (data only, no header).
