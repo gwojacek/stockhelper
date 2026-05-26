@@ -850,7 +850,7 @@ def _prompt_vpn_continue_or_stop() -> bool:
 
 def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None):
     while True:
-        display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+        display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
         if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
             print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
             if _prompt_vpn_continue_or_stop():
@@ -1402,8 +1402,8 @@ def run_ichimoku_search(target: str) -> int:
         else:
             print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
     elif group_name == "commodities":
-        sequential = True
-        print("[search] COMMODITIES mode: sequential fetch to avoid parallel captcha/inspector contention.")
+        sequential = False
+        print("[search] COMMODITIES mode: parallel fetch enabled (captcha/inspector handled per worker).")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
