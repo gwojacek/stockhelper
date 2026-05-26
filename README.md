@@ -123,6 +123,11 @@ python run -c ena
 python run -c eurusd_long
 ```
 
+### Chart window behavior
+
+- Chart UI renders a capped recent window of about **1.5 years** (~548 calendar days) for responsiveness.
+- Full candle history is still kept in local CSV cache and used by scanner flows where required.
+
 ### Ichimoku scanner (`-ichimoku_search`)
 
 You can run bulk scanner workflows directly from launcher:
@@ -136,6 +141,7 @@ python run -ichimoku_search ndx
 ```
 
 Scanner details:
+- scanner calculations are based on full cached CSV history (refresh + read-cache flow),
 - supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
 - writes CSV outputs to `chart_program/data/search/ichimoku/` (Ichimoku) and `chart_program/data/search/fibo/` (Fibonacci),
 - prints **WYNIKI** and **WYNIKI 2** (flip results),
