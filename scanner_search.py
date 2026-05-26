@@ -819,14 +819,25 @@ def _ensure_flip_ticker(flip: FlipResult | None, fallback_ticker: str) -> FlipRe
     return flip
 def _rate_limit_detected(err: str | None) -> bool:
     text = (err or "").lower()
-    return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
+    retryable_markers = (
+        "rate limit",
+        "captcha",
+        "przekroczony dzienny limit",
+        "too many requests",
+        "http error 429",
+        "connection reset by peer",
+        "timed out",
+        "temporarily unavailable",
+        "service unavailable",
+    )
+    return any(marker in text for marker in retryable_markers)
 
 
 
 
 def _prompt_vpn_continue_or_stop() -> bool:
     try:
-        answer = input("[search] Rate limit detected (e.g. 'Przekroczony dzienny limit wywolan'). Change VPN and continue? [y/N]: ").strip().lower()
+        answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
     except EOFError:
         answer = "n"
     return answer == "y"
@@ -1293,7 +1304,7 @@ def run_ichimoku_search(target: str) -> int:
                     if err:
                         print(f"  pominięto ({_compact_error(err)})")
                         if _rate_limit_detected(err):
-                            print("[search] Rate limit detected. Pausing scan for VPN change.")
+                            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                             if not _prompt_vpn_continue_or_stop():
                                 print("[search] Scan stopped by user after rate-limit detection.")
                                 return 1
@@ -1406,7 +1417,7 @@ def run_ichimoku_search(target: str) -> int:
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
                 if _rate_limit_detected(err):
-                    print("[search] Rate limit detected. Pausing scan for VPN change.")
+                    print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                     if not _prompt_vpn_continue_or_stop():
                         print("[search] Scan stopped by user after rate-limit detection.")
                         break
@@ -1427,7 +1438,7 @@ def run_ichimoku_search(target: str) -> int:
                 if err:
                     print(f"  pominięto ({_compact_error(err)})")
                     if _rate_limit_detected(err):
-                        print("[search] Rate limit detected. Pausing scan for VPN change.")
+                        print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                         if not _prompt_vpn_continue_or_stop():
                             print("[search] Scan stopped by user after rate-limit detection.")
                             return 1
@@ -2074,7 +2085,7 @@ def run_fibo_search(target: str) -> int:
             if err:
                 print(f"  pominięto ({err})")
                 if _rate_limit_detected(err):
-                    print("[fibo] Rate limit detected. Pausing scan for VPN change.")
+                    print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
                     if not _prompt_vpn_continue_or_stop():
                         print("[fibo] Scan stopped by user after rate-limit detection.")
                         return 1
