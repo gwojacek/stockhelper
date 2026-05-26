@@ -847,8 +847,15 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         if force_cache_only:
-            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-            print(f"[cache-rule] {scope}: forced cache-only mode ON for {mode} phase.")
+            # Keep forced cache-only for phases like FIBO, but still honor
+            # scope completeness rules (especially commodities) so we do not
+            # skip required UI refresh when local cache is incomplete/stale.
+            if _scope_has_complete_cache(scope):
+                os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+                print(f"[cache-rule] {scope}: forced cache-only mode ON for {mode} phase.")
+            else:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                print(f"[cache-rule] {scope}: forced cache-only overridden -> refresh mode ON (incomplete cache).")
         else:
             _enable_cache_only_if_recent(scope, hours=6)
         csv_dir = ICHIMOKU_SEARCH_OUTPUT_DIR if mode=="ichimoku" else FIBO_SEARCH_OUTPUT_DIR
