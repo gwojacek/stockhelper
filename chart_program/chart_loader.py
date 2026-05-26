@@ -615,7 +615,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=364 if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=False,
+                interactive_captcha=True,
             )
             return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
         except Exception as web_exc:
@@ -644,7 +644,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=364 if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=False,
+                interactive_captcha=True,
             )
             return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
         except Exception as web_exc:
