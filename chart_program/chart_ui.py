@@ -892,7 +892,11 @@ class ChartLevelSelectorUI:
                 lines.append(html.Div(f"Active button: {active_label}"))
             for field in SELECTION_SEQUENCE:
                 value = levels_store.get(field)
-                lines.append(html.Div(f"{LABELS[field]}: {'-' if value is None else f'{value:.{self._precision_for_price(value)}f}'}"))
+                try:
+                    value_num = float(value) if value is not None else None
+                except (TypeError, ValueError):
+                    value_num = None
+                lines.append(html.Div(f"{LABELS[field]}: {'-' if value_num is None else f'{value_num:.{self._precision_for_price(value_num)}f}'}"))
 
             obj_options = []
             seen_fib_groups = set()
