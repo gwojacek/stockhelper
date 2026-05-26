@@ -73,7 +73,6 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
     if not first_page:
         return
 
-    # CMP can be in top page or iframe and selectors vary over time.
     selectors = [
         'button:has-text("Zgadzam się")',
         'button:has-text("Zgadzam sie")',
@@ -83,30 +82,39 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
         'text=Zgadzam się',
     ]
 
-    try:
-        contexts = [page] + list(page.frames)
-    except Exception:
-        contexts = [page]
-
-    # Try a few rounds because iframe content can appear slightly after DOM load.
-    for _ in range(3):
+    for _ in range(4):
+        try:
+            contexts = [page] + list(page.frames)
+        except Exception:
+            contexts = [page]
+        clicked = False
         for ctx in contexts:
             for sel in selectors:
                 try:
                     loc = ctx.locator(sel).first
                     if loc.count() == 0:
                         continue
-                    loc.wait_for(state='visible', timeout=1200)
-                    loc.click(timeout=2500, force=True)
-                    page.wait_for_timeout(700)
-                    return
+                    loc.wait_for(state='visible', timeout=1500)
+                    loc.click(timeout=3000, force=True)
+                    clicked = True
+                    break
                 except Exception:
                     continue
-        try:
-            page.wait_for_timeout(400)
-        except Exception:
-            pass
-
+            if clicked:
+                break
+        if clicked:
+            # Wait for consent layer to disappear and content table to become available.
+            try:
+                page.wait_for_timeout(1200)
+            except Exception:
+                pass
+            if not _consent_overlay_visible(page):
+                return
+        else:
+            try:
+                page.wait_for_timeout(500)
+            except Exception:
+                pass
 
 def _consent_overlay_visible(page) -> bool:
     probes = [
@@ -302,7 +310,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     # Consent modal can still block table even when first click missed/lagged.
                     if _consent_overlay_visible(page):
                         _accept_consent_if_present(page, first_page=True)
-                        _wait_for_table_or_limit_with_retry(page, retries=4)
+                        if _consent_overlay_visible(page):
+                            try:
+                                page.reload(wait_until='domcontentloaded')
+                            except Exception:
+                                pass
+                            _accept_consent_if_present(page, first_page=True)
+                        _wait_for_table_or_limit_with_retry(page, retries=5)
                         extracted = _extract_rows_from_frame(page)
                         if not extracted:
                             for fr in page.frames:
