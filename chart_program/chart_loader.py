@@ -663,14 +663,15 @@ def load_or_update_daily_data(
         raise
 
     if local is not None and not local.empty:
-        merged = pd.concat([local, remote], ignore_index=True)
-        merged = merged.drop_duplicates(subset=["Date"], keep="last")
-        merged = merged.sort_values("Date").reset_index(drop=True)
+        merged_full = pd.concat([local, remote], ignore_index=True)
+        merged_full = merged_full.drop_duplicates(subset=["Date"], keep="last")
+        merged_full = merged_full.sort_values("Date").reset_index(drop=True)
     else:
-        merged = remote
+        merged_full = remote
 
-    if not fetch_older_data:
-        merged = _last_year_only(merged)
+    # Runtime callers typically need only the recent window for indicators,
+    # but cache on disk must keep full history (never shrink on regular refresh).
+    merged = merged_full if fetch_older_data else _last_year_only(merged_full)
 
     if persist:
         # Safety for older-data backfills: never shrink/regress cached history when writing.
@@ -680,9 +681,9 @@ def load_or_update_daily_data(
                 if not current.empty and "Date" in current.columns:
                     current["Date"] = pd.to_datetime(current["Date"], errors="coerce")
                     current = current.dropna(subset=["Date"])
-                    merged = pd.concat([current, merged], ignore_index=True)
-                    merged = merged.drop_duplicates(subset=["Date"], keep="last")
-                    merged = merged.sort_values("Date").reset_index(drop=True)
+                    merged_full = pd.concat([current, merged_full], ignore_index=True)
+                    merged_full = merged_full.drop_duplicates(subset=["Date"], keep="last")
+                    merged_full = merged_full.sort_values("Date").reset_index(drop=True)
             except Exception:
                 pass
 
@@ -690,7 +691,7 @@ def load_or_update_daily_data(
         with tempfile.NamedTemporaryFile("w", delete=False, dir=str(csv_path.parent), suffix=".tmp") as tf:
             tmp_path = Path(tf.name)
         try:
-            merged.to_csv(tmp_path, index=False)
+            merged_full.to_csv(tmp_path, index=False)
             tmp_path.replace(csv_path)
         finally:
             if tmp_path.exists():
