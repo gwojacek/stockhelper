@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import time
+import os
 import json
 from pathlib import Path
 
@@ -204,12 +206,22 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     if verbose:
         print(f"[stooq-web] start symbol={symbol} csv={csv_path} lookback_days={lookback_days}")
     retry_interactive_requested = False
+    started_at = time.monotonic()
+    max_runtime_s = max(30, int(os.getenv("STOCKHELPER_STOOQ_MAX_RUNTIME_S", "120")))
     with sync_playwright() as p:
         browser, page = _open_page(p, interactive=interactive_captcha)
+        page.set_default_timeout(15000)
+        page.set_default_navigation_timeout(20000)
         page_num = 1
         empty_pages = 0
         interactive_state = {"done": False, "forced_pause_done": False}
         while page_num <= 30:
+            if (time.monotonic() - started_at) > max_runtime_s:
+                browser.close()
+                raise TimeoutError(
+                    f"Timeout while fetching Stooq history for {symbol} "
+                    f"(>{max_runtime_s}s, last_page={page_num})."
+                )
             url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
             attempted_urls.append(url)
             if verbose:

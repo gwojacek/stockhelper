@@ -967,23 +967,33 @@ def main()->int:
             except Exception as exc:
                 return False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
         if local_workers == 1:
-            for instrument, symbol, source_csv_path in targets:
-                ok, line = _fetch_one(instrument, symbol, source_csv_path)
-                print(line)
-                if not ok:
-                    failures += 1
-        else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
-                fut_map = {
-                    ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
-                    for instrument, symbol, source_csv_path in targets
-                }
-                for fut in as_completed(fut_map):
-                    ok, line = fut.result()
+            try:
+                for instrument, symbol, source_csv_path in targets:
+                    ok, line = _fetch_one(instrument, symbol, source_csv_path)
                     print(line)
                     if not ok:
                         failures += 1
+            except KeyboardInterrupt:
+                print("[fetch-older-data] Interrupted by user (Ctrl+C).")
+                print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                return 130
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            try:
+                with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
+                    fut_map = {
+                        ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
+                        for instrument, symbol, source_csv_path in targets
+                    }
+                    for fut in as_completed(fut_map):
+                        ok, line = fut.result()
+                        print(line)
+                        if not ok:
+                            failures += 1
+            except KeyboardInterrupt:
+                print("[fetch-older-data] Interrupted by user (Ctrl+C).")
+                print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                return 130
         return 1 if failures else 0
     if args.search_debug: os.environ['STOCKHELPER_STOOQ_DEBUG']='1'
     if args.open_allsearch_report is not None:
