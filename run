@@ -723,7 +723,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
     # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
     print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
-    code_f = _run_batch_search("fibo", scopes, ask_open_links=False)
+    code_f = _run_batch_search("fibo", scopes, ask_open_links=False, force_cache_only=True)
     if code_f != 0:
         failures += 1
 
@@ -764,7 +764,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
     return 1 if failures else 0
 
-def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) -> int:
+def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, force_cache_only: bool = False) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
@@ -780,7 +780,11 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
-        _enable_cache_only_if_recent(scope, hours=6)
+        if force_cache_only:
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+            print(f"[cache-rule] {scope}: forced cache-only mode ON for {mode} phase.")
+        else:
+            _enable_cache_only_if_recent(scope, hours=6)
         csv_dir = ICHIMOKU_SEARCH_OUTPUT_DIR if mode=="ichimoku" else FIBO_SEARCH_OUTPUT_DIR
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
