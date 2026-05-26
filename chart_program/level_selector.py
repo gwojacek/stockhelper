@@ -18,7 +18,7 @@ from chart_program.instrument_detector import detect_instrument_type
 
 
 
-def _trim_chart_window(df: pd.DataFrame, max_days: int = 730) -> pd.DataFrame:
+def _trim_chart_window(df: pd.DataFrame, max_days: int = 548) -> pd.DataFrame:
     if df is None or df.empty or "Date" not in df.columns:
         return df
     out = df.copy()
@@ -488,7 +488,7 @@ def run_level_selector(raw_args=None):
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
 
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
-    df = _trim_chart_window(df, max_days=730)
+    df = _trim_chart_window(df, max_days=548)
 
     if args.fibo_lines and args.fibo_anchor_start and args.fibo_anchor_end:
         try:
