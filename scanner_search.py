@@ -643,7 +643,7 @@ def _find_latest_breakout_idx(
     # WYNIKI 1 breakout day = earliest candle that closes on the other side
     # and then does NOT close back to the opposite side for at least 4 months.
     date_series = pd.to_datetime(df["Date"], errors="coerce")
-    fallback_maintained_idx: int | None = None
+    fallback_transition_idx: int | None = None
     for i in range(1, n):
         i_date = pd.to_datetime(df.iloc[i]["Date"]).strftime("%Y-%m-%d") if not pd.isna(date_series.iloc[i]) else "-"
         if (n - i) < min_age_days:
@@ -663,10 +663,12 @@ def _find_latest_breakout_idx(
             crossed = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
             maintained = bool((close.iloc[i:end_idx] <= top.iloc[i:end_idx]).all())
             in_side_now = bool(close.iloc[i] <= top.iloc[i])
+            prev_in_side = bool(close.iloc[i - 1] <= top.iloc[i - 1])
         else:
             crossed = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
             maintained = bool((close.iloc[i:end_idx] >= bottom.iloc[i:end_idx]).all())
             in_side_now = bool(close.iloc[i] >= bottom.iloc[i])
+            prev_in_side = bool(close.iloc[i - 1] >= bottom.iloc[i - 1])
 
         # Primary rule: true breakout candle crossing opposite side boundary.
         if crossed and maintained:
@@ -674,12 +676,13 @@ def _find_latest_breakout_idx(
                 _debug_log_scan(debug_ticker, f"breakout accepted at {i_date}: crossed and maintained for {min_age_days} bars")
             return i
 
-        # Fallback for prolonged inside-cloud transition:
-        # keep earliest candle that is already on/inside target side and then maintained.
-        if fallback_maintained_idx is None and in_side_now and maintained:
-            fallback_maintained_idx = i
+        # Fallback only for transition into target side without strict boundary cross.
+        # This avoids picking arbitrary in-trend candles deep inside an existing run.
+        transitioned_into_side = in_side_now and (not prev_in_side)
+        if fallback_transition_idx is None and transitioned_into_side and maintained:
+            fallback_transition_idx = i
             if debug_ticker:
-                _debug_log_scan(debug_ticker, f"fallback candidate noted at {i_date}: maintained for {min_age_days} bars without strict cross")
+                _debug_log_scan(debug_ticker, f"fallback transition noted at {i_date}: entered target side and maintained for {min_age_days} bars")
 
         if debug_ticker and crossed and not maintained:
             fail_rel = (close.iloc[i:end_idx] > top.iloc[i:end_idx]) if current_side == "below" else (close.iloc[i:end_idx] < bottom.iloc[i:end_idx])
@@ -689,11 +692,11 @@ def _find_latest_breakout_idx(
                 bad_date = pd.to_datetime(df.iloc[k]["Date"]).strftime("%Y-%m-%d")
                 _debug_log_scan(debug_ticker, f"breakout candidate {i_date} rejected: opposite-side close at {bad_date}")
 
-    if fallback_maintained_idx is not None:
+    if fallback_transition_idx is not None:
         if debug_ticker:
-            d = pd.to_datetime(df.iloc[fallback_maintained_idx]["Date"]).strftime("%Y-%m-%d")
-            _debug_log_scan(debug_ticker, f"using fallback maintained start at {d} (no strict cross found)")
-        return fallback_maintained_idx
+            d = pd.to_datetime(df.iloc[fallback_transition_idx]["Date"]).strftime("%Y-%m-%d")
+            _debug_log_scan(debug_ticker, f"using fallback transition start at {d} (no strict cross found)")
+        return fallback_transition_idx
     return None
 
 
