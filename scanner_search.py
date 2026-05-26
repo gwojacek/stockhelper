@@ -1042,12 +1042,14 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
     touch_idxs: list[int] = []
     for i in post:
         if current_side == "above":
-            if body_low.iloc[i] < bottom.iloc[i]:
-                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
+            # Retests may enter cloud; invalidate only when close breaks to opposite side.
+            if float(df["Close"].iloc[i]) < float(bottom.iloc[i]):
+                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
         else:
-            if body_high.iloc[i] > top.iloc[i]:
-                return "invalidated_by_body_break_through_cloud", "-", 0, "-", []
+            # Retests may enter cloud; invalidate only when close breaks to opposite side.
+            if float(df["Close"].iloc[i]) > float(top.iloc[i]):
+                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
         if touched:
             waiting = True
@@ -1117,6 +1119,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                 for j in range(0, len(w)):
                     if _is_bearish_shooting_star(w.iloc[j]):
                         pattern_candidates.append((j, "shooting_star"))
+                    # Accept bearish hammer-shaped rejection (same geometry as shooting star)
+                    # under explicit "hammer" naming used by some users.
+                    if _is_bearish_shooting_star(w.iloc[j]):
+                        pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
                     if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
