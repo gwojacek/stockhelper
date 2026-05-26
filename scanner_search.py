@@ -822,6 +822,15 @@ def _rate_limit_detected(err: str | None) -> bool:
     return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
 
 
+
+
+def _prompt_vpn_continue_or_stop() -> bool:
+    try:
+        answer = input("[search] Rate limit detected (e.g. 'Przekroczony dzienny limit wywolan'). Change VPN and continue? [y/N]: ").strip().lower()
+    except EOFError:
+        answer = "n"
+    return answer == "y"
+
 def _stooq_symbol_for_link(ticker: str) -> str:
     raw = (ticker or "").strip().upper()
     # Commodity/index aliases -> exact stooq symbols for chart links.
@@ -1283,6 +1292,11 @@ def run_ichimoku_search(target: str) -> int:
                     print(f"[{idx}/{len(members)}] {ticker}")
                     if err:
                         print(f"  pominięto ({_compact_error(err)})")
+                        if _rate_limit_detected(err):
+                            print("[search] Rate limit detected. Pausing scan for VPN change.")
+                            if not _prompt_vpn_continue_or_stop():
+                                print("[search] Scan stopped by user after rate-limit detection.")
+                                return 1
                     elif result:
                         results.append(result)
                     if flip:
@@ -1391,6 +1405,11 @@ def run_ichimoku_search(target: str) -> int:
             print(f"[{offset}/{len(members)}] {ticker}")
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
+                if _rate_limit_detected(err):
+                    print("[search] Rate limit detected. Pausing scan for VPN change.")
+                    if not _prompt_vpn_continue_or_stop():
+                        print("[search] Scan stopped by user after rate-limit detection.")
+                        break
             elif result:
                 results.append(result)
             if flip:
@@ -1407,6 +1426,11 @@ def run_ichimoku_search(target: str) -> int:
                 print(f"[{idx}/{len(members)}] {ticker}")
                 if err:
                     print(f"  pominięto ({_compact_error(err)})")
+                    if _rate_limit_detected(err):
+                        print("[search] Rate limit detected. Pausing scan for VPN change.")
+                        if not _prompt_vpn_continue_or_stop():
+                            print("[search] Scan stopped by user after rate-limit detection.")
+                            return 1
                 elif result:
                     results.append(result)
                 if flip:
@@ -2049,6 +2073,11 @@ def run_fibo_search(target: str) -> int:
             print(f"[{idx}/{len(members)}] fibo {ticker}...")
             if err:
                 print(f"  pominięto ({err})")
+                if _rate_limit_detected(err):
+                    print("[fibo] Rate limit detected. Pausing scan for VPN change.")
+                    if not _prompt_vpn_continue_or_stop():
+                        print("[fibo] Scan stopped by user after rate-limit detection.")
+                        return 1
             rows.extend(found)
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
