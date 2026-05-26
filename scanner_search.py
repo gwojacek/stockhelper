@@ -1401,6 +1401,9 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] WIG mode: sequential cache-only scan (no VPN pause checkpoints).")
         else:
             print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+    elif group_name == "commodities":
+        sequential = True
+        print("[search] COMMODITIES mode: sequential fetch to avoid parallel captcha/inspector contention.")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
