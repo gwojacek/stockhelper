@@ -715,7 +715,7 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
         symbol=symbol,
         instrument_type=instrument_type,
         persist=True,
-        fetch_older_data=True,
+        fetch_older_data=(instrument_type != "commodity"),
     )
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
@@ -819,8 +819,46 @@ def _ensure_flip_ticker(flip: FlipResult | None, fallback_ticker: str) -> FlipRe
     return flip
 def _rate_limit_detected(err: str | None) -> bool:
     text = (err or "").lower()
-    return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
+    retryable_markers = (
+        "rate limit",
+        "captcha",
+        "przekroczony dzienny limit",
+        "too many requests",
+        "http error 429",
+        "connection reset by peer",
+        "timed out",
+        "temporarily unavailable",
+        "service unavailable",
+    )
+    return any(marker in text for marker in retryable_markers)
 
+
+
+
+def _should_prompt_rate_limit(group_name: str) -> bool:
+    return (group_name or "").lower() != "commodities"
+
+
+def _prompt_vpn_continue_or_stop() -> bool:
+    try:
+        answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
+    except EOFError:
+        answer = "n"
+    return answer == "y"
+
+
+
+def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None):
+    while True:
+        display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+        if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
+            if _prompt_vpn_continue_or_stop():
+                print("[search] Retrying same instrument after VPN change...")
+                continue
+            print("[search] Scan stopped by user after rate-limit detection.")
+            return display_symbol, result, flip, err, src, True
+        return display_symbol, result, flip, err, src, False
 
 def _stooq_symbol_for_link(ticker: str) -> str:
     raw = (ticker or "").strip().upper()
@@ -1254,6 +1292,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
+    cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -1262,7 +1301,10 @@ def run_ichimoku_search(target: str) -> int:
     flip_results: list[FlipResult] = []
 
     if group_name == "WIG":
-        print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
+        if cache_only_mode:
+            print("[search] WIG mode: cache-only calculations (no VPN pause checkpoints).")
+        else:
+            print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
         chunk_size = WIG_PART_SIZE
         chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
         for chunk_idx, chunk in enumerate(chunks, start=1):
@@ -1279,13 +1321,20 @@ def run_ichimoku_search(target: str) -> int:
                     print(f"[{idx}/{len(members)}] {ticker}")
                     if err:
                         print(f"  pominięto ({_compact_error(err)})")
+                        if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
+                            if not _prompt_vpn_continue_or_stop():
+                                print("[search] Scan stopped by user after rate-limit detection.")
+                                return 1
                     elif result:
                         results.append(result)
                     if flip:
                         flip = _ensure_flip_ticker(flip, ticker)
                         flip_results.append(flip)
             if chunk_idx < len(chunks):
-                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                if cache_only_mode:
+                    print("[search] cache-only mode: auto-continue to next WIG chunk.")
+                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
                     print("[search] batch mode: auto-continue to next WIG chunk.")
                 else:
                     try:
@@ -1343,15 +1392,23 @@ def run_ichimoku_search(target: str) -> int:
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
     print(f"[1/{len(members)}] {first}")
-    display_symbol, first_result, first_flip, first_err, first_source = _scan_one(first, group_name, exchange_suffix)
+    display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
     print(f"[1/{len(members)}] {first}")
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = True
-        print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+        if cache_only_mode:
+            print("[search] WIG mode: sequential cache-only scan (no VPN pause checkpoints).")
+        else:
+            print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+    elif group_name == "commodities":
+        sequential = False
+        print("[search] COMMODITIES mode: parallel fetch enabled (captcha/inspector handled per worker).")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
+    if first_stopped:
+        return 1
     if first_err:
         print(f"  pominięto ({first_err})")
     elif first_result:
@@ -1366,7 +1423,9 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             if group_name == "WIG" and offset in {166, 331}:
-                if os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
+                if cache_only_mode:
+                    print("[search] cache-only mode: auto-continue after WIG checkpoint.")
+                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
                     print("[search] batch mode: auto-continue after WIG checkpoint.")
                 else:
                     try:
@@ -1376,8 +1435,10 @@ def run_ichimoku_search(target: str) -> int:
                     if answer != "y":
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
-            display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+            display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] {ticker}")
+            if stopped:
+                break
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
             elif result:
@@ -1396,6 +1457,11 @@ def run_ichimoku_search(target: str) -> int:
                 print(f"[{idx}/{len(members)}] {ticker}")
                 if err:
                     print(f"  pominięto ({_compact_error(err)})")
+                    if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                        print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
+                        if not _prompt_vpn_continue_or_stop():
+                            print("[search] Scan stopped by user after rate-limit detection.")
+                            return 1
                 elif result:
                     results.append(result)
                 if flip:
@@ -1952,7 +2018,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
-            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2038,6 +2104,11 @@ def run_fibo_search(target: str) -> int:
             print(f"[{idx}/{len(members)}] fibo {ticker}...")
             if err:
                 print(f"  pominięto ({err})")
+                if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                    print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
+                    if not _prompt_vpn_continue_or_stop():
+                        print("[fibo] Scan stopped by user after rate-limit detection.")
+                        return 1
             rows.extend(found)
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
@@ -2067,6 +2138,18 @@ def run_fibo_search(target: str) -> int:
             continue
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] = {}
 
+    def _fx_to_pln_for_turnover(symbol: str, instrument_type: str) -> float:
+        if instrument_type in {"commodity", "forex"}:
+            return 1.0
+        try:
+            cc = _country_code_from_ticker(symbol)
+            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
+            currency = country_to_currency.get(cc, "USD")
+            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
+            return float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+        except Exception:
+            return 1.0
+
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
         if row is None:
@@ -2082,14 +2165,7 @@ def run_fibo_search(target: str) -> int:
         turnover_native = turnover_native.dropna()
         if len(turnover_native) < 10:
             return False
-        try:
-            cc = _country_code_from_ticker(symbol)
-            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
-            currency = country_to_currency.get(cc, "USD")
-            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
-            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
-        except Exception:
-            fx_to_pln = 1.0
+        fx_to_pln = _fx_to_pln_for_turnover(symbol, row[1])
         avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
         avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
@@ -2130,11 +2206,7 @@ def run_fibo_search(target: str) -> int:
             turnover_native = turnover_native.dropna()
             if len(turnover_native) < 10:
                 continue
-            cc = _country_code_from_ticker(symbol)
-            country_to_currency = {"PL": "PLN", "US": "USD", "DE": "EUR", "FR": "EUR", "CN": "CNY"}
-            currency = country_to_currency.get(cc, "USD")
-            _, fx_to_pln = get_fx_to_pln_rate_yahoo(currency)
-            fx_to_pln = float(fx_to_pln) if fx_to_pln and fx_to_pln > 0 else 1.0
+            fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
             avg_turnover_10d_by_key[k] = float((turnover_native.tail(10) * fx_to_pln).mean())
         except Exception:
             continue
@@ -2223,7 +2295,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     if instrument == "commodity":
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
-    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:
