@@ -1435,7 +1435,7 @@ def run_ichimoku_search(target: str) -> int:
                     if answer != "y":
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
-            display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+            display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] {ticker}")
             if stopped:
                 break
