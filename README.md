@@ -142,6 +142,7 @@ python run -ichimoku_search ndx
 
 Scanner details:
 - scanner calculations are based on full cached CSV history (refresh + read-cache flow),
+- scanner/fibo flows explicitly request older history (`fetch_older_data=True`) before calculations,
 - supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
 - writes CSV outputs to `chart_program/data/search/ichimoku/` (Ichimoku) and `chart_program/data/search/fibo/` (Fibonacci),
 - prints **WYNIKI** and **WYNIKI 2** (flip results),
@@ -156,6 +157,26 @@ python run -ichimoku_search wig_part1
 python run -ichimoku_search wig_part2
 python run -ichimoku_search wig_part3
 ```
+
+
+
+### Parallel / xdist-friendly scanner commands
+
+For large universes you can split and run parts in parallel terminals (or CI jobs):
+
+```bash
+python run -ichimoku_search wig_part1
+python run -ichimoku_search wig_part2
+python run -ichimoku_search wig_part3
+```
+
+Batch/non-interactive mode (auto-continue at checkpoints):
+
+```bash
+STOCKHELPER_BATCH_MODE=1 python run -ichimoku_search wig
+```
+
+`-allsearch` also supports scoped parallel workflows (e.g. separate jobs per `wig`, `dax`, `us100`, `forex`, `commodities`).
 
 ### Quick liquidity check (`-checkavg`)
 
