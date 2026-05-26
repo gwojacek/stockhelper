@@ -1,0 +1,15 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": true,
+  "high": 69.5,
+  "drawn_objects": [],
+  "level_points": {
+    "high": {
+      "price": 69.5,
+      "plot_price": 69.8,
+      "date": "2026-04-10 00:00:00"
+    }
+  }
+}
