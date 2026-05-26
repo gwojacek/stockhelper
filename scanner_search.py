@@ -850,7 +850,7 @@ def _prompt_vpn_continue_or_stop() -> bool:
 
 def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None):
     while True:
-        display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
+        display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
         if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
             print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
             if _prompt_vpn_continue_or_stop():
