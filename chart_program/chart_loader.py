@@ -25,6 +25,10 @@ DATA_DIR_BY_INSTRUMENT = {
     "forex": UNIFIED_DATA_DIR / "forex",
 }
 
+# Per-process memo of symbols already refreshed from remote.
+# Prevents duplicate remote fetches in one run (e.g. allsearch ichi -> fibo).
+_SESSION_REFRESHED_KEYS: set[tuple[str, str, bool]] = set()
+
 COMMODITY_YAHOO_MAP = {
     "GOLD": "GC=F",
     "XAUUSD": "GC=F",
@@ -669,6 +673,19 @@ def load_or_update_daily_data(
             local = None
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    refresh_key = (instrument_type, _storage_symbol_for_csv(symbol, instrument_type).upper(), bool(fetch_older_data))
+
+    # If this symbol was already refreshed in this process and file exists, reuse local CSV
+    # to avoid repeated API/web fetches (especially Stooq web + captcha flows).
+    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty:
+        cached_df = local if fetch_older_data else _last_year_only(local)
+        return cached_df, csv_path, {
+            "source": "cache",
+            "symbol": symbol,
+            "name": symbol.title(),
+            "fallback_reason": "Session cache: remote refresh already performed in this run.",
+        }
+
     if cache_only and local is not None and not local.empty:
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
@@ -680,6 +697,7 @@ def load_or_update_daily_data(
 
     try:
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
+        _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
         if local is not None and not local.empty:
             cached_df = local if fetch_older_data else _last_year_only(local)
