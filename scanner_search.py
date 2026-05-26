@@ -809,6 +809,14 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
         return display_symbol, None, None, str(exc), "unknown"
 
 
+
+
+def _ensure_flip_ticker(flip: FlipResult | None, fallback_ticker: str) -> FlipResult | None:
+    if flip is None:
+        return None
+    if not getattr(flip, "ticker", ""):
+        flip.ticker = fallback_ticker
+    return flip
 def _rate_limit_detected(err: str | None) -> bool:
     text = (err or "").lower()
     return "rate limit" in text or "captcha" in text or "przekroczony dzienny limit" in text
@@ -1188,7 +1196,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "evening_star"))
                     if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
                         pattern_candidates.append((j, "evening_doji_star"))
-            for pattern_idx, formation in sorted(set(pattern_candidates), key=lambda x: x[0]):
+            # Prefer multi-candle formations over 1-candle ones when both exist in same retest cycle.
+            one_candle = {"hammer", "shooting_star", "bearish_hammer"}
+            ordered_candidates = sorted(set(pattern_candidates), key=lambda x: (0 if x[1] not in one_candle else 1, x[0]))
+            for pattern_idx, formation in ordered_candidates:
                 pattern_abs = w_start + pattern_idx
                 local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
                 if pattern_abs - local_reaction_abs >= 2:
@@ -1345,6 +1356,7 @@ def run_ichimoku_search(target: str) -> int:
     elif first_result:
         results.append(first_result)
     if first_flip:
+        first_flip = _ensure_flip_ticker(first_flip, first)
         flip_results.append(first_flip)
 
     rest = members[1:]
@@ -1370,6 +1382,7 @@ def run_ichimoku_search(target: str) -> int:
             elif result:
                 results.append(result)
             if flip:
+                flip = _ensure_flip_ticker(flip, ticker)
                 flip_results.append(flip)
     else:
         max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
@@ -1385,6 +1398,7 @@ def run_ichimoku_search(target: str) -> int:
                 elif result:
                     results.append(result)
                 if flip:
+                    flip = _ensure_flip_ticker(flip, ticker)
                     flip_results.append(flip)
 
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
