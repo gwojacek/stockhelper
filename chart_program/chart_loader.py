@@ -241,6 +241,14 @@ def _sanitize_symbol_for_filename(symbol: str) -> str:
     return symbol.replace("/", "").replace(".", "_").upper()
 
 
+def _storage_symbol_for_csv(symbol: str, instrument_type: str) -> str:
+    if instrument_type != "commodity":
+        return symbol
+    mapped = COMMODITY_STOOQ_MAP.get((symbol or "").strip().upper())
+    return str(mapped or symbol)
+
+
+
 def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     cleaned = symbol.strip().upper()
     candidates: list[str] = []
@@ -559,7 +567,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
-    older_anchor = _older_fetch_anchor(DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv") if fetch_older_data else None
+    older_anchor = _older_fetch_anchor(DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv") if fetch_older_data else None
     if data_source == "stooq":
         df, candidate = _stooq_download(
             symbol,
@@ -595,7 +603,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     )
     if is_literal_commodity:
         try:
-            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
             stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
                 symbol=stooq_fetch_symbol,
@@ -624,7 +632,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     if is_literal_commodity:
         try:
-            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
             stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
                 symbol=stooq_fetch_symbol,
@@ -652,7 +660,7 @@ def load_or_update_daily_data(
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = data_dir / f"{_sanitize_symbol_for_filename(symbol)}.csv"
+    csv_path = data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
 
     local = None
     if csv_path.exists():

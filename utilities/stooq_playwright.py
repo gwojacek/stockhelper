@@ -80,14 +80,18 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
         'text=Zgadzam się',
     ]
 
-    contexts = [page] + list(page.frames)
+    try:
+        contexts = [page] + list(page.frames)
+    except Exception:
+        contexts = [page]
     for ctx in contexts:
         for sel in selectors:
             try:
                 loc = ctx.locator(sel).first
-                loc.wait_for(state='visible', timeout=8000)
-                loc.click(timeout=3000, force=True)
-                page.wait_for_timeout(700)
+                if loc.count() == 0:
+                    continue
+                loc.click(timeout=1500, force=True)
+                page.wait_for_timeout(350)
                 return
             except Exception:
                 continue
@@ -198,8 +202,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             local = local.dropna(subset=["Date"])
 
     min_required = pd.Timestamp(start_date)
-    if not local.empty and local["Date"].min() <= min_required and local["Date"].max().date() >= anchor_date - timedelta(days=2):
-        return local.sort_values("Date").reset_index(drop=True)
+    local_has_full_year = False
+    if not local.empty:
+        local_min = local["Date"].min()
+        local_max = local["Date"].max()
+        local_has_full_year = bool(local_min <= min_required and local_max.date() >= anchor_date - timedelta(days=2))
+        if local_has_full_year:
+            return local.sort_values("Date").reset_index(drop=True)
 
     rows: list[dict] = []
     attempted_urls: list[str] = []
@@ -360,7 +369,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         remote[c] = pd.to_numeric(remote[c], errors="coerce")
     remote = remote.dropna(subset=["Date", "Open", "High", "Low", "Close"])
 
-    if local is None or local.empty:
+    if local is None or local.empty or not local_has_full_year:
+        # If cached file is shorter than requested 1-year window, rebuild from fresh remote pull.
         merged = remote.copy()
     else:
         merged = pd.concat([local, remote], ignore_index=True)
