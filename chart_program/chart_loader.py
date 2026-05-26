@@ -550,7 +550,8 @@ def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
-def _local_csv_has_fresh_year(csv_path: Path) -> bool:
+def _local_csv_has_min_year(csv_path: Path) -> bool:
+    """Return True when local CSV exists and contains at least ~1 year span."""
     try:
         if not csv_path.exists():
             return False
@@ -562,9 +563,6 @@ def _local_csv_has_fresh_year(csv_path: Path) -> bool:
             return False
         latest = dts.max().date()
         oldest = dts.min().date()
-        today = datetime.now(UTC).date()
-        if latest < (today - timedelta(days=1)):
-            return False
         return (latest - oldest).days >= 360
     except Exception:
         return False
@@ -755,13 +753,13 @@ def load_or_update_daily_data(
             "fallback_reason": "Cache-only mode enabled.",
         }
 
-    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_fresh_year(csv_path):
+    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_min_year(csv_path):
         cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
         return cached_df, csv_path, {
             "source": "cache",
             "symbol": symbol,
             "name": symbol.title(),
-            "fallback_reason": "Commodity local CSV already has fresh >=1y data.",
+            "fallback_reason": "Commodity local CSV already has >=1y data.",
         }
 
     try:
