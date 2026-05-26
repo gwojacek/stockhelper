@@ -294,7 +294,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     break
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
-                if page_num == 1:
+                    _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
                     _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if verbose:
