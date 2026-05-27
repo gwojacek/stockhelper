@@ -755,6 +755,24 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
 
+
+    def _is_recent_retest_date(val: str) -> bool:
+        txt = str(val or "").strip()
+        if not txt or txt == "-":
+            return False
+        try:
+            d = datetime.strptime(txt[:10], "%Y-%m-%d").date()
+        except Exception:
+            return False
+        today = datetime.now().date()
+        return d == today or d == (today - timedelta(days=1))
+
+    def _maybe_green_recent(val: str, highlight: bool) -> str:
+        txt = str(val or "")
+        if not highlight:
+            return html.escape(txt)
+        return f"<span style='color:#16a34a;font-weight:700'>{html.escape(txt)}</span>"
+
     def _color_ichimoku_status(val: str) -> str:
         txt = str(val or "")
         norm = txt.strip().lower()
@@ -823,10 +841,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_f1:
                     s = str(r.status)
                     color_status = ("touched_61_8" in s) or ("valid_reversal" in s)
