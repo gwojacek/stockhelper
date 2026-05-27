@@ -141,8 +141,16 @@ def _instrument_type_from_path(path: Path | None) -> str | None:
     return 'stock' if 'stocks' in parts else 'forex' if 'forex' in parts else 'commodity' if 'commodities' in parts else None
 def _resolve_runner(instrument_type: str) -> str: return 'main_stock.py' if instrument_type=='stock' else 'main.py'
 def _stooq_chart_url(ticker: str) -> str:
-    raw=(ticker or '').strip().upper(); mapped=COMMODITY_STOOQ_MAP.get(raw)
-    symbol='al.f' if raw=='ALUMINIUM' else 'hg.f' if raw=='COPPER' else (str(mapped).lower() if mapped else raw.lower())
+    raw = (ticker or "").strip().upper()
+    mapped = COMMODITY_STOOQ_MAP.get(raw)
+    if mapped:
+        symbol = "al.f" if raw == "ALUMINIUM" else "hg.f" if raw == "COPPER" else str(mapped).lower()
+    else:
+        symbol = raw.lower()
+        cfg = _resolve_existing_config_path(raw)
+        instrument = _instrument_type_from_path(cfg)
+        if instrument == "stock" and "." not in symbol and len(raw) <= 5:
+            symbol = f"{symbol}.wa"
     return f"https://stooq.pl/q/a2/?s={symbol}&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1"
 
 def _is_number_text(value: str) -> bool:
