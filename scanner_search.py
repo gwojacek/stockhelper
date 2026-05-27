@@ -129,6 +129,7 @@ class ScanResult:
     retest_count: int | None = None
     latest_retest_date: str | None = None
     latest_retest_pattern: str | None = None
+    ichimoku_status: str | None = None
 
 
 @dataclass
@@ -787,6 +788,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 result.retest_count = 0
                 result.latest_retest_date = "-"
                 result.latest_retest_pattern = "-"
+            result.ichimoku_status = _ichimoku_status(enriched, result.side)
             if instrument == "stock":
                 result.avg_turnover_10d_pln = avg_10d
                 result.low_turnover_days_20d = below_20d
@@ -951,18 +953,53 @@ def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
             pass
 
 
+def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
+    if df.empty:
+        return "-"
+    c = df.iloc[-1]
+    close = float(c["Close"])
+    open_ = float(c["Open"])
+    high = float(c["High"])
+    low = float(c["Low"])
+    top = float(c["cloud_top"])
+    bottom = float(c["cloud_bottom"])
+    kijun = float(c["kijun"])
+
+    statuses: list[str] = []
+    if side == "above":
+        statuses.append("Over Kijun-sen" if close >= kijun else "Under Kijun-sen")
+    else:
+        statuses.append("Under Kijun-sen" if close <= kijun else "Over Kijun-sen")
+
+    touched_cloud = high >= bottom and low <= top
+    inside_cloud = bottom <= close <= top
+    if touched_cloud:
+        statuses.append("Touched the cloud")
+    if inside_cloud:
+        statuses.append("Inside the cloud")
+
+    if inside_cloud:
+        if side == "above":
+            broke_other_side_intraday = low < bottom or open_ < bottom
+        else:
+            broke_other_side_intraday = high > top or open_ > top
+        if broke_other_side_intraday:
+            statuses.append("Unsuccessful breakout to the other side")
+
+    return "; ".join(statuses)
+
+
 def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
     print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI (instrumenty spełniające warunki):{ANSI_RESET}")
     if not results:
         print("Brak wyników.")
         return []
-    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Low<Th20':>10} {'Retest count':<13} {'Latest Retest date':<18} {'Latest Retest pattern':<22} {'Link':<0}")
+    print(f"{'Ticker':<10} {'Pozycja':<8} {'Świece':<8} {'Mies.':<6} {'Start':<12} {'Close':>10} {'Avg10d PLN':>14} {'Ichimoku status':<52} {'Retest count':<13} {'Latest Retest date':<18} {'Latest Retest pattern':<22} {'Link':<0}")
     print("-" * 230)
     sorted_rows = sorted(results, key=lambda r: r.respect_days, reverse=True)
     links: list[str] = []
     for row in sorted_rows:
         avg_10d = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
-        low_20 = str(row.low_turnover_days_20d) if row.low_turnover_days_20d is not None else "-"
         link = _stooq_chart_url(row.ticker)
         links.append(link)
         retest_count = "-"
@@ -972,7 +1009,7 @@ def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: 
             retest_count = str(row.retest_count if row.retest_count is not None else "-")
             retest_date = row.latest_retest_date if row.latest_retest_date else "-"
             retest_pattern = row.latest_retest_pattern if row.latest_retest_pattern else "-"
-        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {low_20:>10} {retest_count:<13} {retest_date:<18} {retest_pattern:<22} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{row.ticker:<10} {row.side:<8} {row.respect_days:<8} {row.respect_months:<6.1f} {row.start_date:<12} {row.close:>10.4f} {avg_10d:>14} {((row.ichimoku_status or "-")[:52]):<52} {retest_count:<13} {retest_date:<18} {retest_pattern:<22} {ANSI_CYAN}{link}{ANSI_RESET}")
     return links
 
 def run_checkavg(target: str) -> int:
@@ -1359,13 +1396,13 @@ def run_ichimoku_search(target: str) -> int:
         rows_md = []
         for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
             side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
             rows_md,
-            description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
+            description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
         )
         links_primary = _print_results_with_links(results, retest_by_ticker_side)
         print(f"\nZapisano MD: {out_md}")
@@ -1482,13 +1519,13 @@ def run_ichimoku_search(target: str) -> int:
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", row.low_turnover_days_20d if row.low_turnover_days_20d is not None else "-", str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
         rows_md,
-        description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
+        description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
     )
 
     links_primary = _print_results_with_links(results, retest_by_ticker_side)
