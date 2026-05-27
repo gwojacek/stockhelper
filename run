@@ -811,7 +811,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
     html_parts.append(_liquidity_legend_html())
-    html_parts.append("<p><input id='q' placeholder='Search ticker/status'> <select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select> <select id='scanner'><option value=''>All scanners</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></p>")
+    html_parts.append("<div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 14px'>"
+                      "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status'>"
+                      "<label for='market'><b>Market</b></label><select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
+                      "<label for='scanner'><b>Scanner view</b></label><select id='scanner'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>")
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
