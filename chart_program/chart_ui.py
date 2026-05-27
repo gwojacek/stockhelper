@@ -682,13 +682,36 @@ class ChartLevelSelectorUI:
                 return levels_store, level_points, objects_store, None, fib_anchor, half_anchor, None
 
             if active_tool == "fib":
+                def _nearest_candle_row(ts_raw):
+                    ts = pd.to_datetime(ts_raw, errors="coerce")
+                    if pd.isna(ts):
+                        return None
+                    dts = pd.to_datetime(self.df["Date"], errors="coerce")
+                    if dts.isna().all():
+                        return None
+                    idx = int((dts - ts).abs().idxmin())
+                    return self.df.iloc[idx]
+
                 if fib_anchor is None:
-                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": self._round_price(price)}, half_anchor, None
+                    row = _nearest_candle_row(date)
+                    if row is not None:
+                        anchor_y = self._round_price(float(row.get("Low", row.get("Close", price))))
+                        anchor_x = row.get("Date", date)
+                    else:
+                        anchor_y = self._round_price(price)
+                        anchor_x = date
+                    return levels_store, level_points, objects_store, line_anchor, {"x": anchor_x, "y": anchor_y}, half_anchor, None
 
                 y_start = self._round_price(fib_anchor["y"])
-                y_end = self._round_price(price)
+                row2 = _nearest_candle_row(date)
+                if row2 is not None:
+                    y_end = self._round_price(float(row2.get("High", row2.get("Close", price))))
+                    x_end_src = row2.get("Date", date)
+                else:
+                    y_end = self._round_price(price)
+                    x_end_src = date
                 x_start = pd.to_datetime(fib_anchor["x"], errors="coerce")
-                x_end = pd.to_datetime(date, errors="coerce")
+                x_end = pd.to_datetime(x_end_src, errors="coerce")
                 x_right = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 if pd.isna(x_start) or pd.isna(x_end) or x_start == x_end:
                     x_start = pd.to_datetime(self.df.iloc[0]["Date"], errors="coerce")
