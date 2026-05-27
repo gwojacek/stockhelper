@@ -504,6 +504,16 @@ def run_level_selector(raw_args=None):
                 y_end = float(e_row.get("High", e_row.get("Close", 0.0)))
                 x_start = pd.to_datetime(s_row["Date"], errors="coerce")
                 x_end = pd.to_datetime(e_row["Date"], errors="coerce")
+                # Keep parity with manual fib workaround: shift 2nd anchor ~1 candle left
+                # to avoid hitbox/barrier behavior around clicked candle in chart UI.
+                try:
+                    e_idx_left = max(0, e_idx - 1)
+                    e_row_left = df.iloc[e_idx_left]
+                    x_end_left = pd.to_datetime(e_row_left["Date"], errors="coerce")
+                    if not pd.isna(x_end_left):
+                        x_end = x_end_left
+                except Exception:
+                    pass
                 x_right = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce")
                 if pd.isna(x_start):
                     x_start = s_ts

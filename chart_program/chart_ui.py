@@ -682,20 +682,110 @@ class ChartLevelSelectorUI:
                 return levels_store, level_points, objects_store, None, fib_anchor, half_anchor, None
 
             if active_tool == "fib":
-                if fib_anchor is None:
-                    return levels_store, level_points, objects_store, line_anchor, {"x": date, "y": self._round_price(price)}, half_anchor, None
+                def _nearest_candle_row(ts_raw):
+                    ts = pd.to_datetime(ts_raw, errors="coerce")
+                    if pd.isna(ts):
+                        return None
+                    dts = pd.to_datetime(self.df["Date"], errors="coerce")
+                    if dts.isna().all():
+                        return None
+                    idx = int((dts - ts).abs().idxmin())
+                    return self.df.iloc[idx]
 
-                y_start = self._round_price(fib_anchor["y"])
-                y_end = self._round_price(price)
-                x_start = pd.to_datetime(fib_anchor["x"], errors="coerce")
-                x_end = pd.to_datetime(date, errors="coerce")
+                def _extreme_row_around(ts_raw, mode: str, radius: int = 1):
+                    ts = pd.to_datetime(ts_raw, errors="coerce")
+                    if pd.isna(ts):
+                        return _nearest_candle_row(ts_raw)
+                    dts = pd.to_datetime(self.df["Date"], errors="coerce")
+                    if dts.isna().all():
+                        return _nearest_candle_row(ts_raw)
+                    center = int((dts - ts).abs().idxmin())
+                    left = max(0, center - radius)
+                    right = min(len(self.df) - 1, center + radius)
+                    w = self.df.iloc[left:right + 1]
+                    if w.empty:
+                        return _nearest_candle_row(ts_raw)
+                    if mode == "low":
+                        try:
+                            idx = int(pd.to_numeric(w["Low"], errors="coerce").idxmin())
+                            return self.df.loc[idx]
+                        except Exception:
+                            return _nearest_candle_row(ts_raw)
+                    try:
+                        idx = int(pd.to_numeric(w["High"], errors="coerce").idxmax())
+                        return self.df.loc[idx]
+                    except Exception:
+                        return _nearest_candle_row(ts_raw)
+
+                def _pick_anchor_row(ts_raw, clicked_price: float):
+                    base = _nearest_candle_row(ts_raw)
+                    if base is None:
+                        return None, None
+                    try:
+                        b_low = float(base.get("Low", base.get("Close", clicked_price)))
+                        b_high = float(base.get("High", base.get("Close", clicked_price)))
+                        mid = (b_low + b_high) / 2.0
+                        mode = "low" if float(clicked_price) <= mid else "high"
+                    except Exception:
+                        mode = "low"
+                    return _extreme_row_around(ts_raw, mode=mode, radius=1), mode
+
+                if fib_anchor is None:
+                    row, mode = _pick_anchor_row(date, price)
+                    if row is None:
+                        row = _nearest_candle_row(date)
+                        mode = "low"
+                    if row is not None:
+                        if mode == "low":
+                            anchor_y = self._round_price(float(row.get("Low", row.get("Close", price))))
+                        else:
+                            anchor_y = self._round_price(float(row.get("High", row.get("Close", price))))
+                        anchor_x = row.get("Date", date)
+                    else:
+                        anchor_y = self._round_price(price)
+                        anchor_x = date
+                    return levels_store, level_points, objects_store, line_anchor, {"x": anchor_x, "y": anchor_y}, half_anchor, None
+
+                row2, mode2 = _pick_anchor_row(date, price)
+                if row2 is None:
+                    row2 = _nearest_candle_row(date)
+                    mode2 = "high"
+                row1 = _nearest_candle_row(fib_anchor["x"])
+                if row1 is None or row2 is None:
+                    return levels_store, level_points, objects_store, line_anchor, None, half_anchor, None
+
+                # Derive final low/high anchors from the two selected anchor candles.
+                y1 = float(row1.get("Low", row1.get("Close", fib_anchor["y"]))) if fib_anchor.get("y") is not None else float(row1.get("Close", price))
+                if mode2 == "low":
+                    y2 = float(row2.get("Low", row2.get("Close", price)))
+                else:
+                    y2 = float(row2.get("High", row2.get("Close", price)))
+                y_low = min(y1, y2)
+                y_high = max(y1, y2)
+                y_start = self._round_price(y_low)
+                y_end = self._round_price(y_high)
+                x_start = pd.to_datetime(row1.get("Date", fib_anchor["x"]), errors="coerce")
+                x_end_raw = pd.to_datetime(row2.get("Date", date), errors="coerce")
+                # Workaround for click barrier/object-hitbox around candles:
+                # shift second anchor ~1 candle to the left, keep same Y level.
+                dts_all = pd.to_datetime(self.df["Date"], errors="coerce")
+                x_end = x_end_raw
+                if not pd.isna(x_end_raw) and not dts_all.isna().all():
+                    try:
+                        idx2 = int((dts_all - x_end_raw).abs().idxmin())
+                        idx2_left = max(0, idx2 - 1)
+                        x_end = pd.to_datetime(self.df.iloc[idx2_left].get("Date", x_end_raw), errors="coerce")
+                    except Exception:
+                        x_end = x_end_raw
                 x_right = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 if pd.isna(x_start) or pd.isna(x_end) or x_start == x_end:
                     x_start = pd.to_datetime(self.df.iloc[0]["Date"], errors="coerce")
                     x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
 
                 delta = y_end - y_start
-                retrace_levels = [0.0, 0.618, 1.0]
+                # Keep manual Fib tool consistent with auto-fibo preload from CLI/report links.
+                # Requested layout: 100, 0, 23.6, 38.2, 61.8
+                retrace_levels = [1.0, 0.0, 0.236, 0.382, 0.618]
                 fib_group_id = str(uuid4())
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
@@ -704,13 +794,17 @@ class ChartLevelSelectorUI:
                     span = pd.Timedelta(days=7)
                 x_common_end = x_right + span * 3
 
-                for r in retrace_levels:
+                for idx, r in enumerate(retrace_levels):
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
                     y_val = self._round_price(y_end - delta * r)
                     base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.{self.price_precision}f})"
-                    x_level_start = x_start + (x_end - x_start) * (1 - r)
-                    if abs(r - 0.618) < 1e-9:
+                    # Match auto-fibo geometry:
+                    # - first line (100%) from first anchor,
+                    # - remaining levels from second anchor and extend right.
+                    if idx == 0:
+                        x_level_start = x_start
+                    else:
                         x_level_start = x_end
                     if pd.isna(x_level_start):
                         x_level_start = x_start
