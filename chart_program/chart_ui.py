@@ -692,8 +692,33 @@ class ChartLevelSelectorUI:
                     idx = int((dts - ts).abs().idxmin())
                     return self.df.iloc[idx]
 
+                def _extreme_row_around(ts_raw, mode: str, radius: int = 2):
+                    ts = pd.to_datetime(ts_raw, errors="coerce")
+                    if pd.isna(ts):
+                        return _nearest_candle_row(ts_raw)
+                    dts = pd.to_datetime(self.df["Date"], errors="coerce")
+                    if dts.isna().all():
+                        return _nearest_candle_row(ts_raw)
+                    center = int((dts - ts).abs().idxmin())
+                    left = max(0, center - radius)
+                    right = min(len(self.df) - 1, center + radius)
+                    w = self.df.iloc[left:right + 1]
+                    if w.empty:
+                        return _nearest_candle_row(ts_raw)
+                    if mode == "low":
+                        try:
+                            idx = int(pd.to_numeric(w["Low"], errors="coerce").idxmin())
+                            return self.df.loc[idx]
+                        except Exception:
+                            return _nearest_candle_row(ts_raw)
+                    try:
+                        idx = int(pd.to_numeric(w["High"], errors="coerce").idxmax())
+                        return self.df.loc[idx]
+                    except Exception:
+                        return _nearest_candle_row(ts_raw)
+
                 if fib_anchor is None:
-                    row = _nearest_candle_row(date)
+                    row = _extreme_row_around(date, "low")
                     if row is not None:
                         anchor_y = self._round_price(float(row.get("Low", row.get("Close", price))))
                         anchor_x = row.get("Date", date)
@@ -703,7 +728,7 @@ class ChartLevelSelectorUI:
                     return levels_store, level_points, objects_store, line_anchor, {"x": anchor_x, "y": anchor_y}, half_anchor, None
 
                 y_start = self._round_price(fib_anchor["y"])
-                row2 = _nearest_candle_row(date)
+                row2 = _extreme_row_around(date, "high")
                 if row2 is not None:
                     y_end = self._round_price(float(row2.get("High", row2.get("Close", price))))
                     x_end_src = row2.get("Date", date)
