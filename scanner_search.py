@@ -144,6 +144,7 @@ class FlipResult:
     valid_retests_count: int = 0
     first_valid_retest_pattern_date: str = "-"
     retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
+    avg_turnover_10d_pln: float | None = None
 
 
 @dataclass
@@ -801,6 +802,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+            if instrument == "stock":
+                flip.avg_turnover_10d_pln = avg_10d
             if result and result.side == flip.current_side:
                 result.start_date = flip.flip_date
         _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
@@ -1019,7 +1022,7 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
         print("Brak wyników.")
         return []
     max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
-    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12}"
+    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12} {'Avg10d PLN':>14}"
     event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
     print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
     print("-" * 150)
@@ -1035,7 +1038,8 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
             else:
                 event_cells.append("-")
         event_cols = " ".join([f"{cell:<34}" for cell in event_cells])
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
+        avg10_txt = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {avg10_txt:>14} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
     return links
 
 
@@ -1367,11 +1371,11 @@ def run_ichimoku_search(target: str) -> int:
         rows_flip_md=[]
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
+            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(
             out_md_flip,
             "WYNIKI 2",
-            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
             rows_flip_md,
             append=True,
             description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
@@ -1493,11 +1497,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
