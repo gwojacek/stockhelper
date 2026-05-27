@@ -965,28 +965,23 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
     bottom = float(c["cloud_bottom"])
     kijun = float(c["kijun"])
 
-    statuses: list[str] = []
-    if side == "above":
-        statuses.append("Over Kijun-sen" if close >= kijun else "Under Kijun-sen")
-    else:
-        statuses.append("Under Kijun-sen" if close <= kijun else "Over Kijun-sen")
-
-    touched_cloud = high >= bottom and low <= top
     inside_cloud = bottom <= close <= top
-    if touched_cloud:
-        statuses.append("Touched the cloud")
-    if inside_cloud:
-        statuses.append("Inside the cloud")
-
     if inside_cloud:
         if side == "above":
             broke_other_side_intraday = low < bottom or open_ < bottom
         else:
             broke_other_side_intraday = high > top or open_ > top
         if broke_other_side_intraday:
-            statuses.append("Unsuccessful breakout to the other side")
+            return "Unsuccessful breakout to the other side"
+        return "Inside the cloud"
 
-    return "; ".join(statuses)
+    touched_cloud = high >= bottom and low <= top
+    if touched_cloud:
+        return "Touched the cloud"
+
+    if side == "above":
+        return "Over Kijun-sen" if close >= kijun else "Under Kijun-sen"
+    return "Under Kijun-sen" if close <= kijun else "Over Kijun-sen"
 
 
 def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
