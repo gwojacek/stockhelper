@@ -804,8 +804,6 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
             flip.ticker = ticker
             if instrument == "stock":
                 flip.avg_turnover_10d_pln = avg_10d
-            if result and result.side == flip.current_side:
-                result.start_date = flip.flip_date
         _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
