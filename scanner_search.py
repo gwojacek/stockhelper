@@ -792,7 +792,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 result.liquidity_threshold_20d_pln = threshold_20d
                 if not stock_liquidity_ok:
                     _debug_log_scan(ticker, "excluded from WYNIKI 1 by liquidity filter")
-                    return display_symbol, None, flip, (
+                    return display_symbol, None, None, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
         if flip:
