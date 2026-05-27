@@ -262,7 +262,8 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 i_d = str(r.get("incline_duration_days", "0") or "0")
                 d_d = str(r.get("decline_duration_days", "0") or "0")
                 r["ratio_txt"] = f"{i_d}/{d_d} ({ratio:.2f}:1)"
-                r["avg10turn"] = "-"
+                r["avg10turn"] = r.get("avg_turnover_10d_pln", "-")
+                r["ratio_raw"] = ratio
                 try:
                     cur = float(str(r.get("current_close", "0") or "0"))
                     f23 = float(str(r.get("fib_23_6", "0") or "0"))
@@ -272,8 +273,10 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                     closeness = max(0.0, 1.0 - (dist / band))
                     marker = "🟢" if closeness >= 0.7 else ("🟡" if closeness >= 0.35 else "🔴")
                     r["near61"] = f"{marker} {closeness * 100:5.1f}%"
+                    r["near61_raw"] = closeness
                 except Exception:
                     r["near61"] = "-"
+                    r["near61_raw"] = -1.0
             cols_w1 = [
                 ("Ticker", "ticker"),
                 ("Dir", "direction"),
@@ -282,7 +285,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Incline", "incline"),
                 ("Ratio(d)", "ratio_txt"),
                 ("Touched_61.8_date", "first_61_8_touch_date"),
-                ("Avg10Turn", "avg10turn"),
+                ("Avg10d PLN", "avg10turn"),
                 ("Near61.8", "near61"),
                 ("Link", "stooq_link"),
             ]
@@ -293,6 +296,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 ("Incline", "incline"),
                 ("Ratio(d)", "ratio_txt"),
                 ("Touched_61.8_date", "first_61_8_touch_date"),
+                ("Avg10d PLN", "avg10turn"),
                 ("Link", "stooq_link"),
             ]
             if csv_path.name.endswith("_w1.csv"):
@@ -316,6 +320,16 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 return out
             rows_w1 = _dedupe(rows_w1)
             rows_w2 = _dedupe(rows_w2)
+            top_near_ids = {id(x) for x in sorted(rows_w1, key=lambda r: float(r.get("near61_raw", -1.0)), reverse=True)[:3]}
+            top_ratio_ids = {id(x) for x in sorted(rows_w1 + rows_w2, key=lambda r: float(r.get("ratio_raw", 0.0)), reverse=True)[:3]}
+            for r in rows_w1:
+                if id(r) in top_near_ids:
+                    r["near61"] = f"{GOLD_DOT} {r.get('near61')}"
+                if id(r) in top_ratio_ids:
+                    r["ratio_txt"] = f"{GOLD_DOT} {r.get('ratio_txt')}"
+            for r in rows_w2:
+                if id(r) in top_ratio_ids:
+                    r["ratio_txt"] = f"{GOLD_DOT} {r.get('ratio_txt')}"
             if rows_w1:
                 _write_table(out, "WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", rows_w1, cols_w1)
             if rows_w2:
@@ -662,7 +676,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal",
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
                 dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
-                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", ""))}, chart_url=str(r.get("Link", "")),
+                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", ""))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="HIGH"
             ))
         for r in f_w1:
@@ -671,7 +685,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")),
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
                 dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
-                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", ""))}, chart_url=str(r.get("Link", "")),
+                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", ""))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
 
@@ -761,9 +775,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             elif is_i2:
                 thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Retest count</th><th>Avg10d PLN</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             elif is_f1:
-                thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Near61.8</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Near61.8</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             else:
-                thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr>"
             empty_cls = " empty-group" if not grows else ""
             html_parts.append(f"<div class='subhead{empty_cls}' data-empty='{1 if not grows else 0}'>{html.escape(gname)} ({len(grows)}) <button class='iconbtn' title='Open all stooq links from this table' onclick='openTableStooqLinks(this)'>🔗</button></div><div style='overflow:auto'>")
             if not grows:
@@ -780,9 +794,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_f1:
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(r.metrics.get('near61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{html.escape(r.metrics.get('near61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 else:
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{html.escape(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("<script>function copyCmd(btn){navigator.clipboard.writeText(btn.dataset.cmd||'');btn.textContent='Copied';setTimeout(()=>btn.textContent='Run/Copy',1200);}async function runOrCopy(btn){const c=btn.dataset.cmd||'';if(c){try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});btn.textContent='Executed';setTimeout(()=>btn.textContent='Run/Copy',1200);}catch(e){copyCmd(btn);}}else{copyCmd(btn);}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market');function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;r.style.display=(okText&&okM)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});q.oninput=f;m.onchange=f;f();</script></body></html>")
