@@ -5,6 +5,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import tempfile
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -28,6 +29,22 @@ DATA_DIR_BY_INSTRUMENT = {
 # Per-process memo of symbols already refreshed from remote.
 # Prevents duplicate remote fetches in one run (e.g. allsearch ichi -> fibo).
 _SESSION_REFRESHED_KEYS: set[tuple[str, str, bool]] = set()
+
+WARSAW_TZ = ZoneInfo("Europe/Warsaw")
+
+
+def _is_mandatory_remote_check_time(instrument_type: str) -> bool:
+    """After configured Warsaw cutoffs, force at least one remote refresh per process run."""
+    now_warsaw = datetime.now(WARSAW_TZ)
+    minutes_now = now_warsaw.hour * 60 + now_warsaw.minute
+    # User rule:
+    # - stocks: mandatory check after 17:15 Warsaw time
+    # - commodities: mandatory check after 19:45 Warsaw time
+    if instrument_type == "stock":
+        return minutes_now >= (17 * 60 + 15)
+    if instrument_type == "commodity":
+        return minutes_now >= (19 * 60 + 45)
+    return False
 
 COMMODITY_YAHOO_MAP = {
     "GOLD": "GC=F",
@@ -732,6 +749,7 @@ def load_or_update_daily_data(
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_key = (instrument_type, _storage_symbol_for_csv(symbol, instrument_type).upper(), bool(fetch_older_data))
+    mandatory_remote_check = _is_mandatory_remote_check_time(instrument_type)
 
     # If this symbol was already refreshed in this process and file exists, reuse local CSV
     # to avoid repeated API/web fetches (especially Stooq web + captcha flows).
@@ -753,7 +771,12 @@ def load_or_update_daily_data(
             "fallback_reason": "Cache-only mode enabled.",
         }
 
-    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_min_year(csv_path):
+    if (
+        instrument_type == "commodity"
+        and not mandatory_remote_check
+        and not fetch_older_data
+        and _local_csv_has_min_year(csv_path)
+    ):
         cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
         return cached_df, csv_path, {
             "source": "cache",
