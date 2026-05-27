@@ -355,7 +355,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
             is_stock_like = any(str(r.get("avg_turnover_10d_pln", "")).strip() for r in rows)
             if is_stock_like:
                 cols.insert(6, ("Avg10d PLN", "avg_turnover_10d_pln"))
-                cols.insert(7, ("Low<Th20", "below_threshold_days_20d"))
+                cols.insert(7, ("Ichimoku status", "ichimoku_status"))
             if is_stock_like and not (len(th10_vals) == 1 and len(th20_vals) == 1):
                 cols.extend([("Th10d PLN", "threshold_10d_pln"), ("Th20d PLN", "threshold_20d_pln")])
             rows = sorted(rows, key=lambda r: (str(r.get("side", "")) != "below", -float(str(r.get("respect_months", "0") or "0"))))
@@ -713,7 +713,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                             market=market, scanner="ICHIMOKU", category=cat, ticker=str(r.get("ticker", "")),
                             status=status, dates={"start_date": str(r.get("start_date", "")), "flip_date": str(r.get("flip_date", ""))},
                             metrics={"candles": str(r.get("respect_days", "")), "months": str(r.get("respect_months", "")), "close": str(r.get("last_close", "")),
-                                     "avg10d": str(r.get("avg_turnover_10d_pln", "")), "low_th20": str(r.get("below_threshold_days_20d", "")),
+                                     "avg10d": str(r.get("avg_turnover_10d_pln", "")), "ichimoku_status": str(r.get("ichimoku_status", "")),
                                      "latest_retest_count": str(r.get("latest_retest_count", "")), "latest_retest_date": str(r.get("last_valid_retest_pattern_date", "")), "latest_retest_pattern": str(r.get("last_valid_retest_pattern_name", ""))},
                             chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
                             python_command=f"python run -c {r.get('ticker','')}",
@@ -757,9 +757,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
     def _color_ichimoku_status(val: str) -> str:
         txt = str(val or "")
-        if txt == "Inside the cloud":
+        norm = txt.strip().lower()
+        if "inside the cloud" in norm:
             return f"<span style='color:#b45309;font-weight:700'>{html.escape(txt)}</span>"
-        if txt == "Unsuccessful breakout to the other side":
+        if "unsuccessful breakout to the other side" in norm:
             return f"<span style='color:#dc2626;font-weight:700'>{html.escape(txt)}</span>"
         return html.escape(txt)
 
