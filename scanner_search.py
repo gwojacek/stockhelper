@@ -904,7 +904,12 @@ def _scan_source_label(src: str) -> str:
 
 
 def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "") -> str:
-    base = f"python run -c {ticker}"
+    t = (ticker or "").strip()
+    if "." not in t and len(t) <= 5:
+        cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
+        if (cfg_stocks / f"{t}.py").exists():
+            t = f"{t}.WA"
+    base = f"python run -c {t}"
     if mode == "fibo":
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"

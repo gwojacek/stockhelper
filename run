@@ -62,6 +62,8 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
         if mapped:
             ticker_cmd = str(mapped).upper()
+    elif market == "WIG" and "." not in ticker_cmd and len(ticker_cmd) <= 5:
+        ticker_cmd = f"{ticker_cmd}.WA"
     instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market == "COMMODITIES" else "stock"))
     if row.scanner == "ICHIMOKU":
         return f"python run -c {ticker_cmd} --ichimoku-mode on"
