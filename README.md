@@ -398,12 +398,16 @@ You can run explicit historical backfill:
 python run --fetch-older-data
 python run --fetch-older-data --fetch-older-data-scope stocks
 python run --fetch-older-data --fetch-older-data-scope forex
-python run --fetch-older-data --fetch-older-data-scope commodities
 ```
 
 Behavior summary:
-- for **non-commodities**, if CSV already has at least 364 days, backfill adds at most 180 older days,
+- `--fetch-older-data` now applies to **stocks + forex only** (commodities are explicitly excluded and logged),
 - non-commodity backfill target is capped around **544 days** (364 + 180),
-- if that cap is already reached, older backfill for that symbol is skipped,
-- commodity search path prefers cache-first checks and opens Playwright only when local coverage is insufficient.
+- if local CSV already spans at least ~**1.5 years** (>= 547 days), older backfill for that symbol is skipped,
+- logged `aim_date` is computed as `last_found_data - 544 days`,
+- each `ok` line logs `oldest_after` and `backfill_added=True/False` so you can verify whether older rows were really appended,
+- if pass 1 produces zero `backfill_added=True`, runner pauses (default `120s`) for VPN switch and retries once automatically.
 
+Optional env knobs:
+- `STOCKHELPER_FETCH_VPN_PAUSE_S` (default `120`) controls pause length before retry.
+- `STOCKHELPER_FETCH_RETRY_ON_ZERO_BACKFILL=0` disables the automatic second pass.
