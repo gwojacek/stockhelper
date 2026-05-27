@@ -695,7 +695,9 @@ class ChartLevelSelectorUI:
                     x_end = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
 
                 delta = y_end - y_start
-                retrace_levels = [0.0, 0.618, 1.0]
+                # Keep manual Fib tool consistent with auto-fibo preload from CLI/report links.
+                # Requested layout: 100, 0, 23.6, 38.2, 61.8
+                retrace_levels = [1.0, 0.0, 0.236, 0.382, 0.618]
                 fib_group_id = str(uuid4())
                 last_date = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 x_right = last_date if not pd.isna(last_date) else x_end
@@ -704,13 +706,17 @@ class ChartLevelSelectorUI:
                     span = pd.Timedelta(days=7)
                 x_common_end = x_right + span * 3
 
-                for r in retrace_levels:
+                for idx, r in enumerate(retrace_levels):
                     pct = f"{r * 100:.1f}%".replace(".0%", "%")
                     y_val = self._round_price(y_end - delta * r)
                     base_label = f"FIB {pct}"
                     label = f"{base_label} ({y_val:.{self.price_precision}f})"
-                    x_level_start = x_start + (x_end - x_start) * (1 - r)
-                    if abs(r - 0.618) < 1e-9:
+                    # Match auto-fibo geometry:
+                    # - first line (100%) from first anchor,
+                    # - remaining levels from second anchor and extend right.
+                    if idx == 0:
+                        x_level_start = x_start
+                    else:
                         x_level_start = x_end
                     if pd.isna(x_level_start):
                         x_level_start = x_start
