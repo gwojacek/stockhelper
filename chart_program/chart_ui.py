@@ -717,26 +717,44 @@ class ChartLevelSelectorUI:
                     except Exception:
                         return _nearest_candle_row(ts_raw)
 
+                def _extremes_between(ts1_raw, ts2_raw):
+                    dts = pd.to_datetime(self.df["Date"], errors="coerce")
+                    t1 = pd.to_datetime(ts1_raw, errors="coerce")
+                    t2 = pd.to_datetime(ts2_raw, errors="coerce")
+                    if pd.isna(t1) or pd.isna(t2) or dts.isna().all():
+                        return None, None
+                    left, right = (t1, t2) if t1 <= t2 else (t2, t1)
+                    w = self.df[(dts >= left) & (dts <= right)]
+                    if w.empty:
+                        return None, None
+                    try:
+                        low_idx = int(pd.to_numeric(w["Low"], errors="coerce").idxmin())
+                        high_idx = int(pd.to_numeric(w["High"], errors="coerce").idxmax())
+                        return self.df.loc[low_idx], self.df.loc[high_idx]
+                    except Exception:
+                        return None, None
+
                 if fib_anchor is None:
-                    row = _extreme_row_around(date, "low")
+                    row = _nearest_candle_row(date)
                     if row is not None:
-                        anchor_y = self._round_price(float(row.get("Low", row.get("Close", price))))
+                        anchor_y = self._round_price(float(row.get("Close", price)))
                         anchor_x = row.get("Date", date)
                     else:
                         anchor_y = self._round_price(price)
                         anchor_x = date
                     return levels_store, level_points, objects_store, line_anchor, {"x": anchor_x, "y": anchor_y}, half_anchor, None
 
-                y_start = self._round_price(fib_anchor["y"])
-                row2 = _extreme_row_around(date, "high")
-                if row2 is not None:
-                    y_end = self._round_price(float(row2.get("High", row2.get("Close", price))))
-                    x_end_src = row2.get("Date", date)
-                else:
-                    y_end = self._round_price(price)
-                    x_end_src = date
-                x_start = pd.to_datetime(fib_anchor["x"], errors="coerce")
-                x_end = pd.to_datetime(x_end_src, errors="coerce")
+                low_row, high_row = _extremes_between(fib_anchor["x"], date)
+                if low_row is None or high_row is None:
+                    low_row = _extreme_row_around(fib_anchor["x"], "low")
+                    high_row = _extreme_row_around(date, "high")
+                if low_row is None or high_row is None:
+                    return levels_store, level_points, objects_store, line_anchor, None, half_anchor, None
+
+                y_start = self._round_price(float(low_row.get("Low", low_row.get("Close", price))))
+                y_end = self._round_price(float(high_row.get("High", high_row.get("Close", price))))
+                x_start = pd.to_datetime(low_row.get("Date", fib_anchor["x"]), errors="coerce")
+                x_end = pd.to_datetime(high_row.get("Date", date), errors="coerce")
                 x_right = pd.to_datetime(self.df.iloc[-1]["Date"], errors="coerce")
                 if pd.isna(x_start) or pd.isna(x_end) or x_start == x_end:
                     x_start = pd.to_datetime(self.df.iloc[0]["Date"], errors="coerce")
