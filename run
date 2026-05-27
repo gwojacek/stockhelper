@@ -1028,7 +1028,7 @@ def main()->int:
                 return "-"
         target_span_days = 364 + 180
         skip_span_days = int(365 * 1.5)
-        def _fetch_one(instrument: str, symbol: str, source_csv_path: Path) -> tuple[bool, str]:
+        def _fetch_one(instrument: str, symbol: str, source_csv_path: Path) -> tuple[bool, bool, str]:
             try:
                 oldest_before = _oldest_date_in_csv(source_csv_path)
                 aim_date = "-"
@@ -1039,7 +1039,7 @@ def main()->int:
                         if not dts.empty:
                             span_days = int((dts.max() - dts.min()).days)
                             if span_days >= skip_span_days:
-                                return True, (
+                                return True, False, (
                                     f"[fetch-older-data] skip {instrument}:{symbol} "
                                     f"last_found_data={oldest_before} span_days={span_days} reason=already_have_1_5y_or_more"
                                 )
@@ -1051,57 +1051,98 @@ def main()->int:
                     except Exception:
                         aim_date = "-"
                 df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
-                return True, (
+                oldest_after = _oldest_date_in_csv(csv_path)
+                backfill_added = False
+                if oldest_before != "-" and oldest_after != "-":
+                    try:
+                        backfill_added = pd.Timestamp(oldest_after) < pd.Timestamp(oldest_before)
+                    except Exception:
+                        backfill_added = False
+                return True, backfill_added, (
                     f"[fetch-older-data] ok {instrument}:{symbol} "
                     f"last_found_data={oldest_before} aim_date={aim_date} "
-                    f"rows={len(df)} source={meta.get('source')} src_csv={source_csv_path} -> {csv_path}"
+                    f"rows={len(df)} source={meta.get('source')} "
+                    f"oldest_after={oldest_after} backfill_added={backfill_added} "
+                    f"src_csv={source_csv_path} -> {csv_path}"
                 )
             except Exception as exc:
-                return False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
+                return False, False, f"[fetch-older-data] fail {instrument}:{symbol}: {exc}"
         fetch_timeout_s = max(15, int(os.getenv("STOCKHELPER_FETCH_ONE_TIMEOUT_S", "90")))
-        if local_workers == 1:
-            def _timeout_handler(_signum, _frame):
-                raise TimeoutError("fetch_one_timeout")
-            try:
-                for instrument, symbol, source_csv_path in targets:
-                    if hasattr(signal, "SIGALRM"):
-                        prev = signal.signal(signal.SIGALRM, _timeout_handler)
-                        signal.alarm(fetch_timeout_s)
-                    try:
-                        ok, line = _fetch_one(instrument, symbol, source_csv_path)
-                    except TimeoutError:
-                        ok, line = False, (
-                            f"[fetch-older-data] fail {instrument}:{symbol}: timeout>{fetch_timeout_s}s "
-                            f"(set STOCKHELPER_FETCH_ONE_TIMEOUT_S to adjust)"
-                        )
-                    finally:
+        vpn_pause_s = max(0, int(os.getenv("STOCKHELPER_FETCH_VPN_PAUSE_S", "120")))
+        retry_on_zero_backfill = os.getenv("STOCKHELPER_FETCH_RETRY_ON_ZERO_BACKFILL", "1") != "0"
+
+        def _run_pass(pass_targets: list[tuple[str, str, Path]], pass_label: str) -> tuple[int, int]:
+            pass_failures = 0
+            pass_backfilled = 0
+            if local_workers == 1:
+                def _timeout_handler(_signum, _frame):
+                    raise TimeoutError("fetch_one_timeout")
+                try:
+                    for instrument, symbol, source_csv_path in pass_targets:
                         if hasattr(signal, "SIGALRM"):
-                            signal.alarm(0)
-                            signal.signal(signal.SIGALRM, prev)
-                    print(line)
-                    if not ok:
-                        failures += 1
-            except KeyboardInterrupt:
-                print("[fetch-older-data] Interrupted by user (Ctrl+C).")
-                print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
-                return 130
-        else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            try:
-                with ThreadPoolExecutor(max_workers=min(local_workers, len(targets))) as ex:
-                    fut_map = {
-                        ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
-                        for instrument, symbol, source_csv_path in targets
-                    }
-                    for fut in as_completed(fut_map):
-                        ok, line = fut.result()
-                        print(line)
+                            prev = signal.signal(signal.SIGALRM, _timeout_handler)
+                            signal.alarm(fetch_timeout_s)
+                        try:
+                            ok, backfill_added, line = _fetch_one(instrument, symbol, source_csv_path)
+                        except TimeoutError:
+                            ok, backfill_added, line = False, False, (
+                                f"[fetch-older-data] fail {instrument}:{symbol}: timeout>{fetch_timeout_s}s "
+                                f"(set STOCKHELPER_FETCH_ONE_TIMEOUT_S to adjust)"
+                            )
+                        finally:
+                            if hasattr(signal, "SIGALRM"):
+                                signal.alarm(0)
+                                signal.signal(signal.SIGALRM, prev)
+                        print(f"{line} pass={pass_label}")
+                        if backfill_added:
+                            pass_backfilled += 1
                         if not ok:
-                            failures += 1
-            except KeyboardInterrupt:
-                print("[fetch-older-data] Interrupted by user (Ctrl+C).")
-                print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                            pass_failures += 1
+                except KeyboardInterrupt:
+                    print("[fetch-older-data] Interrupted by user (Ctrl+C).")
+                    print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                    return -1, pass_backfilled
+            else:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                try:
+                    with ThreadPoolExecutor(max_workers=min(local_workers, len(pass_targets))) as ex:
+                        fut_map = {
+                            ex.submit(_fetch_one, instrument, symbol, source_csv_path): (instrument, symbol)
+                            for instrument, symbol, source_csv_path in pass_targets
+                        }
+                        for fut in as_completed(fut_map):
+                            ok, backfill_added, line = fut.result()
+                            print(f"{line} pass={pass_label}")
+                            if backfill_added:
+                                pass_backfilled += 1
+                            if not ok:
+                                pass_failures += 1
+                except KeyboardInterrupt:
+                    print("[fetch-older-data] Interrupted by user (Ctrl+C).")
+                    print("[fetch-older-data] Already written CSV updates are kept (no rollback).")
+                    return -1, pass_backfilled
+            return pass_failures, pass_backfilled
+
+        first_failures, first_backfilled = _run_pass(targets, "1")
+        if first_failures < 0:
+            return 130
+        failures += first_failures
+
+        if retry_on_zero_backfill and first_backfilled == 0 and targets:
+            print(
+                "[fetch-older-data] No symbol was extended with older rows in pass=1. "
+                f"Pausing {vpn_pause_s}s for VPN switch, then retrying once."
+            )
+            if vpn_pause_s > 0:
+                time.sleep(vpn_pause_s)
+            second_failures, second_backfilled = _run_pass(targets, "2")
+            if second_failures < 0:
                 return 130
+            failures += second_failures
+            print(
+                f"[fetch-older-data] retry summary pass1_backfilled={first_backfilled} "
+                f"pass2_backfilled={second_backfilled}"
+            )
         exit_code = 1 if failures else 0
         print(f"[fetch-older-data] completed assigned={len(targets)} failures={failures} exit_code={exit_code}")
         _hard_exit(exit_code)

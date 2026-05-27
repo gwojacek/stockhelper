@@ -404,5 +404,10 @@ Behavior summary:
 - `--fetch-older-data` now applies to **stocks + forex only** (commodities are explicitly excluded and logged),
 - non-commodity backfill target is capped around **544 days** (364 + 180),
 - if local CSV already spans at least ~**1.5 years** (>= 547 days), older backfill for that symbol is skipped,
-- logged `aim_date` is computed as `last_found_data - 544 days`.
+- logged `aim_date` is computed as `last_found_data - 544 days`,
+- each `ok` line logs `oldest_after` and `backfill_added=True/False` so you can verify whether older rows were really appended,
+- if pass 1 produces zero `backfill_added=True`, runner pauses (default `120s`) for VPN switch and retries once automatically.
 
+Optional env knobs:
+- `STOCKHELPER_FETCH_VPN_PAUSE_S` (default `120`) controls pause length before retry.
+- `STOCKHELPER_FETCH_RETRY_ON_ZERO_BACKFILL=0` disables the automatic second pass.
