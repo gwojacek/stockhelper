@@ -144,6 +144,7 @@ class FlipResult:
     valid_retests_count: int = 0
     first_valid_retest_pattern_date: str = "-"
     retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
+    avg_turnover_10d_pln: float | None = None
 
 
 @dataclass
@@ -792,7 +793,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 result.liquidity_threshold_20d_pln = threshold_20d
                 if not stock_liquidity_ok:
                     _debug_log_scan(ticker, "excluded from WYNIKI 1 by liquidity filter")
-                    return display_symbol, None, flip, (
+                    return display_symbol, None, None, (
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
         if flip:
@@ -801,6 +802,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+            if instrument == "stock":
+                flip.avg_turnover_10d_pln = avg_10d
             if result and result.side == flip.current_side:
                 result.start_date = flip.flip_date
         _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
@@ -901,7 +904,12 @@ def _scan_source_label(src: str) -> str:
 
 
 def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "") -> str:
-    base = f"python run -c {ticker}"
+    t = (ticker or "").strip()
+    if "." not in t and len(t) <= 5:
+        cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
+        if (cfg_stocks / f"{t}.py").exists():
+            t = f"{t}.WA"
+    base = f"python run -c {t}"
     if mode == "fibo":
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"
@@ -1019,7 +1027,7 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
         print("Brak wyników.")
         return []
     max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
-    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12}"
+    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12} {'Avg10d PLN':>14}"
     event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
     print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
     print("-" * 150)
@@ -1035,7 +1043,8 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
             else:
                 event_cells.append("-")
         event_cols = " ".join([f"{cell:<34}" for cell in event_cells])
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
+        avg10_txt = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {avg10_txt:>14} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
     return links
 
 
@@ -1355,7 +1364,7 @@ def run_ichimoku_search(target: str) -> int:
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Latest Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
             rows_md,
             description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
         )
@@ -1367,11 +1376,11 @@ def run_ichimoku_search(target: str) -> int:
         rows_flip_md=[]
         for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
             cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
+            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
         _write_md_table(
             out_md_flip,
             "WYNIKI 2",
-            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
             rows_flip_md,
             append=True,
             description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
@@ -1478,7 +1487,7 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Latest Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
     )
@@ -1493,11 +1502,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
@@ -1737,6 +1746,22 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             if crossed_618:
                 _log("Rejected long: 61.8 crossed but no valid pattern.")
                 return None
+            close_after_peak = pd.to_numeric(w.iloc[i_peak:i_end + 1]["Close"], errors="coerce")
+            below_236_idx = [j for j, v in enumerate(close_after_peak.tolist()) if pd.notna(v) and float(v) < fib_236]
+            if below_236_idx:
+                after_first_below = close_after_peak.iloc[below_236_idx[0] + 1:].tolist()
+                first_back_above_idx = next(
+                    (j for j, v in enumerate(after_first_below) if pd.notna(v) and float(v) > fib_236),
+                    None,
+                )
+                if first_back_above_idx is not None:
+                    returned_below_again = any(
+                        pd.notna(v) and float(v) < fib_236
+                        for v in after_first_below[first_back_above_idx + 1:]
+                    )
+                    if not returned_below_again:
+                        _log("Rejected long: price closed back above 23.6 after first close below 23.6 and did not return below again.")
+                        return None
             if float(close.iloc[-1]) > fib_236:
                 _log("Rejected long: current close is above 23.6, so not waiting-for-61.8 anymore.")
                 return None
@@ -1874,6 +1899,22 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if crossed_618:
             _log("Rejected short: 61.8 crossed but no valid pattern.")
             return None
+        close_after_bottom = pd.to_numeric(w.iloc[i_bottom:i_end + 1]["Close"], errors="coerce")
+        above_236_idx = [j for j, v in enumerate(close_after_bottom.tolist()) if pd.notna(v) and float(v) > fib_236]
+        if above_236_idx:
+            after_first_above = close_after_bottom.iloc[above_236_idx[0] + 1:].tolist()
+            first_back_below_idx = next(
+                (j for j, v in enumerate(after_first_above) if pd.notna(v) and float(v) < fib_236),
+                None,
+            )
+            if first_back_below_idx is not None:
+                returned_above_again = any(
+                    pd.notna(v) and float(v) > fib_236
+                    for v in after_first_above[first_back_below_idx + 1:]
+                )
+                if not returned_above_again:
+                    _log("Rejected short: price closed back below 23.6 after first close above 23.6 and did not return above again.")
+                    return None
         if float(close.iloc[-1]) < fib_236:
             _log("Rejected short: current close is below 23.6, so not waiting-for-61.8 anymore.")
             return None
@@ -1915,8 +1956,8 @@ def _print_fibo_results(
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'IchiRetest':<12} {'Link':<0}")
-        print("-" * 199)
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
+        print("-" * 184)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
     if avg_turnover_10d_by_key:
@@ -1944,10 +1985,7 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        ichi_txt = '-'
-        if ichimoku_retest_by_key is not None:
-            ichi_txt = ichimoku_retest_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), '-')
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ichi_txt:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
@@ -2019,6 +2057,7 @@ def run_fibo_search(target: str) -> int:
         out_rows: list[FiboScanResult] = []
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2058,6 +2097,8 @@ def run_fibo_search(target: str) -> int:
                         break
                 for c in picked_long:
                     c.ticker = ticker
+                    if pd.notna(latest_close):
+                        c.current_close = latest_close
                     out_rows.append(c)
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
@@ -2087,6 +2128,8 @@ def run_fibo_search(target: str) -> int:
                             break
                     for c in picked_short:
                         c.ticker = ticker
+                        if pd.notna(latest_close):
+                            c.current_close = latest_close
                         out_rows.append(c)
             return idx, ticker, out_rows, None
         except Exception as exc:
@@ -2259,9 +2302,9 @@ def run_fibo_search(target: str) -> int:
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
     # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
-    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
+    rows1_md=[[r.ticker,r.direction,("🟢 " + r.status) if r.status=="valid_reversal" else (("🟡 " + r.status) if "waiting" in r.status else ("🔴 " + r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows1_md)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Near61.8","Link","Python command"],rows1_md)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Link","Python command"],rows2_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
