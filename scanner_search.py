@@ -645,7 +645,8 @@ def _find_latest_breakout_idx(
     # and then does NOT close back to the opposite side for at least 4 months.
     date_series = pd.to_datetime(df["Date"], errors="coerce")
     fallback_transition_idx: int | None = None
-    for i in range(1, n):
+    # Search from newest to oldest: we need the LAST valid breakout candle.
+    for i in range(n - 1, 0, -1):
         i_date = pd.to_datetime(df.iloc[i]["Date"]).strftime("%Y-%m-%d") if not pd.isna(date_series.iloc[i]) else "-"
         if (n - i) < min_age_days:
             if debug_ticker:
