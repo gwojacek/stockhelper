@@ -754,6 +754,16 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
     def _color_fibo_metric(val: str) -> str:
         txt = str(val or "")
+        if txt.endswith("%"):
+            try:
+                pct = float(txt.replace("%", "").replace("🟨", "").replace("🟢", "").replace("🟡", "").replace("🔴", "").strip())
+                if pct >= 70.0:
+                    return f"<span style='color:#166534;font-weight:700'>{html.escape(txt)}</span>"
+                if pct >= 35.0:
+                    return f"<span style='color:#92400e;font-weight:700'>{html.escape(txt)}</span>"
+                return f"<span style='color:#991b1b;font-weight:700'>{html.escape(txt)}</span>"
+            except Exception:
+                pass
         if txt.startswith("🟨 "):
             return f"<span style='color:#b45309;font-weight:700'>{html.escape(txt)}</span>"
         if txt.startswith("🟢 "):
@@ -806,7 +816,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('latest_retest_date',''))}</td><td>{html.escape(r.metrics.get('latest_retest_pattern',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 elif is_f1:
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{_color_fibo_metric(r.status)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{_color_fibo_metric(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
+                    status_html = _color_fibo_metric(r.status) if "reached_23_6_waiting_for_61_8" in str(r.status) else html.escape(str(r.status))
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{status_html}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{_color_fibo_metric(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
                 else:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{_color_fibo_metric(r.metrics.get('ratio',''))}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{chart_btn}</td><td><code>{cmd[:64]}</code> <button class='btn' onclick='runOrCopy(this)' data-cmd='{cmd}'>Run/Copy</button></td></tr>")
             html_parts.append("</tbody></table></div>")
