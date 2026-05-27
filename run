@@ -907,7 +907,7 @@ def main()->int:
     parser.add_argument('--fibo-anchor-start')
     parser.add_argument('--fibo-anchor-end')
     parser.add_argument('--fibo-right', action='store_true')
-    parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older 364-day window before current oldest cached date.')
+    parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older window (up to ~364+180 days total span target) before current oldest cached date.')
     parser.add_argument('--fetch-older-data-scope', choices=['all', 'commodities', 'stocks', 'forex'], default='all', help='Limit older-data fetch to one instrument group.')
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
@@ -963,11 +963,12 @@ def main()->int:
                 return None
             return idx, total
         targets: list[tuple[str, str, Path]] = []
-        # Keep commodities first (UI/table issues happen there most often).
-        groups = [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
+                # Commodities are intentionally excluded from older-data mode (UI/table issues + unreliable backfill path).
+        groups = [("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
         scope = (args.fetch_older_data_scope or "all").lower()
         if scope == "commodities":
-            groups = [("commodity", PROJECT_ROOT / "data" / "commodities")]
+            print("[fetch-older-data] commodities are excluded in older-data mode; nothing to do for scope=commodities.")
+            groups = []
         elif scope == "stocks":
             groups = [("stock", PROJECT_ROOT / "data" / "stocks")]
         elif scope == "forex":
@@ -984,7 +985,7 @@ def main()->int:
         for instrument, symbol, csv_path in targets:
             # Keep first discovered file as source of truth to avoid alias/duplicate csv paths.
             deduped.setdefault(_dedup_key(instrument, symbol), (instrument, symbol, csv_path))
-        targets = sorted(deduped.values(), key=lambda t: (0 if t[0] == "commodity" else 1 if t[0] == "stock" else 2, t[1]))
+        targets = sorted(deduped.values(), key=lambda t: (0 if t[0] == "stock" else 1, t[1]))
         xslot = _xdist_worker_slot()
         if xslot:
             worker_idx, worker_total = xslot
@@ -1025,24 +1026,28 @@ def main()->int:
                 return d.date().isoformat()
             except Exception:
                 return "-"
-        two_years_ago = (pd.Timestamp.utcnow().normalize() - pd.Timedelta(days=730)).date()
+        target_span_days = 364 + 180
+        skip_span_days = int(365 * 1.5)
         def _fetch_one(instrument: str, symbol: str, source_csv_path: Path) -> tuple[bool, str]:
             try:
                 oldest_before = _oldest_date_in_csv(source_csv_path)
                 aim_date = "-"
-                if oldest_before != "-":
+                if source_csv_path.exists():
                     try:
-                        oldest_before_date = pd.Timestamp(oldest_before).date()
-                        if oldest_before_date <= two_years_ago:
-                            return True, (
-                                f"[fetch-older-data] skip {instrument}:{symbol} "
-                                f"last_found_data={oldest_before} reason=already_have_2y_or_more"
-                            )
+                        local_df = pd.read_csv(source_csv_path)
+                        dts = pd.to_datetime(local_df.get("Date"), errors="coerce").dropna().sort_values()
+                        if not dts.empty:
+                            span_days = int((dts.max() - dts.min()).days)
+                            if span_days >= skip_span_days:
+                                return True, (
+                                    f"[fetch-older-data] skip {instrument}:{symbol} "
+                                    f"last_found_data={oldest_before} span_days={span_days} reason=already_have_1_5y_or_more"
+                                )
                     except Exception:
                         pass
                 if oldest_before != "-":
                     try:
-                        aim_date = (pd.Timestamp(oldest_before) - pd.Timedelta(days=364)).date().isoformat()
+                        aim_date = (pd.Timestamp(oldest_before) - pd.Timedelta(days=target_span_days)).date().isoformat()
                     except Exception:
                         aim_date = "-"
                 df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
