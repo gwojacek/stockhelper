@@ -100,11 +100,28 @@ def _liquidity_legend_html() -> str:
     fibo_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(500000*m)} PLN" for k, m in multipliers.items()])
     ichi_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(700000*m)} PLN" for k, m in multipliers.items()])
     low20_examples = ", ".join([f"{k}: ×{m:.2f} = {_fmt(300000*m)} PLN" for k, m in multipliers.items()])
+    wig_f = _fmt(500000 * multipliers["WIG/PL"]); dax_f = _fmt(500000 * multipliers["DAX/DE"]); us_f = _fmt(500000 * multipliers["US100/US"])
+    wig_i = _fmt(700000 * multipliers["WIG/PL"]); dax_i = _fmt(700000 * multipliers["DAX/DE"]); us_i = _fmt(700000 * multipliers["US100/US"])
+    wig_l = _fmt(300000 * multipliers["WIG/PL"]); dax_l = _fmt(300000 * multipliers["DAX/DE"]); us_l = _fmt(300000 * multipliers["US100/US"])
     return (
-        "<details class='legend muted'><summary><b>Legenda (progi)</b> (kliknij, aby rozwinąć)</summary>"
-        f"🟨 • Fibo: próg płynności Th10d (ostatnie 10 świeczek) = bazowo 500000 PLN × mnożnik PKB kraju ({fibo_examples}).<br>"
-        f"☁️ • Ichimoku: próg płynności = 700000 PLN × mnożnik PKB kraju ({ichi_examples}).<br>"
-        f"🧪 • Low&lt;Th20: liczba dni z ostatnich 20 poniżej progu 300000 PLN × mnożnik kraju ({low20_examples}) — nie może być więcej niż 2."
+        "<details class='legend muted'><summary><b>📊 Legenda progów</b> (kliknij, aby rozwinąć)</summary>"
+        "<br>🟡 <b>Fibo</b><br>"
+        "📐 próg płynności = Th10d (ostatnie 10 świeczek)<br>"
+        "💰 bazowo 500 000 PLN × mnożnik PKB kraju:<br>"
+        f"• 🇵🇱 WIG/PL → ×{multipliers['WIG/PL']:.2f} = {wig_f} PLN<br>"
+        f"• 🇩🇪 DAX/DE → ×{multipliers['DAX/DE']:.2f} = {dax_f} PLN<br>"
+        f"• 🇺🇸 US100/US → ×{multipliers['US100/US']:.2f} = {us_f} PLN<br><br>"
+        "☁️ <b>Ichimoku</b><br>"
+        "📐 próg płynności = 700 000 PLN × mnożnik PKB kraju:<br>"
+        f"• 🇵🇱 WIG/PL → ×{multipliers['WIG/PL']:.2f} = {wig_i} PLN<br>"
+        f"• 🇩🇪 DAX/DE → ×{multipliers['DAX/DE']:.2f} = {dax_i} PLN<br>"
+        f"• 🇺🇸 US100/US → ×{multipliers['US100/US']:.2f} = {us_i} PLN<br><br>"
+        "🧪 <b>Low &lt; Th20</b><br>"
+        "📉 liczba dni z ostatnich 20 poniżej progu 300 000 PLN × mnożnik kraju:<br>"
+        f"• 🇵🇱 WIG/PL → ×{multipliers['WIG/PL']:.2f} = {wig_l} PLN<br>"
+        f"• 🇩🇪 DAX/DE → ×{multipliers['DAX/DE']:.2f} = {dax_l} PLN<br>"
+        f"• 🇺🇸 US100/US → ×{multipliers['US100/US']:.2f} = {us_l} PLN<br>"
+        "⚠️ Nie może być więcej niż 2 dni."
         "</details>"
     )
 
