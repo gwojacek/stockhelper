@@ -1355,7 +1355,7 @@ def run_ichimoku_search(target: str) -> int:
         _write_md_table(
             out_md,
             "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Latest Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
             rows_md,
             description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
         )
@@ -1478,7 +1478,7 @@ def run_ichimoku_search(target: str) -> int:
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Latest Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Low<Th20","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Low<Th20).",
     )
@@ -1737,6 +1737,22 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             if crossed_618:
                 _log("Rejected long: 61.8 crossed but no valid pattern.")
                 return None
+            close_after_peak = pd.to_numeric(w.iloc[i_peak:i_end + 1]["Close"], errors="coerce")
+            below_236_idx = [j for j, v in enumerate(close_after_peak.tolist()) if pd.notna(v) and float(v) < fib_236]
+            if below_236_idx:
+                after_first_below = close_after_peak.iloc[below_236_idx[0] + 1:].tolist()
+                first_back_above_idx = next(
+                    (j for j, v in enumerate(after_first_below) if pd.notna(v) and float(v) > fib_236),
+                    None,
+                )
+                if first_back_above_idx is not None:
+                    returned_below_again = any(
+                        pd.notna(v) and float(v) < fib_236
+                        for v in after_first_below[first_back_above_idx + 1:]
+                    )
+                    if not returned_below_again:
+                        _log("Rejected long: price closed back above 23.6 after first close below 23.6 and did not return below again.")
+                        return None
             if float(close.iloc[-1]) > fib_236:
                 _log("Rejected long: current close is above 23.6, so not waiting-for-61.8 anymore.")
                 return None
@@ -1874,6 +1890,22 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if crossed_618:
             _log("Rejected short: 61.8 crossed but no valid pattern.")
             return None
+        close_after_bottom = pd.to_numeric(w.iloc[i_bottom:i_end + 1]["Close"], errors="coerce")
+        above_236_idx = [j for j, v in enumerate(close_after_bottom.tolist()) if pd.notna(v) and float(v) > fib_236]
+        if above_236_idx:
+            after_first_above = close_after_bottom.iloc[above_236_idx[0] + 1:].tolist()
+            first_back_below_idx = next(
+                (j for j, v in enumerate(after_first_above) if pd.notna(v) and float(v) < fib_236),
+                None,
+            )
+            if first_back_below_idx is not None:
+                returned_above_again = any(
+                    pd.notna(v) and float(v) > fib_236
+                    for v in after_first_above[first_back_below_idx + 1:]
+                )
+                if not returned_above_again:
+                    _log("Rejected short: price closed back below 23.6 after first close above 23.6 and did not return above again.")
+                    return None
         if float(close.iloc[-1]) < fib_236:
             _log("Rejected short: current close is below 23.6, so not waiting-for-61.8 anymore.")
             return None
@@ -1915,8 +1947,8 @@ def _print_fibo_results(
         print("Brak wyników.")
         links = []
     else:
-        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'IchiRetest':<12} {'Link':<0}")
-        print("-" * 199)
+        print(f"{'Ticker':<10} {'Dir':<6} {'Status':<30} {'Pattern':<22} {'Incline':<23} {'Ratio(d)':>16} {'Touched_61.8_date':<16} {'Avg10Turn':>12} {'Near61.8':>10} {'Link':<0}")
+        print("-" * 184)
         links = []
     top3_avg_keys: set[tuple[str, str, str, str]] = set()
     if avg_turnover_10d_by_key:
@@ -1944,10 +1976,7 @@ def _print_fibo_results(
             near_col = ANSI_GREEN if closeness >= 0.7 else (ANSI_YELLOW if closeness >= 0.35 else "\033[31m")
         except Exception:
             pass
-        ichi_txt = '-'
-        if ichimoku_retest_by_key is not None:
-            ichi_txt = ichimoku_retest_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), '-')
-        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ichi_txt:<12} {ANSI_CYAN}{link}{ANSI_RESET}")
+        print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
     print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
