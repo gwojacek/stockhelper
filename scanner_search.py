@@ -2048,6 +2048,7 @@ def run_fibo_search(target: str) -> int:
         out_rows: list[FiboScanResult] = []
         try:
             df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2087,6 +2088,8 @@ def run_fibo_search(target: str) -> int:
                         break
                 for c in picked_long:
                     c.ticker = ticker
+                    if pd.notna(latest_close):
+                        c.current_close = latest_close
                     out_rows.append(c)
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
@@ -2116,6 +2119,8 @@ def run_fibo_search(target: str) -> int:
                             break
                     for c in picked_short:
                         c.ticker = ticker
+                        if pd.notna(latest_close):
+                            c.current_close = latest_close
                         out_rows.append(c)
             return idx, ticker, out_rows, None
         except Exception as exc:

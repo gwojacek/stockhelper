@@ -644,7 +644,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")),
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
                 dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
-                metrics={"ratio": str(r.get("Ratio(d)", ""))}, chart_url=str(r.get("Link", "")),
+                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", ""))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
 
