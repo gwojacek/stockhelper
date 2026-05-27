@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal
 from urllib.request import urlopen
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NoReturn
@@ -11,6 +11,7 @@ except Exception:
     tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import COMMODITY_STOOQ_MAP
+from scanner_search import COMMODITIES_SEARCH_TICKERS
 PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
@@ -390,6 +391,66 @@ def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
     with report.open("a", encoding="utf-8") as out:
         out.write("\n" + text.strip() + "\n")
 
+
+
+def _csv_has_data(path: Path) -> bool:
+    try:
+        if not path.exists() or path.stat().st_size <= 32:
+            return False
+        with path.open('r', encoding='utf-8') as fh:
+            lines = 0
+            for _ in fh:
+                lines += 1
+                if lines >= 2:
+                    return True
+        return False
+    except Exception:
+        return False
+
+
+def _csv_has_fresh_year(path: Path) -> bool:
+    if not _csv_has_data(path):
+        return False
+    try:
+        import pandas as pd
+        df = pd.read_csv(path)
+        if df.empty or 'Date' not in df.columns:
+            return False
+        dts = pd.to_datetime(df['Date'], errors='coerce').dropna()
+        if dts.empty:
+            return False
+        latest = dts.max().date()
+        oldest = dts.min().date()
+        today = datetime.now(UTC).date()
+        # Accept latest candle from today or yesterday.
+        if latest < (today - timedelta(days=1)):
+            return False
+        # Must cover roughly one year window.
+        if (latest - oldest).days < 360:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def _scope_has_complete_cache(scope: str) -> bool:
+    scope_n = (scope or '').strip().lower()
+    if scope_n != 'commodities':
+        return True
+    data_dir = PROJECT_ROOT / 'data' / 'commodities'
+    missing: list[str] = []
+    for ticker in COMMODITIES_SEARCH_TICKERS:
+        stooq_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), ticker)).upper()
+        fname = stooq_symbol.replace('/', '').replace('.', '_') + '.csv'
+        fp = data_dir / fname
+        if not _csv_has_fresh_year(fp):
+            missing.append(fname)
+    if missing:
+        print(f"[cache-rule] commodities cache not ready ({len(missing)} missing/stale): {', '.join(missing[:6])}{' ...' if len(missing)>6 else ''}")
+        return False
+    return True
+
+
 def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
     keys = _scope_file_keys(scope)
     candidates: list[Path] = []
@@ -398,6 +459,11 @@ def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
         candidates += [p for p in FIBO_SEARCH_OUTPUT_DIR.glob(f"fibo_search_{key}_*.md") if p.is_file()]
     if not candidates:
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        return False
+
+    if not _scope_has_complete_cache(scope):
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        print(f"[cache-rule] {scope}: incomplete local CSV cache -> refresh mode ON")
         return False
     latest = max(candidates, key=lambda p: p.stat().st_mtime)
     now_utc = datetime.now(UTC)
@@ -723,7 +789,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
     # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
     print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
-    code_f = _run_batch_search("fibo", scopes, ask_open_links=False)
+    code_f = _run_batch_search("fibo", scopes, ask_open_links=False, force_cache_only=True)
     if code_f != 0:
         failures += 1
 
@@ -764,7 +830,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
     return 1 if failures else 0
 
-def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) -> int:
+def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, force_cache_only: bool = False) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
@@ -780,7 +846,18 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True) 
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
-        _enable_cache_only_if_recent(scope, hours=6)
+        if force_cache_only:
+            # Keep forced cache-only for phases like FIBO, but still honor
+            # scope completeness rules (especially commodities) so we do not
+            # skip required UI refresh when local cache is incomplete/stale.
+            if _scope_has_complete_cache(scope):
+                os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+                print(f"[cache-rule] {scope}: forced cache-only mode ON for {mode} phase.")
+            else:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                print(f"[cache-rule] {scope}: forced cache-only overridden -> refresh mode ON (incomplete cache).")
+        else:
+            _enable_cache_only_if_recent(scope, hours=6)
         csv_dir = ICHIMOKU_SEARCH_OUTPUT_DIR if mode=="ichimoku" else FIBO_SEARCH_OUTPUT_DIR
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
@@ -837,7 +914,7 @@ def main()->int:
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
     args=parser.parse_args()
     if args.fetch_older_data:
-        from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
+        from chart_program.chart_loader import load_or_update_daily_data
         import pandas as pd
         def _commodity_symbol_to_stooq_ticker(symbol: str) -> str:
             raw = (symbol or "").strip().upper()
@@ -886,15 +963,18 @@ def main()->int:
                 return None
             return idx, total
         targets: list[tuple[str, str, Path]] = []
-        # Keep commodities first (UI/table issues happen there most often).
-        groups = [("commodity", PROJECT_ROOT / "data" / "commodities"), ("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
+        # Older-data mode excludes commodities (UI/captcha flow should remain scanner-driven).
+        groups = [("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
         scope = (args.fetch_older_data_scope or "all").lower()
         if scope == "commodities":
-            groups = [("commodity", PROJECT_ROOT / "data" / "commodities")]
+            print("[fetch-older-data] commodities scope requested -> skipped by design (UI/Playwright excluded from older-data mode).")
+            groups = []
         elif scope == "stocks":
             groups = [("stock", PROJECT_ROOT / "data" / "stocks")]
         elif scope == "forex":
             groups = [("forex", PROJECT_ROOT / "data" / "forex")]
+        if scope == "all":
+            print("[fetch-older-data] commodities excluded from older-data mode (use scanner refresh flow for UI commodities).")
         for instrument, folder in groups:
             if not folder.exists():
                 continue
@@ -935,43 +1015,44 @@ def main()->int:
             "stock": PROJECT_ROOT / "data" / "stocks",
             "forex": PROJECT_ROOT / "data" / "forex",
         }
-        def _oldest_date_in_csv(path: Path) -> str:
+        def _date_range_in_csv(path: Path) -> tuple[str, str, int | None]:
             try:
                 if not path.exists():
-                    return "-"
+                    return "-", "-", None
                 df = pd.read_csv(path)
                 if "Date" not in df.columns or df.empty:
-                    return "-"
-                d = pd.to_datetime(df["Date"], errors="coerce").min()
-                if pd.isna(d):
-                    return "-"
-                return d.date().isoformat()
+                    return "-", "-", None
+                dts = pd.to_datetime(df["Date"], errors="coerce").dropna()
+                if dts.empty:
+                    return "-", "-", None
+                oldest = dts.min().date()
+                newest = dts.max().date()
+                span_days = int((newest - oldest).days)
+                return oldest.isoformat(), newest.isoformat(), span_days
             except Exception:
-                return "-"
-        two_years_ago = (pd.Timestamp.utcnow().normalize() - pd.Timedelta(days=730)).date()
+                return "-", "-", None
+        target_span_days = 364 + 180
         def _fetch_one(instrument: str, symbol: str, source_csv_path: Path) -> tuple[bool, str]:
             try:
-                oldest_before = _oldest_date_in_csv(source_csv_path)
+                oldest_before, newest_before, span_before = _date_range_in_csv(source_csv_path)
                 aim_date = "-"
-                if oldest_before != "-":
+                if newest_before != "-":
                     try:
-                        oldest_before_date = pd.Timestamp(oldest_before).date()
-                        if oldest_before_date <= two_years_ago:
-                            return True, (
-                                f"[fetch-older-data] skip {instrument}:{symbol} "
-                                f"last_found_data={oldest_before} reason=already_have_2y_or_more"
-                            )
-                    except Exception:
-                        pass
-                if oldest_before != "-":
-                    try:
-                        aim_date = (pd.Timestamp(oldest_before) - pd.Timedelta(days=364)).date().isoformat()
+                        aim_date = (pd.Timestamp(newest_before) - pd.Timedelta(days=target_span_days)).date().isoformat()
                     except Exception:
                         aim_date = "-"
+                if span_before is not None and span_before >= target_span_days:
+                    return True, (
+                        f"[fetch-older-data] skip {instrument}:{symbol} "
+                        f"oldest={oldest_before} newest={newest_before} span_days={span_before} "
+                        f"aim_date={aim_date} reason=already_have_target_span_{target_span_days}d"
+                    )
                 df, csv_path, meta = load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=True)
+                oldest_after, newest_after, span_after = _date_range_in_csv(csv_path)
                 return True, (
                     f"[fetch-older-data] ok {instrument}:{symbol} "
-                    f"last_found_data={oldest_before} aim_date={aim_date} "
+                    f"oldest_before={oldest_before} newest_before={newest_before} span_before={span_before} "
+                    f"aim_date={aim_date} oldest_after={oldest_after} newest_after={newest_after} span_after={span_after} "
                     f"rows={len(df)} source={meta.get('source')} src_csv={source_csv_path} -> {csv_path}"
                 )
             except Exception as exc:
