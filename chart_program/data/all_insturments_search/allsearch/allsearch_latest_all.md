@@ -14,16 +14,17 @@ WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/belo
 | Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Low<Th20 | Latest Retest count | Latest Retest date | Latest Retest pattern | Link | Python command |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | TOR | ⚪ above | 197 | 9.6 | 2026-01-22 | 70.7000 | 755492 | 0 | 2 | 2026-03-30 | bullish_piercing_line | https://stooq.pl/q/a2/?s=tor&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c TOR --ichimoku-mode on |
-| CRI | ⚪ above | 181 | 8.8 | 2025-09-01 | 945.0000 | 18311895 | 0 | 2 | 2025-12-11 | hammer | https://stooq.pl/q/a2/?s=cri&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CRI --ichimoku-mode on |
+| CRI | ⚪ above | 181 | 8.7 | 2024-12-20 | 945.0000 | 18311895 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=cri&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CRI --ichimoku-mode on |
 | ASB | ⚪ above | 147 | 7.3 | 2025-01-20 | 69.0000 | 15749268 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=asb&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ASB --ichimoku-mode on |
-| DIG | ⚪ above | 145 | 6.9 | 2025-10-29 | 202.2000 | 1177057 | 0 | 4 | 2026-03-31 | bullish_piercing_line | https://stooq.pl/q/a2/?s=dig&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c DIG --ichimoku-mode on |
+| DIG | ⚪ above | 145 | 6.9 | 2024-09-26 | 202.2000 | 1177057 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=dig&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c DIG --ichimoku-mode on |
+| BNP | ⚪ above | 142 | 7.0 | 2025-01-16 | 145.4000 | 1407651 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=bnp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c BNP --ichimoku-mode on |
 | OPL | ⚪ above | 136 | 6.7 | 2022-10-31 | 16.3000 | 18242110 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=opl&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c OPL --ichimoku-mode on |
 | EUR | 🔴 below | 136 | 6.7 | 2024-03-07 | 5.4800 | 757124 | 1 | 0 | - | - | https://stooq.pl/q/a2/?s=eur&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c EUR --ichimoku-mode on |
 | ING | ⚪ above | 136 | 6.5 | 2023-10-12 | 425.0000 | 5413821 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=ing&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ING --ichimoku-mode on |
-| ICE | ⚪ above | 115 | 5.7 | 2025-12-03 | 74.0000 | 2555228 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=ice&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ICE --ichimoku-mode on |
+| ICE | ⚪ above | 115 | 5.7 | 2025-07-03 | 74.0000 | 2555228 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=ice&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ICE --ichimoku-mode on |
 | XTB | ⚪ above | 114 | 5.5 | 2025-12-09 | 109.9600 | 40903132 | 0 | 1 | 2025-12-15 | bullish_harami | https://stooq.pl/q/a2/?s=xtb&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c XTB --ichimoku-mode on |
 | EBP | ⚪ above | 110 | 5.5 | 2022-10-20 | 619.0000 | 56360936 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=ebp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c EBP --ichimoku-mode on |
-| SCW | ⚪ above | 105 | 5.1 | 2025-12-23 | 385.0000 | 5612320 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=scw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c SCW --ichimoku-mode on |
+| SCW | ⚪ above | 105 | 5.1 | 2024-12-20 | 385.0000 | 5612320 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=scw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c SCW --ichimoku-mode on |
 | CAR | ⚪ above | 102 | 5.1 | 2025-12-22 | 831.0000 | 6269667 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=car&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CAR --ichimoku-mode on |
 | APR | ⚪ above | 97 | 4.6 | 2026-01-07 | 25.9000 | 5775823 | 0 | 3 | 2026-03-23 | bullish_piercing_line | https://stooq.pl/q/a2/?s=apr&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c APR --ichimoku-mode on |
 | ELT | ⚪ above | 95 | 4.5 | 2023-11-14 | 61.0000 | 1334906 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=elt&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ELT --ichimoku-mode on |
@@ -37,6 +38,7 @@ WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim 
 
 | Ticker | Było | Jest | Data wybicia | Mies. od wybicia | Latest Retest status | Retest count | Latest Retest date | Latest Retest pattern | Link | Python command |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| EAH | above | 🔴 below | 2025-11-10 | 6.5 | deep_retest_pattern | 4 | 2026-05-05 | bearish_harami | https://stooq.pl/q/a2/?s=eah&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c EAH --ichimoku-mode on |
 | GPP | below | ⚪ above | 2026-04-21 | 1.1 | medium_retest_pattern | 2 | 2026-05-21 | bullish_harami | https://stooq.pl/q/a2/?s=gpp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c GPP --ichimoku-mode on |
 
 --------------------------------------------- FIBO ---------------------------------------------
@@ -76,12 +78,13 @@ WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/belo
 
 | Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Low<Th20 | Latest Retest count | Latest Retest date | Latest Retest pattern | Link | Python command |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| HFG.DE | 🔴 below | 196 | 9.4 | 2025-08-13 | 4.2910 | 11194068 | 0 | 5 | 2026-05-12 | bearish_harami | https://stooq.pl/q/a2/?s=hfg.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c HFG.DE --ichimoku-mode on |
-| ENR.DE | ⚪ above | 170 | 8.0 | 2025-09-24 | 181.2800 | 1543893421 | 0 | 2 | 2026-03-19 | hammer | https://stooq.pl/q/a2/?s=enr.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ENR.DE --ichimoku-mode on |
-| RWE.DE | ⚪ above | 169 | 8.1 | 2025-09-22 | 57.3400 | 320052194 | 0 | 3 | 2026-05-20 | hammer | https://stooq.pl/q/a2/?s=rwe.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c RWE.DE --ichimoku-mode on |
-| SAP.DE | 🔴 below | 144 | 6.6 | 2025-11-06 | 154.4800 | 1727058198 | 0 | 2 | 2026-05-20 | bearish_harami | https://stooq.pl/q/a2/?s=sap.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c SAP.DE --ichimoku-mode on |
-| SHL.DE | 🔴 below | 88 | 4.1 | 2026-01-21 | 35.1200 | 136485800 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=shl.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c SHL.DE --ichimoku-mode on |
-| AIR.DE | 🔴 below | 82 | 3.9 | 2026-01-28 | 174.4000 | 201322495 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=air.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c AIR.DE --ichimoku-mode on |
+| HFG.DE | 🔴 below | 198 | 9.4 | 2025-08-13 | 4.2910 | 11185636 | 0 | 5 | 2026-05-12 | bearish_harami | https://stooq.pl/q/a2/?s=hfg.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c HFG.DE --ichimoku-mode on |
+| ENR.DE | ⚪ above | 170 | 8.0 | 2024-09-10 | 181.2800 | 1542730470 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=enr.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ENR.DE --ichimoku-mode on |
+| RWE.DE | ⚪ above | 169 | 8.1 | 2025-02-26 | 57.3400 | 319811112 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=rwe.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c RWE.DE --ichimoku-mode on |
+| SAP.DE | 🔴 below | 144 | 6.6 | 2025-11-06 | 154.4800 | 1725757277 | 0 | 2 | 2026-05-20 | bearish_harami | https://stooq.pl/q/a2/?s=sap.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c SAP.DE --ichimoku-mode on |
+| PAH3.DE | 🔴 below | 88 | 4.2 | 2024-09-20 | 32.4100 | 74284544 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=pah3.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c PAH3.DE --ichimoku-mode on |
+| SHL.DE | 🔴 below | 88 | 4.1 | 2026-01-21 | 35.1200 | 136382991 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=shl.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c SHL.DE --ichimoku-mode on |
+| AIR.DE | 🔴 below | 82 | 3.9 | 2026-01-28 | 174.4000 | 201170847 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=air.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c AIR.DE --ichimoku-mode on |
 ## WYNIKI 2
 
 WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.
@@ -116,28 +119,27 @@ WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/belo
 
 | Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Low<Th20 | Latest Retest count | Latest Retest date | Latest Retest pattern | Link | Python command |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ROP.US | 🔴 below | 199 | 9.5 | 2025-08-08 | 326.9400 | 1376567079 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=rop.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ROP.US --ichimoku-mode on |
-| ROST.US | ⚪ above | 199 | 9.5 | 2025-08-08 | 234.8100 | 2781882344 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=rost.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ROST.US --ichimoku-mode on |
-| TRI.US | 🔴 below | 199 | 9.5 | 2025-08-08 | 85.8600 | 756587573 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=tri.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c TRI.US --ichimoku-mode on |
-| WDC.US | ⚪ above | 199 | 9.5 | 2025-08-08 | 484.2800 | 11575934887 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=wdc.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c WDC.US --ichimoku-mode on |
-| ASML.US | ⚪ above | 181 | 8.6 | 2025-09-04 | 1632.9000 | 9446561435 | 0 | 2 | 2026-03-19 | bullish_piercing_line | https://stooq.pl/q/a2/?s=asml.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ASML.US --ichimoku-mode on |
-| CSGP.US | 🔴 below | 180 | 8.5 | 2025-09-05 | 33.9500 | 1227878011 | 0 | 2 | 2026-01-23 | bearish_harami | https://stooq.pl/q/a2/?s=csgp.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CSGP.US --ichimoku-mode on |
-| CPRT.US | 🔴 below | 173 | 8.2 | 2025-09-16 | 33.7900 | 1231129035 | 0 | 1 | 2026-05-22 | bearish_harami | https://stooq.pl/q/a2/?s=cprt.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CPRT.US --ichimoku-mode on |
-| AMAT.US | ⚪ above | 172 | 8.1 | 2025-09-18 | 432.1600 | 13694639733 | 0 | 1 | 2026-03-31 | bullish_harami | https://stooq.pl/q/a2/?s=amat.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c AMAT.US --ichimoku-mode on |
-| DASH.US | 🔴 below | 141 | 6.7 | 2025-10-30 | 160.2500 | 3011494870 | 0 | 4 | 2026-05-22 | bearish_hammer | https://stooq.pl/q/a2/?s=dash.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c DASH.US --ichimoku-mode on |
-| CSX.US | ⚪ above | 123 | 5.6 | 2025-12-03 | 45.5200 | 2095749926 | 0 | 1 | 2026-03-23 | morning_star | https://stooq.pl/q/a2/?s=csx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CSX.US --ichimoku-mode on |
-| ALNY.US | 🔴 below | 117 | 5.6 | 2025-12-04 | 297.4500 | 945428615 | 0 | 1 | 2026-03-26 | bearish_hammer | https://stooq.pl/q/a2/?s=alny.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ALNY.US --ichimoku-mode on |
-| INSM.US | 🔴 below | 107 | 4.4 | 2026-01-08 | 106.2400 | 1850889430 | 0 | 1 | 2026-04-15 | dark_cloud_cover | https://stooq.pl/q/a2/?s=insm.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c INSM.US --ichimoku-mode on |
-| LIN.US | ⚪ above | 100 | 4.4 | 2026-01-09 | 517.5800 | 3492298471 | 0 | 3 | 2026-04-08 | bullish_piercing_line | https://stooq.pl/q/a2/?s=lin.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c LIN.US --ichimoku-mode on |
-| INTU.US | 🔴 below | 99 | 4.6 | 2026-01-02 | 319.9400 | 7693695774 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=intu.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c INTU.US --ichimoku-mode on |
-| ADBE.US | 🔴 below | 98 | 4.5 | 2026-01-05 | 244.7600 | 4124695177 | 0 | 2 | 2026-05-06 | evening_star | https://stooq.pl/q/a2/?s=adbe.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ADBE.US --ichimoku-mode on |
-| BKR.US | ⚪ above | 97 | 4.5 | 2026-01-05 | 66.0600 | 1746744455 | 0 | 3 | 2026-04-06 | bullish_piercing_line | https://stooq.pl/q/a2/?s=bkr.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c BKR.US --ichimoku-mode on |
-| COST.US | ⚪ above | 94 | 4.4 | 2026-01-09 | 1028.2400 | 8022779603 | 0 | 3 | 2026-05-11 | hammer | https://stooq.pl/q/a2/?s=cost.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c COST.US --ichimoku-mode on |
-| IDXX.US | 🔴 below | 90 | 3.8 | 2026-01-14 | 559.3700 | 1251294105 | 0 | 1 | 2026-01-27 | bearish_harami | https://stooq.pl/q/a2/?s=idxx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c IDXX.US --ichimoku-mode on |
-| ISRG.US | 🔴 below | 90 | 3.7 | 2026-01-14 | 438.1000 | 3731868813 | 0 | 1 | 2026-01-28 | shooting_star | https://stooq.pl/q/a2/?s=isrg.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ISRG.US --ichimoku-mode on |
-| PLTR.US | 🔴 below | 89 | 4.2 | 2026-01-16 | 136.8800 | 17188845284 | 0 | 2 | 2026-04-06 | bearish_harami | https://stooq.pl/q/a2/?s=pltr.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c PLTR.US --ichimoku-mode on |
-| AXON.US | 🔴 below | 88 | 3.8 | 2025-09-11 | 386.0000 | 1562833960 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=axon.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c AXON.US --ichimoku-mode on |
-| FANG.US | ⚪ above | 86 | 3.8 | 2026-01-21 | 200.7100 | 1250212582 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=fang.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c FANG.US --ichimoku-mode on |
+| ROP.US | 🔴 below | 223 | 10.4 | 2025-07-10 | 326.9400 | 1375735267 | 0 | 2 | 2026-04-14 | bearish_harami | https://stooq.pl/q/a2/?s=rop.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ROP.US --ichimoku-mode on |
+| ROST.US | ⚪ above | 204 | 9.6 | 2025-08-04 | 234.8100 | 2780201349 | 0 | 1 | 2026-05-12 | bullish_harami | https://stooq.pl/q/a2/?s=rost.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ROST.US --ichimoku-mode on |
+| TRI.US | 🔴 below | 199 | 9.5 | 2025-08-08 | 85.8600 | 756130394 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=tri.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c TRI.US --ichimoku-mode on |
+| WDC.US | ⚪ above | 199 | 9.5 | 2025-08-08 | 484.2800 | 11568939951 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=wdc.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c WDC.US --ichimoku-mode on |
+| ASML.US | ⚪ above | 181 | 8.5 | 2025-09-05 | 1632.9000 | 9440853205 | 0 | 2 | 2026-03-19 | bullish_piercing_line | https://stooq.pl/q/a2/?s=asml.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ASML.US --ichimoku-mode on |
+| CSGP.US | 🔴 below | 180 | 7.9 | 2025-09-24 | 33.9500 | 1227136047 | 0 | 1 | 2026-01-23 | bearish_harami | https://stooq.pl/q/a2/?s=csgp.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CSGP.US --ichimoku-mode on |
+| AMAT.US | ⚪ above | 172 | 8.1 | 2025-09-18 | 432.1600 | 13686364538 | 0 | 1 | 2026-03-31 | bullish_harami | https://stooq.pl/q/a2/?s=amat.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c AMAT.US --ichimoku-mode on |
+| DASH.US | 🔴 below | 141 | 6.7 | 2025-10-30 | 160.2500 | 3009675128 | 0 | 4 | 2026-05-22 | bearish_hammer | https://stooq.pl/q/a2/?s=dash.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c DASH.US --ichimoku-mode on |
+| CSX.US | ⚪ above | 123 | 5.6 | 2025-12-03 | 45.5200 | 2094483537 | 0 | 1 | 2026-03-23 | morning_star | https://stooq.pl/q/a2/?s=csx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c CSX.US --ichimoku-mode on |
+| ALNY.US | 🔴 below | 117 | 5.6 | 2025-12-04 | 297.4500 | 944857325 | 0 | 1 | 2026-03-26 | bearish_hammer | https://stooq.pl/q/a2/?s=alny.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ALNY.US --ichimoku-mode on |
+| INSM.US | 🔴 below | 107 | 4.4 | 2026-01-08 | 106.2400 | 1849771002 | 0 | 1 | 2026-04-15 | dark_cloud_cover | https://stooq.pl/q/a2/?s=insm.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c INSM.US --ichimoku-mode on |
+| LIN.US | ⚪ above | 100 | 4.4 | 2025-05-14 | 517.5800 | 3490188196 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=lin.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c LIN.US --ichimoku-mode on |
+| INTU.US | 🔴 below | 99 | 4.6 | 2026-01-02 | 319.9400 | 7689046741 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=intu.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c INTU.US --ichimoku-mode on |
+| ADBE.US | 🔴 below | 98 | 4.5 | 2024-12-12 | 244.7600 | 4122202767 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=adbe.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ADBE.US --ichimoku-mode on |
+| BKR.US | ⚪ above | 97 | 4.5 | 2024-09-27 | 66.0600 | 1745688958 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=bkr.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c BKR.US --ichimoku-mode on |
+| COST.US | ⚪ above | 94 | 4.4 | 2026-01-09 | 1028.2400 | 8017931715 | 0 | 3 | 2026-05-11 | hammer | https://stooq.pl/q/a2/?s=cost.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c COST.US --ichimoku-mode on |
+| IDXX.US | 🔴 below | 90 | 3.8 | 2024-10-04 | 559.3700 | 1250537991 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=idxx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c IDXX.US --ichimoku-mode on |
+| ISRG.US | 🔴 below | 90 | 3.7 | 2026-01-14 | 438.1000 | 3729613775 | 0 | 1 | 2026-01-28 | bearish_hammer | https://stooq.pl/q/a2/?s=isrg.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c ISRG.US --ichimoku-mode on |
+| PLTR.US | 🔴 below | 89 | 4.2 | 2026-01-16 | 136.8800 | 17178458661 | 0 | 2 | 2026-04-06 | bearish_harami | https://stooq.pl/q/a2/?s=pltr.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c PLTR.US --ichimoku-mode on |
+| AXON.US | 🔴 below | 88 | 3.8 | 2025-09-02 | 386.0000 | 1561889593 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=axon.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c AXON.US --ichimoku-mode on |
+| FANG.US | ⚪ above | 86 | 3.8 | 2026-01-21 | 200.7100 | 1249457122 | 0 | 0 | - | - | https://stooq.pl/q/a2/?s=fang.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1 | python run -c FANG.US --ichimoku-mode on |
 ## WYNIKI 2
 
 WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.
