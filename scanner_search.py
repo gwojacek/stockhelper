@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import time
+import threading
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
+STOP_SCAN_EVENT = threading.Event()
 
 
 
@@ -995,6 +997,8 @@ def _is_retryable_download_error(err: str | None) -> bool:
 def _load_daily_data_with_retries(symbol: str, instrument_type: str, persist: bool = True, fetch_older_data: bool = False, attempts: int = 3):
     last_exc: Exception | None = None
     for attempt in range(1, max(1, attempts) + 1):
+        if STOP_SCAN_EVENT.is_set():
+            raise RuntimeError("Scan stop requested by user.")
         try:
             return load_or_update_daily_data(
                 symbol=symbol,
@@ -1024,6 +1028,8 @@ def _prompt_vpn_continue_or_stop() -> bool:
         answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
     except EOFError:
         answer = "n"
+    if answer != "y":
+        STOP_SCAN_EVENT.set()
     return answer == "y"
 
 
@@ -1507,6 +1513,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 
 
 def run_ichimoku_search(target: str) -> int:
+    STOP_SCAN_EVENT.clear()
     group_name, members, source, exchange_suffix = _get_members(target)
     default_cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
@@ -2218,6 +2225,7 @@ def _print_fibo_results(
 
 
 def run_fibo_search(target: str) -> int:
+    STOP_SCAN_EVENT.clear()
     group_name, members, source, exchange_suffix = _get_members(target)
     default_cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
@@ -2371,6 +2379,7 @@ def run_fibo_search(target: str) -> int:
                     print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
                     if not _prompt_vpn_continue_or_stop():
                         print("[fibo] Scan stopped by user after rate-limit detection.")
+                        ex.shutdown(wait=False, cancel_futures=True)
                         return 1
             rows.extend(found)
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
