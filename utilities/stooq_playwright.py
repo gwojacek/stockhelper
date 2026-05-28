@@ -12,6 +12,8 @@ from playwright.sync_api import sync_playwright
 
 
 _CAPTCHA_INSPECTOR_LOCK = threading.Lock()
+_EASYOCR_READER = None
+_EASYOCR_UNAVAILABLE = False
 
 
 _POLISH_MONTHS = {
@@ -330,10 +332,39 @@ def _preprocess_stooq_captcha_image(src_path: Path, out_path: Path) -> bool:
     cleaned = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     # OCR engines generally work better with dark glyphs on a light background.
     cleaned = 255 - cleaned
+    cleaned = cv2.resize(cleaned, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    cleaned = cv2.copyMakeBorder(cleaned, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=255)
     return bool(cv2.imwrite(str(out_path), cleaned))
 
 
-def _ocr_stooq_captcha(cleaned_path: Path) -> str:
+def _captcha_code_from_text(text: str) -> str:
+    code = "".join(ch for ch in (text or "").upper() if ch.isalnum())
+    return code[:4] if len(code) >= 4 else ""
+
+
+def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> str:
+    global _EASYOCR_READER, _EASYOCR_UNAVAILABLE
+    if _EASYOCR_UNAVAILABLE:
+        return ""
+    try:
+        if _EASYOCR_READER is None:
+            import easyocr
+            _EASYOCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
+        results = _EASYOCR_READER.readtext(
+            str(cleaned_path),
+            detail=0,
+            paragraph=False,
+            allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+            decoder="greedy",
+        )
+    except Exception as exc:
+        _EASYOCR_UNAVAILABLE = True
+        print(f"[stooq-web] EasyOCR unavailable/failed for captcha: {exc}")
+        return ""
+    return _captcha_code_from_text("".join(str(x) for x in results))
+
+
+def _ocr_stooq_captcha_tesseract(cleaned_path: Path) -> str:
     try:
         import pytesseract
     except Exception:
@@ -345,16 +376,25 @@ def _ocr_stooq_captcha(cleaned_path: Path) -> str:
         )
     except Exception:
         return ""
-    code = "".join(ch for ch in text.upper() if ch.isalnum())
-    return code[:4] if len(code) >= 4 else ""
+    return _captcha_code_from_text(text)
+
+
+def _ocr_stooq_captcha(cleaned_path: Path) -> tuple[str, str]:
+    code = _ocr_stooq_captcha_easyocr(cleaned_path)
+    if len(code) == 4:
+        return code, "easyocr"
+    code = _ocr_stooq_captcha_tesseract(cleaned_path)
+    if len(code) == 4:
+        return code, "tesseract"
+    return "", ""
 
 
 def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     """Best-effort Stooq captcha solver for the simple red-letter challenge.
 
     The captcha is usually rendered as an image in row #t11, with input #f15
-    and confirmation submit #f13. If cv2/pytesseract are unavailable or OCR
-    is uncertain, return False and let the headed inspector fallback handle it.
+    and confirmation submit #f13. If cv2/EasyOCR/pytesseract are unavailable
+    or OCR is uncertain, return False and let the headed inspector fallback handle it.
     """
     try:
         img = page.locator("#t11 img").first
@@ -368,11 +408,11 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
         if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
             print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.")
             return False
-        code = _ocr_stooq_captcha(cleaned_path)
+        code, engine = _ocr_stooq_captcha(cleaned_path)
         if len(code) != 4:
             print(f"[stooq-web] captcha OCR unavailable/uncertain; saved cleaned image: {cleaned_path}")
             return False
-        print(f"[stooq-web] captcha OCR candidate for {symbol}: {code}")
+        print(f"[stooq-web] captcha OCR candidate for {symbol} via {engine}: {code}")
         page.locator("#f15").fill(code)
         # Stooq requires submitting the captcha form after filling the code.
         # The "Odśwież stronę" link (#cpt_gh) is not enough by itself.
