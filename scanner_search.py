@@ -62,12 +62,6 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     state = _load_search_state()
     group_state = state.get(key, {})
 
-    if key == "commodities":
-        day_key = now_waw.strftime("%Y-%m-%d")
-        first_done = group_state.get("first_check_day") == day_key
-        if first_done and (now_waw.hour, now_waw.minute) < (19, 45):
-            return False
-
     probe_n, quiet_n = _group_probe_plan(group_name, members)
     no_new_first_two = True
     any_new = False
@@ -85,37 +79,35 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         if ticker in members[:quiet_n] and has_new:
             no_new_first_two = False
 
+    # API searches: no 2-hour cache enforcement. Always re-check on each run.
+    if key != "commodities":
+        group_state["last_remote_check"] = now_waw.isoformat()
+        state[key] = group_state
+        _save_search_state(state)
+        return any_new
+
+    # Commodities (UI checks): first check of Warsaw day must probe remote,
+    # then allow cache until 19:45; after that, re-probe on next run.
+    day_key = now_waw.strftime("%Y-%m-%d")
+    first_done = group_state.get("first_check_day") == day_key
+    if first_done and (now_waw.hour, now_waw.minute) < (19, 45):
+        group_state["last_remote_check"] = now_waw.isoformat()
+        state[key] = group_state
+        _save_search_state(state)
+        return False
+
     if any_new:
         group_state["last_remote_check"] = now_waw.isoformat()
-        if key == "commodities":
-            group_state["first_check_day"] = now_waw.strftime("%Y-%m-%d")
+        group_state["first_check_day"] = day_key
         state[key] = group_state
         _save_search_state(state)
         return True
 
-    if key == "single":
-        return False
-
-    # no new data for the first 2 probe symbols -> cache mode for up to 2 hours
-    if no_new_first_two:
-        next_check = (now_waw + timedelta(hours=2)).isoformat()
-        group_state["next_remote_check_not_before"] = next_check
-        if key == "commodities" and not group_state.get("first_check_day"):
-            group_state["first_check_day"] = now_waw.strftime("%Y-%m-%d")
-        state[key] = group_state
-        _save_search_state(state)
-
-    gate = group_state.get("next_remote_check_not_before")
-    if gate:
-        try:
-            if now_waw < datetime.fromisoformat(gate):
-                return False
-        except Exception:
-            pass
-
+    # No new data: use local cache for this run.
+    # Keep marker so subsequent same-day runs before 19:45 stay cached.
+    if no_new_first_two or not first_done:
+        group_state["first_check_day"] = day_key
     group_state["last_remote_check"] = now_waw.isoformat()
-    if key == "commodities":
-        group_state["first_check_day"] = now_waw.strftime("%Y-%m-%d")
     state[key] = group_state
     _save_search_state(state)
     return False
