@@ -342,10 +342,24 @@ def _captcha_code_from_text(text: str) -> str:
     return code[:4] if len(code) >= 4 else ""
 
 
-def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> str:
+def _captcha_debug_enabled() -> bool:
+    return os.getenv("STOCKHELPER_STOOQ_CAPTCHA_DEBUG", "1") != "0"
+
+
+def _debug_captcha_ocr(engine: str, raw, code: str, cleaned_path: Path) -> None:
+    if not _captcha_debug_enabled():
+        return
+    print(
+        f"[stooq-web] captcha OCR debug engine={engine} raw={raw!r} "
+        f"normalized={code!r} len={len(code)} image={cleaned_path}",
+        flush=True,
+    )
+
+
+def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> tuple[str, str]:
     global _EASYOCR_READER, _EASYOCR_UNAVAILABLE
     if _EASYOCR_UNAVAILABLE:
-        return ""
+        return "", ""
     try:
         if _EASYOCR_READER is None:
             import easyocr
@@ -360,32 +374,39 @@ def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> str:
     except Exception as exc:
         _EASYOCR_UNAVAILABLE = True
         print(f"[stooq-web] EasyOCR unavailable/failed for captcha: {exc}")
-        return ""
-    return _captcha_code_from_text("".join(str(x) for x in results))
+        return "", ""
+    raw_text = "".join(str(x) for x in results)
+    code = _captcha_code_from_text(raw_text)
+    _debug_captcha_ocr("easyocr", results, code, cleaned_path)
+    return code, raw_text
 
 
-def _ocr_stooq_captcha_tesseract(cleaned_path: Path) -> str:
+def _ocr_stooq_captcha_tesseract(cleaned_path: Path) -> tuple[str, str]:
     try:
         import pytesseract
-    except Exception:
-        return ""
+    except Exception as exc:
+        _debug_captcha_ocr("tesseract", f"unavailable: {exc}", "", cleaned_path)
+        return "", ""
     try:
         text = pytesseract.image_to_string(
             str(cleaned_path),
             config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
         )
-    except Exception:
-        return ""
-    return _captcha_code_from_text(text)
+    except Exception as exc:
+        _debug_captcha_ocr("tesseract", f"failed: {exc}", "", cleaned_path)
+        return "", ""
+    code = _captcha_code_from_text(text)
+    _debug_captcha_ocr("tesseract", text, code, cleaned_path)
+    return code, text
 
 
 def _ocr_stooq_captcha(cleaned_path: Path) -> tuple[str, str]:
-    code = _ocr_stooq_captcha_easyocr(cleaned_path)
-    if len(code) == 4:
-        return code, "easyocr"
-    code = _ocr_stooq_captcha_tesseract(cleaned_path)
-    if len(code) == 4:
-        return code, "tesseract"
+    easy_code, _easy_raw = _ocr_stooq_captcha_easyocr(cleaned_path)
+    if len(easy_code) == 4:
+        return easy_code, "easyocr"
+    tess_code, _tess_raw = _ocr_stooq_captcha_tesseract(cleaned_path)
+    if len(tess_code) == 4:
+        return tess_code, "tesseract"
     return "", ""
 
 
@@ -410,7 +431,11 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             return False
         code, engine = _ocr_stooq_captcha(cleaned_path)
         if len(code) != 4:
-            print(f"[stooq-web] captcha OCR unavailable/uncertain; saved cleaned image: {cleaned_path}")
+            print(
+                f"[stooq-web] captcha OCR unavailable/uncertain; saved raw={raw_path} cleaned={cleaned_path} "
+                "(set STOCKHELPER_STOOQ_CAPTCHA_DEBUG=0 to hide OCR debug)",
+                flush=True,
+            )
             return False
         print(f"[stooq-web] captcha OCR candidate for {symbol} via {engine}: {code}")
         page.locator("#f15").fill(code)
