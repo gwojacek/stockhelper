@@ -100,11 +100,18 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     # Cache can be used in a time bucket only after a successful UI download in that bucket.
     day_key = now_waw.strftime("%Y-%m-%d")
     phase = "pre1945" if (now_waw.hour, now_waw.minute) < (19, 45) else "post1945"
+    checked_marker = f"ui_checked_{phase}_day"
     phase_marker = f"ui_downloaded_{phase}_day"
+    if group_state.get(checked_marker) == day_key:
+        group_state["last_remote_check"] = now_waw.isoformat()
+        state[key] = group_state
+        _save_search_state(state)
+        return False
     ui_downloaded_this_phase = group_state.get(phase_marker) == day_key
 
     if any_new:
         group_state["last_remote_check"] = now_waw.isoformat()
+        group_state[checked_marker] = day_key
         # API-fetched metals do not control UI-bucket lock.
         if any_new_ui_commodity:
             group_state[phase_marker] = day_key
@@ -116,11 +123,13 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     # Use cache-only only after we've already downloaded UI commodity data in this phase.
     if not ui_downloaded_this_phase:
         group_state["last_remote_check"] = now_waw.isoformat()
+        group_state[checked_marker] = day_key
         state[key] = group_state
         _save_search_state(state)
-        return True
+        return False
 
     group_state["last_remote_check"] = now_waw.isoformat()
+    group_state[checked_marker] = day_key
     state[key] = group_state
     _save_search_state(state)
     return False
