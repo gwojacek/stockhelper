@@ -1571,7 +1571,7 @@ def run_ichimoku_search(target: str) -> int:
         print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
-    processed_tickers: set[str] = set()
+    processed_count = 0
     error_count = 0
 
     if group_name == "WIG":
@@ -1592,7 +1592,7 @@ def run_ichimoku_search(target: str) -> int:
                 for fut in as_completed(fut_map):
                     idx, ticker = fut_map[fut]
                     display_symbol, result, flip, err, src = fut.result()
-                    processed_tickers.add(ticker)
+                    processed_count += 1
                     print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                     if err:
                         error_count += 1
@@ -1663,9 +1663,9 @@ def run_ichimoku_search(target: str) -> int:
             if open_all == "y":
                 for link in all_links:
                     webbrowser.open_new_tab(link)
-        print(f"[search] processed {len(processed_tickers)}/{len(members)} instruments for {group_name}; errors={error_count}", flush=True)
-        if len(processed_tickers) < len(members):
-            print(f"[search] incomplete scope {group_name}: missing {len(members) - len(processed_tickers)} instruments.", flush=True)
+        print(f"[search] processed {processed_count}/{len(members)} instruments for {group_name}; errors={error_count}", flush=True)
+        if processed_count < len(members):
+            print(f"[search] incomplete scope {group_name}: missing {len(members) - processed_count} instruments.", flush=True)
             return 1
         return 0
 
@@ -1673,7 +1673,7 @@ def run_ichimoku_search(target: str) -> int:
     first = members[0]
     print(f"[1/{len(members)}] {first}", flush=True)
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
-    processed_tickers.add(first)
+    processed_count += 1
     print(f"[1/{len(members)}] {first}", flush=True)
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
@@ -1718,7 +1718,7 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
-            processed_tickers.add(ticker)
+            processed_count += 1
             print(f"[{offset}/{len(members)}] {ticker}", flush=True)
             if stopped:
                 break
@@ -1738,7 +1738,7 @@ def run_ichimoku_search(target: str) -> int:
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
                 display_symbol, result, flip, err, src = fut.result()
-                processed_tickers.add(ticker)
+                processed_count += 1
                 print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                 if err:
                     error_count += 1
@@ -1799,9 +1799,9 @@ def run_ichimoku_search(target: str) -> int:
         if open_all == "y":
             for link in all_links:
                 webbrowser.open_new_tab(link)
-    print(f"[search] processed {len(processed_tickers)}/{len(members)} instruments for {group_name}; errors={error_count}", flush=True)
-    if len(processed_tickers) < len(members):
-        print(f"[search] incomplete scope {group_name}: missing {len(members) - len(processed_tickers)} instruments.", flush=True)
+    print(f"[search] processed {processed_count}/{len(members)} instruments for {group_name}; errors={error_count}", flush=True)
+    if processed_count < len(members):
+        print(f"[search] incomplete scope {group_name}: missing {len(members) - processed_count} instruments.", flush=True)
         return 1
     return 0
 
