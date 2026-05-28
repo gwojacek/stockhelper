@@ -1298,7 +1298,6 @@ def main()->int:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
         if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo',['wig','dax','us100','forex','commodities'])
-        _enable_cache_only_if_recent(args.fibo_search_target, hours=6, allow_non_commodities=False)
         from scanner_search import run_fibo_search; return run_fibo_search(args.fibo_search_target)
     target=(args.target or '').strip()
     if not target: parser.error('target is required unless -ichimoku_search is used')

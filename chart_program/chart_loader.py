@@ -789,7 +789,13 @@ def load_or_update_daily_data(
             "fallback_reason": "Cache-only mode enabled.",
         }
 
-    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_min_year(csv_path):
+    force_remote_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+    if (
+        instrument_type == "commodity"
+        and not fetch_older_data
+        and not force_remote_refresh
+        and _local_csv_has_min_year(csv_path)
+    ):
         cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
         return cached_df, csv_path, {
             "source": "cache",

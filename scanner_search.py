@@ -1431,6 +1431,7 @@ def run_ichimoku_search(target: str) -> int:
     refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
     cache_only_mode = default_cache_only_mode or (not refresh_group)
     os.environ["STOCKHELPER_CACHE_ONLY"] = "1" if cache_only_mode else "0"
+    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1" if refresh_group else "0"
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -2137,6 +2138,11 @@ def _print_fibo_results(
 
 def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
+    default_cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
+    cache_only_mode = default_cache_only_mode or (not refresh_group)
+    os.environ["STOCKHELPER_CACHE_ONLY"] = "1" if cache_only_mode else "0"
+    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1" if refresh_group else "0"
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     rows: list[FiboScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
