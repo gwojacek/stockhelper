@@ -944,7 +944,7 @@ def _rate_limit_detected(err: str | None) -> bool:
 
 
 def _should_prompt_rate_limit(group_name: str) -> bool:
-    return (group_name or "").lower() != "commodities"
+    return True
 
 
 def _prompt_vpn_continue_or_stop() -> bool:
