@@ -12,6 +12,7 @@ from playwright.sync_api import sync_playwright
 
 
 _CAPTCHA_INSPECTOR_LOCK = threading.Lock()
+_CAPTCHA_OCR_LOCK = threading.Lock()
 _EASYOCR_READER = None
 _EASYOCR_UNAVAILABLE = False
 
@@ -360,21 +361,28 @@ def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> tuple[str, str]:
     global _EASYOCR_READER, _EASYOCR_UNAVAILABLE
     if _EASYOCR_UNAVAILABLE:
         return "", ""
-    try:
-        if _EASYOCR_READER is None:
-            import easyocr
-            _EASYOCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
-        results = _EASYOCR_READER.readtext(
-            str(cleaned_path),
-            detail=0,
-            paragraph=False,
-            allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-            decoder="greedy",
-        )
-    except Exception as exc:
-        _EASYOCR_UNAVAILABLE = True
-        print(f"[stooq-web] EasyOCR unavailable/failed for captcha: {exc}")
-        return "", ""
+    # EasyOCR lazily downloads/initializes its models. In a commodity scan many
+    # workers can hit the captcha at once; serialize both initialization and
+    # recognition so they do not all try to download/use the model directory at
+    # the same time (which caused repeated download logs and temp.zip races).
+    with _CAPTCHA_OCR_LOCK:
+        if _EASYOCR_UNAVAILABLE:
+            return "", ""
+        try:
+            if _EASYOCR_READER is None:
+                import easyocr
+                _EASYOCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
+            results = _EASYOCR_READER.readtext(
+                str(cleaned_path),
+                detail=0,
+                paragraph=False,
+                allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                decoder="greedy",
+            )
+        except Exception as exc:
+            _EASYOCR_UNAVAILABLE = True
+            print(f"[stooq-web] EasyOCR unavailable/failed for captcha: {exc}")
+            return "", ""
     raw_text = "".join(str(x) for x in results)
     code = _captcha_code_from_text(raw_text)
     _debug_captcha_ocr("easyocr", results, code, cleaned_path)
@@ -438,10 +446,13 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             )
             return False
         print(f"[stooq-web] captcha OCR candidate for {symbol} via {engine}: {code}")
-        page.locator("#f15").fill(code)
+        # Stooq reuses id=f15/id=f13 on non-input elements in some quote panels,
+        # so use tag-qualified locators to avoid Playwright strict-mode matches
+        # against <font id="f15"> market-value elements.
+        page.locator('input[name="cpt_t"], input#f15').first.fill(code)
         # Stooq requires submitting the captcha form after filling the code.
         # The "Odśwież stronę" link (#cpt_gh) is not enough by itself.
-        page.locator("#f13").click()
+        page.locator('input[type="submit"]#f13, input[type="submit"][value="Potwierdzam"]').first.click()
         try:
             page.wait_for_load_state("domcontentloaded", timeout=10000)
         except Exception:
@@ -451,7 +462,7 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
         # still needs to be clicked (or the page reloaded) before history rows
         # appear.
         try:
-            refresh_link = page.locator("#cpt_gh").first
+            refresh_link = page.locator("a#cpt_gh").first
             if refresh_link.count() > 0:
                 refresh_link.click()
                 try:
