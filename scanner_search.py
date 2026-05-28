@@ -1009,6 +1009,18 @@ def _is_retryable_download_error(err: str | None) -> bool:
     return any(marker in text for marker in retryable)
 
 
+def _retry_error_brief(err: str | None) -> str:
+    text = (err or "")
+    low = text.lower()
+    if "connection reset by peer" in low:
+        return "Connection reset by peer [Errno 104]"
+    if "connection refused" in low:
+        return "Connection refused [Errno 111]"
+    if "timed out" in low:
+        return "Connection timed out"
+    return _compact_error(err)
+
+
 def _load_daily_data_with_retries(symbol: str, instrument_type: str, persist: bool = True, fetch_older_data: bool = False, attempts: int = 3):
     last_exc: Exception | None = None
     for attempt in range(1, max(1, attempts) + 1):
@@ -1028,7 +1040,7 @@ def _load_daily_data_with_retries(symbol: str, instrument_type: str, persist: bo
             if attempt >= attempts or (not _is_retryable_download_error(str(exc))):
                 raise
             sleep_s = min(5, attempt)
-            print(f"[data-retry] {symbol} attempt {attempt}/{attempts} failed ({_compact_error(str(exc))}); retrying in {sleep_s}s...")
+            print(f"[data-retry] {symbol} attempt {attempt}/{attempts} failed {_retry_error_brief(str(exc))}; retrying in {sleep_s}s...")
             for _ in range(int(sleep_s * 10)):
                 if STOP_SCAN_EVENT.is_set():
                     raise RuntimeError("Scan stop requested by user.")
@@ -2402,20 +2414,37 @@ def run_fibo_search(target: str) -> int:
     max_workers = min(auto_workers, len(members))
     print(f"[fibo] parallel mode ({max_workers} workers, xdist-style).")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        fut_map = {ex.submit(_scan_fibo_one, (idx, ticker)): (idx, ticker) for idx, ticker in enumerate(members, start=1)}
-        for fut in as_completed(fut_map):
-            idx, ticker = fut_map[fut]
-            _, _, found, err = fut.result()
+        pending: dict = {}
+        next_idx = 1
+        total = len(members)
+        while next_idx <= total and len(pending) < max_workers:
+            t = members[next_idx - 1]
+            pending[ex.submit(_scan_fibo_one, (next_idx, t))] = (next_idx, t)
+            next_idx += 1
+        while pending:
+            done = next(as_completed(pending))
+            idx, ticker = pending.pop(done)
+            _, _, found, err = done.result()
             print(f"[{idx}/{len(members)}] fibo {ticker}...")
             if err:
                 print(f"  pominięto ({_compact_error(err)})")
                 if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                    PAUSE_SCAN_EVENT.set()
                     print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
                     if not _prompt_vpn_continue_or_stop():
                         print("[fibo] Scan stopped by user after rate-limit detection.")
                         ex.shutdown(wait=False, cancel_futures=True)
                         return 1
             rows.extend(found)
+            while PAUSE_SCAN_EVENT.is_set() and not STOP_SCAN_EVENT.is_set():
+                time.sleep(0.2)
+            if STOP_SCAN_EVENT.is_set():
+                ex.shutdown(wait=False, cancel_futures=True)
+                return 1
+            if next_idx <= total:
+                t = members[next_idx - 1]
+                pending[ex.submit(_scan_fibo_one, (next_idx, t))] = (next_idx, t)
+                next_idx += 1
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
