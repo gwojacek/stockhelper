@@ -33,6 +33,8 @@ SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 STOP_SCAN_EVENT = threading.Event()
+PAUSE_SCAN_EVENT = threading.Event()
+PROMPT_LOCK = threading.Lock()
 
 
 
@@ -1012,6 +1014,8 @@ def _load_daily_data_with_retries(symbol: str, instrument_type: str, persist: bo
     for attempt in range(1, max(1, attempts) + 1):
         if STOP_SCAN_EVENT.is_set():
             raise RuntimeError("Scan stop requested by user.")
+        while PAUSE_SCAN_EVENT.is_set() and not STOP_SCAN_EVENT.is_set():
+            time.sleep(0.2)
         try:
             return load_or_update_daily_data(
                 symbol=symbol,
@@ -1025,7 +1029,12 @@ def _load_daily_data_with_retries(symbol: str, instrument_type: str, persist: bo
                 raise
             sleep_s = min(5, attempt)
             print(f"[data-retry] {symbol} attempt {attempt}/{attempts} failed ({_compact_error(str(exc))}); retrying in {sleep_s}s...")
-            time.sleep(sleep_s)
+            for _ in range(int(sleep_s * 10)):
+                if STOP_SCAN_EVENT.is_set():
+                    raise RuntimeError("Scan stop requested by user.")
+                while PAUSE_SCAN_EVENT.is_set() and not STOP_SCAN_EVENT.is_set():
+                    time.sleep(0.2)
+                time.sleep(0.1)
     if last_exc is not None:
         raise last_exc
 
@@ -1037,13 +1046,19 @@ def _should_prompt_rate_limit(group_name: str) -> bool:
 
 
 def _prompt_vpn_continue_or_stop() -> bool:
-    try:
-        answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
-    except EOFError:
-        answer = "n"
-    if answer != "y":
-        STOP_SCAN_EVENT.set()
-    return answer == "y"
+    with PROMPT_LOCK:
+        PAUSE_SCAN_EVENT.set()
+        try:
+            try:
+                answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
+            except EOFError:
+                answer = "n"
+            if answer != "y":
+                STOP_SCAN_EVENT.set()
+                return False
+            return True
+        finally:
+            PAUSE_SCAN_EVENT.clear()
 
 
 
@@ -1531,6 +1546,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 
 def run_ichimoku_search(target: str) -> int:
     STOP_SCAN_EVENT.clear()
+    PAUSE_SCAN_EVENT.clear()
     group_name, members, source, exchange_suffix = _get_members(target)
     default_cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
@@ -2243,6 +2259,7 @@ def _print_fibo_results(
 
 def run_fibo_search(target: str) -> int:
     STOP_SCAN_EVENT.clear()
+    PAUSE_SCAN_EVENT.clear()
     group_name, members, source, exchange_suffix = _get_members(target)
     default_cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
