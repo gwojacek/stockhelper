@@ -904,12 +904,16 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False)
     if code_i != 0:
         failures += 1
+        print("[allsearch] Ichimoku phase did not complete cleanly; not opening stale/partial HTML report.")
+        return 1
 
     # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
     print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
     code_f = _run_batch_search("fibo", scopes, ask_open_links=False, force_cache_only=True)
     if code_f != 0:
         failures += 1
+        print("[allsearch] FIBO phase did not complete cleanly; not opening stale/partial HTML report.")
+        return 1
 
     ichimoku_md_by_scope: dict[str, Path | None] = {scope: _latest_scope_md("search", scope) for scope in scopes}
     fibo_md_by_scope: dict[str, Path | None] = {scope: _latest_scope_md("fibo_search", scope) for scope in scopes}
@@ -1030,7 +1034,11 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
                 if fibo_split_present and not (p.name.endswith("_w1.csv") or p.name.endswith("_w2.csv")):
                     continue
                 _append_csv_section(report, "FIBO", p, all_links, csv_refs)
-        if code!=0: failures+=1
+        if code!=0:
+            failures+=1
+            print(f"[batch] {mode} search failed/stopped for {scope}; aborting remaining scopes to avoid stale partial report.")
+            break
+        print(f"[batch] completed {mode} scope {idx}/{len(batch)}: {scope}")
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
