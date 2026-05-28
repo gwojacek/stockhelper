@@ -385,12 +385,6 @@ def _is_fibo_csv(name: str) -> bool:
     return name.startswith("fibo_search_") and name.endswith(".csv")
 
 def _latest_scope_md(prefix: str, scope: str) -> Path | None:
-    scope_n = (scope or "").strip().lower()
-    if scope_n != "commodities" and not allow_non_commodities:
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-        print(f"[cache-rule] {scope}: refresh mode ON (API search; no time-window cache enforcement)")
-        return False
-
     keys = _scope_file_keys(scope)
     candidates: list[Path] = []
     for key in keys:
