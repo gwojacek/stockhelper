@@ -933,13 +933,34 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
 
 
 def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
-    """Refresh data source, then always run calculations on full cached CSV history."""
+    """Refresh newest data first, then run calculations on full cached CSV history.
+
+    Stock scans also do bounded older backfills, but that request is anchored at
+    the oldest local row.  If we only do the older-backfill request after a
+    freshness probe reports new current data, the newest Stooq candle is never
+    written.  Always perform the current-window refresh first; then optionally
+    extend older history for non-commodities.
+    """
     _runtime_df, csv_path, meta = _load_daily_data_with_retries(
         symbol=symbol,
         instrument_type=instrument_type,
         persist=True,
-        fetch_older_data=(instrument_type != "commodity"),
+        fetch_older_data=False,
     )
+    if instrument_type != "commodity" and os.environ.get("STOCKHELPER_CACHE_ONLY") != "1":
+        try:
+            _older_df, csv_path, older_meta = _load_daily_data_with_retries(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=True,
+                fetch_older_data=True,
+            )
+            if str((meta or {}).get("source", "")).lower() == "cache" and older_meta:
+                meta = older_meta
+        except Exception as exc:
+            # Current data is the correctness-critical part for searches.  Older
+            # backfill failures should not hide a freshly updated current CSV.
+            print(f"[search] older-history backfill skipped for {symbol}: {_retry_error_brief(exc)}", flush=True)
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")

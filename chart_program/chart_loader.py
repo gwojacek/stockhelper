@@ -512,6 +512,11 @@ def _stooq_download(
 
 
 
+def _write_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -> None:
+    text = df.to_csv(index=False).rstrip("\r\n")
+    path.write_text(text, encoding="utf-8")
+
+
 def _sanitize_ohlc_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     rename_map = {
@@ -883,7 +888,7 @@ def load_or_update_daily_data(
         with tempfile.NamedTemporaryFile("w", delete=False, dir=str(csv_path.parent), suffix=".tmp") as tf:
             tmp_path = Path(tf.name)
         try:
-            merged_full.to_csv(tmp_path, index=False)
+            _write_csv_without_trailing_blank_line(merged_full, tmp_path)
             tmp_path.replace(csv_path)
         finally:
             if tmp_path.exists():
@@ -903,7 +908,7 @@ def load_or_update_daily_data(
                 or written_latest < merged_latest
                 or (written_latest == merged_latest and _latest_ohlcv_changed(written, merged_full, merged_latest))
             ):
-                merged_full.to_csv(csv_path, index=False)
+                _write_csv_without_trailing_blank_line(merged_full, csv_path)
         except Exception:
             pass
     display_name = _humanize_symbol(symbol)
