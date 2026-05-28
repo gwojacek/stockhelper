@@ -445,13 +445,26 @@ def _retry_error_brief(exc: BaseException | str) -> str:
     return _compact_error(text)[:240] if "_compact_error" in globals() else text[:240]
 
 
+def _is_rate_limit_download_error(exc: BaseException | str) -> bool:
+    text = str(exc).lower()
+    markers = (
+        "rate limit",
+        "captcha",
+        "przekroczony dzienny limit",
+        "too many requests",
+        "http error 429",
+    )
+    return any(m in text for m in markers)
+
+
 def _is_retryable_download_error(exc: BaseException | str) -> bool:
+    if _is_rate_limit_download_error(exc):
+        return False
     text = str(exc).lower()
     markers = (
         "connection refused", "connection reset by peer", "timed out", "timeout",
-        "too many requests", "http error 429", "temporarily unavailable", "service unavailable",
-        "remote end closed connection", "bad gateway", "gateway timeout", "captcha",
-        "przekroczony dzienny limit",
+        "temporarily unavailable", "service unavailable",
+        "remote end closed connection", "bad gateway", "gateway timeout",
     )
     return any(m in text for m in markers)
 
@@ -470,6 +483,9 @@ def _load_daily_data_with_retries(*, symbol: str, instrument_type: str, persist:
             )
         except Exception as exc:
             last_exc = exc
+            if _is_rate_limit_download_error(exc):
+                PAUSE_SCAN_EVENT.set()
+                raise
             if not _is_retryable_download_error(exc) or attempt >= 3:
                 raise
             print(f"[download-retry] {symbol}: attempt {attempt}/3 failed ({_retry_error_brief(exc)}); retrying...", flush=True)
@@ -1091,19 +1107,20 @@ def _should_prompt_rate_limit(group_name: str) -> bool:
 
 def _prompt_vpn_continue_or_stop() -> bool:
     with PROMPT_LOCK:
-        PAUSE_SCAN_EVENT.set()
+        if not PAUSE_SCAN_EVENT.is_set():
+            return not STOP_SCAN_EVENT.is_set()
+        print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.", flush=True)
         try:
-            try:
-                answer = input("[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/connection reset). Change VPN/solve captcha and continue? [y/N]: ").strip().lower()
-            except EOFError:
-                answer = "n"
-            if answer != "y":
-                STOP_SCAN_EVENT.set()
-                return False
-            STOP_SCAN_EVENT.clear()
-            return True
-        finally:
+            answer = input("[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/429). Change VPN/solve captcha and continue? [y/N]: ").strip().lower()
+        except EOFError:
+            answer = "n"
+        if answer != "y":
+            STOP_SCAN_EVENT.set()
             PAUSE_SCAN_EVENT.clear()
+            return False
+        STOP_SCAN_EVENT.clear()
+        PAUSE_SCAN_EVENT.clear()
+        return True
 
 
 
@@ -1112,12 +1129,14 @@ def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_su
         if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
             return ticker, None, None, "scan stopped", "unknown", True
         display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
-        if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
-            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
+        if err and _rate_limit_detected(err):
+            if not _should_prompt_rate_limit(group_name):
+                PAUSE_SCAN_EVENT.clear()
+                return display_symbol, result, flip, err, src, False
             if _prompt_vpn_continue_or_stop():
-                print("[search] Retrying same instrument after VPN change...")
+                print("[search] Retrying same instrument after VPN change...", flush=True)
                 continue
-            print("[search] Scan stopped by user after rate-limit detection.")
+            print("[search] Scan stopped by user after rate-limit detection.", flush=True)
             return display_symbol, result, flip, err, src, True
         return display_symbol, result, flip, err, src, False
 
