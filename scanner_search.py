@@ -6,11 +6,12 @@ import os
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import math
 from importlib import util
 from pathlib import Path
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -20,6 +21,7 @@ from chart_program.chart_loader import (
     COMMODITY_STOOQ_MAP,
     COMMODITY_YAHOO_MAP,
     load_or_update_daily_data,
+    has_new_remote_data,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 
@@ -29,6 +31,94 @@ SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 
+
+
+SEARCH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
+WARSAW_TZ = ZoneInfo("Europe/Warsaw")
+
+def _load_search_state() -> dict:
+    if SEARCH_STATE_FILE.exists():
+        try:
+            return json.loads(SEARCH_STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def _save_search_state(state: dict) -> None:
+    SEARCH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SEARCH_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _group_probe_plan(group_name: str, members: list[str]) -> tuple[int, int]:
+    g = (group_name or "").lower()
+    if g == "single":
+        return (1, 1)
+    if g == "commodities":
+        return (1, 1)
+    return (min(5, len(members)), min(2, len(members)))
+
+def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+    now_waw = datetime.now(WARSAW_TZ)
+    key = (group_name or "").lower()
+    state = _load_search_state()
+    group_state = state.get(key, {})
+
+    if key == "commodities":
+        day_key = now_waw.strftime("%Y-%m-%d")
+        first_done = group_state.get("first_check_day") == day_key
+        if first_done and (now_waw.hour, now_waw.minute) < (19, 45):
+            return False
+
+    probe_n, quiet_n = _group_probe_plan(group_name, members)
+    no_new_first_two = True
+    any_new = False
+    for ticker in members[:probe_n]:
+        instrument = "commodity" if key in {"commodities", "indexes"} else ("forex" if key == "forex" else "stock")
+        symbol = ticker
+        if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
+            symbol = f"{ticker}{exchange_suffix}"
+        if instrument == "commodity":
+            mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
+            if mapped:
+                symbol = mapped.upper()
+        has_new = has_new_remote_data(symbol=symbol, instrument_type=instrument)
+        any_new = any_new or has_new
+        if ticker in members[:quiet_n] and has_new:
+            no_new_first_two = False
+
+    if any_new:
+        group_state["last_remote_check"] = now_waw.isoformat()
+        if key == "commodities":
+            group_state["first_check_day"] = now_waw.strftime("%Y-%m-%d")
+        state[key] = group_state
+        _save_search_state(state)
+        return True
+
+    if key == "single":
+        return False
+
+    # no new data for the first 2 probe symbols -> cache mode for up to 2 hours
+    if no_new_first_two:
+        next_check = (now_waw + timedelta(hours=2)).isoformat()
+        group_state["next_remote_check_not_before"] = next_check
+        if key == "commodities" and not group_state.get("first_check_day"):
+            group_state["first_check_day"] = now_waw.strftime("%Y-%m-%d")
+        state[key] = group_state
+        _save_search_state(state)
+
+    gate = group_state.get("next_remote_check_not_before")
+    if gate:
+        try:
+            if now_waw < datetime.fromisoformat(gate):
+                return False
+        except Exception:
+            pass
+
+    group_state["last_remote_check"] = now_waw.isoformat()
+    if key == "commodities":
+        group_state["first_check_day"] = now_waw.strftime("%Y-%m-%d")
+    state[key] = group_state
+    _save_search_state(state)
+    return False
 
 def _search_output_dir(prefix: str) -> Path:
     return FIBO_SEARCH_OUTPUT_DIR if prefix.startswith("fibo") else ICHIMOKU_SEARCH_OUTPUT_DIR
@@ -1332,7 +1422,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
-    cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    default_cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    refresh_group = _should_refresh_group_data(group_name, members, exchange_suffix)
+    cache_only_mode = default_cache_only_mode or (not refresh_group)
+    os.environ["STOCKHELPER_CACHE_ONLY"] = "1" if cache_only_mode else "0"
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:

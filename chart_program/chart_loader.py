@@ -711,6 +711,42 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     raise ValueError(f"Stooq API failed for non-commodity-web symbol {symbol}: {primary_error}")
 
 
+
+
+def has_new_remote_data(
+    symbol: str,
+    instrument_type: str,
+    api_key: str | None = None,
+    data_source: str = "auto",
+    fetch_older_data: bool = False,
+) -> bool:
+    """Check if remote source has data newer than local CSV without writing files."""
+    data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
+    csv_path = data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+    local_max = None
+    if csv_path.exists():
+        try:
+            local = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+            if not local.empty and "Date" in local.columns:
+                local_max = pd.to_datetime(local["Date"], errors="coerce").max()
+        except Exception:
+            local_max = None
+
+    remote, _source, _source_symbol, _source_name, _fallback_reason = _download_remote(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        api_key=api_key,
+        data_source=data_source,
+        fetch_older_data=fetch_older_data,
+    )
+    if remote is None or remote.empty or "Date" not in remote.columns:
+        return False
+    remote_max = pd.to_datetime(remote["Date"], errors="coerce").max()
+    if pd.isna(remote_max):
+        return False
+    if local_max is None or pd.isna(local_max):
+        return True
+    return bool(remote_max > local_max)
 def load_or_update_daily_data(
     symbol: str,
     instrument_type: str,
