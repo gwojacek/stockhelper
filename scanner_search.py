@@ -35,6 +35,33 @@ FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 
 SEARCH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
 WARSAW_TZ = ZoneInfo("Europe/Warsaw")
+API_COMMODITY_SYMBOLS = {"XAUUSD", "XAGUSD", "XPDUSD"}
+
+def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
+    """Return number of missing daily bars vs Yahoo for UI-fetched commodities."""
+    t = str(ticker or "").upper()
+    mapped = str(COMMODITY_STOOQ_MAP.get(t, t)).upper()
+    if mapped in API_COMMODITY_SYMBOLS:
+        return 0
+    csv_path = PROJECT_ROOT / "data" / "commodities" / f"{mapped.replace('.', '_')}.csv"
+    local_last = None
+    if csv_path.exists():
+        try:
+            local = pd.read_csv(csv_path)
+            if "Date" in local.columns and not local.empty:
+                local_last = pd.to_datetime(local["Date"], errors="coerce").max()
+        except Exception:
+            local_last = None
+    try:
+        yahoo_df, _, _ = load_or_update_daily_data(symbol=t, instrument_type="commodity", persist=False, data_source="yahoo", fetch_older_data=False)
+        yahoo_last = pd.to_datetime(yahoo_df["Date"], errors="coerce").max() if ("Date" in yahoo_df.columns and not yahoo_df.empty) else None
+    except Exception:
+        return 0
+    if yahoo_last is None or pd.isna(yahoo_last):
+        return 0
+    if local_last is None or pd.isna(local_last):
+        return 999
+    return max(0, int((yahoo_last.normalize() - local_last.normalize()).days))
 
 def _load_search_state() -> dict:
     if SEARCH_STATE_FILE.exists():
@@ -102,6 +129,14 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     phase = "pre1945" if (now_waw.hour, now_waw.minute) < (19, 45) else "post1945"
     checked_marker = f"ui_checked_{phase}_day"
     phase_marker = f"ui_downloaded_{phase}_day"
+    stale_ui = [t for t in members if _commodity_missing_days_vs_yahoo(t) > 0]
+    if stale_ui:
+        print(f"[search] commodities stale vs yahoo -> forcing UI refresh: {', '.join(stale_ui[:6])}{' ...' if len(stale_ui)>6 else ''}")
+        group_state["last_remote_check"] = now_waw.isoformat()
+        group_state[checked_marker] = day_key
+        state[key] = group_state
+        _save_search_state(state)
+        return True
     if group_state.get(checked_marker) == day_key:
         group_state["last_remote_check"] = now_waw.isoformat()
         state[key] = group_state
