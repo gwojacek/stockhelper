@@ -588,6 +588,32 @@ def _latest_date_from_df(df: pd.DataFrame) -> pd.Timestamp | None:
     return dts.max().tz_localize(None) if getattr(dts.max(), "tzinfo", None) else dts.max()
 
 
+def _latest_ohlcv_changed(local: pd.DataFrame, remote: pd.DataFrame, latest: pd.Timestamp) -> bool:
+    if local is None or remote is None or local.empty or remote.empty or "Date" not in local.columns or "Date" not in remote.columns:
+        return False
+    latest_date = pd.to_datetime(latest).date()
+    local_dates = pd.to_datetime(local["Date"], errors="coerce")
+    remote_dates = pd.to_datetime(remote["Date"], errors="coerce")
+    local_rows = local.loc[local_dates.dt.date == latest_date]
+    remote_rows = remote.loc[remote_dates.dt.date == latest_date]
+    if local_rows.empty or remote_rows.empty:
+        return False
+    local_row = local_rows.iloc[-1]
+    remote_row = remote_rows.iloc[-1]
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        if col not in local_row.index or col not in remote_row.index:
+            continue
+        lv = pd.to_numeric(local_row.get(col), errors="coerce")
+        rv = pd.to_numeric(remote_row.get(col), errors="coerce")
+        if pd.isna(lv) and pd.isna(rv):
+            continue
+        if pd.isna(lv) != pd.isna(rv):
+            return True
+        if abs(float(lv) - float(rv)) > 1e-9:
+            return True
+    return False
+
+
 def has_new_remote_data(
     symbol: str,
     instrument_type: str,
@@ -615,10 +641,15 @@ def has_new_remote_data(
         data_source=data_source,
         fetch_older_data=fetch_older_data,
     )
-    remote_latest = _latest_date_from_df(_sanitize_ohlc_dataframe(remote))
+    remote = _sanitize_ohlc_dataframe(remote)
+    remote_latest = _latest_date_from_df(remote)
     if remote_latest is None:
         return False
-    return remote_latest > local_latest
+    if remote_latest > local_latest:
+        return True
+    if remote_latest == local_latest and _latest_ohlcv_changed(local, remote, remote_latest):
+        return True
+    return False
 
 def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, datetime | None]:
     """When older-data mode is requested, fetch only bounded extra history.
@@ -860,6 +891,21 @@ def load_or_update_daily_data(
                     tmp_path.unlink()
                 except Exception:
                     pass
+
+        # Guard against stale scanner calculations/reports if a remote/live row was
+        # available in memory but did not make it to disk for any reason.
+        try:
+            written = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+            written_latest = _latest_date_from_df(written)
+            merged_latest = _latest_date_from_df(merged_full)
+            if merged_latest is not None and (
+                written_latest is None
+                or written_latest < merged_latest
+                or (written_latest == merged_latest and _latest_ohlcv_changed(written, merged_full, merged_latest))
+            ):
+                merged_full.to_csv(csv_path, index=False)
+        except Exception:
+            pass
     display_name = _humanize_symbol(symbol)
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":

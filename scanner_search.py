@@ -531,9 +531,9 @@ def _warsaw_phase_now() -> tuple[str, str]:
     return now.strftime("%Y-%m-%d"), phase
 
 
-def _needs_wig_after_close_refresh(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+def _needs_warsaw_stock_after_close_refresh(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
     group_l = (group_name or "").lower()
-    if not group_l.startswith("wig"):
+    if not (group_l.startswith("wig") or group_l == "single"):
         return False
     now = _warsaw_now()
     cutoff = now.replace(hour=17, minute=30, second=0, microsecond=0)
@@ -562,7 +562,7 @@ def _needs_wig_after_close_refresh(group_name: str, members: list[str], exchange
             break
     if stale:
         print(
-            f"[refresh-check] {group_name}: Warsaw close passed (17:30) and WIG CSVs need post-close candles "
+            f"[refresh-check] {group_name}: Warsaw close passed (17:30) and Warsaw stock CSVs need post-close candles "
             f"({', '.join(stale[:5])}{' ...' if len(stale) > 5 else ''}) -> refresh whole group"
         )
         return True
@@ -610,7 +610,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         return False
     STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
     group_l = (group_name or "").lower()
-    if _needs_wig_after_close_refresh(group_name, members, exchange_suffix):
+    if _needs_warsaw_stock_after_close_refresh(group_name, members, exchange_suffix):
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
         return True
