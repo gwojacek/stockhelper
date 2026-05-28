@@ -1071,7 +1071,11 @@ def _compact_error(err: str | None) -> str:
     if "url=" in text:
         return text.split(" | url=", 1)[0]
     if " Tried: " in text:
-        return text.split(" Tried: ", 1)[0]
+        text = text.split(" Tried: ", 1)[0]
+    # Keep terminal output concise.
+    max_len = 180
+    if len(text) > max_len:
+        return text[:max_len - 3].rstrip() + "..."
     return text
 
 
@@ -1637,7 +1641,7 @@ def run_ichimoku_search(target: str) -> int:
     if first_stopped:
         return 1
     if first_err:
-        print(f"  pominięto ({first_err})")
+        print(f"  pominięto ({_compact_error(first_err)})")
     elif first_result:
         results.append(first_result)
     if first_flip:
@@ -2374,7 +2378,7 @@ def run_fibo_search(target: str) -> int:
             _, _, found, err = fut.result()
             print(f"[{idx}/{len(members)}] fibo {ticker}...")
             if err:
-                print(f"  pominięto ({err})")
+                print(f"  pominięto ({_compact_error(err)})")
                 if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                     print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
                     if not _prompt_vpn_continue_or_stop():
