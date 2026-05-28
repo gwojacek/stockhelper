@@ -16,6 +16,17 @@ _POLISH_MONTHS = {
 }
 
 
+def _page_has_rate_limit_or_captcha(page) -> bool:
+    try:
+        body = page.locator("body").inner_text(timeout=1500)
+    except Exception:
+        try:
+            body = page.content()
+        except Exception:
+            body = ""
+    return _is_rate_limited_html(body)
+
+
 def _is_rate_limited_html(html: str) -> bool:
     lowered = (html or '').lower()
     markers = ['przekroczony dzienny limit wywołań strony', 'przepisz powyższy kod']
@@ -248,7 +259,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         local_min = local["Date"].min()
         local_max = local["Date"].max()
         local_has_full_year = bool(local_min <= min_required and local_max.date() >= anchor_date - timedelta(days=2))
-        if local_has_full_year:
+        if local_has_full_year and os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") != "1":
             return local.sort_values("Date").reset_index(drop=True)
 
     rows: list[dict] = []
@@ -292,11 +303,21 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     page.goto(url, wait_until="domcontentloaded")
                 except Exception:
                     break
+                if _page_has_rate_limit_or_captcha(page):
+                    _handle_captcha_interactive(page, symbol, interactive_state if 'interactive_state' in locals() else None, interactive_captcha)
+                    if _page_has_rate_limit_or_captcha(page):
+                        shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_p{page_num}")
+                        raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
                     _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
                     _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
+                if _page_has_rate_limit_or_captcha(page):
+                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
+                    if _page_has_rate_limit_or_captcha(page):
+                        shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_after_wait_p{page_num}")
+                        raise ValueError(f"Stooq rate limit/captcha detected after table wait on page {page_num}. URL: {url} Screenshot: {shot}")
                 if verbose:
                     print(f"[stooq-web] page={page_num} ready={ready}")
 

@@ -568,6 +568,59 @@ def _local_csv_has_min_year(csv_path: Path) -> bool:
         return False
 
 
+
+
+
+def _force_remote_refresh_enabled() -> bool:
+    return os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+
+
+def local_csv_path_for_symbol(symbol: str, instrument_type: str) -> Path:
+    data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
+    return data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+
+
+def _latest_date_from_df(df: pd.DataFrame) -> pd.Timestamp | None:
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    dts = pd.to_datetime(df["Date"], errors="coerce").dropna()
+    if dts.empty:
+        return None
+    return dts.max().tz_localize(None) if getattr(dts.max(), "tzinfo", None) else dts.max()
+
+
+def has_new_remote_data(
+    symbol: str,
+    instrument_type: str,
+    api_key: str | None = None,
+    data_source: str = "auto",
+    fetch_older_data: bool = False,
+) -> bool:
+    """Return True only when a temporary remote download has a newer Date than local CSV.
+
+    This is a non-destructive freshness probe for API-backed scanner scopes.  It
+    intentionally does not persist or merge data; callers that receive True should
+    refresh the whole scope through load_or_update_daily_data(..., persist=True).
+    """
+    csv_path = local_csv_path_for_symbol(symbol, instrument_type)
+    if not csv_path.exists():
+        return True
+    local = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+    local_latest = _latest_date_from_df(local)
+    if local_latest is None:
+        return True
+    remote, _source, _source_symbol, _source_name, _reason = _download_remote(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        api_key=api_key,
+        data_source=data_source,
+        fetch_older_data=fetch_older_data,
+    )
+    remote_latest = _latest_date_from_df(_sanitize_ohlc_dataframe(remote))
+    if remote_latest is None:
+        return False
+    return remote_latest > local_latest
+
 def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, datetime | None]:
     """When older-data mode is requested, fetch only bounded extra history.
 
@@ -628,7 +681,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
-    csv_path_ref = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+    csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
     if data_source == "stooq":
         df, candidate = _stooq_download(
@@ -722,7 +775,7 @@ def load_or_update_daily_data(
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+    csv_path = local_csv_path_for_symbol(symbol, instrument_type)
 
     local = None
     if csv_path.exists():
@@ -753,7 +806,7 @@ def load_or_update_daily_data(
             "fallback_reason": "Cache-only mode enabled.",
         }
 
-    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_min_year(csv_path):
+    if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
         return cached_df, csv_path, {
             "source": "cache",
@@ -766,6 +819,8 @@ def load_or_update_daily_data(
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
         _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
+        if _force_remote_refresh_enabled():
+            raise
         if local is not None and not local.empty:
             cached_df = local if fetch_older_data else _last_year_only(local)
             return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
