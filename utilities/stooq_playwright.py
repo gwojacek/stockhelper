@@ -357,6 +357,46 @@ def _debug_captcha_ocr(engine: str, raw, code: str, cleaned_path: Path) -> None:
     )
 
 
+def _captcha_page_text(page) -> str:
+    try:
+        return page.locator("body").inner_text(timeout=1500)
+    except Exception:
+        try:
+            return page.content()
+        except Exception:
+            return ""
+
+
+def _captcha_wrong_code_visible(page) -> bool:
+    text = _captcha_page_text(page).lower()
+    markers = ("błędny kod", "bledny kod", "spróbuj ponownie", "sprobuj ponownie")
+    return any(marker in text for marker in markers)
+
+
+def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
+    selectors = (
+        'a:has-text("Zmień kod")',
+        'a:has-text("Zmien kod")',
+        'a[onclick*="cpt_o"]',
+    )
+    for selector in selectors:
+        try:
+            link = page.locator(selector).first
+            if link.count() == 0:
+                continue
+            print(f"[stooq-web] captcha wrong/blocked for {symbol}; requesting new code before attempt {attempt}.", flush=True)
+            link.click()
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            continue
+    print(f"[stooq-web] captcha wrong/blocked for {symbol}; no 'Zmień kod' link found.", flush=True)
+    return False
+
+
 def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> tuple[str, str]:
     global _EASYOCR_READER, _EASYOCR_UNAVAILABLE
     if _EASYOCR_UNAVAILABLE:
@@ -425,68 +465,103 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     and confirmation submit #f13. If cv2/EasyOCR/pytesseract are unavailable
     or OCR is uncertain, return False and let the headed inspector fallback handle it.
     """
-    try:
-        img = page.locator("#t11 img").first
-        if img.count() == 0:
-            img = page.locator("tr#t11 img").first
-        if img.count() == 0:
-            return False
-        raw_path = _captcha_artifact_path(symbol, "_captcha_raw")
-        cleaned_path = _captcha_artifact_path(symbol, "_captcha_cleaned")
-        img.screenshot(path=str(raw_path))
-        if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
-            print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.")
-            return False
-        code, engine = _ocr_stooq_captcha(cleaned_path)
-        if len(code) != 4:
-            print(
-                f"[stooq-web] captcha OCR unavailable/uncertain; saved raw={raw_path} cleaned={cleaned_path} "
-                "(set STOCKHELPER_STOOQ_CAPTCHA_DEBUG=0 to hide OCR debug)",
-                flush=True,
-            )
-            return False
-        print(f"[stooq-web] captcha OCR candidate for {symbol} via {engine}: {code}")
-        # Stooq reuses id=f15/id=f13 on non-input elements in some quote panels,
-        # so use tag-qualified locators to avoid Playwright strict-mode matches
-        # against <font id="f15"> market-value elements.
-        page.locator('input[name="cpt_t"], input#f15').first.fill(code)
-        # Stooq requires submitting the captcha form after filling the code.
-        # The "Odśwież stronę" link (#cpt_gh) is not enough by itself.
-        page.locator('input[type="submit"]#f13, input[type="submit"][value="Potwierdzam"]').first.click()
+    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "3")))
+    for attempt in range(1, max_attempts + 1):
         try:
-            page.wait_for_load_state("domcontentloaded", timeout=10000)
-        except Exception:
-            pass
-
-        # After a successful captcha submit Stooq may show the refresh link; it
-        # still needs to be clicked (or the page reloaded) before history rows
-        # appear.
-        try:
-            refresh_link = page.locator("a#cpt_gh").first
-            if refresh_link.count() > 0:
-                refresh_link.click()
-                try:
-                    page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except Exception:
-                    pass
-            else:
-                page.reload(wait_until="domcontentloaded")
-        except Exception:
+            img = page.locator("#t11 img").first
+            if img.count() == 0:
+                img = page.locator("tr#t11 img").first
+            if img.count() == 0:
+                if attempt == 1:
+                    return False
+                print(f"[stooq-web] captcha image disappeared for {symbol} after attempt {attempt - 1}.", flush=True)
+                return False
+            suffix = "" if attempt == 1 else f"_a{attempt}"
+            raw_path = _captcha_artifact_path(symbol, f"_captcha_raw{suffix}")
+            cleaned_path = _captcha_artifact_path(symbol, f"_captcha_cleaned{suffix}")
+            img.screenshot(path=str(raw_path))
+            if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
+                print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.", flush=True)
+                return False
+            code, engine = _ocr_stooq_captcha(cleaned_path)
+            if len(code) != 4:
+                print(
+                    f"[stooq-web] captcha OCR unavailable/uncertain for {symbol} attempt {attempt}/{max_attempts}; "
+                    f"saved raw={raw_path} cleaned={cleaned_path} "
+                    "(set STOCKHELPER_STOOQ_CAPTCHA_DEBUG=0 to hide OCR debug)",
+                    flush=True,
+                )
+                return False
+            print(f"[stooq-web] captcha OCR candidate for {symbol} via {engine} attempt {attempt}/{max_attempts}: {code}", flush=True)
+            # Stooq reuses id=f15/id=f13 on non-input elements in some quote panels,
+            # so use tag-qualified locators to avoid Playwright strict-mode matches
+            # against <font id="f15"> market-value elements.
+            page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            print(f"[stooq-web] captcha filled for {symbol} attempt {attempt}/{max_attempts}.", flush=True)
+            # Stooq requires submitting the captcha form after filling the code.
+            # The "Odśwież stronę" link (#cpt_gh) is not enough by itself.
+            page.locator('input[type="submit"]#f13, input[type="submit"][value="Potwierdzam"]').first.click()
+            print(f"[stooq-web] captcha submitted for {symbol} attempt {attempt}/{max_attempts}.", flush=True)
             try:
-                page.reload(wait_until="domcontentloaded")
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
 
-        table_visible = False
-        try:
-            page.locator("table tr td").first.wait_for(state="visible", timeout=8000)
-            table_visible = page.locator("table tr td").count() > 0
-        except Exception:
+            if _captcha_wrong_code_visible(page):
+                if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                    continue
+                return False
+
+            # After a successful captcha submit Stooq may show the refresh link; it
+            # still needs to be clicked (or the page reloaded) before history rows
+            # appear.
+            try:
+                refresh_link = page.locator("a#cpt_gh").first
+                if refresh_link.count() > 0:
+                    print(f"[stooq-web] captcha accepted for {symbol}; clicking Stooq refresh link.", flush=True)
+                    refresh_link.click()
+                    try:
+                        page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    except Exception:
+                        pass
+                else:
+                    print(f"[stooq-web] captcha submit done for {symbol}; refresh link missing, reloading page.", flush=True)
+                    page.reload(wait_until="domcontentloaded")
+            except Exception as exc:
+                print(f"[stooq-web] captcha refresh step failed for {symbol}: {exc}; reloading page.", flush=True)
+                try:
+                    page.reload(wait_until="domcontentloaded")
+                except Exception:
+                    pass
+
+            if _captcha_wrong_code_visible(page):
+                if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                    continue
+                return False
+
             table_visible = False
-        return table_visible and not _page_has_rate_limit_or_captcha(page)
-    except Exception as exc:
-        print(f"[stooq-web] captcha auto-solve failed for {symbol}: {exc}")
-        return False
+            try:
+                page.locator("table tr td").first.wait_for(state="visible", timeout=8000)
+                table_visible = page.locator("table tr td").count() > 0
+            except Exception:
+                table_visible = False
+            solved = table_visible and not _page_has_rate_limit_or_captcha(page)
+            print(
+                f"[stooq-web] captcha result for {symbol} attempt {attempt}/{max_attempts}: "
+                f"table_visible={table_visible} solved={solved}",
+                flush=True,
+            )
+            if solved:
+                return True
+            if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                continue
+            return False
+        except Exception as exc:
+            print(f"[stooq-web] captcha auto-solve failed for {symbol} attempt {attempt}/{max_attempts}: {exc}", flush=True)
+            if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                continue
+            return False
+    return False
 
 def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, end_date: datetime | None = None) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
