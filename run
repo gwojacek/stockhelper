@@ -956,6 +956,8 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
 def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, force_cache_only: bool = False) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
+    from scanner_search import _get_members  # type: ignore
+    from chart_program.chart_loader import load_or_update_daily_data, COMMODITY_STOOQ_MAP
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
     report_dir = ALL_REPORT_DIR / ("ichimoku_searches" if mode == "ichimoku" else "fibo_searches")
@@ -968,6 +970,38 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     report = report_dir / f"{mode}_all_latest.md"
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
     failures=0; all_links=set(); csv_refs: list[Path] = []
+    def _csv_path_for(symbol: str, instrument: str) -> Path:
+        base = PROJECT_ROOT / "data" / ("stocks" if instrument == "stock" else ("forex" if instrument == "forex" else "commodities"))
+        return base / f"{symbol.replace('/', '').replace('.', '_')}.csv"
+
+    def _retry_missing_scope_csvs_once(scope: str) -> None:
+        try:
+            group_name, members, _source, exchange_suffix = _get_members(scope)
+        except Exception:
+            return
+        missing: list[tuple[str, str, str]] = []
+        for ticker in members:
+            instrument = "stock"
+            if group_name == "forex":
+                instrument = "forex"
+            elif group_name in {"commodities", "indexes"}:
+                instrument = "commodity"
+            symbol = ticker
+            if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
+                symbol = f"{ticker}{exchange_suffix}"
+            if instrument == "commodity":
+                symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol).upper()
+            if not _csv_path_for(symbol, instrument).exists():
+                missing.append((ticker, symbol, instrument))
+        if not missing:
+            return
+        print(f"[batch] {scope}: missing csv after section run={len(missing)} -> one retry for missing only.")
+        for ticker, symbol, instrument in missing:
+            try:
+                load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            except Exception as exc:
+                print(f"  [batch-retry] {ticker} skipped ({str(exc)[:120]})")
+
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         if force_cache_only:
@@ -986,6 +1020,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
+        _retry_missing_scope_csvs_once(scope)
         after = sorted(csv_dir.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
         with report.open("a", encoding="utf-8") as out:
