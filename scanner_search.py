@@ -1609,7 +1609,6 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     _should_refresh_group_data(group_name, members, exchange_suffix)
-    cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -1619,106 +1618,14 @@ def run_ichimoku_search(target: str) -> int:
     processed_count = 0
     error_count = 0
 
-    if group_name == "WIG":
-        if cache_only_mode:
-            print("[search] WIG mode: cache-only calculations (no VPN pause checkpoints).")
-        else:
-            print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
-        chunk_size = WIG_PART_SIZE
-        chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
-        for chunk_idx, chunk in enumerate(chunks, start=1):
-            print(f"[search] starting chunk {chunk_idx}/{len(chunks)} (size={len(chunk)})")
-            max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(chunk))
-            with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                fut_map = {
-                    ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix): (idx, ticker)
-                    for idx, ticker in enumerate(chunk, start=(chunk_idx - 1) * chunk_size + 1)
-                }
-                for fut in as_completed(fut_map):
-                    idx, ticker = fut_map[fut]
-                    display_symbol, result, flip, err, src, stopped = fut.result()
-                    print(f"[{idx}/{len(members)}] {ticker}", flush=True)
-                    processed_count += 1
-                    if stopped:
-                        return 1
-                    if err:
-                        error_count += 1
-                        print(f"  pominięto ({_compact_error(err)})", flush=True)
-                    elif result:
-                        results.append(result)
-                    if flip:
-                        flip = _ensure_flip_ticker(flip, ticker)
-                        flip_results.append(flip)
-            if chunk_idx < len(chunks):
-                if cache_only_mode:
-                    print("[search] cache-only mode: auto-continue to next WIG chunk.")
-                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
-                    print("[search] batch mode: auto-continue to next WIG chunk.")
-                else:
-                    try:
-                        answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
-                    except EOFError:
-                        answer = "n"
-                    if answer != "y":
-                        print("[search] Scan paused/stopped by user before next WIG chunk.")
-                        break
-
-        retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
-        ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        out_md = _daily_report_path("search", group_name)
-        rows_md = []
-        for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(
-            out_md,
-            "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
-            rows_md,
-            description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
-        )
-        links_primary = _print_results_with_links(results, retest_by_ticker_side)
-        print(f"\nZapisano MD: {out_md}")
-        print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
-        print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
-        links_flip = _print_flip_results_with_links(flip_results)
-        out_md_flip = out_md
-        rows_flip_md=[]
-        for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-            cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(
-            out_md_flip,
-            "WYNIKI 2",
-            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
-            rows_flip_md,
-            append=True,
-            description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
-        )
-        print(f"Zapisano MD: {out_md_flip}")
-        _prune_search_history(group_name, keep_last=3)
-        all_links = links_primary + [x for x in links_flip if x not in links_primary]
-        if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
-            try:
-                open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
-            except EOFError:
-                open_all = "n"
-            if open_all == "y":
-                for link in all_links:
-                    webbrowser.open_new_tab(link)
-        return 0
-
-    # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
+    # Scan the first symbol as a live rate-limit/captcha check; if clean, scan the rest in parallel.
     first = members[0]
     print(f"[1/{len(members)}] {first}")
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
-        sequential = True
-        if cache_only_mode:
-            print("[search] WIG mode: sequential cache-only scan (no VPN pause checkpoints).")
-        else:
-            print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+        sequential = False
+        print("[search] WIG mode: parallel scan enabled (refresh probe already completed).")
     elif group_name == "commodities":
         sequential = False
         print("[search] COMMODITIES mode: parallel fetch enabled (captcha/inspector handled per worker).")
@@ -1742,19 +1649,6 @@ def run_ichimoku_search(target: str) -> int:
         if sequential:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
-            if group_name == "WIG" and offset in {166, 331}:
-                if cache_only_mode:
-                    print("[search] cache-only mode: auto-continue after WIG checkpoint.")
-                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
-                    print("[search] batch mode: auto-continue after WIG checkpoint.")
-                else:
-                    try:
-                        answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
-                    except EOFError:
-                        answer = "n"
-                    if answer != "y":
-                        print("[search] Scan paused/stopped by user before next WIG chunk.")
-                        break
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
             print(f"[{offset}/{len(members)}] {ticker}", flush=True)
             processed_count += 1
