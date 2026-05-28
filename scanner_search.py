@@ -963,6 +963,11 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
     if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
         fetch_symbol = f"{ticker}{exchange_suffix}"
         display_symbol = fetch_symbol
+    elif instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+        # Keep single Warsaw-stock scans aligned with the refresh probe and CSV
+        # path logic. Without this, e.g. -allsearch xtb probes/refreshes XTB.WA
+        # but the scan itself loads/persists XTB.csv, leaving XTB_WA.csv stale.
+        fetch_symbol = f"{fetch_symbol}.WA"
     _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
