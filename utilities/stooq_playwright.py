@@ -107,6 +107,9 @@ def _switch_to_inspector_for_captcha(
     if not interactive_captcha:
         return browser, page, True
 
+    if _try_solve_stooq_captcha(page, symbol):
+        return browser, page, False
+
     with _CAPTCHA_INSPECTOR_LOCK:
         reason = "CAPTCHA/limit" if blocked else "blank first page (possible CAPTCHA/limit)"
         print(f"[stooq-web] {reason} detected for {symbol}. Opening headed inspector pause.")
@@ -297,6 +300,95 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
     except Exception:
         return ""
     return str(path)
+
+
+
+def _captcha_artifact_path(symbol: str, suffix: str) -> Path:
+    out_dir = Path("debug") / "stooq"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir / f"{symbol.lower().replace('.', '_')}{suffix}.png"
+
+
+def _preprocess_stooq_captcha_image(src_path: Path, out_path: Path) -> bool:
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return False
+    img = cv2.imread(str(src_path))
+    if img is None:
+        return False
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    lower_red1 = np.array([0, 80, 80])
+    upper_red1 = np.array([10, 255, 255])
+    lower_red2 = np.array([170, 80, 80])
+    upper_red2 = np.array([180, 255, 255])
+    mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+    mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+    mask = mask1 | mask2
+    kernel = np.ones((2, 2), np.uint8)
+    cleaned = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    # OCR engines generally work better with dark glyphs on a light background.
+    cleaned = 255 - cleaned
+    return bool(cv2.imwrite(str(out_path), cleaned))
+
+
+def _ocr_stooq_captcha(cleaned_path: Path) -> str:
+    try:
+        import pytesseract
+    except Exception:
+        return ""
+    try:
+        text = pytesseract.image_to_string(
+            str(cleaned_path),
+            config="--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        )
+    except Exception:
+        return ""
+    code = "".join(ch for ch in text.upper() if ch.isalnum())
+    return code[:4] if len(code) >= 4 else ""
+
+
+def _try_solve_stooq_captcha(page, symbol: str) -> bool:
+    """Best-effort Stooq captcha solver for the simple red-letter challenge.
+
+    The captcha is usually rendered as an image in row #t11, with input #f15
+    and refresh/submit link #cpt_gh.  If cv2/pytesseract are unavailable or OCR
+    is uncertain, return False and let the headed inspector fallback handle it.
+    """
+    try:
+        img = page.locator("#t11 img").first
+        if img.count() == 0:
+            img = page.locator("tr#t11 img").first
+        if img.count() == 0:
+            return False
+        raw_path = _captcha_artifact_path(symbol, "_captcha_raw")
+        cleaned_path = _captcha_artifact_path(symbol, "_captcha_cleaned")
+        img.screenshot(path=str(raw_path))
+        if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
+            print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.")
+            return False
+        code = _ocr_stooq_captcha(cleaned_path)
+        if len(code) != 4:
+            print(f"[stooq-web] captcha OCR unavailable/uncertain; saved cleaned image: {cleaned_path}")
+            return False
+        print(f"[stooq-web] captcha OCR candidate for {symbol}: {code}")
+        page.locator("#f15").fill(code)
+        page.locator("#cpt_gh").click()
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=10000)
+        except Exception:
+            pass
+        table_visible = False
+        try:
+            page.locator("table tr td").first.wait_for(state="visible", timeout=8000)
+            table_visible = page.locator("table tr td").count() > 0
+        except Exception:
+            table_visible = False
+        return table_visible and not _page_has_rate_limit_or_captcha(page)
+    except Exception as exc:
+        print(f"[stooq-web] captcha auto-solve failed for {symbol}: {exc}")
+        return False
 
 def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_days: int = 364, verbose: bool = False, interactive_captcha: bool = False, end_date: datetime | None = None) -> pd.DataFrame:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
