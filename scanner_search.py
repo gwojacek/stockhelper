@@ -1571,6 +1571,8 @@ def run_ichimoku_search(target: str) -> int:
         print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
+    processed_tickers: set[str] = set()
+    error_count = 0
 
     if group_name == "WIG":
         if cache_only_mode:
@@ -1590,9 +1592,11 @@ def run_ichimoku_search(target: str) -> int:
                 for fut in as_completed(fut_map):
                     idx, ticker = fut_map[fut]
                     display_symbol, result, flip, err, src = fut.result()
-                    print(f"[{idx}/{len(members)}] {ticker}")
+                    processed_tickers.add(ticker)
+                    print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                     if err:
-                        print(f"  pominięto ({_compact_error(err)})")
+                        error_count += 1
+                        print(f"  pominięto ({_compact_error(err)})", flush=True)
                         if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                             print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                             if not _prompt_vpn_continue_or_stop():
@@ -1659,13 +1663,18 @@ def run_ichimoku_search(target: str) -> int:
             if open_all == "y":
                 for link in all_links:
                     webbrowser.open_new_tab(link)
+        print(f"[search] processed {len(processed_tickers)}/{len(members)} instruments for {group_name}; errors={error_count}", flush=True)
+        if len(processed_tickers) < len(members):
+            print(f"[search] incomplete scope {group_name}: missing {len(members) - len(processed_tickers)} instruments.", flush=True)
+            return 1
         return 0
 
     # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
     first = members[0]
-    print(f"[1/{len(members)}] {first}")
+    print(f"[1/{len(members)}] {first}", flush=True)
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
-    print(f"[1/{len(members)}] {first}")
+    processed_tickers.add(first)
+    print(f"[1/{len(members)}] {first}", flush=True)
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = True
@@ -1682,7 +1691,8 @@ def run_ichimoku_search(target: str) -> int:
     if first_stopped:
         return 1
     if first_err:
-        print(f"  pominięto ({_compact_error(first_err)})")
+        error_count += 1
+        print(f"  pominięto ({_compact_error(first_err)})", flush=True)
     elif first_result:
         results.append(first_result)
     if first_flip:
@@ -1708,11 +1718,13 @@ def run_ichimoku_search(target: str) -> int:
                         print("[search] Scan paused/stopped by user before next WIG chunk.")
                         break
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
-            print(f"[{offset}/{len(members)}] {ticker}")
+            processed_tickers.add(ticker)
+            print(f"[{offset}/{len(members)}] {ticker}", flush=True)
             if stopped:
                 break
             if err:
-                print(f"  pominięto ({_compact_error(err)})")
+                error_count += 1
+                print(f"  pominięto ({_compact_error(err)})", flush=True)
             elif result:
                 results.append(result)
             if flip:
@@ -1726,9 +1738,11 @@ def run_ichimoku_search(target: str) -> int:
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
                 display_symbol, result, flip, err, src = fut.result()
-                print(f"[{idx}/{len(members)}] {ticker}")
+                processed_tickers.add(ticker)
+                print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                 if err:
-                    print(f"  pominięto ({_compact_error(err)})")
+                    error_count += 1
+                    print(f"  pominięto ({_compact_error(err)})", flush=True)
                     if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                         print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
                         if not _prompt_vpn_continue_or_stop():
@@ -1785,6 +1799,10 @@ def run_ichimoku_search(target: str) -> int:
         if open_all == "y":
             for link in all_links:
                 webbrowser.open_new_tab(link)
+    print(f"[search] processed {len(processed_tickers)}/{len(members)} instruments for {group_name}; errors={error_count}", flush=True)
+    if len(processed_tickers) < len(members):
+        print(f"[search] incomplete scope {group_name}: missing {len(members) - len(processed_tickers)} instruments.", flush=True)
+        return 1
     return 0
 
 
