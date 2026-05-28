@@ -65,6 +65,13 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     probe_n, quiet_n = _group_probe_plan(group_name, members)
     no_new_first_two = True
     any_new = False
+    any_new_ui_commodity = False
+
+    def _is_api_commodity_symbol(ticker_name: str) -> bool:
+        raw = str(ticker_name or "").upper()
+        mapped = str(COMMODITY_STOOQ_MAP.get(raw, raw)).upper()
+        return mapped in {"XAUUSD", "XAGUSD", "XPDUSD"}
+
     for ticker in members[:probe_n]:
         instrument = "commodity" if key in {"commodities", "indexes"} else ("forex" if key == "forex" else "stock")
         symbol = ticker
@@ -76,6 +83,8 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                 symbol = mapped.upper()
         has_new = has_new_remote_data(symbol=symbol, instrument_type=instrument)
         any_new = any_new or has_new
+        if key == "commodities" and (not _is_api_commodity_symbol(ticker)) and has_new:
+            any_new_ui_commodity = True
         if ticker in members[:quiet_n] and has_new:
             no_new_first_two = False
 
@@ -86,27 +95,31 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         _save_search_state(state)
         return any_new
 
-    # Commodities (UI checks): first check of Warsaw day must probe remote,
-    # then allow cache until 19:45; after that, re-probe on next run.
+    # Commodities (UI checks): allow UI refresh at most twice/day:
+    # once before 19:45 Warsaw time and once after 19:45.
+    # Cache can be used in a time bucket only after a successful UI download in that bucket.
     day_key = now_waw.strftime("%Y-%m-%d")
-    first_done = group_state.get("first_check_day") == day_key
-    if first_done and (now_waw.hour, now_waw.minute) < (19, 45):
-        group_state["last_remote_check"] = now_waw.isoformat()
-        state[key] = group_state
-        _save_search_state(state)
-        return False
+    phase = "pre1945" if (now_waw.hour, now_waw.minute) < (19, 45) else "post1945"
+    phase_marker = f"ui_downloaded_{phase}_day"
+    ui_downloaded_this_phase = group_state.get(phase_marker) == day_key
 
     if any_new:
         group_state["last_remote_check"] = now_waw.isoformat()
-        group_state["first_check_day"] = day_key
+        # API-fetched metals do not control UI-bucket lock.
+        if any_new_ui_commodity:
+            group_state[phase_marker] = day_key
         state[key] = group_state
         _save_search_state(state)
         return True
 
-    # No new data: use local cache for this run.
-    # Keep marker so subsequent same-day runs before 19:45 stay cached.
-    if no_new_first_two or not first_done:
-        group_state["first_check_day"] = day_key
+    # No new data found on probe run.
+    # Use cache-only only after we've already downloaded UI commodity data in this phase.
+    if not ui_downloaded_this_phase:
+        group_state["last_remote_check"] = now_waw.isoformat()
+        state[key] = group_state
+        _save_search_state(state)
+        return True
+
     group_state["last_remote_check"] = now_waw.isoformat()
     state[key] = group_state
     _save_search_state(state)
