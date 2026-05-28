@@ -4,10 +4,14 @@ from datetime import UTC, datetime, timedelta
 import time
 import os
 import json
+import threading
 from pathlib import Path
 
 import pandas as pd
 from playwright.sync_api import sync_playwright
+
+
+_CAPTCHA_INSPECTOR_LOCK = threading.Lock()
 
 
 _POLISH_MONTHS = {
@@ -79,44 +83,57 @@ def _open_page(playwright, interactive: bool = False):
     return browser, page
 
 
-def _switch_to_inspector_for_captcha(playwright, browser, page, url: str, symbol: str, interactive_captcha: bool):
+def _switch_to_inspector_for_captcha(
+    playwright,
+    browser,
+    page,
+    url: str,
+    symbol: str,
+    interactive_captcha: bool,
+    *,
+    suspected: bool = False,
+):
     """Return (browser, page, still_blocked) after optional headed captcha pause.
 
     Normal commodity scraping stays headless.  Only when Stooq actually shows a
-    captcha/rate-limit page do we relaunch a headed browser and pause in the
-    inspector so the user can solve it.
+    captcha/rate-limit page (or the first page is blank while interactive captcha
+    handling is enabled) do we relaunch a headed browser and pause in the
+    inspector so the user can solve it.  The inspector path is serialized so a
+    commodity batch does not open many headed browser pauses at once.
     """
-    if not _page_has_rate_limit_or_captcha(page):
+    blocked = _page_has_rate_limit_or_captcha(page)
+    if not blocked and not suspected:
         return browser, page, False
     if not interactive_captcha:
         return browser, page, True
 
-    print(f"[stooq-web] CAPTCHA/limit detected for {symbol}. Opening headed inspector pause.")
-    try:
-        page.close()
-    except Exception:
-        pass
-    try:
-        browser.close()
-    except Exception:
-        pass
+    with _CAPTCHA_INSPECTOR_LOCK:
+        reason = "CAPTCHA/limit" if blocked else "blank first page (possible CAPTCHA/limit)"
+        print(f"[stooq-web] {reason} detected for {symbol}. Opening headed inspector pause.")
+        try:
+            page.close()
+        except Exception:
+            pass
+        try:
+            browser.close()
+        except Exception:
+            pass
 
-    browser, page = _open_page(playwright, interactive=True)
-    page.set_default_timeout(15000)
-    page.set_default_navigation_timeout(20000)
-    try:
-        page.goto(url, wait_until="domcontentloaded")
-    except Exception:
-        return browser, page, True
-    _accept_consent_if_present(page, first_page=True)
-    if _page_has_rate_limit_or_captcha(page):
-        print("[stooq-web] Solve captcha / wait out the limit, then click Resume in Playwright inspector.")
+        browser, page = _open_page(playwright, interactive=True)
+        page.set_default_timeout(15000)
+        page.set_default_navigation_timeout(20000)
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+        except Exception:
+            return browser, page, True
+        _accept_consent_if_present(page, first_page=True)
+        print("[stooq-web] If captcha/limit is visible, solve it; then click Resume in Playwright inspector.")
         try:
             page.pause()
         except Exception as exc:
             print(f"[stooq-web] Unable to open inspector automatically: {exc}")
             return browser, page, True
-    return browser, page, _page_has_rate_limit_or_captcha(page)
+        return browser, page, _page_has_rate_limit_or_captcha(page)
 
 
 
@@ -386,6 +403,18 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                                 extracted = _extract_rows_from_frame(fr)
                                 if extracted:
                                     break
+                    if not extracted and interactive_captcha:
+                        browser, page, still_blocked = _switch_to_inspector_for_captcha(
+                            p, browser, page, url, symbol, interactive_captcha, suspected=True
+                        )
+                        if not still_blocked:
+                            _wait_for_table_or_limit_with_retry(page, retries=5)
+                            extracted = _extract_rows_from_frame(page)
+                            if not extracted:
+                                for fr in page.frames:
+                                    extracted = _extract_rows_from_frame(fr)
+                                    if extracted:
+                                        break
                     shot = _debug_fail_screenshot(symbol, page, suffix="_no_rows")
                     if _is_rate_limited_html(page.content()):
                         raise ValueError(f"Stooq rate limit detected (captcha/limit popup). URL: {url} Screenshot: {shot}")
