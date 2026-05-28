@@ -20,6 +20,7 @@ from chart_program.chart_loader import (
     COMMODITY_STOOQ_MAP,
     COMMODITY_YAHOO_MAP,
     load_or_update_daily_data,
+    should_refresh_group_from_remote,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 
@@ -1339,6 +1340,37 @@ def run_ichimoku_search(target: str) -> int:
         print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
+    prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+
+    def _set_cache_only(flag: bool) -> None:
+        if flag:
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        else:
+            if prev_cache_only is None:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            else:
+                os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
+
+    if group_name in {"commodities", "single", "WIG"} and members:
+        probe_instrument = "commodity" if group_name == "commodities" else ("stock" if group_name == "WIG" else detect_instrument_type(members[0], None))
+        probe_symbols: list[str] = []
+        for ticker in members:
+            if probe_instrument == "commodity":
+                probe_symbols.append(COMMODITY_STOOQ_MAP.get(ticker.upper(), ticker).upper())
+            elif probe_instrument == "stock":
+                fs = ticker if not exchange_suffix else f"{ticker}{exchange_suffix}"
+                if "." not in fs and len(fs) <= 5:
+                    fs = f"{fs}.WA"
+                probe_symbols.append(fs)
+            else:
+                probe_symbols.append(ticker)
+        do_refresh = should_refresh_group_from_remote(probe_symbols, "commodity" if probe_instrument == "commodity" else "stock", probe_count=2) if probe_instrument in {"commodity", "stock"} else True
+        if do_refresh:
+            print("[search] probe detected newer market data after cutoff -> refreshing searched group from remote.")
+            _set_cache_only(False)
+        else:
+            print("[search] probe found no newer market data -> using cache for this search.")
+            _set_cache_only(True)
 
     if group_name == "WIG":
         if cache_only_mode:
@@ -2041,6 +2073,30 @@ def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     rows: list[FiboScanResult] = []
+    prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    if group_name in {"commodities", "single", "WIG"} and members:
+        probe_instrument = "commodity" if group_name == "commodities" else ("stock" if group_name == "WIG" else detect_instrument_type(members[0], None))
+        probe_symbols: list[str] = []
+        for ticker in members:
+            if probe_instrument == "commodity":
+                probe_symbols.append(COMMODITY_STOOQ_MAP.get(ticker.upper(), ticker).upper())
+            elif probe_instrument == "stock":
+                fs = ticker if not exchange_suffix else f"{ticker}{exchange_suffix}"
+                if "." not in fs and len(fs) <= 5:
+                    fs = f"{fs}.WA"
+                probe_symbols.append(fs)
+            else:
+                probe_symbols.append(ticker)
+        do_refresh = should_refresh_group_from_remote(probe_symbols, "commodity" if probe_instrument == "commodity" else "stock", probe_count=2) if probe_instrument in {"commodity", "stock"} else True
+        if do_refresh:
+            print("[fibo] probe detected newer market data after cutoff -> refreshing searched group from remote.")
+            if prev_cache_only is None:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            else:
+                os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
+        else:
+            print("[fibo] probe found no newer market data -> using cache for this search.")
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
             return False

@@ -46,6 +46,50 @@ def _is_mandatory_remote_check_time(instrument_type: str) -> bool:
         return minutes_now >= (19 * 60 + 45)
     return False
 
+
+def should_refresh_group_from_remote(symbols: list[str], instrument_type: str, probe_count: int = 2) -> bool:
+    """
+    Decide whether a search should refresh from remote for the whole group.
+    Rule: after Warsaw cutoff, probe first N symbols; if any has newer remote data than local CSV,
+    refresh whole group, otherwise use cache.
+    """
+    if instrument_type not in {"stock", "commodity"}:
+        return True
+    if not _is_mandatory_remote_check_time(instrument_type):
+        return False
+
+    probes = [s for s in symbols if str(s).strip()][: max(1, probe_count)]
+    if not probes:
+        return False
+
+    for symbol in probes:
+        try:
+            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+            local_last = None
+            if csv_path.exists():
+                local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+                if not local_df.empty and "Date" in local_df.columns:
+                    local_last = pd.to_datetime(local_df["Date"], errors="coerce").max()
+
+            remote_df, *_ = _download_remote(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                api_key=None,
+                data_source="auto",
+                fetch_older_data=False,
+            )
+            if remote_df is None or remote_df.empty or "Date" not in remote_df.columns:
+                continue
+            remote_last = pd.to_datetime(remote_df["Date"], errors="coerce").max()
+            if pd.isna(remote_last):
+                continue
+            if local_last is None or pd.isna(local_last) or remote_last > local_last:
+                return True
+        except Exception:
+            # If probing fails, keep default cache mode for safety and speed.
+            continue
+    return False
+
 COMMODITY_YAHOO_MAP = {
     "GOLD": "GC=F",
     "XAUUSD": "GC=F",
