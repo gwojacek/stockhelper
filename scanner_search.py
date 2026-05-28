@@ -7,8 +7,6 @@ import re
 import webbrowser
 import threading
 import time
-from contextlib import redirect_stderr, redirect_stdout
-from io import StringIO
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, datetime, time as dt_time
@@ -30,6 +28,7 @@ from chart_program.chart_loader import (
     _yahoo_download,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
+from utilities.output_silence import call_silenced
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
@@ -551,8 +550,7 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
             return 9999
         local_latest = local_dates.max().date()
         yahoo_symbol = raw
-        with StringIO() as sink, redirect_stdout(sink), redirect_stderr(sink):
-            remote, _candidate, _name = _yahoo_download(yahoo_symbol, "commodity")
+        remote, _candidate, _name = call_silenced(_yahoo_download, yahoo_symbol, "commodity")
         remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
         if remote_dates.empty:
             return 0
@@ -1665,7 +1663,6 @@ def run_ichimoku_search(target: str) -> int:
     first = members[0]
     print(f"[1/{len(members)}] {first}")
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
-    print(f"[1/{len(members)}] {first}")
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = True

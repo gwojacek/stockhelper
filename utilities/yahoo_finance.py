@@ -1,5 +1,4 @@
 import io
-from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
@@ -8,6 +7,7 @@ from urllib.request import urlopen
 import pandas as pd
 import yfinance as yf
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from utilities.output_silence import call_silenced
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
 STOOQ_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 LAST_TURNOVER_SOURCE = "unknown"
@@ -138,8 +138,7 @@ def get_fx_to_pln_rate_yahoo(currency: str) -> tuple[str, float]:
     if currency in _FX_TO_PLN_CACHE:
         return _FX_TO_PLN_CACHE[currency]
     for pair in [f"{currency}PLN=X", f"PLN{currency}=X"]:
-        with StringIO() as sink, redirect_stdout(sink), redirect_stderr(sink):
-            hist = yf.Ticker(pair).history(period="5d")
+        hist = call_silenced(yf.Ticker(pair).history, period="5d")
         if not hist.empty:
             rate = float(hist["Close"].iloc[-1])
             if pair.startswith("PLN") and rate > 0:

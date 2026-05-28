@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from io import StringIO
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -13,6 +12,7 @@ import os
 import pandas as pd
 
 from utilities.stooq_playwright import update_stooq_history_with_playwright
+from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 
@@ -293,8 +293,7 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
     for candidate in _yahoo_symbol_candidates(symbol, instrument_type):
         try:
             ticker = yf.Ticker(candidate)
-            with StringIO() as sink, redirect_stderr(sink), redirect_stdout(sink):
-                hist = ticker.history(period="max", interval="1d", auto_adjust=False)
+            hist = call_silenced(ticker.history, period="max", interval="1d", auto_adjust=False)
             if hist is None or hist.empty:
                 errors.append(f"{candidate}: empty data")
                 continue
