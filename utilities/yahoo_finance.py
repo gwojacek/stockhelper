@@ -1,4 +1,5 @@
 import io
+import contextlib
 from io import StringIO
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
@@ -10,6 +11,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
 STOOQ_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 LAST_TURNOVER_SOURCE = "unknown"
+_FX_TO_PLN_CACHE: dict[str, tuple[str, float]] = {}
 
 
 def _normalize_yahoo_symbol(symbol: str) -> str:
@@ -133,13 +135,17 @@ def get_fx_to_pln_rate_yahoo(currency: str) -> tuple[str, float]:
     currency = currency.upper()
     if currency == "PLN":
         return "PLNPLN=X", 1.0
+    if currency in _FX_TO_PLN_CACHE:
+        return _FX_TO_PLN_CACHE[currency]
     for pair in [f"{currency}PLN=X", f"PLN{currency}=X"]:
-        hist = yf.Ticker(pair).history(period="5d")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            hist = yf.Ticker(pair).history(period="5d")
         if not hist.empty:
             rate = float(hist["Close"].iloc[-1])
             if pair.startswith("PLN") and rate > 0:
                 rate = 1 / rate
-            return pair, rate
+            _FX_TO_PLN_CACHE[currency] = (pair, rate)
+            return _FX_TO_PLN_CACHE[currency]
     raise ValueError(f"Brak kursu FX dla waluty {currency} do PLN")
 def get_last_turnover_source() -> str:
     """Zwraca źródło ostatnio pobranych danych obrotu: stooq/yahoo/unknown."""
