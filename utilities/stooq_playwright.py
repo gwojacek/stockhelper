@@ -381,6 +381,26 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             page.wait_for_load_state("domcontentloaded", timeout=10000)
         except Exception:
             pass
+
+        # After a successful captcha submit Stooq may show the refresh link; it
+        # still needs to be clicked (or the page reloaded) before history rows
+        # appear.
+        try:
+            refresh_link = page.locator("#cpt_gh").first
+            if refresh_link.count() > 0:
+                refresh_link.click()
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:
+                    pass
+            else:
+                page.reload(wait_until="domcontentloaded")
+        except Exception:
+            try:
+                page.reload(wait_until="domcontentloaded")
+            except Exception:
+                pass
+
         table_visible = False
         try:
             page.locator("table tr td").first.wait_for(state="visible", timeout=8000)
