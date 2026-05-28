@@ -385,6 +385,12 @@ def _is_fibo_csv(name: str) -> bool:
     return name.startswith("fibo_search_") and name.endswith(".csv")
 
 def _latest_scope_md(prefix: str, scope: str) -> Path | None:
+    scope_n = (scope or "").strip().lower()
+    if scope_n != "commodities" and not allow_non_commodities:
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        print(f"[cache-rule] {scope}: refresh mode ON (API search; no time-window cache enforcement)")
+        return False
+
     keys = _scope_file_keys(scope)
     candidates: list[Path] = []
     for key in keys:
@@ -494,7 +500,13 @@ def _scope_has_complete_cache(scope: str) -> bool:
     return True
 
 
-def _enable_cache_only_if_recent(scope: str, hours: int = 6) -> bool:
+def _enable_cache_only_if_recent(scope: str, hours: int = 6, allow_non_commodities: bool = False) -> bool:
+    scope_n = (scope or "").strip().lower()
+    if scope_n != "commodities" and not allow_non_commodities:
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        print(f"[cache-rule] {scope}: refresh mode ON (API search; no time-window cache enforcement)")
+        return False
+
     keys = _scope_file_keys(scope)
     candidates: list[Path] = []
     for key in keys:
@@ -969,7 +981,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
                 os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                 print(f"[cache-rule] {scope}: forced cache-only overridden -> refresh mode ON (incomplete cache).")
         else:
-            _enable_cache_only_if_recent(scope, hours=6)
+            _enable_cache_only_if_recent(scope, hours=6, allow_non_commodities=False)
         csv_dir = ICHIMOKU_SEARCH_OUTPUT_DIR if mode=="ichimoku" else FIBO_SEARCH_OUTPUT_DIR
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
@@ -1273,7 +1285,7 @@ def main()->int:
         return 0
     if args.search_target:
         if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
-        _enable_cache_only_if_recent(args.search_target, hours=6)
+        _enable_cache_only_if_recent(args.search_target, hours=6, allow_non_commodities=False)
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
     if args.checkavg_target:
         from scanner_search import run_checkavg; return run_checkavg(args.checkavg_target)
@@ -1286,7 +1298,7 @@ def main()->int:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
         if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo',['wig','dax','us100','forex','commodities'])
-        _enable_cache_only_if_recent(args.fibo_search_target, hours=6)
+        _enable_cache_only_if_recent(args.fibo_search_target, hours=6, allow_non_commodities=False)
         from scanner_search import run_fibo_search; return run_fibo_search(args.fibo_search_target)
     target=(args.target or '').strip()
     if not target: parser.error('target is required unless -ichimoku_search is used')
