@@ -218,6 +218,13 @@ def _force_interactive_pause(page, symbol: str, state: dict | None = None, inter
     except Exception as exc:
         print(f"[stooq-web] Unable to open inspector: {exc}")
 
+def _page_has_rate_limit_or_captcha(page) -> bool:
+    try:
+        body = (page.locator("body").inner_text() or "").lower()
+    except Exception:
+        body = ""
+    return ("przekroczony dzienny limit" in body) or ("przepisz powyższy kod" in body)
+
 
 def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
     out_dir = Path("debug") / "stooq"
@@ -296,9 +303,19 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     _accept_consent_if_present(page, first_page=True)
                     _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
                     _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
+                if _page_has_rate_limit_or_captcha(page):
+                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
+                    if _page_has_rate_limit_or_captcha(page):
+                        shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_page{page_num}")
+                        raise ValueError(f"Stooq rate limit detected during page fetch. URL: {url} Screenshot: {shot}")
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if verbose:
                     print(f"[stooq-web] page={page_num} ready={ready}")
+                if not ready or _page_has_rate_limit_or_captcha(page):
+                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
+                    if _page_has_rate_limit_or_captcha(page):
+                        shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_page{page_num}")
+                        raise ValueError(f"Stooq rate limit detected after table wait. URL: {url} Screenshot: {shot}")
 
                 extracted = _extract_rows_from_frame(page)
                 if not extracted:
