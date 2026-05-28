@@ -111,7 +111,20 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
             if mapped:
                 symbol = mapped.upper()
-        has_new = has_new_remote_data(symbol=symbol, instrument_type=instrument)
+        while True:
+            try:
+                has_new = has_new_remote_data(symbol=symbol, instrument_type=instrument)
+                break
+            except Exception as exc:
+                err_txt = _compact_error(str(exc))
+                if _rate_limit_detected(err_txt):
+                    print(f"[search] probe failed for {symbol}: {err_txt}")
+                    print("[search] Network/rate-limit issue detected during probe. Pausing for VPN change.")
+                    if _prompt_vpn_continue_or_stop():
+                        print("[search] Retrying probe after VPN change...")
+                        continue
+                    raise RuntimeError("Scan stopped by user after probe rate-limit detection.") from exc
+                raise
         any_new = any_new or has_new
         if key == "commodities" and (not _is_api_commodity_symbol(ticker)) and has_new:
             any_new_ui_commodity = True
