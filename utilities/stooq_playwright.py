@@ -353,7 +353,7 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     """Best-effort Stooq captcha solver for the simple red-letter challenge.
 
     The captcha is usually rendered as an image in row #t11, with input #f15
-    and refresh/submit link #cpt_gh.  If cv2/pytesseract are unavailable or OCR
+    and confirmation submit #f13. If cv2/pytesseract are unavailable or OCR
     is uncertain, return False and let the headed inspector fallback handle it.
     """
     try:
@@ -374,7 +374,9 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             return False
         print(f"[stooq-web] captcha OCR candidate for {symbol}: {code}")
         page.locator("#f15").fill(code)
-        page.locator("#cpt_gh").click()
+        # Stooq requires submitting the captcha form after filling the code.
+        # The "Odśwież stronę" link (#cpt_gh) is not enough by itself.
+        page.locator("#f13").click()
         try:
             page.wait_for_load_state("domcontentloaded", timeout=10000)
         except Exception:
