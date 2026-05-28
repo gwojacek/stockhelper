@@ -517,14 +517,56 @@ def _write_refresh_state(state: dict) -> None:
         print(f"[refresh-check] warning: could not write state: {_retry_error_brief(exc)}")
 
 
-def _warsaw_phase_now() -> tuple[str, str]:
+def _warsaw_now():
     try:
         from zoneinfo import ZoneInfo
-        now = datetime.now(ZoneInfo("Europe/Warsaw"))
+        return datetime.now(ZoneInfo("Europe/Warsaw"))
     except Exception:
-        now = datetime.now(UTC)
+        return datetime.now(UTC)
+
+
+def _warsaw_phase_now() -> tuple[str, str]:
+    now = _warsaw_now()
     phase = "pre1945" if now.time() < dt_time(19, 45) else "post1945"
     return now.strftime("%Y-%m-%d"), phase
+
+
+def _needs_wig_after_close_refresh(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+    group_l = (group_name or "").lower()
+    if not group_l.startswith("wig"):
+        return False
+    now = _warsaw_now()
+    cutoff = now.replace(hour=17, minute=30, second=0, microsecond=0)
+    if now < cutoff:
+        return False
+
+    stale: list[str] = []
+    today = now.date()
+    cutoff_ts = cutoff.timestamp()
+    for ticker in members:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+        if instrument != "stock":
+            continue
+        csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+        if not csv_path.exists():
+            stale.append(ticker)
+            continue
+        try:
+            local = pd.read_csv(csv_path, usecols=["Date"])
+            latest = pd.to_datetime(local["Date"], errors="coerce").dropna().max()
+            if pd.isna(latest) or latest.date() < today or csv_path.stat().st_mtime < cutoff_ts:
+                stale.append(ticker)
+        except Exception:
+            stale.append(ticker)
+        if len(stale) >= 6:
+            break
+    if stale:
+        print(
+            f"[refresh-check] {group_name}: Warsaw close passed (17:30) and WIG CSVs need post-close candles "
+            f"({', '.join(stale[:5])}{' ...' if len(stale) > 5 else ''}) -> refresh whole group"
+        )
+        return True
+    return False
 
 
 def _is_ui_commodity_ticker(ticker: str) -> bool:
@@ -568,6 +610,10 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         return False
     STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
     group_l = (group_name or "").lower()
+    if _needs_wig_after_close_refresh(group_name, members, exchange_suffix):
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        return True
     if group_l == "commodities":
         day, phase = _warsaw_phase_now()
         state = _read_refresh_state()

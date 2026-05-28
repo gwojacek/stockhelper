@@ -79,6 +79,46 @@ def _open_page(playwright, interactive: bool = False):
     return browser, page
 
 
+def _switch_to_inspector_for_captcha(playwright, browser, page, url: str, symbol: str, interactive_captcha: bool):
+    """Return (browser, page, still_blocked) after optional headed captcha pause.
+
+    Normal commodity scraping stays headless.  Only when Stooq actually shows a
+    captcha/rate-limit page do we relaunch a headed browser and pause in the
+    inspector so the user can solve it.
+    """
+    if not _page_has_rate_limit_or_captcha(page):
+        return browser, page, False
+    if not interactive_captcha:
+        return browser, page, True
+
+    print(f"[stooq-web] CAPTCHA/limit detected for {symbol}. Opening headed inspector pause.")
+    try:
+        page.close()
+    except Exception:
+        pass
+    try:
+        browser.close()
+    except Exception:
+        pass
+
+    browser, page = _open_page(playwright, interactive=True)
+    page.set_default_timeout(15000)
+    page.set_default_navigation_timeout(20000)
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+    except Exception:
+        return browser, page, True
+    _accept_consent_if_present(page, first_page=True)
+    if _page_has_rate_limit_or_captcha(page):
+        print("[stooq-web] Solve captcha / wait out the limit, then click Resume in Playwright inspector.")
+        try:
+            page.pause()
+        except Exception as exc:
+            print(f"[stooq-web] Unable to open inspector automatically: {exc}")
+            return browser, page, True
+    return browser, page, _page_has_rate_limit_or_captcha(page)
+
+
 
 def _accept_consent_if_present(page, first_page: bool = False) -> None:
     if not first_page:
@@ -280,7 +320,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         except Exception:
             start_page = 1
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=interactive_captcha)
+        browser, page = _open_page(p, interactive=False)
         try:
             page.set_default_timeout(15000)
             page.set_default_navigation_timeout(20000)
@@ -304,18 +344,16 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 except Exception:
                     break
                 if _page_has_rate_limit_or_captcha(page):
-                    _handle_captcha_interactive(page, symbol, interactive_state if 'interactive_state' in locals() else None, interactive_captcha)
-                    if _page_has_rate_limit_or_captcha(page):
+                    browser, page, still_blocked = _switch_to_inspector_for_captcha(p, browser, page, url, symbol, interactive_captcha)
+                    if still_blocked:
                         shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_p{page_num}")
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
-                    _force_interactive_pause(page, symbol, interactive_state, interactive_captcha)
-                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if _page_has_rate_limit_or_captcha(page):
-                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
-                    if _page_has_rate_limit_or_captcha(page):
+                    browser, page, still_blocked = _switch_to_inspector_for_captcha(p, browser, page, url, symbol, interactive_captcha)
+                    if still_blocked:
                         shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_after_wait_p{page_num}")
                         raise ValueError(f"Stooq rate limit/captcha detected after table wait on page {page_num}. URL: {url} Screenshot: {shot}")
                 if verbose:
