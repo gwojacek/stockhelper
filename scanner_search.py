@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -853,7 +854,7 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
 
 def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
     """Refresh data source, then always run calculations on full cached CSV history."""
-    _runtime_df, csv_path, meta = load_or_update_daily_data(
+    _runtime_df, csv_path, meta = _load_daily_data_with_retries(
         symbol=symbol,
         instrument_type=instrument_type,
         persist=True,
@@ -974,6 +975,42 @@ def _rate_limit_detected(err: str | None) -> bool:
         "service unavailable",
     )
     return any(marker in text for marker in retryable_markers)
+
+
+def _is_retryable_download_error(err: str | None) -> bool:
+    text = (err or "").lower()
+    retryable = (
+        "connection refused",
+        "connection reset",
+        "timed out",
+        "temporary failure",
+        "temporarily unavailable",
+        "service unavailable",
+        "http error 429",
+        "too many requests",
+    )
+    return any(marker in text for marker in retryable)
+
+
+def _load_daily_data_with_retries(symbol: str, instrument_type: str, persist: bool = True, fetch_older_data: bool = False, attempts: int = 3):
+    last_exc: Exception | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            return load_or_update_daily_data(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=persist,
+                fetch_older_data=fetch_older_data,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= attempts or (not _is_retryable_download_error(str(exc))):
+                raise
+            sleep_s = min(5, attempt)
+            print(f"[data-retry] {symbol} attempt {attempt}/{attempts} failed ({_compact_error(str(exc))}); retrying in {sleep_s}s...")
+            time.sleep(sleep_s)
+    if last_exc is not None:
+        raise last_exc
 
 
 
@@ -2239,7 +2276,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
-            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
