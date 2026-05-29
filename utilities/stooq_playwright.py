@@ -5,6 +5,7 @@ import time
 import os
 import json
 import threading
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -494,16 +495,23 @@ def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> tuple[str, str]:
         if _EASYOCR_UNAVAILABLE:
             return "", ""
         try:
-            if _EASYOCR_READER is None:
-                import easyocr
-                _EASYOCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
-            results = _EASYOCR_READER.readtext(
-                str(cleaned_path),
-                detail=0,
-                paragraph=False,
-                allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-                decoder="greedy",
-            )
+            with warnings.catch_warnings():
+                # EasyOCR imports/uses torch internally. On CPU-only desktops torch
+                # can emit repeated CUDA/pin_memory UserWarnings for every captcha;
+                # keep scanner output focused on the captcha actions instead.
+                warnings.filterwarnings("ignore", category=UserWarning, module=r"torch\..*")
+                warnings.filterwarnings("ignore", message=r".*CUDA initialization.*", category=UserWarning)
+                warnings.filterwarnings("ignore", message=r".*pin_memory.*", category=UserWarning)
+                if _EASYOCR_READER is None:
+                    import easyocr
+                    _EASYOCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
+                results = _EASYOCR_READER.readtext(
+                    str(cleaned_path),
+                    detail=0,
+                    paragraph=False,
+                    allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                    decoder="greedy",
+                )
         except Exception as exc:
             _EASYOCR_UNAVAILABLE = True
             print(f"[stooq-web] EasyOCR unavailable/failed for captcha: {exc}")
