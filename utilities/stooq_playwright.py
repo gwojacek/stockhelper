@@ -344,7 +344,7 @@ def _captcha_code_from_text(text: str) -> str:
 
 
 def _captcha_debug_enabled() -> bool:
-    return os.getenv("STOCKHELPER_STOOQ_CAPTCHA_DEBUG", "1") != "0"
+    return os.getenv("STOCKHELPER_STOOQ_CAPTCHA_DEBUG", "0") == "1"
 
 
 def _debug_captcha_ocr(engine: str, raw, code: str, cleaned_path: Path) -> None:
@@ -381,7 +381,6 @@ def _captcha_state_screenshot(page, symbol: str, reason: str, attempt: int) -> s
 
 
 def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
-    _captcha_state_screenshot(page, symbol, "request_new_code", attempt)
     selectors = (
         'a:has-text("Zmień kod")',
         'a:has-text("Zmien kod")',
@@ -392,7 +391,7 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
             link = page.locator(selector).first
             if link.count() == 0:
                 continue
-            print(f"[stooq-web] captcha wrong/blocked for {symbol}; requesting new code before attempt {attempt}.", flush=True)
+            print(f"[stooq-web] captcha rejected for {symbol}; requesting new code (attempt {attempt}).", flush=True)
             try:
                 link.click(timeout=3000, force=True)
             except Exception:
@@ -410,16 +409,15 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
             page.wait_for_timeout(1000)
         except Exception:
             pass
-        print(f"[stooq-web] captcha wrong/blocked for {symbol}; requested new code via cpt_o() before attempt {attempt}.", flush=True)
+        print(f"[stooq-web] captcha rejected for {symbol}; requested new code via cpt_o() (attempt {attempt}).", flush=True)
         return True
     except Exception:
         pass
-    print(f"[stooq-web] captcha wrong/blocked for {symbol}; no 'Zmień kod' link found.", flush=True)
+    print(f"[stooq-web] captcha rejected for {symbol}; no 'Zmień kod' link found.", flush=True)
     return False
 
 
 def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
-    _captcha_state_screenshot(page, symbol, "before_submit", attempt)
     try:
         submitted = page.evaluate(
             """() => {
@@ -434,7 +432,7 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
             }"""
         )
         if submitted:
-            print(f"[stooq-web] captcha submit invoked via form button for {symbol} attempt {attempt}.", flush=True)
+            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
             return True
     except Exception as exc:
         print(f"[stooq-web] captcha DOM submit failed for {symbol} attempt {attempt}: {exc}; trying Playwright click.", flush=True)
@@ -449,10 +447,10 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
             if btn.count() == 0:
                 continue
             btn.click(timeout=3000, force=True)
-            print(f"[stooq-web] captcha submit clicked ({selector}) for {symbol} attempt {attempt}.", flush=True)
+            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
             return True
         except Exception as exc:
-            print(f"[stooq-web] captcha submit click failed ({selector}) for {symbol} attempt {attempt}: {exc}", flush=True)
+            pass
     _captcha_state_screenshot(page, symbol, "submit_failed", attempt)
     return False
 
@@ -461,7 +459,6 @@ def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> None:
     try:
         refresh_link = page.locator("a#cpt_gh").first
         if refresh_link.count() > 0:
-            print(f"[stooq-web] captcha accepted for {symbol}; invoking Stooq refresh link.", flush=True)
             try:
                 # The link can be present but hidden; direct DOM click still runs
                 # Stooq's onclick handler without waiting 15s for visibility.
@@ -475,8 +472,6 @@ def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> None:
             except Exception:
                 pass
         else:
-            print(f"[stooq-web] captcha submit done for {symbol}; refresh link missing, reloading page.", flush=True)
-            _captcha_state_screenshot(page, symbol, "refresh_link_missing", attempt)
             page.reload(wait_until="domcontentloaded")
     except Exception as exc:
         _captcha_state_screenshot(page, symbol, "refresh_step_failed", attempt)
@@ -575,32 +570,33 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
                 return False
             code, engine = _ocr_stooq_captcha(cleaned_path)
             if len(code) != 4:
+                if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                    print(f"[stooq-web] captcha OCR uncertain for {symbol} attempt {attempt}/{max_attempts}; trying new code.", flush=True)
+                    continue
                 shot = _captcha_state_screenshot(page, symbol, "ocr_uncertain", attempt)
                 print(
-                    f"[stooq-web] captcha OCR unavailable/uncertain for {symbol} attempt {attempt}/{max_attempts}; "
-                    f"saved raw={raw_path} cleaned={cleaned_path} page={shot} "
-                    "(set STOCKHELPER_STOOQ_CAPTCHA_DEBUG=0 to hide OCR debug)",
+                    f"[stooq-web] captcha OCR uncertain for {symbol} attempt {attempt}/{max_attempts}; "
+                    f"failure screenshot={shot}",
                     flush=True,
                 )
-                if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
-                    continue
                 return False
-            print(f"[stooq-web] captcha OCR candidate for {symbol} via {engine} attempt {attempt}/{max_attempts}: {code}", flush=True)
             # Stooq reuses id=f15/id=f13 on non-input elements in some quote panels,
             # so use tag-qualified locators to avoid Playwright strict-mode matches
             # against <font id="f15"> market-value elements.
             page.locator('input[name="cpt_t"], input#f15').first.fill(code)
-            print(f"[stooq-web] captcha filled for {symbol} attempt {attempt}/{max_attempts}.", flush=True)
+            print(f"[stooq-web] captcha code filled for {symbol} attempt {attempt}/{max_attempts}: {code}", flush=True)
             # Stooq requires submitting the captcha form after filling the code.
             # The "Odśwież stronę" link (#cpt_gh) is generated only after this.
             if not _submit_captcha_form(page, symbol, attempt):
                 return False
-            print(f"[stooq-web] captcha submitted for {symbol} attempt {attempt}/{max_attempts}.", flush=True)
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
-            _captcha_state_screenshot(page, symbol, "after_submit", attempt)
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
 
             if _captcha_wrong_code_visible(page):
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
@@ -624,21 +620,24 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             except Exception:
                 table_visible = False
             solved = table_visible and not _page_has_rate_limit_or_captcha(page)
-            shot = "" if solved else _captcha_state_screenshot(page, symbol, "result_failed", attempt)
-            print(
-                f"[stooq-web] captcha result for {symbol} attempt {attempt}/{max_attempts}: "
-                f"table_visible={table_visible} solved={solved} screenshot={shot or '-'}",
-                flush=True,
-            )
             if solved:
                 return True
             if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                print(f"[stooq-web] captcha flow not solved for {symbol} attempt {attempt}/{max_attempts}; trying new code.", flush=True)
                 continue
+            shot = _captcha_state_screenshot(page, symbol, "result_failed", attempt)
+            print(
+                f"[stooq-web] captcha flow failed for {symbol} attempt {attempt}/{max_attempts}: "
+                f"table_visible={table_visible} screenshot={shot or '-'}",
+                flush=True,
+            )
             return False
         except Exception as exc:
-            print(f"[stooq-web] captcha auto-solve failed for {symbol} attempt {attempt}/{max_attempts}: {exc}", flush=True)
             if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                print(f"[stooq-web] captcha auto-solve failed for {symbol} attempt {attempt}/{max_attempts}: {exc}; trying new code.", flush=True)
                 continue
+            shot = _captcha_state_screenshot(page, symbol, "exception", attempt)
+            print(f"[stooq-web] captcha auto-solve failed for {symbol} attempt {attempt}/{max_attempts}: {exc} screenshot={shot or '-'}", flush=True)
             return False
     return False
 
