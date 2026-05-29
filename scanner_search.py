@@ -1823,20 +1823,25 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         # For Fibonacci drawing the lower reset point is the correct 0/100%
         # anchor as long as there is still a real impulse leg afterwards.
         min_reset_impulse_days = 5
-        reset_right = i_peak - min_reset_impulse_days
-        if reset_right > i_start:
-            reset_slice = low.iloc[i_start + 1:reset_right + 1]
+
+        def _reset_to_newer_lower_low(start_idx: int, start_low: float) -> tuple[int, float]:
+            reset_right = i_peak - min_reset_impulse_days
+            if reset_right <= start_idx:
+                return start_idx, start_low
+            reset_slice = low.iloc[start_idx + 1:reset_right + 1]
             if not reset_slice.empty:
                 reset_idx = int(reset_slice.idxmin())
                 reset_low = float(low.iloc[reset_idx])
-                if reset_low < fib_start:
+                if reset_low < start_low:
                     _log(
                         "Long: newer lower fib start reset "
-                        f"idx={i_start} low={fib_start:.4f} -> "
+                        f"idx={start_idx} low={start_low:.4f} -> "
                         f"idx={reset_idx} low={reset_low:.4f}."
                     )
-                    i_start = reset_idx
-                    fib_start = reset_low
+                    return reset_idx, reset_low
+            return start_idx, start_low
+
+        i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
         # Guard against stale multi-cycle impulses:
         # if an earlier local peak (after the chosen start, before the chosen peak)
         # already completed a >=61.8 correction, this start is too old.
@@ -1871,6 +1876,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             )
             i_start = orig_i_start
             fib_start = fallback_start
+            i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
             stale_cycle = _has_stale_cycle(i_start, fib_start)
         if stale_cycle:
             return None
