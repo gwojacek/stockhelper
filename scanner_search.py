@@ -3,10 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import webbrowser
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time as dt_time
 import math
 from importlib import util
 from pathlib import Path
@@ -20,14 +23,24 @@ from chart_program.chart_loader import (
     COMMODITY_STOOQ_MAP,
     COMMODITY_YAHOO_MAP,
     load_or_update_daily_data,
+    has_new_remote_data,
+    local_csv_path_for_symbol,
+    _yahoo_download,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
+from utilities.output_silence import call_silenced
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
+
+STOP_SCAN_EVENT = threading.Event()
+PAUSE_SCAN_EVENT = threading.Event()
+PROMPT_LOCK = threading.Lock()
+REFRESH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
+API_METAL_COMMODITIES = {"XAUUSD", "XAGUSD", "XPDUSD"}
 
 
 def _search_output_dir(prefix: str) -> Path:
@@ -402,6 +415,229 @@ def _normalize_commodity_symbol(raw: str) -> str:
             return key
     return cleaned
 
+
+
+def _wait_if_scan_paused() -> bool:
+    while PAUSE_SCAN_EVENT.is_set() and not STOP_SCAN_EVENT.is_set():
+        time.sleep(0.25)
+    return not STOP_SCAN_EVENT.is_set()
+
+
+def _retry_error_brief(exc: BaseException | str) -> str:
+    text = str(exc)
+    lowered = text.lower()
+    markers = [
+        ("connection reset by peer", "Connection reset by peer"),
+        ("connection refused", "Connection refused"),
+        ("timed out", "Timeout"),
+        ("timeout", "Timeout"),
+        ("too many requests", "Too many requests"),
+        ("http error 429", "HTTP 429"),
+        ("temporarily unavailable", "Temporarily unavailable"),
+        ("service unavailable", "Service unavailable"),
+        ("captcha", "Captcha/rate limit"),
+        ("przekroczony dzienny limit", "Stooq daily limit"),
+    ]
+    for needle, label in markers:
+        if needle in lowered:
+            m = re.search(r"\[Errno\s+\d+\]", text)
+            return f"{label} {m.group(0)}" if m else label
+    return _compact_error(text)[:240] if "_compact_error" in globals() else text[:240]
+
+
+def _is_rate_limit_download_error(exc: BaseException | str) -> bool:
+    text = str(exc).lower()
+    markers = (
+        "rate limit",
+        "captcha",
+        "przekroczony dzienny limit",
+        "too many requests",
+        "http error 429",
+    )
+    return any(m in text for m in markers)
+
+
+def _is_retryable_download_error(exc: BaseException | str) -> bool:
+    if _is_rate_limit_download_error(exc):
+        return False
+    text = str(exc).lower()
+    markers = (
+        "connection refused", "connection reset by peer", "timed out", "timeout",
+        "temporarily unavailable", "service unavailable",
+        "remote end closed connection", "bad gateway", "gateway timeout",
+    )
+    return any(m in text for m in markers)
+
+
+def _load_daily_data_with_retries(*, symbol: str, instrument_type: str, persist: bool = True, fetch_older_data: bool = False):
+    last_exc: BaseException | None = None
+    for attempt in range(1, 4):
+        if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
+            raise RuntimeError("scan stopped")
+        try:
+            return load_or_update_daily_data(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=persist,
+                fetch_older_data=fetch_older_data,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if _is_rate_limit_download_error(exc):
+                PAUSE_SCAN_EVENT.set()
+                raise
+            if not _is_retryable_download_error(exc) or attempt >= 3:
+                raise
+            print(f"[download-retry] {symbol}: attempt {attempt}/3 failed ({_retry_error_brief(exc)}); retrying...", flush=True)
+            for _ in range(8 * attempt):
+                if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
+                    raise RuntimeError("scan stopped")
+                time.sleep(0.25)
+    raise last_exc or RuntimeError("download failed")
+
+
+def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, str]:
+    if group_name == "forex":
+        instrument = "forex"
+    elif group_name in {"commodities", "indexes"}:
+        instrument = "commodity"
+    elif group_name == "single":
+        detected = detect_instrument_type(ticker, None)
+        instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
+    else:
+        instrument = "stock"
+    fetch_symbol = ticker
+    if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
+        fetch_symbol = f"{ticker}{exchange_suffix}"
+    if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+        fetch_symbol = f"{fetch_symbol}.WA"
+    if instrument == "commodity":
+        fetch_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol)).upper()
+    return fetch_symbol, instrument
+
+
+def _read_refresh_state() -> dict:
+    try:
+        if REFRESH_STATE_FILE.exists():
+            return json.loads(REFRESH_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _write_refresh_state(state: dict) -> None:
+    try:
+        REFRESH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        REFRESH_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    except Exception as exc:
+        print(f"[refresh-check] warning: could not write state: {_retry_error_brief(exc)}")
+
+
+def _warsaw_now():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Warsaw"))
+    except Exception:
+        return datetime.now(UTC)
+
+
+def _warsaw_phase_now() -> tuple[str, str]:
+    now = _warsaw_now()
+    phase = "pre1945" if now.time() < dt_time(19, 45) else "post1945"
+    return now.strftime("%Y-%m-%d"), phase
+
+
+def _is_ui_commodity_ticker(ticker: str) -> bool:
+    raw = (ticker or "").strip().upper()
+    if raw in API_METAL_COMMODITIES:
+        return False
+    mapped = str(COMMODITY_STOOQ_MAP.get(raw, raw)).lower()
+    return raw in COMMODITY_STOOQ_MAP and not mapped.startswith("^") and mapped not in {"xauusd", "xagusd", "xpdusd"}
+
+
+def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
+    raw = (ticker or "").strip().upper()
+    if not _is_ui_commodity_ticker(raw):
+        return 0
+    symbol = str(COMMODITY_STOOQ_MAP.get(raw, raw)).upper()
+    csv_path = local_csv_path_for_symbol(symbol, "commodity")
+    if not csv_path.exists():
+        return 9999
+    try:
+        local = pd.read_csv(csv_path)
+        local_dates = pd.to_datetime(local.get("Date"), errors="coerce").dropna()
+        if local_dates.empty:
+            return 9999
+        local_latest = local_dates.max().date()
+        yahoo_symbol = raw
+        remote, _candidate, _name = call_silenced(_yahoo_download, yahoo_symbol, "commodity")
+        remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
+        if remote_dates.empty:
+            return 0
+        remote_latest = remote_dates.max().date()
+        return max(0, (remote_latest - local_latest).days)
+    except Exception as exc:
+        print(f"[refresh-check] {raw}: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
+        return 0
+
+
+def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+    if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
+        print(f"[refresh-check] {group_name}: cache-only already requested; skipping remote probe.")
+        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        return False
+    STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
+    group_l = (group_name or "").lower()
+    if group_l == "commodities":
+        day, phase = _warsaw_phase_now()
+        state = _read_refresh_state()
+        bucket = f"commodities:{day}:{phase}"
+        stale: list[str] = []
+        for t in members:
+            missing = _commodity_missing_days_vs_yahoo(t)
+            if missing > 0:
+                stale.append(f"{t}({missing}d)")
+        if stale:
+            print(f"[refresh-check] commodities stale vs Yahoo: {', '.join(stale[:8])}{' ...' if len(stale)>8 else ''} -> refresh whole group")
+            state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "stale"}
+            _write_refresh_state(state)
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
+        if state.get(bucket):
+            print(f"[refresh-check] commodities {phase}: already checked today -> cache-only mode ON")
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            return False
+        print(f"[refresh-check] commodities {phase}: no Yahoo-stale UI commodities; marking bucket checked")
+        state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "fresh"}
+        _write_refresh_state(state)
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        return False
+
+    probes = members[:1] if group_l == "single" else members[:min(5, len(members))]
+    checked = 0
+    for ticker in probes:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+        try:
+            newer = has_new_remote_data(fetch_symbol, instrument)
+            checked += 1
+            print(f"[refresh-check] {ticker}: remote {'newer' if newer else 'not newer'}")
+            if newer:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+                return True
+        except Exception as exc:
+            print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); refreshing to avoid stale cache")
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
+    print(f"[refresh-check] {group_name}: checked {checked} probe(s), no newer remote data -> cache-only mode ON")
+    os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+    os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+    return False
+
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
     if not spec or not spec.loader:
@@ -713,13 +949,34 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
 
 
 def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
-    """Refresh data source, then always run calculations on full cached CSV history."""
-    _runtime_df, csv_path, meta = load_or_update_daily_data(
+    """Refresh newest data first, then run calculations on full cached CSV history.
+
+    Stock scans also do bounded older backfills, but that request is anchored at
+    the oldest local row.  If we only do the older-backfill request after a
+    freshness probe reports new current data, the newest Stooq candle is never
+    written.  Always perform the current-window refresh first; then optionally
+    extend older history for non-commodities.
+    """
+    _runtime_df, csv_path, meta = _load_daily_data_with_retries(
         symbol=symbol,
         instrument_type=instrument_type,
         persist=True,
-        fetch_older_data=(instrument_type != "commodity"),
+        fetch_older_data=False,
     )
+    if instrument_type != "commodity" and os.environ.get("STOCKHELPER_CACHE_ONLY") != "1":
+        try:
+            _older_df, csv_path, older_meta = _load_daily_data_with_retries(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=True,
+                fetch_older_data=True,
+            )
+            if str((meta or {}).get("source", "")).lower() == "cache" and older_meta:
+                meta = older_meta
+        except Exception as exc:
+            # Current data is the correctness-critical part for searches.  Older
+            # backfill failures should not hide a freshly updated current CSV.
+            print(f"[search] older-history backfill skipped for {symbol}: {_retry_error_brief(exc)}", flush=True)
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -743,6 +1000,11 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
     if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
         fetch_symbol = f"{ticker}{exchange_suffix}"
         display_symbol = fetch_symbol
+    elif instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+        # Keep single Warsaw-stock scans aligned with the refresh probe and CSV
+        # path logic. Without this, e.g. -allsearch xtb probes/refreshes XTB.WA
+        # but the scan itself loads/persists XTB.csv, leaving XTB_WA.csv stale.
+        fetch_symbol = f"{fetch_symbol}.WA"
     _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
@@ -844,23 +1106,37 @@ def _should_prompt_rate_limit(group_name: str) -> bool:
 
 
 def _prompt_vpn_continue_or_stop() -> bool:
-    try:
-        answer = input("[search] Network/rate-limit issue detected (e.g. 'Przekroczony dzienny limit wywolan', 'Connection reset by peer'). Change VPN and continue? [y/N]: ").strip().lower()
-    except EOFError:
-        answer = "n"
-    return answer == "y"
+    with PROMPT_LOCK:
+        if not PAUSE_SCAN_EVENT.is_set():
+            return not STOP_SCAN_EVENT.is_set()
+        print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.", flush=True)
+        try:
+            answer = input("[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/429). Change VPN/solve captcha and continue? [y/N]: ").strip().lower()
+        except EOFError:
+            answer = "n"
+        if answer != "y":
+            STOP_SCAN_EVENT.set()
+            PAUSE_SCAN_EVENT.clear()
+            return False
+        STOP_SCAN_EVENT.clear()
+        PAUSE_SCAN_EVENT.clear()
+        return True
 
 
 
 def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None):
     while True:
+        if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
+            return ticker, None, None, "scan stopped", "unknown", True
         display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
-        if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
-            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
+        if err and _rate_limit_detected(err):
+            if not _should_prompt_rate_limit(group_name):
+                PAUSE_SCAN_EVENT.clear()
+                return display_symbol, result, flip, err, src, False
             if _prompt_vpn_continue_or_stop():
-                print("[search] Retrying same instrument after VPN change...")
+                print("[search] Retrying same instrument after VPN change...", flush=True)
                 continue
-            print("[search] Scan stopped by user after rate-limit detection.")
+            print("[search] Scan stopped by user after rate-limit detection.", flush=True)
             return display_symbol, result, flip, err, src, True
         return display_symbol, result, flip, err, src, False
 
@@ -1332,115 +1608,24 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
-    cache_only_mode = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    _should_refresh_group_data(group_name, members, exchange_suffix)
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
         print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
+    processed_count = 0
+    error_count = 0
 
-    if group_name == "WIG":
-        if cache_only_mode:
-            print("[search] WIG mode: cache-only calculations (no VPN pause checkpoints).")
-        else:
-            print("[search] WIG mode: xdist-style parallel chunks with VPN confirmation between chunks.")
-        chunk_size = WIG_PART_SIZE
-        chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
-        for chunk_idx, chunk in enumerate(chunks, start=1):
-            print(f"[search] starting chunk {chunk_idx}/{len(chunks)} (size={len(chunk)})")
-            max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(chunk))
-            with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                fut_map = {
-                    ex.submit(_scan_one, ticker, group_name, exchange_suffix): (idx, ticker)
-                    for idx, ticker in enumerate(chunk, start=(chunk_idx - 1) * chunk_size + 1)
-                }
-                for fut in as_completed(fut_map):
-                    idx, ticker = fut_map[fut]
-                    display_symbol, result, flip, err, src = fut.result()
-                    print(f"[{idx}/{len(members)}] {ticker}")
-                    if err:
-                        print(f"  pominięto ({_compact_error(err)})")
-                        if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
-                            print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
-                            if not _prompt_vpn_continue_or_stop():
-                                print("[search] Scan stopped by user after rate-limit detection.")
-                                return 1
-                    elif result:
-                        results.append(result)
-                    if flip:
-                        flip = _ensure_flip_ticker(flip, ticker)
-                        flip_results.append(flip)
-            if chunk_idx < len(chunks):
-                if cache_only_mode:
-                    print("[search] cache-only mode: auto-continue to next WIG chunk.")
-                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
-                    print("[search] batch mode: auto-continue to next WIG chunk.")
-                else:
-                    try:
-                        answer = input("[search] Chunk done. Change VPN location and continue with next chunk? [y/N]: ").strip().lower()
-                    except EOFError:
-                        answer = "n"
-                    if answer != "y":
-                        print("[search] Scan paused/stopped by user before next WIG chunk.")
-                        break
-
-        retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
-        ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        out_md = _daily_report_path("search", group_name)
-        rows_md = []
-        for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
-            side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-            rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(
-            out_md,
-            "WYNIKI",
-            ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
-            rows_md,
-            description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
-        )
-        links_primary = _print_results_with_links(results, retest_by_ticker_side)
-        print(f"\nZapisano MD: {out_md}")
-        print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
-        links_flip = _print_flip_results_with_links(flip_results)
-        out_md_flip = out_md
-        rows_flip_md=[]
-        for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
-            cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-            rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
-        _write_md_table(
-            out_md_flip,
-            "WYNIKI 2",
-            ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
-            rows_flip_md,
-            append=True,
-            description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
-        )
-        print(f"Zapisano MD: {out_md_flip}")
-        _prune_search_history(group_name, keep_last=3)
-        all_links = links_primary + [x for x in links_flip if x not in links_primary]
-        if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
-            try:
-                open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
-            except EOFError:
-                open_all = "n"
-            if open_all == "y":
-                for link in all_links:
-                    webbrowser.open_new_tab(link)
-        return 0
-
-    # Probe first symbol for rate limits/captcha; if present use sequential mode, otherwise parallel mode.
+    # Scan the first symbol as a live rate-limit/captcha check; if clean, scan the rest in parallel.
     first = members[0]
     print(f"[1/{len(members)}] {first}")
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
-    print(f"[1/{len(members)}] {first}")
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
-        sequential = True
-        if cache_only_mode:
-            print("[search] WIG mode: sequential cache-only scan (no VPN pause checkpoints).")
-        else:
-            print("[search] WIG mode: sequential scan with pause every 165 requests for VPN rotation.")
+        sequential = False
+        print("[search] WIG mode: parallel scan enabled (refresh probe already completed).")
     elif group_name == "commodities":
         sequential = False
         print("[search] COMMODITIES mode: parallel fetch enabled (captcha/inspector handled per worker).")
@@ -1449,7 +1634,9 @@ def run_ichimoku_search(target: str) -> int:
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
     if first_stopped:
         return 1
+    processed_count += 1
     if first_err:
+        error_count += 1
         print(f"  pominięto ({first_err})")
     elif first_result:
         results.append(first_result)
@@ -1462,25 +1649,14 @@ def run_ichimoku_search(target: str) -> int:
         if sequential:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
-            if group_name == "WIG" and offset in {166, 331}:
-                if cache_only_mode:
-                    print("[search] cache-only mode: auto-continue after WIG checkpoint.")
-                elif os.environ.get("STOCKHELPER_BATCH_MODE") == "1":
-                    print("[search] batch mode: auto-continue after WIG checkpoint.")
-                else:
-                    try:
-                        answer = input(f"[search] Reached {offset-1} WIG checks. Change VPN location and continue? [y/N]: ").strip().lower()
-                    except EOFError:
-                        answer = "n"
-                    if answer != "y":
-                        print("[search] Scan paused/stopped by user before next WIG chunk.")
-                        break
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
-            print(f"[{offset}/{len(members)}] {ticker}")
+            print(f"[{offset}/{len(members)}] {ticker}", flush=True)
+            processed_count += 1
             if stopped:
                 break
             if err:
-                print(f"  pominięto ({_compact_error(err)})")
+                error_count += 1
+                print(f"  pominięto ({_compact_error(err)})", flush=True)
             elif result:
                 results.append(result)
             if flip:
@@ -1490,18 +1666,17 @@ def run_ichimoku_search(target: str) -> int:
         max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            fut_map = {ex.submit(_scan_one, ticker, group_name, exchange_suffix): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
+            fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
-                display_symbol, result, flip, err, src = fut.result()
-                print(f"[{idx}/{len(members)}] {ticker}")
+                display_symbol, result, flip, err, src, stopped = fut.result()
+                print(f"[{idx}/{len(members)}] {ticker}", flush=True)
+                processed_count += 1
+                if stopped:
+                    return 1
                 if err:
-                    print(f"  pominięto ({_compact_error(err)})")
-                    if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
-                        print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.")
-                        if not _prompt_vpn_continue_or_stop():
-                            print("[search] Scan stopped by user after rate-limit detection.")
-                            return 1
+                    error_count += 1
+                    print(f"  pominięto ({_compact_error(err)})", flush=True)
                 elif result:
                     results.append(result)
                 if flip:
@@ -1526,6 +1701,7 @@ def run_ichimoku_search(target: str) -> int:
     links_primary = _print_results_with_links(results, retest_by_ticker_side)
     print(f"\nZapisano MD: {out_md}")
     print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
+    print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
 
     links_flip = _print_flip_results_with_links(flip_results)
 
@@ -2039,6 +2215,7 @@ def _print_fibo_results(
 
 def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
+    _should_refresh_group_data(group_name, members, exchange_suffix)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     rows: list[FiboScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
@@ -2091,7 +2268,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
-            df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
@@ -2173,21 +2350,43 @@ def run_fibo_search(target: str) -> int:
     cpu = os.cpu_count() or 4
     auto_workers = max(4, min(cpu * 3, 32))
     max_workers = min(auto_workers, len(members))
-    print(f"[fibo] parallel mode ({max_workers} workers, xdist-style).")
+    print(f"[fibo] parallel mode ({max_workers} workers, bounded queue).")
+    indexed_members = list(enumerate(members, start=1))
+    next_pos = 0
+    pending: dict = {}
+    queue_limit = max_workers * 2
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        fut_map = {ex.submit(_scan_fibo_one, (idx, ticker)): (idx, ticker) for idx, ticker in enumerate(members, start=1)}
-        for fut in as_completed(fut_map):
-            idx, ticker = fut_map[fut]
-            _, _, found, err = fut.result()
-            print(f"[{idx}/{len(members)}] fibo {ticker}...")
-            if err:
-                print(f"  pominięto ({err})")
-                if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
-                    print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.")
-                    if not _prompt_vpn_continue_or_stop():
-                        print("[fibo] Scan stopped by user after rate-limit detection.")
-                        return 1
-            rows.extend(found)
+        def _submit_more() -> None:
+            nonlocal next_pos
+            while next_pos < len(indexed_members) and len(pending) < queue_limit and not STOP_SCAN_EVENT.is_set() and not PAUSE_SCAN_EVENT.is_set():
+                idx, ticker = indexed_members[next_pos]
+                pending[ex.submit(_scan_fibo_one, (idx, ticker))] = (idx, ticker)
+                next_pos += 1
+        _submit_more()
+        while pending:
+            done, _not_done = wait(list(pending.keys()), timeout=0.5, return_when=FIRST_COMPLETED)
+            if not done:
+                if STOP_SCAN_EVENT.is_set():
+                    return 1
+                if not PAUSE_SCAN_EVENT.is_set():
+                    _submit_more()
+                continue
+            for fut in done:
+                idx, ticker = pending.pop(fut)
+                _, _, found, err = fut.result()
+                print(f"[{idx}/{len(members)}] fibo {ticker}...", flush=True)
+                if err:
+                    print(f"  pominięto ({err})", flush=True)
+                    if _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                        print("[fibo] Network/rate-limit issue detected. Pausing scan for VPN change.", flush=True)
+                        PAUSE_SCAN_EVENT.set()
+                        if not _prompt_vpn_continue_or_stop():
+                            print("[fibo] Scan stopped by user after rate-limit detection.", flush=True)
+                            return 1
+                rows.extend(found)
+            _submit_more()
+        if STOP_SCAN_EVENT.is_set():
+            return 1
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
@@ -2377,7 +2576,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     if instrument == "commodity":
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
-    df, _, _ = load_or_update_daily_data(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+    df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:

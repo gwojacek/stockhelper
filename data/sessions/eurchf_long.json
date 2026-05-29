@@ -1,0 +1,17 @@
+{
+  "high": 0.9446,
+  "low": 0.9267,
+  "entry": 0.93614,
+  "stop_loss": 0.9318,
+  "position_type": "long",
+  "capital": 233000,
+  "lot_cost": 14118.4,
+  "pip_value": 46.36,
+  "pip_size": 0.0001,
+  "spread": 63.75599999999999,
+  "pair": "EUR/CHF",
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": true
+}

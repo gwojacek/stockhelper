@@ -1,0 +1,13 @@
+{
+  "high": 15.25,
+  "low": 13.34,
+  "entry": 14.2,
+  "stop_loss": 13.69,
+  "capital": 225000,
+  "symbol": "MRB.WA",
+  "name": "MRB",
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": true
+}

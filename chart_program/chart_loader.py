@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from io import StringIO
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -13,6 +12,7 @@ import os
 import pandas as pd
 
 from utilities.stooq_playwright import update_stooq_history_with_playwright
+from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 
@@ -293,8 +293,7 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
     for candidate in _yahoo_symbol_candidates(symbol, instrument_type):
         try:
             ticker = yf.Ticker(candidate)
-            with StringIO() as sink, redirect_stderr(sink), redirect_stdout(sink):
-                hist = ticker.history(period="max", interval="1d", auto_adjust=False)
+            hist = call_silenced(ticker.history, period="max", interval="1d", auto_adjust=False)
             if hist is None or hist.empty:
                 errors.append(f"{candidate}: empty data")
                 continue
@@ -513,6 +512,11 @@ def _stooq_download(
 
 
 
+def _write_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -> None:
+    text = df.to_csv(index=False).rstrip("\r\n")
+    path.write_text(text, encoding="utf-8")
+
+
 def _sanitize_ohlc_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     rename_map = {
@@ -567,6 +571,90 @@ def _local_csv_has_min_year(csv_path: Path) -> bool:
     except Exception:
         return False
 
+
+
+
+
+def _force_remote_refresh_enabled() -> bool:
+    return os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+
+
+def local_csv_path_for_symbol(symbol: str, instrument_type: str) -> Path:
+    data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
+    return data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+
+
+def _latest_date_from_df(df: pd.DataFrame) -> pd.Timestamp | None:
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    dts = pd.to_datetime(df["Date"], errors="coerce").dropna()
+    if dts.empty:
+        return None
+    return dts.max().tz_localize(None) if getattr(dts.max(), "tzinfo", None) else dts.max()
+
+
+def _latest_ohlcv_changed(local: pd.DataFrame, remote: pd.DataFrame, latest: pd.Timestamp) -> bool:
+    if local is None or remote is None or local.empty or remote.empty or "Date" not in local.columns or "Date" not in remote.columns:
+        return False
+    latest_date = pd.to_datetime(latest).date()
+    local_dates = pd.to_datetime(local["Date"], errors="coerce")
+    remote_dates = pd.to_datetime(remote["Date"], errors="coerce")
+    local_rows = local.loc[local_dates.dt.date == latest_date]
+    remote_rows = remote.loc[remote_dates.dt.date == latest_date]
+    if local_rows.empty or remote_rows.empty:
+        return False
+    local_row = local_rows.iloc[-1]
+    remote_row = remote_rows.iloc[-1]
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        if col not in local_row.index or col not in remote_row.index:
+            continue
+        lv = pd.to_numeric(local_row.get(col), errors="coerce")
+        rv = pd.to_numeric(remote_row.get(col), errors="coerce")
+        if pd.isna(lv) and pd.isna(rv):
+            continue
+        if pd.isna(lv) != pd.isna(rv):
+            return True
+        if abs(float(lv) - float(rv)) > 1e-9:
+            return True
+    return False
+
+
+def has_new_remote_data(
+    symbol: str,
+    instrument_type: str,
+    api_key: str | None = None,
+    data_source: str = "auto",
+    fetch_older_data: bool = False,
+) -> bool:
+    """Return True only when a temporary remote download has a newer Date than local CSV.
+
+    This is a non-destructive freshness probe for API-backed scanner scopes.  It
+    intentionally does not persist or merge data; callers that receive True should
+    refresh the whole scope through load_or_update_daily_data(..., persist=True).
+    """
+    csv_path = local_csv_path_for_symbol(symbol, instrument_type)
+    if not csv_path.exists():
+        return True
+    local = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+    local_latest = _latest_date_from_df(local)
+    if local_latest is None:
+        return True
+    remote, _source, _source_symbol, _source_name, _reason = _download_remote(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        api_key=api_key,
+        data_source=data_source,
+        fetch_older_data=fetch_older_data,
+    )
+    remote = _sanitize_ohlc_dataframe(remote)
+    remote_latest = _latest_date_from_df(remote)
+    if remote_latest is None:
+        return False
+    if remote_latest > local_latest:
+        return True
+    if remote_latest == local_latest and _latest_ohlcv_changed(local, remote, remote_latest):
+        return True
+    return False
 
 def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, datetime | None]:
     """When older-data mode is requested, fetch only bounded extra history.
@@ -628,7 +716,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
-    csv_path_ref = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+    csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
     if data_source == "stooq":
         df, candidate = _stooq_download(
@@ -722,7 +810,7 @@ def load_or_update_daily_data(
     data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+    csv_path = local_csv_path_for_symbol(symbol, instrument_type)
 
     local = None
     if csv_path.exists():
@@ -753,7 +841,7 @@ def load_or_update_daily_data(
             "fallback_reason": "Cache-only mode enabled.",
         }
 
-    if instrument_type == "commodity" and not fetch_older_data and _local_csv_has_min_year(csv_path):
+    if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
         return cached_df, csv_path, {
             "source": "cache",
@@ -766,6 +854,8 @@ def load_or_update_daily_data(
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
         _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
+        if _force_remote_refresh_enabled():
+            raise
         if local is not None and not local.empty:
             cached_df = local if fetch_older_data else _last_year_only(local)
             return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
@@ -798,7 +888,7 @@ def load_or_update_daily_data(
         with tempfile.NamedTemporaryFile("w", delete=False, dir=str(csv_path.parent), suffix=".tmp") as tf:
             tmp_path = Path(tf.name)
         try:
-            merged_full.to_csv(tmp_path, index=False)
+            _write_csv_without_trailing_blank_line(merged_full, tmp_path)
             tmp_path.replace(csv_path)
         finally:
             if tmp_path.exists():
@@ -806,6 +896,21 @@ def load_or_update_daily_data(
                     tmp_path.unlink()
                 except Exception:
                     pass
+
+        # Guard against stale scanner calculations/reports if a remote/live row was
+        # available in memory but did not make it to disk for any reason.
+        try:
+            written = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+            written_latest = _latest_date_from_df(written)
+            merged_latest = _latest_date_from_df(merged_full)
+            if merged_latest is not None and (
+                written_latest is None
+                or written_latest < merged_latest
+                or (written_latest == merged_latest and _latest_ohlcv_changed(written, merged_full, merged_latest))
+            ):
+                _write_csv_without_trailing_blank_line(merged_full, csv_path)
+        except Exception:
+            pass
     display_name = _humanize_symbol(symbol)
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
