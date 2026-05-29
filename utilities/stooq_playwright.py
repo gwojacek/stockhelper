@@ -427,36 +427,39 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
 
 
 def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
-    """Click the visible Stooq captcha confirmation button.
-
-    Validation happens only after the real "Potwierdzam" button is clicked, so
-    try user-like Playwright clicks first.  DOM submission is only a fallback.
-    """
-    click_targets = (
-        ("role button Potwierdzam", lambda: page.get_by_role("button", name="Potwierdzam").first),
-        ('input#f13[type="submit"]', lambda: page.locator('input#f13[type="submit"]').first),
-        ('input[type="submit"][value="Potwierdzam"]', lambda: page.locator('input[type="submit"][value="Potwierdzam"]').first),
-    )
-    for label, locator_factory in click_targets:
+    """Click Stooq's visible "Potwierdzam" captcha confirmation button."""
+    try:
+        # The captcha is validated only by this button click. Use the same
+        # Playwright selector as the debug/manual recipe so the action is a real
+        # button click, not only a form/DOM submit shortcut.
+        button = page.get_by_role("button", name="Potwierdzam")
+        button.click(timeout=5000)
+        print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
         try:
-            btn = locator_factory()
+            page.wait_for_timeout(1000)
+        except Exception:
+            pass
+        return True
+    except Exception as role_exc:
+        print(
+            f"[stooq-web] captcha Potwierdzam role click failed for {symbol} "
+            f"attempt {attempt}: {role_exc}",
+            flush=True,
+        )
+
+    # Fallbacks are only for diagnostics/older browser accessibility quirks; the
+    # primary supported selector remains get_by_role("button", name="Potwierdzam").
+    fallback_targets = (
+        'input#f13[type="submit"]',
+        'input[type="submit"][value="Potwierdzam"]',
+    )
+    for selector in fallback_targets:
+        try:
+            btn = page.locator(selector).first
             if btn.count() == 0:
                 continue
-            try:
-                btn.scroll_into_view_if_needed(timeout=1500)
-            except Exception:
-                pass
-            try:
-                btn.click(timeout=5000)
-            except Exception:
-                # Some Stooq captcha overlays are visually present but Playwright
-                # still considers the input unstable; click the element center as
-                # a real mouse action before falling back to forced/DOM clicks.
-                box = btn.bounding_box(timeout=1500)
-                if not box:
-                    raise
-                page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
+            btn.click(timeout=5000, force=True)
+            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt} ({selector} fallback).", flush=True)
             try:
                 page.wait_for_timeout(1000)
             except Exception:
@@ -464,27 +467,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
             return True
         except Exception:
             continue
-
-    try:
-        submitted = page.evaluate(
-            """() => {
-                const btn = document.querySelector('input#f13[type="submit"], input[type="submit"][value="Potwierdzam"]');
-                if (!btn) return false;
-                btn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true, view: window}));
-                btn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true, view: window}));
-                btn.click();
-                return true;
-            }"""
-        )
-        if submitted:
-            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt} (DOM fallback).", flush=True)
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
-            return True
-    except Exception as exc:
-        print(f"[stooq-web] captcha DOM submit failed for {symbol} attempt {attempt}: {exc}", flush=True)
 
     _captcha_state_screenshot(page, symbol, "submit_failed", attempt)
     return False
