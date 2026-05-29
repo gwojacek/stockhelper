@@ -1,0 +1,68 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (1.65)",
+      "x0": "2025-12-10",
+      "x1": "2027-06-05",
+      "y0": 1.65,
+      "y1": 1.65,
+      "price": 1.65,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0.0% (9.4)",
+      "x0": "2026-04-13",
+      "x1": "2027-06-05",
+      "y0": 9.4,
+      "y1": 9.4,
+      "price": 9.4,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (7.571)",
+      "x0": "2026-04-13",
+      "x1": "2027-06-05",
+      "y0": 7.571,
+      "y1": 7.571,
+      "price": 7.571,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (6.4395)",
+      "x0": "2026-04-13",
+      "x1": "2027-06-05",
+      "y0": 6.4395,
+      "y1": 6.4395,
+      "price": 6.4395,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (4.6105)",
+      "x0": "2026-04-13",
+      "x1": "2027-06-05",
+      "y0": 4.6105,
+      "y1": 4.6105,
+      "price": 4.6105,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}

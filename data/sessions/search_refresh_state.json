@@ -12,6 +12,10 @@
     "checked_at": "2026-05-28T15:32:29.566859+00:00",
     "result": "stale"
   },
+  "commodities:2026-05-29:post1945": {
+    "checked_at": "2026-05-29T20:08:37.674755+00:00",
+    "result": "stale"
+  },
   "commodities:2026-05-29:pre1945": {
     "checked_at": "2026-05-29T09:17:05.871121+00:00",
     "result": "stale"
