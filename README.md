@@ -141,18 +141,18 @@ python run -ichimoku_search ndx
 ```
 
 Scanner details:
-- scanner calculations are based on cached CSV history (with conditional refresh),
-- commodities first check local CSV coverage (>= ~1 year span) and skip Playwright/browser fetch when enough data is already cached,
-- when commodity fetch is required, interactive Playwright mode can pause in inspector for manual captcha solving,
-- non-commodity scan refresh can use bounded older backfill logic (up to ~364 + 180 days total historical span target),
+- scanner calculations are based on local CSV history, but each standalone scope first probes remote freshness before deciding cache vs refresh,
+- API-backed scopes (`wig`, `dax/dax40`, `ndx/us100`, `forex`, and single instruments) probe remote data on every run; if a probe sees a newer latest row, the whole scope is refreshed,
+- commodity scopes compare UI-scraped commodities against Yahoo freshness and refresh the whole commodity group when any UI commodity is stale,
+- commodity metals fetched through API (`XAUUSD`, `XAGUSD`, `XPDUSD`) are handled separately from UI-scraped Stooq commodities,
+- Stooq UI commodity refreshes start headless; if captcha/rate-limit appears, the scraper tries OCR + `Potwierdzam` + `Odśwież stronę` automatically, then falls back to headed Playwright inspector if needed,
+- rate-limit/captcha/download-limit errors pause scheduling and workers instead of blindly continuing; transient network failures are retried with short concise logs,
 - supports dedicated universes for `wig`, `dax/dax40`, `ndx/us100`,
 - writes CSV outputs to `chart_program/data/search/ichimoku/` (Ichimoku) and `chart_program/data/search/fibo/` (Fibonacci),
 - prints **WYNIKI** and **WYNIKI 2** (flip results),
 - prints per-row Stooq chart links and can open all links after confirmation.
 
-For large `wig` runs, scanner uses VPN-friendly chunking (165-size parts) with confirmation between chunks.
-
-You can also run explicit parts (parallel-friendly):
+You can also run explicit WIG parts (parallel-friendly):
 
 ```bash
 python run -ichimoku_search wig_part1
@@ -212,13 +212,16 @@ python run -allsearch commodities
 Behavior:
 - `-allsearch` **always runs both** scanners (Ichimoku + Fibonacci) for the selected scope(s),
 - `-allsearch all` runs all major scopes: `wig`, `dax`, `us100`, `forex`, `commodities`,
+- Ichimoku runs first and performs freshness probing/refresh; Fibonacci then reuses cache when the scope cache is complete,
+- after each scope, missing expected CSVs are retried once; if a scope/phase fails or is stopped, remaining batch work is aborted,
+- stale/partial final HTML is not opened when the batch does not complete cleanly,
 - per-scope outputs are written under `chart_program/data/all_insturments_search/`,
 - combined reports are saved under `chart_program/data/all_insturments_search/allsearch/`,
 - report filename is scope-aware:
   - `python run -allsearch all` -> `allsearch_latest_all.md` + `allsearch_latest_all.html`,
   - `python run -allsearch us100` -> `allsearch_latest_us100.md` + `allsearch_latest_us100.html`,
-- HTML report is auto-opened after generation,
-- HTML includes per-market grouped tables (`WYNIKI 1/2 ICHIMOKU`, `WYNIKI FIBO #1/#2`), search/filter, and sortable columns.
+- HTML report is auto-opened after successful generation,
+- HTML includes per-market grouped tables (`WYNIKI 1/2 ICHIMOKU`, `WYNIKI FIBO #1/#2`), search/filter, and sortable columns,
 - in HTML report, `stockhelper_chart` commands for **commodities** use mapped Stooq symbols (e.g. `COFFEE` -> `KC.F`) so chart opening works correctly,
 - PDF export button sets a date-based filename suggestion, e.g. `stockhelper_report_2026-05-24.pdf` (depends on browser print dialog behavior).
 
@@ -247,13 +250,22 @@ What this prints:
 To inspect Stooq/captcha/debug artifacts:
 
 ```bash
+# Debug only: saves JSON/HTML/screenshot, does not update CSV
 python run --debug-stooq coffee
 python run --debug-stooq coffee --inspector
+
+# Debug + merge visible Stooq table rows into the matching commodity CSV
+python run --debug-stooq coffee --inspector --debug-stooq-fetch
+python run --debug-stooq cc.f --inspector --debug-stooq-fetch
+
+# Verbose commodity scraper logs during a normal scan
 python run -ichimoku_search commodities --search-debug
 ```
 
 Notes:
-- `--inspector` enables interactive captcha/debug flow in browser.
+- `--debug-stooq` is inspection-only by default; add `--debug-stooq-fetch` only when you want visible table rows merged into `data/commodities/<SYMBOL>.csv`.
+- `--inspector` opens a headed browser path. Captcha handling still tries the same OCR flow first (`input` fill -> `get_by_role("button", name="Potwierdzam")` -> `get_by_role("link", name="Odśwież stronę")`), then pauses in inspector only if automation cannot clear the page.
+- Captcha OCR debug details are quiet by default. Set `STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1` to print raw OCR/normalization details.
 - `--search-debug` enables verbose Stooq scraper logs via `STOCKHELPER_STOOQ_DEBUG=1`.
 - For selected symbols, loader may use Playwright web path (`stooq_web`) when API responses are insufficient.
 
@@ -388,6 +400,18 @@ Edit generated config values (`spread`, `pip_value`, `lot_cost`) and rerun analy
 - Keep config modules simple and explicit.
 - Prefer adding new instrument setups under `configs/` rather than hardcoding in entry scripts.
 - Keep strategy logic in `strategies/` and calculation primitives in `core/`.
+
+
+### Refresh / captcha environment knobs
+
+Useful environment variables for scanner/data-refresh troubleshooting:
+
+- `STOCKHELPER_CACHE_ONLY=1` forces scanners to use local CSVs only (set internally by some batch phases).
+- `STOCKHELPER_FORCE_REMOTE_REFRESH=1` bypasses commodity cache shortcuts and makes forced refresh failures propagate.
+- `STOCKHELPER_STOOQ_DEBUG=1` prints verbose Stooq scraper progress.
+- `STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1` prints raw OCR results and normalized captcha candidates.
+- `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS=3` controls how many OCR captcha attempts are made before inspector/manual fallback.
+- `STOCKHELPER_STOOQ_MAX_RUNTIME_S=900` can raise/lower the Stooq scraper watchdog timeout.
 
 
 ### Older-data fetch mode (`--fetch-older-data`)
