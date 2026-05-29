@@ -767,13 +767,13 @@ class ChartLevelSelectorUI:
                 x_start = pd.to_datetime(row1.get("Date", fib_anchor["x"]), errors="coerce")
                 x_end_raw = pd.to_datetime(row2.get("Date", date), errors="coerce")
                 # Workaround for click barrier/object-hitbox around candles:
-                # shift second anchor ~1 candle to the left, keep same Y level.
+                # shift second anchor 2 candles to the left, keep same Y level.
                 dts_all = pd.to_datetime(self.df["Date"], errors="coerce")
                 x_end = x_end_raw
                 if not pd.isna(x_end_raw) and not dts_all.isna().all():
                     try:
                         idx2 = int((dts_all - x_end_raw).abs().idxmin())
-                        idx2_left = max(0, idx2 - 1)
+                        idx2_left = max(0, idx2 - 2)
                         x_end = pd.to_datetime(self.df.iloc[idx2_left].get("Date", x_end_raw), errors="coerce")
                     except Exception:
                         x_end = x_end_raw
