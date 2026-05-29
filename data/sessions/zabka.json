@@ -1,0 +1,75 @@
+{
+  "high": 24.99,
+  "low": 19.64,
+  "entry": 21.65,
+  "stop_loss": 20.54,
+  "capital": 243000,
+  "symbol": "ZAB.WA",
+  "name": "Zabka",
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (19.92)",
+      "x0": "2026-03-13",
+      "x1": "2026-09-01",
+      "y0": 19.92,
+      "y1": 19.92,
+      "price": 19.92,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0.0% (25.86)",
+      "x0": "2026-04-15",
+      "x1": "2026-09-01",
+      "y0": 25.86,
+      "y1": 25.86,
+      "price": 25.86,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (24.45816)",
+      "x0": "2026-04-15",
+      "x1": "2026-09-01",
+      "y0": 24.45816,
+      "y1": 24.45816,
+      "price": 24.45816,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (23.59092)",
+      "x0": "2026-04-15",
+      "x1": "2026-09-01",
+      "y0": 23.59092,
+      "y1": 23.59092,
+      "price": 23.59092,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (22.18908)",
+      "x0": "2026-04-15",
+      "x1": "2026-09-01",
+      "y0": 22.18908,
+      "y1": 22.18908,
+      "price": 22.18908,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}
