@@ -500,6 +500,36 @@ def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> bool:
         print(f"[stooq-web] captcha refresh step failed for {symbol}: {exc}", flush=True)
         return False
 
+
+def _captcha_refresh_reached_data_page(page, symbol: str, attempt: int) -> bool:
+    try:
+        _accept_consent_if_present(page, first_page=True)
+    except Exception:
+        pass
+    try:
+        _wait_for_table_or_limit_with_retry(page, retries=3)
+    except Exception:
+        pass
+    try:
+        if page.locator("#fth1").count() > 0:
+            return True
+    except Exception:
+        pass
+    try:
+        if _extract_rows_from_frame(page):
+            return True
+        for fr in page.frames:
+            if _extract_rows_from_frame(fr):
+                return True
+    except Exception:
+        pass
+    try:
+        if page.locator("table tr td").count() > 0 and not _page_has_rate_limit_or_captcha(page):
+            return True
+    except Exception:
+        pass
+    return False
+
 def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> tuple[str, str]:
     global _EASYOCR_READER, _EASYOCR_UNAVAILABLE
     if _EASYOCR_UNAVAILABLE:
@@ -646,22 +676,17 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
                     continue
                 return False
 
-            table_visible = False
-            try:
-                page.locator("table tr td").first.wait_for(state="visible", timeout=8000)
-                table_visible = page.locator("table tr td").count() > 0
-            except Exception:
-                table_visible = False
-            solved = table_visible and not _page_has_rate_limit_or_captcha(page)
-            if solved:
+            if _captcha_refresh_reached_data_page(page, symbol, attempt):
                 return True
-            if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
-                print(f"[stooq-web] captcha flow not solved for {symbol} attempt {attempt}/{max_attempts}; trying new code.", flush=True)
+
+            still_blocked = _page_has_rate_limit_or_captcha(page)
+            if still_blocked and attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                print(f"[stooq-web] captcha still visible for {symbol} attempt {attempt}/{max_attempts}; trying new code.", flush=True)
                 continue
             shot = _captcha_state_screenshot(page, symbol, "result_failed", attempt)
             print(
                 f"[stooq-web] captcha flow failed for {symbol} attempt {attempt}/{max_attempts}: "
-                f"table_visible={table_visible} screenshot={shot or '-'}",
+                f"still_blocked={still_blocked} screenshot={shot or '-'}",
                 flush=True,
             )
             return False
