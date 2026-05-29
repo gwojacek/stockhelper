@@ -418,6 +418,45 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
     return False
 
 
+def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
+    _captcha_state_screenshot(page, symbol, "before_submit", attempt)
+    try:
+        submitted = page.evaluate(
+            """() => {
+                const btn = document.querySelector('input#f13[type="submit"], input[type="submit"][value="Potwierdzam"]');
+                if (!btn) return false;
+                if (btn.form && typeof btn.form.requestSubmit === 'function') {
+                    btn.form.requestSubmit(btn);
+                } else {
+                    btn.click();
+                }
+                return true;
+            }"""
+        )
+        if submitted:
+            print(f"[stooq-web] captcha submit invoked via form button for {symbol} attempt {attempt}.", flush=True)
+            return True
+    except Exception as exc:
+        print(f"[stooq-web] captcha DOM submit failed for {symbol} attempt {attempt}: {exc}; trying Playwright click.", flush=True)
+
+    selectors = (
+        'input#f13[type="submit"]',
+        'input[type="submit"][value="Potwierdzam"]',
+    )
+    for selector in selectors:
+        try:
+            btn = page.locator(selector).first
+            if btn.count() == 0:
+                continue
+            btn.click(timeout=3000, force=True)
+            print(f"[stooq-web] captcha submit clicked ({selector}) for {symbol} attempt {attempt}.", flush=True)
+            return True
+        except Exception as exc:
+            print(f"[stooq-web] captcha submit click failed ({selector}) for {symbol} attempt {attempt}: {exc}", flush=True)
+    _captcha_state_screenshot(page, symbol, "submit_failed", attempt)
+    return False
+
+
 def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> None:
     try:
         refresh_link = page.locator("a#cpt_gh").first
@@ -553,13 +592,15 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             page.locator('input[name="cpt_t"], input#f15').first.fill(code)
             print(f"[stooq-web] captcha filled for {symbol} attempt {attempt}/{max_attempts}.", flush=True)
             # Stooq requires submitting the captcha form after filling the code.
-            # The "Odśwież stronę" link (#cpt_gh) is not enough by itself.
-            page.locator('input[type="submit"]#f13, input[type="submit"][value="Potwierdzam"]').first.click()
+            # The "Odśwież stronę" link (#cpt_gh) is generated only after this.
+            if not _submit_captcha_form(page, symbol, attempt):
+                return False
             print(f"[stooq-web] captcha submitted for {symbol} attempt {attempt}/{max_attempts}.", flush=True)
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
+            _captcha_state_screenshot(page, symbol, "after_submit", attempt)
 
             if _captcha_wrong_code_visible(page):
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
