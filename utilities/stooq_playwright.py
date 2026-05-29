@@ -267,7 +267,15 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
         return False
 
     if page.locator("text=Przekroczony dzienny limit").count() > 0 or page.locator("text=Przepisz powyższy kod").count() > 0:
-        print(f"[stooq-web] CAPTCHA/limit detected for {symbol}. Interactive mode enabled.")
+        print(f"[stooq-web] CAPTCHA/limit detected for {symbol}. Interactive mode enabled; trying OCR first.")
+        try:
+            if _try_solve_stooq_captcha(page, symbol):
+                if state is not None:
+                    state["done"] = True
+                print(f"[stooq-web] captcha OCR flow finished for {symbol}; continuing debug capture.")
+                return True
+        except Exception as exc:
+            print(f"[stooq-web] captcha OCR flow failed before inspector for {symbol}: {exc}")
         print("[stooq-web] Browser inspector opened (headed mode required). Solve captcha manually, then resume execution.")
         try:
             page.pause()
