@@ -427,69 +427,96 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
 
 
 def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
+    """Click the visible Stooq captcha confirmation button.
+
+    Validation happens only after the real "Potwierdzam" button is clicked, so
+    try user-like Playwright clicks first.  DOM submission is only a fallback.
+    """
+    click_targets = (
+        ("role button Potwierdzam", lambda: page.get_by_role("button", name="Potwierdzam").first),
+        ('input#f13[type="submit"]', lambda: page.locator('input#f13[type="submit"]').first),
+        ('input[type="submit"][value="Potwierdzam"]', lambda: page.locator('input[type="submit"][value="Potwierdzam"]').first),
+    )
+    for label, locator_factory in click_targets:
+        try:
+            btn = locator_factory()
+            if btn.count() == 0:
+                continue
+            try:
+                btn.scroll_into_view_if_needed(timeout=1500)
+            except Exception:
+                pass
+            try:
+                btn.click(timeout=5000)
+            except Exception:
+                # Some Stooq captcha overlays are visually present but Playwright
+                # still considers the input unstable; click the element center as
+                # a real mouse action before falling back to forced/DOM clicks.
+                box = btn.bounding_box(timeout=1500)
+                if not box:
+                    raise
+                page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            continue
+
     try:
         submitted = page.evaluate(
             """() => {
                 const btn = document.querySelector('input#f13[type="submit"], input[type="submit"][value="Potwierdzam"]');
                 if (!btn) return false;
-                if (btn.form && typeof btn.form.requestSubmit === 'function') {
-                    btn.form.requestSubmit(btn);
-                } else {
-                    btn.click();
-                }
+                btn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true, view: window}));
+                btn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true, view: window}));
+                btn.click();
                 return true;
             }"""
         )
         if submitted:
-            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
+            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt} (DOM fallback).", flush=True)
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
             return True
     except Exception as exc:
-        print(f"[stooq-web] captcha DOM submit failed for {symbol} attempt {attempt}: {exc}; trying Playwright click.", flush=True)
+        print(f"[stooq-web] captcha DOM submit failed for {symbol} attempt {attempt}: {exc}", flush=True)
 
-    selectors = (
-        'input#f13[type="submit"]',
-        'input[type="submit"][value="Potwierdzam"]',
-    )
-    for selector in selectors:
-        try:
-            btn = page.locator(selector).first
-            if btn.count() == 0:
-                continue
-            btn.click(timeout=3000, force=True)
-            print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
-            return True
-        except Exception as exc:
-            pass
     _captcha_state_screenshot(page, symbol, "submit_failed", attempt)
     return False
 
-
-def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> None:
+def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> bool:
     try:
-        refresh_link = page.locator("a#cpt_gh").first
+        try:
+            page.wait_for_timeout(1000)
+        except Exception:
+            pass
+        refresh_link = page.get_by_role("link", name="Odśwież stronę").first
+        if refresh_link.count() == 0:
+            refresh_link = page.locator("a#cpt_gh").first
         if refresh_link.count() > 0:
             try:
-                # The link can be present but hidden; direct DOM click still runs
-                # Stooq's onclick handler without waiting 15s for visibility.
+                refresh_link.click(timeout=5000)
+            except Exception:
+                # The link may exist but be hidden; direct DOM click still runs
+                # Stooq's onclick handler without waiting for visibility.
                 refresh_link.evaluate("el => el.click()")
-            except Exception as exc:
-                _captcha_state_screenshot(page, symbol, "refresh_link_failed", attempt)
-                print(f"[stooq-web] captcha refresh DOM click failed for {symbol}: {exc}; trying cpt_g().", flush=True)
-                page.evaluate("() => { if (typeof cpt_g === 'function') return cpt_g(0, 0, 1); }")
+            print(f"[stooq-web] captcha refresh link clicked for {symbol} attempt {attempt}.", flush=True)
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
-        else:
-            page.reload(wait_until="domcontentloaded")
+            return True
+        _captcha_state_screenshot(page, symbol, "refresh_link_missing", attempt)
+        return False
     except Exception as exc:
         _captcha_state_screenshot(page, symbol, "refresh_step_failed", attempt)
-        print(f"[stooq-web] captcha refresh step failed for {symbol}: {exc}; reloading page.", flush=True)
-        try:
-            page.reload(wait_until="domcontentloaded")
-        except Exception:
-            pass
-
+        print(f"[stooq-web] captcha refresh step failed for {symbol}: {exc}", flush=True)
+        return False
 
 def _ocr_stooq_captcha_easyocr(cleaned_path: Path) -> tuple[str, str]:
     global _EASYOCR_READER, _EASYOCR_UNAVAILABLE
@@ -622,7 +649,15 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             # After a successful captcha submit Stooq may show the refresh link; it
             # still needs to be invoked (or the page reloaded) before history rows
             # appear.
-            _refresh_after_captcha_submit(page, symbol, attempt)
+            refresh_clicked = _refresh_after_captcha_submit(page, symbol, attempt)
+            if not refresh_clicked:
+                if _captcha_wrong_code_visible(page):
+                    if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                        continue
+                    return False
+                if attempt < max_attempts:
+                    print(f"[stooq-web] captcha refresh link missing for {symbol} attempt {attempt}/{max_attempts}; not changing code unless Stooq rejects it.", flush=True)
+                return False
 
             if _captcha_wrong_code_visible(page):
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
