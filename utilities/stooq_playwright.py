@@ -35,6 +35,18 @@ def _page_has_rate_limit_or_captcha(page) -> bool:
     return _is_rate_limited_html(body)
 
 
+def _page_has_captcha_image(page) -> bool:
+    try:
+        if page.locator("#t11 img").first.count() > 0:
+            return True
+    except Exception:
+        pass
+    try:
+        return page.locator("tr#t11 img").first.count() > 0
+    except Exception:
+        return False
+
+
 def _is_rate_limited_html(html: str) -> bool:
     lowered = (html or '').lower()
     markers = ['przekroczony dzienny limit wywołań strony', 'przepisz powyższy kod']
@@ -106,7 +118,13 @@ def _switch_to_inspector_for_captcha(
     commodity batch does not open many headed browser pauses at once.
     """
     blocked = _page_has_rate_limit_or_captcha(page)
+    captcha_image_visible = _page_has_captcha_image(page)
     if not blocked and not suspected:
+        return browser, page, False
+    # A blank/no-row page is only treated as a captcha when the captcha image is
+    # actually present. Do not open the inspector just because one commodity page
+    # returned no rows.
+    if suspected and not blocked and not captcha_image_visible:
         return browser, page, False
     if not interactive_captcha:
         return browser, page, True
