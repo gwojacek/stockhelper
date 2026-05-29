@@ -1813,6 +1813,35 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         i_start = fib_start_idx
         fib_start = float(low.iloc[fib_start_idx])
         fib_end = float(high.iloc[i_peak])
+        # If price prints a lower swing bottom after the initially selected
+        # impulse start, reset the Fibonacci base to that newer/lower low.  The
+        # original start selector intentionally keeps a minimum pre-peak length
+        # (~2 weeks), but this can leave an obsolete anchor in place when a
+        # sharp final impulse begins from a lower bottom slightly closer to the
+        # peak (for example ATT.WA: 2026-03-23 low 17.10 was kept even though
+        # 2026-04-22 printed a lower low at 16.98 before the 2026-05-06 peak).
+        # For Fibonacci drawing the lower reset point is the correct 0/100%
+        # anchor as long as there is still a real impulse leg afterwards.
+        min_reset_impulse_days = 5
+
+        def _reset_to_newer_lower_low(start_idx: int, start_low: float) -> tuple[int, float]:
+            reset_right = i_peak - min_reset_impulse_days
+            if reset_right <= start_idx:
+                return start_idx, start_low
+            reset_slice = low.iloc[start_idx + 1:reset_right + 1]
+            if not reset_slice.empty:
+                reset_idx = int(reset_slice.idxmin())
+                reset_low = float(low.iloc[reset_idx])
+                if reset_low < start_low:
+                    _log(
+                        "Long: newer lower fib start reset "
+                        f"idx={start_idx} low={start_low:.4f} -> "
+                        f"idx={reset_idx} low={reset_low:.4f}."
+                    )
+                    return reset_idx, reset_low
+            return start_idx, start_low
+
+        i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
         # Guard against stale multi-cycle impulses:
         # if an earlier local peak (after the chosen start, before the chosen peak)
         # already completed a >=61.8 correction, this start is too old.
@@ -1847,6 +1876,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             )
             i_start = orig_i_start
             fib_start = fallback_start
+            i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
             stale_cycle = _has_stale_cycle(i_start, fib_start)
         if stale_cycle:
             return None
