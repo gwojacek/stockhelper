@@ -899,13 +899,63 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
     return merged
 
 
-def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captcha: bool = False) -> Path:
+def _rows_to_daily_df(rows: list[list[str]]) -> pd.DataFrame:
+    parsed: list[dict] = []
+    for row in rows:
+        # Expected columns: Nr, Data, Open, High, Low, Close, Zmiana%, Zmiana, Wolumen, LOP
+        if len(row) < 6:
+            continue
+        try:
+            dt = _parse_stooq_date(row[1])
+            parsed.append(
+                {
+                    "Date": dt,
+                    "Open": float(_clean_numeric(row[2])),
+                    "High": float(_clean_numeric(row[3])),
+                    "Low": float(_clean_numeric(row[4])),
+                    "Close": float(_clean_numeric(row[5])),
+                    "Volume": float(_clean_numeric(row[8], for_volume=True)) if len(row) > 8 and _clean_numeric(row[8], for_volume=True) else 0.0,
+                }
+            )
+        except Exception:
+            continue
+    if not parsed:
+        return pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    return pd.DataFrame(parsed).dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
+
+
+def _merge_debug_rows_into_csv(rows: list[list[str]], csv_path: Path) -> tuple[int, str]:
+    remote = _rows_to_daily_df(rows)
+    if remote.empty:
+        return 0, ""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    local = pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    if csv_path.exists():
+        try:
+            local = pd.read_csv(csv_path)
+            if "Date" in local.columns:
+                local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
+                local = local.dropna(subset=["Date"])
+        except Exception:
+            local = pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    merged = pd.concat([local, remote], ignore_index=True)
+    merged["Date"] = pd.to_datetime(merged["Date"], errors="coerce")
+    merged = merged.dropna(subset=["Date"])
+    merged = merged.drop_duplicates(subset=["Date"], keep="last").sort_values("Date").reset_index(drop=True)
+    merged.to_csv(csv_path, index=False)
+    latest = ""
+    if not merged.empty:
+        latest = pd.to_datetime(merged["Date"].max()).strftime("%Y-%m-%d")
+    return len(remote), latest
+
+
+def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captcha: bool = False, csv_path: Path | None = None) -> Path:
     out_dir = out_dir or Path("debug") / "stooq"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
 
     urls = _stooq_history_urls(symbol)
-    payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": []}
+    payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
     with sync_playwright() as p:
         browser, page = _open_page(p, interactive=interactive_captcha)
         response = None
@@ -943,6 +993,11 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                     rows = fr_rows
         payload["rows_count"] = len(rows)
         payload["rows_preview"] = rows[:8]
+        if csv_path is not None:
+            written_rows, latest_date = _merge_debug_rows_into_csv(rows, csv_path)
+            payload["csv_path"] = str(csv_path)
+            payload["csv_rows_merged_from_debug"] = written_rows
+            payload["csv_latest_date_after_merge"] = latest_date
         payload["title"] = page.title()
         payload["status"] = response.status if response else None
         payload["final_url"] = page.url

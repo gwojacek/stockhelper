@@ -1084,7 +1084,7 @@ def main()->int:
     parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
     parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
-    parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('-inspector','--inspector',action='store_true')
+    parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('--debug-stooq-fetch',action='store_true',help='When used with --debug-stooq, merge fetched visible Stooq rows into the matching commodity CSV.'); parser.add_argument('-inspector','--inspector',action='store_true')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
     parser.add_argument('--fibo-lines', type=int, default=0)
     parser.add_argument('--fibo-anchor-start')
@@ -1339,8 +1339,16 @@ def main()->int:
         else:
             values = {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}
             symbol_for_debug = raw.lower() if raw.lower() in values else raw
-        path = debug_stooq_page(symbol_for_debug, interactive_captcha=args.inspector)
+        csv_path = None
+        if args.debug_stooq_fetch:
+            safe = symbol_for_debug.replace('/', '').replace('.', '_').upper()
+            csv_path = PROJECT_ROOT / "data" / "commodities" / f"{safe}.csv"
+        path = debug_stooq_page(symbol_for_debug, interactive_captcha=args.inspector, csv_path=csv_path)
         print(f"Stooq debug zapisany: {path}")
+        if csv_path is not None:
+            print(f"Stooq debug rows merged into CSV: {csv_path}")
+        else:
+            print("Stooq debug mode does not update CSV files. Add --debug-stooq-fetch to merge visible rows into the commodity CSV.")
         return 0
     if args.search_target:
         if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
