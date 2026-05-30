@@ -9,11 +9,12 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from dataclasses import dataclass
-from datetime import UTC, datetime, time as dt_time
+from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
 from importlib import util
 from pathlib import Path
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -41,6 +42,113 @@ PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
 REFRESH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
 API_METAL_COMMODITIES = {"XAUUSD", "XAGUSD", "XPDUSD"}
+
+
+@dataclass(frozen=True)
+class MarketDataRule:
+    rule_name: str
+    timezone: str
+    availability_time: dt_time
+    trading_weekdays: tuple[int, ...]
+    weekend_fallback_weekday: int = 4
+    holidays: frozenset[date] = frozenset()
+
+
+MARKET_DATA_RULES: dict[str, MarketDataRule] = {
+    "stock_market_pl": MarketDataRule("stock_market_pl", "Europe/Warsaw", dt_time(17, 30), (0, 1, 2, 3, 4)),
+    "stock_market_de": MarketDataRule("stock_market_de", "Europe/Berlin", dt_time(18, 30), (0, 1, 2, 3, 4)),
+    "stock_market_us": MarketDataRule("stock_market_us", "America/New_York", dt_time(18, 0), (0, 1, 2, 3, 4)),
+    "stock_market_generic": MarketDataRule("stock_market_generic", "UTC", dt_time(22, 0), (0, 1, 2, 3, 4)),
+    # Commodity data is intentionally separate from stock-market rules.  Many
+    # contracts trade across Sunday-Friday sessions, but daily scanner data is
+    # provider-settlement based, so use a conservative post-settlement UTC gate.
+    "commodity_market": MarketDataRule("commodity_market", "UTC", dt_time(1, 0), (0, 1, 2, 3, 4)),
+    "forex_market": MarketDataRule("forex_market", "UTC", dt_time(1, 0), (0, 1, 2, 3, 4)),
+}
+
+GROUP_MARKET_DATA_RULES: dict[str, str] = {
+    "WIG": "stock_market_pl",
+    "WIG_PART1": "stock_market_pl",
+    "WIG_PART2": "stock_market_pl",
+    "WIG_PART3": "stock_market_pl",
+    "WIG20": "stock_market_pl",
+    "DAX": "stock_market_de",
+    "DAX40": "stock_market_de",
+    "NDX100": "stock_market_us",
+    "US": "stock_market_us",
+    "US100": "stock_market_us",
+    "COMMODITIES": "commodity_market",
+    "FOREX": "forex_market",
+    "INDEXES": "commodity_market",
+}
+
+
+def _market_rule_name_for_instrument(instrument: str, group: str, symbol: str | None = None) -> str:
+    group_key = (group or "").strip().upper()
+    if group_key in GROUP_MARKET_DATA_RULES:
+        return GROUP_MARKET_DATA_RULES[group_key]
+    if instrument == "commodity":
+        return "commodity_market"
+    if instrument == "forex":
+        return "forex_market"
+    suffix = (symbol or "").strip().upper().rsplit(".", 1)[-1] if "." in (symbol or "") else ""
+    if suffix == "WA":
+        return "stock_market_pl"
+    if suffix == "DE":
+        return "stock_market_de"
+    if suffix == "US":
+        return "stock_market_us"
+    return "stock_market_generic"
+
+
+def _previous_session_day(day: date, rule: MarketDataRule) -> date:
+    candidate = day
+    for _ in range(14):
+        if candidate.weekday() in rule.trading_weekdays and candidate not in rule.holidays:
+            return candidate
+        candidate -= timedelta(days=1)
+    return candidate
+
+
+def get_expected_latest_session_date(instrument: str, group: str, current_datetime: datetime, symbol: str | None = None) -> date:
+    """Return the newest provider-expected closed daily session for a scanner row.
+
+    The rule is market/group based so grouped reports use one consistent
+    expectation per market, while commodities and forex remain on their own
+    extensible calendar branches.
+    """
+    if current_datetime.tzinfo is None:
+        current_datetime = current_datetime.replace(tzinfo=UTC)
+    rule = MARKET_DATA_RULES[_market_rule_name_for_instrument(instrument, group, symbol)]
+    local_now = current_datetime.astimezone(ZoneInfo(rule.timezone))
+    candidate = _previous_session_day(local_now.date(), rule)
+    if candidate == local_now.date() and local_now.time() < rule.availability_time:
+        candidate = _previous_session_day(candidate - timedelta(days=1), rule)
+    return candidate
+
+
+def has_latest_expected_data(latest_candle_date: date | None, expected_latest_session_date: date | None) -> bool:
+    if latest_candle_date is None or expected_latest_session_date is None:
+        return False
+    return latest_candle_date >= expected_latest_session_date
+
+
+def _latest_candle_date_from_df(df: pd.DataFrame) -> date | None:
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    dates = pd.to_datetime(df["Date"], errors="coerce").dropna()
+    if dates.empty:
+        return None
+    return dates.max().date()
+
+
+def _latest_data_marker(latest_candle_date: date | None, expected_latest_session_date: date | None) -> str:
+    return "✅" if has_latest_expected_data(latest_candle_date, expected_latest_session_date) else "❌"
+
+
+def _fmt_optional_date(value: date | None) -> str:
+    return value.isoformat() if value else "-"
+
 
 
 def _search_output_dir(prefix: str) -> Path:
@@ -143,6 +251,8 @@ class ScanResult:
     latest_retest_date: str | None = None
     latest_retest_pattern: str | None = None
     ichimoku_status: str | None = None
+    latest_candle_date: date | None = None
+    expected_latest_session_date: date | None = None
 
 
 @dataclass
@@ -159,6 +269,8 @@ class FlipResult:
     first_valid_retest_pattern_date: str = "-"
     retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
     avg_turnover_10d_pln: float | None = None
+    latest_candle_date: date | None = None
+    expected_latest_session_date: date | None = None
 
 
 @dataclass
@@ -179,6 +291,8 @@ class FiboScanResult:
     reversal_pattern_name: str
     stop_loss: float
     current_close: float
+    latest_candle_date: date | None = None
+    expected_latest_session_date: date | None = None
 
 
 def _is_bullish_hammer(c: pd.Series) -> bool:
@@ -982,7 +1096,7 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
     return df, csv_path, meta
-def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
+def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
     elif group_name == "commodities":
@@ -1025,6 +1139,10 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
     try:
         df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
         source_label = str((meta or {}).get("source", "unknown")).lower()
+        latest_candle_date = _latest_candle_date_from_df(df)
+        expected_latest_session_date = get_expected_latest_session_date(
+            instrument, group_name, current_datetime or datetime.now(UTC), fetch_symbol
+        )
         enriched = _ichimoku(df)
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
         flip = _flip_after_long_respect(enriched)
@@ -1051,6 +1169,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                 result.latest_retest_date = "-"
                 result.latest_retest_pattern = "-"
             result.ichimoku_status = _ichimoku_status(enriched, result.side)
+            result.latest_candle_date = latest_candle_date
+            result.expected_latest_session_date = expected_latest_session_date
             if instrument == "stock":
                 result.avg_turnover_10d_pln = avg_10d
                 result.low_turnover_days_20d = below_20d
@@ -1067,6 +1187,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None) -> tupl
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+            flip.latest_candle_date = latest_candle_date
+            flip.expected_latest_session_date = expected_latest_session_date
             if instrument == "stock":
                 flip.avg_turnover_10d_pln = avg_10d
         _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
@@ -1124,11 +1246,11 @@ def _prompt_vpn_continue_or_stop() -> bool:
 
 
 
-def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None):
+def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None):
     while True:
         if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
             return ticker, None, None, "scan stopped", "unknown", True
-        display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix)
+        display_symbol, result, flip, err, src = _scan_one(ticker, group_name, exchange_suffix, current_datetime)
         if err and _rate_limit_detected(err):
             if not _should_prompt_rate_limit(group_name):
                 PAUSE_SCAN_EVENT.clear()
@@ -1194,6 +1316,10 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     return base + " --ichimoku-mode on"
 
 
+def _is_http_url(value: str) -> bool:
+    return value.startswith("http://") or value.startswith("https://")
+
+
 def _write_md_table(
     path: Path,
     title: str,
@@ -1202,6 +1328,7 @@ def _write_md_table(
     append: bool = False,
     description: str | None = None,
 ) -> None:
+    link_col = headers.index("Link") if "Link" in headers else None
     with path.open("a" if append else "w", encoding="utf-8") as fh:
         fh.write(f"## {title}\n\n")
         if description:
@@ -1209,7 +1336,12 @@ def _write_md_table(
         fh.write("| " + " | ".join(headers) + " |\n")
         fh.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
         for row in rows:
-            safe = [str(c).replace("\n", " ").replace("|", "\\|") for c in row]
+            safe: list[str] = []
+            for col_idx, cell in enumerate(row):
+                cell_txt = str(cell).replace("\n", " ")
+                if link_col is not None and col_idx == link_col and _is_http_url(cell_txt):
+                    cell_txt = f"[📈]({cell_txt})"
+                safe.append(cell_txt.replace("|", "\\|"))
             fh.write("| " + " | ".join(safe) + " |\n")
 
 
@@ -1613,6 +1745,7 @@ def run_ichimoku_search(target: str) -> int:
     dbg = _debug_symbol_target()
     if dbg:
         print(f"[search] debug symbol enabled: {dbg} (set via STOCKHELPER_DEBUG_SYMBOL)")
+    current_datetime = datetime.now(UTC)
     results: list[ScanResult] = []
     flip_results: list[FlipResult] = []
     processed_count = 0
@@ -1621,7 +1754,7 @@ def run_ichimoku_search(target: str) -> int:
     # Scan the first symbol as a live rate-limit/captcha check; if clean, scan the rest in parallel.
     first = members[0]
     print(f"[1/{len(members)}] {first}")
-    display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix)
+    display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix, current_datetime)
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = False
@@ -1649,7 +1782,7 @@ def run_ichimoku_search(target: str) -> int:
         if sequential:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
-            display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix)
+            display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix, current_datetime)
             print(f"[{offset}/{len(members)}] {ticker}", flush=True)
             processed_count += 1
             if stopped:
@@ -1666,7 +1799,7 @@ def run_ichimoku_search(target: str) -> int:
         max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
+            fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
             for fut in as_completed(fut_map):
                 idx, ticker = fut_map[fut]
                 display_symbol, result, flip, err, src, stopped = fut.result()
@@ -1689,11 +1822,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku')])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
     )
@@ -1709,11 +1842,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku')])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
@@ -2247,6 +2380,7 @@ def run_fibo_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     _should_refresh_group_data(group_name, members, exchange_suffix)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
+    current_datetime = datetime.now(UTC)
     rows: list[FiboScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
@@ -2299,6 +2433,8 @@ def run_fibo_search(target: str) -> int:
         out_rows: list[FiboScanResult] = []
         try:
             df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            latest_candle_date = _latest_candle_date_from_df(df)
+            expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
@@ -2341,6 +2477,8 @@ def run_fibo_search(target: str) -> int:
                     c.ticker = ticker
                     if pd.notna(latest_close):
                         c.current_close = latest_close
+                    c.latest_candle_date = latest_candle_date
+                    c.expected_latest_session_date = expected_latest_session_date
                     out_rows.append(c)
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
@@ -2372,6 +2510,8 @@ def run_fibo_search(target: str) -> int:
                         c.ticker = ticker
                         if pd.notna(latest_close):
                             c.current_close = latest_close
+                        c.latest_candle_date = latest_candle_date
+                        c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
             return idx, ticker, out_rows, None
         except Exception as exc:
@@ -2551,7 +2691,7 @@ def run_fibo_search(target: str) -> int:
         tk = (r.ticker, side)
         if tk not in ichimoku_retest_by_ticker:
             try:
-                _, _, flip, _, _ = _scan_one(r.ticker, group_name, exchange_suffix)
+                _, _, flip, _, _ = _scan_one(r.ticker, group_name, exchange_suffix, current_datetime)
                 target_side = 'above' if side == 'long' else 'below'
                 if flip and flip.current_side == target_side:
                     if flip.valid_retests_count > 0:
@@ -2570,10 +2710,10 @@ def run_fibo_search(target: str) -> int:
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
-    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows1]
-    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command"],rows1_md)
-    _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command"],rows2_md, append=True)
+    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
+    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
+    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md)
+    _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows)}")
