@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal
 from urllib.request import urlopen
+from urllib.parse import quote
 from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +18,20 @@ SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_search"
+
+TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
+
+TROJPOLLOWKI_RETEST_LABELS = {
+    "breakout_confirmed": "breakout confirmed",
+    "retest_breakout": "retest breakout",
+    "shallow_retest_pattern": "shallow retest",
+    "medium_retest_pattern": "medium retest",
+    "deep_retest_pattern": "deep retest",
+    "returned_to_cloud_waiting_for_pattern": "returned to cloud, waiting",
+    "no_breakout": "no breakout",
+    "unsuccessful_breakout": "unsuccessful breakout",
+}
+
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
@@ -628,6 +643,305 @@ def _serve_report_locally(path: Path) -> str | None:
                 return f"http://{host}:{port}/{report_url_path}"
     return None
 
+
+def _parse_markdown_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
+    out: dict[str, list[dict[str, str]]] = {}
+    if not md_path or not md_path.exists():
+        return out
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    last_heading = ""
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("#"):
+            last_heading = line.lstrip("#").strip()
+        if i + 2 < len(lines) and lines[i].strip().startswith("|") and lines[i + 1].strip().startswith("|"):
+            headers = [h.strip() for h in lines[i].strip().strip("|").split("|")]
+            separator = [sep.strip() for sep in lines[i + 1].strip().strip("|").split("|")]
+            if headers and separator and len(headers) == len(separator) and all(set(sep) <= {"-", ":"} and sep for sep in separator):
+                rows: list[dict[str, str]] = []
+                j = i + 2
+                while j < len(lines) and lines[j].strip().startswith("|"):
+                    vals = [v.strip() for v in lines[j].strip().strip("|").split("|")]
+                    if len(vals) == len(headers):
+                        row = {headers[k]: vals[k] for k in range(len(headers))}
+                        for link_key in ("Link", "Links"):
+                            link_cell = row.get(link_key, "")
+                            inline_match = re.match(r"^\[[^\]]+\]\(([^)]+)\)$", link_cell)
+                            if inline_match:
+                                row[link_key] = inline_match.group(1)
+                        rows.append(row)
+                    j += 1
+                out.setdefault(last_heading or "TABLE", []).extend(rows)
+                i = j
+                continue
+        i += 1
+    return out
+
+
+def _market_icon(scope: str, ticker: str = "") -> str:
+    scope_n = (scope or "").strip().lower()
+    ticker_u = (ticker or "").upper()
+    if scope_n == "wig" or ticker_u.endswith(".WA"):
+        return "🇵🇱"
+    if scope_n == "dax" or ticker_u.endswith(".DE"):
+        return "🇩🇪"
+    if scope_n in {"us100", "us"} or ticker_u.endswith(".US"):
+        return "🇺🇸"
+    if scope_n == "forex":
+        return "💱"
+    if scope_n == "commodities":
+        return "🛢️"
+    return "📊"
+
+
+def _parse_float_text(value: str, default: float = 0.0) -> float:
+    txt = str(value or "").replace("%", "").replace("🟨", "").replace("🟢", "").replace("🟡", "").replace("🔴", "").strip()
+    txt = txt.replace(" ", "").replace(",", "")
+    try:
+        return float(txt)
+    except Exception:
+        return default
+
+
+def _ratio_value(row: dict[str, str]) -> float:
+    txt = str(row.get("Ratio(d)") or row.get("ratio_txt") or row.get("incline_decline_duration_ratio") or "")
+    m = re.search(r"\(([-+0-9.]+):1\)", txt)
+    if m:
+        return _parse_float_text(m.group(1), 0.0)
+    return _parse_float_text(txt, 0.0)
+
+
+def _incline_duration_days(row: dict[str, str]) -> int:
+    txt = str(row.get("Ratio(d)") or "")
+    m = re.match(r"\s*(\d+)\s*/", txt)
+    if m:
+        return int(m.group(1))
+    return int(_parse_float_text(str(row.get("incline_duration_days") or "0"), 0.0))
+
+
+def _extract_start_date(row: dict[str, str]) -> str:
+    incline = str(row.get("Incline") or row.get("incline") or "")
+    if "->" in incline:
+        return incline.split("->", 1)[0].strip() or "-"
+    return str(row.get("incline_start_date") or row.get("Start") or row.get("Data wybicia") or "-").strip() or "-"
+
+
+def _near61_pct(row: dict[str, str]) -> float:
+    near = str(row.get("Near61.8") or row.get("near61") or "")
+    if near and near != "-":
+        return _parse_float_text(near, -1.0)
+    return -1.0
+
+
+def _markdown_link(label: str, url: str | None) -> str:
+    txt = str(url or "").strip()
+    if not txt:
+        return "-"
+    return f"[{label}]({txt})"
+
+
+def _stockhelper_chart_url(command: str | None) -> str | None:
+    cmd = str(command or "").strip()
+    if not cmd:
+        return None
+    return f"http://127.0.0.1:8765/run-command?command={quote(cmd, safe='')}"
+
+
+def _links_for_troj(row: ScannerRow) -> str:
+    chart = _markdown_link("chart", _stockhelper_chart_url(_chart_command_for_row(row)))
+    stooq = _markdown_link("stooq", row.chart_url or (_stooq_chart_url(row.ticker) if row.ticker else ""))
+    return f"{chart} {stooq}".strip()
+
+
+def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
+    rows: list[ScannerRow] = []
+    for scope in scopes:
+        market = scope.upper()
+        i_md = _latest_scope_md("search", scope)
+        f_md = _latest_scope_md("fibo_search", scope)
+        i_tables = _parse_markdown_tables(i_md) if i_md else {}
+        f_tables = _parse_markdown_tables(f_md) if f_md else {}
+        i_w2 = next((v for k, v in i_tables.items() if "WYNIKI 2" in k.upper()), [])
+        i_w1 = next((v for k, v in i_tables.items() if k.upper().strip() == "WYNIKI" or "WYNIKI 1" in k.upper()), [])
+        f_w2 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #2" in k.upper()), [])
+        f_w1 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #1" in k.upper()), [])
+        for r in i_w2:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t, status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))}, metrics={"months": str(r.get("Mies. od wybicia", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", ""))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
+        for r in i_w1:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="ICHIMOKU", category="position", ticker=t, status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))}, metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Ichimoku status", ""))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"))
+        for r in f_w2:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+        for r in f_w1:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")), pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
+    return rows
+
+
+def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
+    direction = "↘️" if str(row.direction).lower() == "short" else "↗️"
+    parts = [f"{_market_icon(row.market, row.ticker)} {row.ticker} {direction}", f"start: {row.dates.get('start') or _extract_start_date({'Incline': row.dates.get('incline','')})}"]
+    if include_near:
+        near = _parse_float_text(str(row.metrics.get("near61_raw") or row.metrics.get("near61") or ""), -1.0)
+        if near >= 0:
+            parts.append(f"near 61.8: {near:.1f}%")
+    parts.append(_links_for_troj(row))
+    return "<br>".join(parts)
+
+
+def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
+    fibo = [r for r in rows if r.scanner == "FIBO"]
+    col1 = [r for r in fibo if r.category == "valid" and int(_parse_float_text(r.metrics.get("incline_days", "0"), 0)) >= 21 and _parse_float_text(r.metrics.get("ratio_raw", "0"), 0) >= 1.0 and "invalidated" not in r.status.lower()]
+    col2 = [r for r in fibo if r.category == "waiting" and 0 <= _parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0) < 75.0]
+    col3 = [r for r in fibo if r.category == "waiting" and _parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0) >= 75.0]
+    col1.sort(key=lambda r: (_parse_float_text(r.metrics.get("ratio_raw", "0"), 0), int(_parse_float_text(r.metrics.get("incline_days", "0"), 0))), reverse=True)
+    col2.sort(key=lambda r: _parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), reverse=True)
+    col3.sort(key=lambda r: _parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), reverse=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "fibo.md"
+    max_len = max(len(col1), len(col2), len(col3), 1)
+    lines = ["# Trójpolówki — Fibo", "", f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}", "", "| 🚀 Steep incline / no major bearish signal | ⚠️ Bearish close around 23.6 | 🎯 Near 61.8 > 75% / deeper pullback |", "|---|---|---|"]
+    for idx in range(max_len):
+        cells = [
+            _fibo_item(col1[idx], include_near=False) if idx < len(col1) else "",
+            _fibo_item(col2[idx], include_near=True) if idx < len(col2) else "",
+            _fibo_item(col3[idx], include_near=True) if idx < len(col3) else "",
+        ]
+        lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _status_plain(value: str) -> str:
+    txt = re.sub(r"^[^A-Za-z0-9_]+\s*", "", str(value or "")).strip()
+    return txt or "-"
+
+
+def _readable_breakout_note(status: str, ichimoku_status: str = "") -> str:
+    norm = _status_plain(status).lower().replace(" ", "_")
+    if "(" in norm:
+        norm = norm.split("(", 1)[0].strip()
+    if norm in TROJPOLLOWKI_RETEST_LABELS:
+        return TROJPOLLOWKI_RETEST_LABELS[norm]
+    text = _status_plain(ichimoku_status or status)
+    low = text.lower()
+    if "touched the cloud" in low:
+        return "candle touched cloud"
+    if "inside the cloud" in low:
+        return "candle inside cloud"
+    if "unsuccessful breakout" in low:
+        return "unsuccessful breakout"
+    return "-" if text in {"above", "below", "-"} or "kijun" in low else text.replace("_", " ")
+
+
+def _is_short_ichi(row: ScannerRow) -> bool:
+    text = f"{row.status} {row.metrics.get('ichimoku_status','')}".lower()
+    return "below" in text or "under kijun" in text or "bearish" in text or str(row.status).strip().lower() == "short"
+
+
+def _cloud_side_valid(row: ScannerRow) -> bool:
+    is_short = _is_short_ichi(row)
+    status = f"{row.status} {row.metrics.get('ichimoku_status','')}".lower()
+    if is_short:
+        return "below" in status or "under kijun" in status
+    return "above" in status or "over kijun" in status
+
+
+def _ichimoku_risk(row: ScannerRow, chikou: str, twist: str) -> int:
+    is_short = _is_short_ichi(row)
+    risk = 0
+    if chikou == "yes":
+        risk += 1
+    if (not is_short and twist == "green") or (is_short and twist == "red"):
+        risk += 1
+    if _cloud_side_valid(row) and (row.category == "retest_breakout" or "breakout" in str(row.status).lower() or "retest" in str(row.status).lower()):
+        risk += 1
+    return min(risk, 3)
+
+
+def _ichimoku_dynamic(months: float, status: str) -> str:
+    low = status.lower()
+    if "breakout" in low and months <= 1.5:
+        return "aggressive"
+    if months <= 3.0:
+        return "high"
+    if months <= 6.0:
+        return "mild"
+    return "slow"
+
+
+def _ichimoku_cloud(months: float, status: str) -> str:
+    low = status.lower()
+    if "inside" in low or "touched" in low:
+        return "shallow"
+    if months >= 6.0:
+        return "thick"
+    return "normal"
+
+
+def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
+    ichi = [r for r in rows if r.scanner == "ICHIMOKU"]
+    def include(row: ScannerRow) -> bool:
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        status_text = f"{row.status} {row.metrics.get('ichimoku_status','')}".lower()
+        return months > 4 or any(token in status_text for token in ["kijun", "cloud", "breakout", "retest", "returned_to_cloud", "shallow_retest", "medium_retest", "deep_retest"])
+    ichi = [r for r in ichi if include(r)]
+    ichi.sort(key=lambda r: (_parse_float_text(r.metrics.get("months", "0"), 0.0), r.ticker), reverse=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "ichimoku.md"
+    headers = ["Instrument", "Direction / Status", "Kijun", "Months", "Risk", "TK cross", "Dynamic", "Cloud", "Chikou", "Twist", "TK plus", "Tenkan in cloud", "Breakout notes", "Links"]
+    lines = ["# Trójpolówki — Ichimoku", "", f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}", "", "| " + " | ".join(headers) + " |", "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---|"]
+    for row in ichi:
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        is_short = _is_short_ichi(row)
+        status = _status_plain(row.status)
+        kijun = row.metrics.get("ichimoku_status") or status
+        chikou = str(row.metrics.get("chikou") or row.metrics.get("Chikou") or "no").strip().lower()
+        chikou = "yes" if chikou in {"yes", "true", "1"} else "no"
+        twist = str(row.metrics.get("twist") or row.metrics.get("Twist") or "neutral").strip().lower()
+        twist = twist if twist in {"green", "red", "neutral"} else "neutral"
+        tk_cross = str(row.metrics.get("tk_cross") or row.metrics.get("TK cross") or "none").strip() or "none"
+        tk_plus = str(row.metrics.get("tk_plus") or row.metrics.get("TK plus") or "no").strip().lower()
+        tk_plus = "yes" if tk_plus in {"yes", "true", "1"} else "no"
+        tenkan_cloud = str(row.metrics.get("tenkan_in_cloud") or row.metrics.get("Tenkan in cloud") or "").strip().lower()
+        if tenkan_cloud not in {"yes", "no"}:
+            tenkan_cloud = "yes" if row.category == "retest_breakout" and "cloud" in f"{status} {kijun}".lower() else "no"
+        dynamic = str(row.metrics.get("dynamic") or row.metrics.get("Dynamic") or _ichimoku_dynamic(months, status)).strip()
+        cloud = str(row.metrics.get("cloud") or row.metrics.get("Cloud") or _ichimoku_cloud(months, f"{status} {kijun}")).strip()
+        risk = _ichimoku_risk(row, chikou, twist)
+        direction_icon = "🔴" if is_short else "⚪"
+        values = [
+            f"{_market_icon(row.market, row.ticker)} {row.ticker}",
+            f"{direction_icon} {status}",
+            kijun,
+            f"{months:.1f}",
+            f"{risk}%",
+            tk_cross if tk_cross in {"none", "bullish TK cross", "bearish TK cross"} else "none",
+            dynamic if dynamic in {"aggressive", "high", "mild", "slow"} else "mild",
+            cloud if cloud in {"shallow", "normal", "thick"} else "normal",
+            chikou,
+            twist,
+            tk_plus,
+            tenkan_cloud,
+            _readable_breakout_note(status, kijun),
+            _links_for_troj(row),
+        ]
+        lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in values) + " |")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_trojpolowki_reports(scopes: list[str], timestamp: datetime | None = None) -> tuple[Path, Path]:
+    ts = timestamp or datetime.now()
+    rows = _read_allsearch_rows(scopes)
+    fibo_path = _write_trojpolowki_fibo(rows, TROJPOLLOWKI_DIR, ts)
+    ichimoku_path = _write_trojpolowki_ichimoku(rows, TROJPOLLOWKI_DIR, ts)
+    return fibo_path, ichimoku_path
+
+
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
         out: dict[str, list[dict[str, str]]] = {}
@@ -832,7 +1146,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                   "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
-    html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
+    troj_fibo_rel = html.escape(os.path.relpath(TROJPOLLOWKI_DIR / 'fibo.md', output_path.parent))
+    troj_ichi_rel = html.escape(os.path.relpath(TROJPOLLOWKI_DIR / 'ichimoku.md', output_path.parent))
+    html_parts.append(f"<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button> &nbsp; <a class='btn' href='{troj_fibo_rel}' target='_blank'>Trójpolówki Fibo</a> <a class='btn' href='{troj_ichi_rel}' target='_blank'>Trójpolówki Ichimoku</a></p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
     html_parts.append(_liquidity_legend_html())
     html_parts.append("<div style='display:flex;gap:10px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin:10px 0 14px'>"
@@ -1008,8 +1324,12 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+    allsearch_timestamp = datetime.now()
+    troj_fibo, troj_ichimoku = _write_trojpolowki_reports(scopes, allsearch_timestamp)
     _build_html_report(scopes, report_html)
     print(f"\n[allsearch] combo report saved: {report}")
+    print(f"[allsearch] Trójpolówki Fibo saved: {troj_fibo}")
+    print(f"[allsearch] Trójpolówki Ichimoku saved: {troj_ichimoku}")
     print(f"[allsearch] html report saved: {report_html}")
     reopen_scope = "all" if [s.lower() for s in scopes] == ["wig", "dax", "us100", "forex", "commodities"] else ",".join(scopes).lower()
     print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
