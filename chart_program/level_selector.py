@@ -500,20 +500,32 @@ def run_level_selector(raw_args=None):
                 e_idx = int((dts - e_ts).abs().idxmin())
                 s_row = df.iloc[s_idx]
                 e_row = df.iloc[e_idx]
-                y_start = float(s_row.get("Low", s_row.get("Close", 0.0)))
-                y_end = float(e_row.get("High", e_row.get("Close", 0.0)))
+
+                def _row_price(row, field: str, fallback: float = 0.0) -> float:
+                    return float(row.get(field, row.get("Close", fallback)))
+
+                def _row_mid(row) -> float:
+                    return (_row_price(row, "Low") + _row_price(row, "High")) / 2.0
+
+                is_short = _row_mid(e_row) < _row_mid(s_row)
+                if is_short:
+                    high_price = round(_row_price(s_row, "High"), 5)
+                    low_price = round(_row_price(e_row, "Low"), 5)
+                else:
+                    low_price = round(_row_price(s_row, "Low"), 5)
+                    high_price = round(_row_price(e_row, "High"), 5)
+
                 x_start = pd.to_datetime(s_row["Date"], errors="coerce")
-                x_end = pd.to_datetime(e_row["Date"], errors="coerce")
-                # Keep parity with manual fib workaround: shift 2nd anchor 3 candles left
-                # to avoid hitbox/barrier behavior around clicked candle in chart UI.
+                x_end_raw = pd.to_datetime(e_row["Date"], errors="coerce")
+                # Keep parity with the manual Fib tool: start the second-anchor lines
+                # about two candles to the left, but keep the exact same Y levels.
                 try:
-                    e_idx_left = max(0, e_idx - 3)
+                    e_idx_left = max(0, e_idx - 2)
                     e_row_left = df.iloc[e_idx_left]
                     x_end_left = pd.to_datetime(e_row_left["Date"], errors="coerce")
-                    if not pd.isna(x_end_left):
-                        x_end = x_end_left
+                    x_end = x_end_left if not pd.isna(x_end_left) else x_end_raw
                 except Exception:
-                    pass
+                    x_end = x_end_raw
                 x_right = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce")
                 if pd.isna(x_start):
                     x_start = s_ts
@@ -526,22 +538,14 @@ def run_level_selector(raw_args=None):
                     span = pd.Timedelta(days=7)
                 extension = span * 3
                 x_common_end = x_right + extension if args.fibo_right else x_right
-                # Requested layout: 100, 0, 23.6, 38.2, 61.8
                 levels = [1.0, 0.0, 0.236, 0.382, 0.618][: max(1, min(args.fibo_lines, 5))]
                 objs = []
                 gid = "auto-fibo"
-                delta = y_end - y_start
+                delta = high_price - low_price
                 for idx, r in enumerate(levels):
-                    if idx == 0:
-                        # First line is 100% (anchor1 low) and starts from anchor1.
-                        y_val = round(y_end - delta * r, 5)
-                        x_level_start = x_start
-                        pct_label = "FIB 100%"
-                    else:
-                        # Remaining lines (0/23.6/38.2/61.8) start at anchor2 and extend right.
-                        y_val = round(y_end - delta * r, 5)
-                        x_level_start = x_end
-                        pct_label = f"FIB {r*100:.1f}%"
+                    pct_label = f"FIB {r*100:.1f}%".replace(".0%", "%")
+                    y_val = round(low_price + delta * r, 5) if is_short else round(high_price - delta * r, 5)
+                    x_level_start = x_start if idx == 0 else x_end
                     x0_txt = str(pd.to_datetime(x_level_start, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_level_start, errors="coerce")) else str(s_row["Date"])
                     x1_txt = str(pd.to_datetime(x_common_end, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_common_end, errors="coerce")) else str(df.iloc[-1]["Date"])
                     objs.append({
@@ -553,11 +557,12 @@ def run_level_selector(raw_args=None):
                         "y0": y_val,
                         "y1": y_val,
                         "price": y_val,
-                        "color": "#f59e0b",
+                        "color": "#22c55e" if r == 0.618 else "#f59e0b",
                         "group_id": gid,
+                        "direction": "short" if is_short else "long",
                     })
                 existing["drawn_objects"] = objs
-                print(f"[chart] auto-fibo preloaded: {len(objs)} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}")
+                print(f"[chart] auto-fibo preloaded: {len(objs)} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}, direction={'short' if is_short else 'long'}")
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
 
