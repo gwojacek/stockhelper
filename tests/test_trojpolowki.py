@@ -55,8 +55,8 @@ def test_fibo_columns_and_links(tmp_path: Path):
     assert "🇵🇱 TPE ↗️" in text
     assert "🇺🇸 AEP.US ↗️" in text and "near 61.8: 62.5%" in text
     assert "🇵🇱 TRN ↗️" in text and "near 61.8: 93.2%" in text
-    assert "[chart](http://127.0.0.1:8765/run-command?command=" in text
-    assert "[stooq](https://stooq.pl/trn)" in text
+    assert "[📈 chart](http://127.0.0.1:8765/run-command?command=" in text
+    assert "[🔗 stooq](https://stooq.pl/trn)" in text
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
@@ -64,19 +64,19 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     rows = [
         mod.ScannerRow(
             market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker="CRI", status="⚪ above",
-            dates={"flip_date": "2026-01-01"}, metrics={"months": "8.9", "ichimoku_status": "Over Kijun-sen", "chikou": "yes", "twist": "green", "tk_plus": "yes", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/cri",
+            dates={"flip_date": "2026-01-01"}, metrics={"months": "8.9", "ichimoku_status": "Over Kijun-sen", "risk": "3%", "tk_cross": "none", "dynamic": "aggressive", "cloud": "thick", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "no", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/cri",
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="HFG.DE", status="🔴 below",
-            dates={"flip_date": "2026-02-01"}, metrics={"months": "5.1", "ichimoku_status": "Under Kijun-sen", "chikou": "yes", "twist": "red", "tk_plus": "yes", "raw_status": "deep_retest_pattern"}, chart_url="https://stooq.pl/hfg",
+            dates={"flip_date": "2026-02-01"}, metrics={"months": "5.1", "ichimoku_status": "Under Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "high", "cloud": "normal", "chikou": "yes", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "deep_retest_pattern"}, chart_url="https://stooq.pl/hfg",
         ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
-    assert "| 🇵🇱 CRI | ⚪ above | Over Kijun-sen | 8.9 | 3%" in text
-    assert "| 🇩🇪 HFG.DE | 🔴 below | Under Kijun-sen | 5.1 | 3%" in text
-    assert "[chart](http://127.0.0.1:8765/run-command?command=" in text
-    assert "[stooq](https://stooq.pl/hfg)" in text
+    assert "| 🇵🇱 CRI | 🟢 above cloud | 🔁 retest | Over Kijun-sen | 8.9 | 3% | none | aggressive | thick | yes | green | yes | no | breakout confirmed |" in text
+    assert "| 🇩🇪 HFG.DE | 🔴 below cloud | 🔁 retest | Under Kijun-sen | 5.1 | 3% | bearish TK cross | high | normal | yes | red | yes | yes | deep retest |" in text
+    assert "[📈 chart](http://127.0.0.1:8765/run-command?command=" in text
+    assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 
 def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
