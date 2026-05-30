@@ -1316,6 +1316,16 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     return base + " --ichimoku-mode on"
 
 
+def _markdown_link_label(title: str, index: int, url: str = "") -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "chart"
+    url_key = re.sub(r"[^a-z0-9]+", "-", url.lower()).strip("-")[-24:] or str(index)
+    return f"{base}-link-{index}-{url_key}"
+
+
+def _is_http_url(value: str) -> bool:
+    return value.startswith("http://") or value.startswith("https://")
+
+
 def _write_md_table(
     path: Path,
     title: str,
@@ -1324,15 +1334,32 @@ def _write_md_table(
     append: bool = False,
     description: str | None = None,
 ) -> None:
+    link_col = headers.index("Link") if "Link" in headers else None
+    link_refs: list[tuple[str, str, str]] = []
     with path.open("a" if append else "w", encoding="utf-8") as fh:
         fh.write(f"## {title}\n\n")
         if description:
             fh.write(description.strip() + "\n\n")
         fh.write("| " + " | ".join(headers) + " |\n")
         fh.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
-        for row in rows:
-            safe = [str(c).replace("\n", " ").replace("|", "\\|") for c in row]
+        for row_idx, row in enumerate(rows, start=1):
+            safe: list[str] = []
+            for col_idx, cell in enumerate(row):
+                cell_txt = str(cell).replace("\n", " ")
+                if link_col is not None and col_idx == link_col and _is_http_url(cell_txt):
+                    label = _markdown_link_label(f"{path.stem}-{title}", row_idx, cell_txt)
+                    display_name = str(row[0]) if row else f"#{row_idx}"
+                    link_refs.append((label, cell_txt, display_name))
+                    cell_txt = f"[📈][{label}]"
+                safe.append(cell_txt.replace("|", "\\|"))
             fh.write("| " + " | ".join(safe) + " |\n")
+        if link_refs:
+            fh.write("\nLinks:\n")
+            for label, _url, display_name in link_refs:
+                fh.write(f"- {display_name}: [📈][{label}]\n")
+            fh.write("\n")
+            for label, url, _display_name in link_refs:
+                fh.write(f"[{label}]: {url}\n")
 
 
 def _daily_report_path(prefix: str, group_name: str) -> Path:
