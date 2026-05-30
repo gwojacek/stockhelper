@@ -376,6 +376,10 @@ python run -allsearch all
 
 - `chart_program/data/all_insturments_search/allsearch/allsearch_latest_<scope>.md`
 - `chart_program/data/all_insturments_search/allsearch/allsearch_latest_<scope>.html`
+- `chart_program/data/all_insturments_search/Trójpolówki/fibo.md`
+- `chart_program/data/all_insturments_search/Trójpolówki/ichimoku.md`
+
+`Trójpolówki` is refreshed only by `-allsearch` runs. It keeps compact three-column Markdown watchlists split by market: Fibo buckets steep/valid 23.6 bounces, 23.6 waiting closes, and deeper 50/61.8-area pullbacks; Ichimoku buckets cloud-respecting trends, Kijun-sen touches, and cloud touches/retests with extra TK-cross, cloud thickness, breakout dynamic, Chikou/twist/risk notes derived from the same locally refreshed scan data.
 
 > Note: the directory name is spelled `all_insturments_search` in the repository.
 

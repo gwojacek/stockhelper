@@ -831,6 +831,8 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     out["kijun"] = (high26 + low26) / 2
     span_a = ((out["tenkan"] + out["kijun"]) / 2).shift(26)
     span_b = ((out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2).shift(26)
+    out["senkou_a"] = span_a
+    out["senkou_b"] = span_b
     out["cloud_top"] = pd.concat([span_a, span_b], axis=1).max(axis=1)
     out["cloud_bottom"] = pd.concat([span_a, span_b], axis=1).min(axis=1)
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
