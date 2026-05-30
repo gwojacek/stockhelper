@@ -128,8 +128,9 @@ def _csv_path_for_ticker_market(ticker: str, market: str) -> Path:
 
 
 def _read_market_df(ticker: str, market: str):
+    import pandas as pd
+
     try:
-        import pandas as pd
         path = _csv_path_for_ticker_market(ticker, market)
         if not path.exists():
             return None
@@ -143,59 +144,83 @@ def _read_market_df(ticker: str, market: str):
         return None
 
 
+def _market_icon(market: str) -> str:
+    return {
+        "WIG": "🇵🇱",
+        "DAX": "🇩🇪",
+        "DAX40": "🇩🇪",
+        "US100": "🇺🇸",
+        "NDX100": "🇺🇸",
+        "FOREX": "💱",
+        "COMMODITIES": "🛢️",
+    }.get((market or "").strip().upper(), "📊")
+
+
+def _clean_status(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()) or "-"
+
+
+def _near61_pct(row: ScannerRow) -> float:
+    return _safe_float(row.metrics.get("near61", ""), default=-1.0)
+
+
 def _fibo_position_bucket(row: ScannerRow) -> str:
     status = (row.status or "").lower()
-    if "valid_reversal" in status:
-        return "23.6 bounce / first column"
+    near_pct = _near61_pct(row)
+    if row.category == "waiting" and near_pct >= 75.0:
+        return "near_61"
     if "touched_61_8" in status:
-        return "50-ish deep close / third column"
-    if "reached_23_6" in status or row.category == "waiting":
-        return "23.6 close / second column"
-    return "23.6 close / second column"
+        return "near_61"
+    if "valid_reversal" in status or row.category == "valid":
+        return "steep"
+    return "near_23"
 
 
 def _fibo_item(row: ScannerRow) -> str:
-    inc_days, corr_days, ratio = _split_ratio_days(row.metrics.get("ratio", ""))
-    ratio_note = f" ratio {ratio:.2f}:1" if ratio else ""
-    near = row.metrics.get("near61") or "-"
-    parts = [f"{row.ticker} ({row.direction or '-'})", row.status or row.category]
-    if row.pattern:
-        parts.append(f"pattern {row.pattern}")
-    if row.dates.get("incline"):
-        parts.append(row.dates["incline"])
-    if ratio_note:
-        parts.append(ratio_note.strip())
-    if near and near != "-":
-        parts.append(f"near 61.8 {near}")
-    return "<br>".join(html.escape(str(x)) for x in parts if str(x).strip())
+    start = (row.dates.get("incline") or "").split("->", 1)[0].strip() or "-"
+    direction_icon = "↗️" if (row.direction or "").lower() == "long" else "↘️" if row.direction else ""
+    lines = [
+        f"{_market_icon(row.market)} <b>{html.escape(row.ticker)}</b> {direction_icon}".strip(),
+        f"start: {html.escape(start)}",
+    ]
+    if _fibo_position_bucket(row) in {"near_23", "near_61"}:
+        near = row.metrics.get("near61") or "-"
+        lines.append(f"near 61.8: {html.escape(near)}")
+    return "<div class='troj-card'>" + "<br>".join(lines) + "</div>"
 
 
 def _build_fibo_trojpol_report(rows: list[ScannerRow], scopes: list[str]) -> str:
-    by_market: dict[str, list[ScannerRow]] = {}
-    for r in rows:
-        if r.scanner == "FIBO":
-            by_market.setdefault(r.market, []).append(r)
-    lines = ["# Trójpolówki — Fibo", "", f"Updated from allsearch: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}", "", "| 23.6 bounce / steep incline | Bearish close around 23.6 | Close around 50 / deeper pullback |", "| --- | --- | --- |"]
-    order = [s.upper() for s in scopes]
-    for market in order:
-        mrows = by_market.get(market, [])
-        cols = {"23.6 bounce / first column": [], "23.6 close / second column": [], "50-ish deep close / third column": []}
-        for r in sorted(mrows, key=lambda x: (_split_ratio_days(x.metrics.get("ratio", ""))[2], x.ticker), reverse=True):
-            cols[_fibo_position_bucket(r)].append(_fibo_item(r))
-        if any(cols.values()):
-            lines.append(f"| **{market}** | **{market}** | **{market}** |")
-            lines.append("| " + " | ".join("<br><br>".join(cols[k]) or "-" for k in cols) + " |")
-    if len(lines) == 6:
-        lines.append("| - | - | - |")
-    lines.append("")
-    lines.append("Notes: first column uses existing allsearch/Fibo output (`valid_reversal`) as a bounce/no-major-bearish proxy; second and third columns use waiting/deeper-pullback statuses from the same scan output only.")
+    cols: dict[str, list[str]] = {"steep": [], "near_23": [], "near_61": []}
+    allowed = {s.upper() for s in scopes}
+    fibo_rows = [r for r in rows if r.scanner == "FIBO" and (not allowed or r.market in allowed)]
+    fibo_rows = sorted(
+        fibo_rows,
+        key=lambda r: (
+            {"steep": 0, "near_23": 1, "near_61": 2}.get(_fibo_position_bucket(r), 9),
+            -_near61_pct(r),
+            r.market,
+            r.ticker,
+        ),
+    )
+    for row in fibo_rows:
+        cols[_fibo_position_bucket(row)].append(_fibo_item(row))
+    lines = [
+        "# Trójpolówki — Fibo",
+        "",
+        f"Updated from allsearch: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        "",
+        "| 🚀 Steep incline / no major bearish signal | ⚠️ Bearish close around 23.6 | 🎯 Near 61.8 > 75% / deeper pullback |",
+        "| --- | --- | --- |",
+        "| " + " | ".join("<br><br>".join(cols[key]) or "-" for key in ("steep", "near_23", "near_61")) + " |",
+        "",
+        "Legend: 🇵🇱 WIG, 🇩🇪 DAX, 🇺🇸 US100, 💱 Forex, 🛢️ Commodities. The third Fibo column is driven by the allsearch `Near61.8` value when it is at least 75%.",
+    ]
     return "\n".join(lines) + "\n"
 
-
 def _enrich_ichimoku(row: ScannerRow) -> dict[str, str]:
+    from scanner_search import _ichimoku
+
     try:
-        from scanner_search import _ichimoku
-        import pandas as pd
         df = _read_market_df(row.ticker, row.market)
         if df is None:
             return {}
@@ -221,7 +246,7 @@ def _enrich_ichimoku(row: ScannerRow) -> dict[str, str]:
         recent = ichi.tail(5)
         bodies = (recent["Close"] - recent["Open"]).abs()
         avg_body = (ichi.tail(30)["Close"] - ichi.tail(30)["Open"]).abs().mean()
-        big_count = int((bodies > max(avg_body * 1.6, close * 0.015)).sum()) if pd.notna(avg_body) else 0
+        big_count = int((bodies > max(avg_body * 1.6, close * 0.015)).sum()) if avg_body == avg_body else 0
         body_sum_pct = float(bodies.sum() / max(abs(close), 1e-9) * 100)
         if big_count >= 3 or body_sum_pct >= 10:
             dynamic = "aggressive"
@@ -251,54 +276,67 @@ def _enrich_ichimoku(row: ScannerRow) -> dict[str, str]:
 
 
 def _ichimoku_bucket(row: ScannerRow, extra: dict[str, str]) -> str:
-    status = (row.metrics.get("ichimoku_status") or row.status or "").lower()
-    if "touched the cloud" in status or "inside the cloud" in status:
-        return "Touched cloud"
-    if "kijun" in status:
-        return "Touched Kijun-sen"
-    return "Respects cloud >4 months"
+    status = _clean_status(row.metrics.get("ichimoku_status") or row.status).lower()
+    if "over kijun-sen" in status:
+        return "over_kijun"
+    if "under kijun-sen" in status:
+        return "under_kijun"
+    if "touched the cloud" in status or "inside the cloud" in status or "unsuccessful breakout" in status:
+        return "cloud"
+    return "respect"
 
 
 def _ichimoku_item(row: ScannerRow) -> str:
     extra = _enrich_ichimoku(row)
-    parts = [f"{row.ticker} ({row.status or '-'})", row.metrics.get("ichimoku_status") or row.category]
+    status = _clean_status(row.metrics.get("ichimoku_status") or row.category)
+    side = _clean_status(row.status)
+    lines = [
+        f"{_market_icon(row.market)} <b>{html.escape(row.ticker)}</b> ({html.escape(side)})",
+        html.escape(status),
+    ]
     if row.metrics.get("months"):
-        parts.append(f"months {row.metrics.get('months')}")
+        lines.append(f"months {html.escape(row.metrics.get('months', '-'))}")
     if extra:
-        parts.extend([
-            f"risk {extra.get('risk','-')}",
-            f"TK {extra.get('tk_cross','none')}",
-            f"dynamic {extra.get('dynamic','-')}",
-            f"cloud {extra.get('thickness','-')}",
-            f"chikou {extra.get('chikou','-')}, twist {extra.get('twist','-')}",
-            f"TK plus {extra.get('tk_plus','-')}, tenkan-in-cloud {extra.get('tenkan_in_cloud','-')}",
+        lines.extend([
+            f"risk {html.escape(extra.get('risk','-'))}",
+            f"TK {html.escape(extra.get('tk_cross','none'))}",
+            f"dynamic {html.escape(extra.get('dynamic','-'))}",
+            f"cloud {html.escape(extra.get('thickness','-'))}",
+            f"chikou {html.escape(extra.get('chikou','-'))}, twist {html.escape(extra.get('twist','-'))}",
+            f"TK plus {html.escape(extra.get('tk_plus','-'))}, tenkan-in-cloud {html.escape(extra.get('tenkan_in_cloud','-'))}",
         ])
-    return "<br>".join(html.escape(str(x)) for x in parts if str(x).strip())
+    return "<div class='troj-card'>" + "<br>".join(lines) + "</div>"
 
 
 def _build_ichimoku_trojpol_report(rows: list[ScannerRow], scopes: list[str]) -> str:
-    by_market: dict[str, list[ScannerRow]] = {}
-    for r in rows:
-        if r.scanner == "ICHIMOKU":
-            by_market.setdefault(r.market, []).append(r)
-    headers = ["Respects cloud >4 months", "Touched Kijun-sen", "Touched cloud"]
-    lines = ["# Trójpolówki — Ichimoku", "", f"Updated from allsearch: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}", "", "| " + " | ".join(headers) + " |", "| --- | --- | --- |"]
-    for market in [s.upper() for s in scopes]:
-        cols = {h: [] for h in headers}
-        for r in sorted(by_market.get(market, []), key=lambda x: (_safe_float(x.metrics.get("months", "0")), x.ticker), reverse=True):
-            if _safe_float(r.metrics.get("months", "0")) < 4 and r.category == "position":
-                continue
-            bucket = _ichimoku_bucket(r, {})
-            cols[bucket].append(_ichimoku_item(r))
-        if any(cols.values()):
-            lines.append(f"| **{market}** | **{market}** | **{market}** |")
-            lines.append("| " + " | ".join("<br><br>".join(cols[h]) or "-" for h in headers) + " |")
-    if len(lines) == 6:
-        lines.append("| - | - | - |")
-    lines.append("")
-    lines.append("Short logic is handled in reverse for below-cloud rows. Retests are included from allsearch Ichimoku retest rows when present.")
+    cols: dict[str, list[str]] = {"respect": [], "over_kijun": [], "under_kijun": [], "cloud": []}
+    allowed = {s.upper() for s in scopes}
+    ichi_rows = [r for r in rows if r.scanner == "ICHIMOKU" and (not allowed or r.market in allowed)]
+    ichi_rows = sorted(
+        ichi_rows,
+        key=lambda r: (
+            {"respect": 0, "over_kijun": 1, "under_kijun": 2, "cloud": 3}.get(_ichimoku_bucket(r, {}), 9),
+            -_safe_float(r.metrics.get("months", "0")),
+            r.market,
+            r.ticker,
+        ),
+    )
+    for row in ichi_rows:
+        if row.category == "position" and _safe_float(row.metrics.get("months", "0")) < 4:
+            continue
+        cols[_ichimoku_bucket(row, {})].append(_ichimoku_item(row))
+    lines = [
+        "# Trójpolówki — Ichimoku",
+        "",
+        f"Updated from allsearch: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        "",
+        "| ☁️ Respects cloud >4 months | ⬆️ Over Kijun-sen | ⬇️ Under Kijun-sen | 🌥️ Cloud touch / inside / break |",
+        "| --- | --- | --- | --- |",
+        "| " + " | ".join("<br><br>".join(cols[key]) or "-" for key in ("respect", "over_kijun", "under_kijun", "cloud")) + " |",
+        "",
+        "Legend: 🇵🇱 WIG, 🇩🇪 DAX, 🇺🇸 US100, 💱 Forex, 🛢️ Commodities. Below-cloud/short rows use the same logic in reverse.",
+    ]
     return "\n".join(lines) + "\n"
-
 
 def _write_trojpolowki_reports(rows: list[ScannerRow], scopes: list[str]) -> None:
     TROJPOL_DIR.mkdir(parents=True, exist_ok=True)

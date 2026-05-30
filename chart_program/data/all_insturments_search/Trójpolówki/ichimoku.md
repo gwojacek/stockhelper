@@ -2,8 +2,8 @@
 
 Updated from allsearch: never
 
-| Respects cloud >4 months | Touched Kijun-sen | Touched cloud |
-| --- | --- | --- |
-| - | - | - |
+| ☁️ Respects cloud >4 months | ⬆️ Over Kijun-sen | ⬇️ Under Kijun-sen | 🌥️ Cloud touch / inside / break |
+| --- | --- | --- | --- |
+| - | - | - | - |
 
-This file is overwritten by `python run -allsearch <scope>` and should contain only instruments from the latest allsearch data.
+Legend: 🇵🇱 WIG, 🇩🇪 DAX, 🇺🇸 US100, 💱 Forex, 🛢️ Commodities. This file is overwritten by `python run -allsearch <scope>` and contains only instruments from the latest allsearch data.

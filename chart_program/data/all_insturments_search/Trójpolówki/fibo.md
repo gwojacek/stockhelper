@@ -2,8 +2,8 @@
 
 Updated from allsearch: never
 
-| 23.6 bounce / steep incline | Bearish close around 23.6 | Close around 50 / deeper pullback |
+| 🚀 Steep incline / no major bearish signal | ⚠️ Bearish close around 23.6 | 🎯 Near 61.8 > 75% / deeper pullback |
 | --- | --- | --- |
 | - | - | - |
 
-This file is overwritten by `python run -allsearch <scope>` and should contain only instruments from the latest allsearch data.
+Legend: 🇵🇱 WIG, 🇩🇪 DAX, 🇺🇸 US100, 💱 Forex, 🛢️ Commodities. This file is overwritten by `python run -allsearch <scope>` and contains only instruments from the latest allsearch data.
