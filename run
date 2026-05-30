@@ -195,12 +195,6 @@ def _format_row(cells: list[str], widths: list[int], right_align: list[bool] | N
         out_cells.append(txt.rjust(width) if right_align[i] else txt.ljust(width))
     return "│ " + " │ ".join(out_cells) + " │"
 
-def _markdown_link_label(title: str, index: int, url: str = "") -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "chart"
-    url_key = re.sub(r"[^a-z0-9]+", "-", url.lower()).strip("-")[-24:] or str(index)
-    return f"{base}-link-{index}-{url_key}"
-
-
 def _is_http_url(value: str) -> bool:
     return value.startswith("http://") or value.startswith("https://")
 
@@ -213,17 +207,13 @@ def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tupl
     headers = [h for h, _ in columns]
     keys = [k for _, k in columns]
     link_idx = headers.index("Link") if "Link" in headers else None
-    link_refs: list[tuple[str, str, str]] = []
     rows_data = []
-    for row_idx, row in enumerate(rows, start=1):
+    for row in rows:
         vals = []
         for col_idx, key in enumerate(keys):
             val = str(row.get(key, "")).replace("\n", " ")
             if link_idx is not None and col_idx == link_idx and _is_http_url(val):
-                label = _markdown_link_label(title, row_idx, val)
-                display_name = str(row.get("ticker") or row.get("Ticker") or row_idx)
-                link_refs.append((label, val, display_name))
-                val = f"[📈][{label}]"
+                val = f"[📈]({val})"
             vals.append(val)
         rows_data.append(vals)
     if tabulate is not None:
@@ -233,13 +223,6 @@ def _write_table(out, title: str, rows: list[dict[str, str]], columns: list[tupl
         out.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
         for vals in rows_data:
             out.write("| " + " | ".join(vals) + " |\n")
-    if link_refs:
-        out.write("\nLinks:\n")
-        for label, _url, display_name in link_refs:
-            out.write(f"- {display_name}: [📈][{label}]\n")
-        out.write("\n")
-        for label, url, _display_name in link_refs:
-            out.write(f"[{label}]: {url}\n")
 
 def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str], csv_refs: list[Path]) -> None:
     if not csv_path.exists(): return
@@ -651,11 +634,6 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if not md_path.exists():
             return out
         lines = md_path.read_text(encoding="utf-8").splitlines()
-        link_refs: dict[str, str] = {}
-        for ref_line in lines:
-            m = re.match(r"^\[([^\]]+)\]:\s*(\S+)", ref_line.strip())
-            if m:
-                link_refs[m.group(1)] = m.group(2)
         last_heading = ""
         i = 0
         while i < len(lines):
@@ -673,9 +651,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                         if len(vals) == len(headers):
                             row = {headers[k]: vals[k] for k in range(len(headers))}
                             link_cell = row.get("Link", "")
-                            ref_match = re.match(r"^\[[^\]]+\]\[([^\]]+)\]$", link_cell)
-                            if ref_match and ref_match.group(1) in link_refs:
-                                row["Link"] = link_refs[ref_match.group(1)]
+                            inline_match = re.match(r"^\[[^\]]+\]\(([^)]+)\)$", link_cell)
+                            if inline_match:
+                                row["Link"] = inline_match.group(1)
                             rows.append(row)
                         j += 1
                     title = last_heading or "TABLE"
