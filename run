@@ -749,9 +749,7 @@ def _stockhelper_chart_url(command: str | None) -> str | None:
 
 
 def _links_for_troj(row: ScannerRow) -> str:
-    chart = _markdown_link("📈 chart", _stockhelper_chart_url(_chart_command_for_row(row)))
-    stooq = _markdown_link("🔗 stooq", row.chart_url or (_stooq_chart_url(row.ticker) if row.ticker else ""))
-    return f"{chart} {stooq}".strip()
+    return _stooq_link_for_troj(row)
 
 
 def _stooq_link_for_troj(row: ScannerRow) -> str:
@@ -789,6 +787,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                     "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
                     "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                     "raw_status": str(r.get("Latest Retest status", "")),
+                    "ichimoku_status": str(r.get("Ichimoku status", "")),
                     "risk": _metric_from_row(r, "Risk"), "tk_cross": _metric_from_row(r, "TK cross"),
                     "dynamic": _metric_from_row(r, "Dynamic"), "cloud": _metric_from_row(r, "Cloud"),
                     "chikou": _metric_from_row(r, "Chikou"), "twist": _metric_from_row(r, "Twist"),
@@ -932,12 +931,24 @@ def _source_metric(row: ScannerRow, key: str) -> str:
 def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
     candidates = [r for r in rows if r.scanner == "ICHIMOKU"]
 
+    def _kijun_label(raw: str) -> str:
+        low = str(raw or "").lower()
+        if "over kijun" in low:
+            return "over"
+        if "under kijun" in low:
+            return "under"
+        if "touched" in low and "kijun" in low:
+            return "touched"
+        return "-"
+
     def prepared(row: ScannerRow) -> tuple[ScannerRow, dict[str, str]]:
+        raw_status = row.metrics.get("raw_status", row.status)
         raw_kijun = _source_metric(row, "ichimoku_status")
-        note = _readable_breakout_note(row.metrics.get("raw_status", row.status), raw_kijun)
+        kijun = _kijun_label(raw_kijun)
+        note = _readable_breakout_note(raw_status, raw_kijun)
         info = {
             "cloud_side": _cloud_side_label(row),
-            "kijun": _kijun_label(raw_kijun),
+            "kijun": kijun,
             "note": note,
             "risk": _source_metric(row, "risk"),
             "tk_cross": _source_metric(row, "tk_cross"),
@@ -948,8 +959,14 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             "tk_plus": _source_metric(row, "tk_plus"),
             "tenkan_in_cloud": _source_metric(row, "tenkan_in_cloud"),
         }
-        info["bias"] = _bias_label(row, note)
+        if note == "breakout confirmed" and (("above" in info["cloud_side"] and kijun == "over") or ("below" in info["cloud_side"] and kijun == "under")):
+            info["note"] = "above cloud" if "above" in info["cloud_side"] else "below cloud"
+            info["bias"] = "↗️ long" if "above" in info["cloud_side"] else "↘️ short"
+        else:
+            info["bias"] = _bias_label(row, info["note"])
         return row, info
+
+    prepared_rows = [prepared(r) for r in candidates]
 
     def include(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         row, info = item
@@ -961,30 +978,33 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
     def is_short(info: dict[str, str]) -> bool:
         return "short" in info["bias"] or "below" in info["cloud_side"] or "under" in info["kijun"]
 
+    def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        row, info = item
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
+        return row.category == "retest_breakout" and months < 4.0 and touches_cloud
+
+    def _has_current_cloud_context(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        row, info = item
+        if _is_retest_under_4m(item):
+            return False
+        if any(token in info["cloud_side"] for token in ("inside", "touched")):
+            return True
+        return info["note"] not in {"-", "above cloud", "below cloud"} and ("retest" in info["note"] or "returned" in info["note"] or "unsuccessful" in info["note"])
+
     def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
         row, info = item
-        has_cloud_interaction = info["note"] != "-" or row.category == "retest_breakout" or any(token in info["cloud_side"] for token in ("inside", "touched"))
-        if has_cloud_interaction:
+        if _is_retest_under_4m(item):
+            return "short_retest"
+        if _has_current_cloud_context(item):
             return "cloud"
         risk = _risk_value(info["risk"])
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         if months >= 4.0 and risk >= 2 and any(token in info["cloud_side"] for token in ("above", "below")):
             return "strong"
-        if "kijun" in info["kijun"].lower() or info["kijun"] in {"over", "under", "touched"} or info["tk_cross"] != "-" or info["tk_plus"] != "-":
+        if info["kijun"] in {"over", "under", "touched"} or info["tk_cross"] != "-" or info["tk_plus"] != "-":
             return "watch"
         return "skip"
-
-    def _kijun_label(raw: str) -> str:
-        low = str(raw or "").lower()
-        if "over kijun" in low:
-            return "over"
-        if "under kijun" in low:
-            return "under"
-        if "touched" in low and "kijun" in low:
-            return "touched"
-        return "-"
-
-    prepared_rows = [prepared(r) for r in candidates]
 
     def _risk_icon(risk: str) -> str:
         value = _risk_value(risk)
@@ -1004,7 +1024,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
     def _chikou_text(info: dict[str, str]) -> str:
         value = info["chikou"].lower()
         if value == "yes":
-            return ("✅ Chikou under" if is_short(info) else "✅ Chikou over")
+            return "✅ Chikou under" if is_short(info) else "✅ Chikou over"
         if value == "no":
             return "❌ Chikou"
         return "Chikou -"
@@ -1019,22 +1039,22 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "⚪ twist neutral"
         return "twist -"
 
+    def _tk_cross_factor(info: dict[str, str]) -> str | None:
+        tk_cross = info["tk_cross"].lower()
+        if "bullish" in tk_cross:
+            return "🟢 TK cross bullish"
+        if "bearish" in tk_cross:
+            return "🔴 TK cross bearish"
+        return None
+
     def _factor_lists(info: dict[str, str]) -> tuple[list[str], list[str]]:
         plus: list[str] = []
         minus: list[str] = []
         short = is_short(info)
-        tk_plus = info["tk_plus"].lower()
-        if tk_plus == "yes":
-            plus.append("TK+ yes")
-        elif tk_plus == "no":
-            minus.append("TK+ no")
-        tk_cross = info["tk_cross"].lower()
-        if "bullish" in tk_cross:
-            (minus if short else plus).append("TK cross bullish")
-        elif "bearish" in tk_cross:
-            (plus if short else minus).append("TK cross bearish")
-        elif tk_cross == "none":
-            pass
+        tk = _tk_cross_factor(info)
+        if tk:
+            is_bullish = "bullish" in tk
+            (minus if (short and is_bullish) or ((not short) and not is_bullish) else plus).append(tk)
         tenkan = info["tenkan_in_cloud"].lower()
         if tenkan == "yes":
             plus.append("Tenkan☁ yes")
@@ -1052,51 +1072,56 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             minus.append("cloud shallow")
         return plus, minus
 
-    def item_text(row: ScannerRow, info: dict[str, str]) -> str:
+    def item_text(row: ScannerRow, info: dict[str, str], detailed: bool) -> str:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
-        plus, minus = _factor_lists(info)
         note = info["note"] if info["note"] != "-" else "-"
-        lines = [
-            f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**",
-            f"🎯 {_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}",
-        ]
-        if plus:
-            lines.append("➕ " + " · ".join(plus))
-        if minus:
-            lines.append("➖ " + " · ".join(minus))
+        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**"]
+        if detailed:
+            plus, minus = _factor_lists(info)
+            lines.append(f"{_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}")
+            if plus:
+                lines.append("➕ " + " · ".join(plus))
+            if minus:
+                lines.append("➖ " + " · ".join(minus))
+        elif info["kijun"] != "-":
+            lines.append(f"Kijun: {info['kijun']}")
         lines.append(f"🏷️ {note} · {_links_for_troj(row)}")
         return "<br>".join(lines)
 
     prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
-    prepared_rows.sort(key=lambda item: ({"cloud": 0, "strong": 1, "watch": 2}.get(bucket(item), 9), -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "strong": 2, "watch": 3}.get(bucket(item), 9), -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
-    headers = ["🟢 Strong / continuation", "👀 Kijun / watch", "☁️ Cloud / retest / breakout"]
+    headers = ["🟢 Strong / continuation", "👀 Kijun / watch", "☁️ Cloud / retest / breakout", "🔁 Retest <4m"]
     lines = [
         "# Trójpolówki — Ichimoku",
         "",
         f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
         "Legenda:",
-        "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column.",
-        "- 🎯 Risk line shows only core source factors: risk, Chikou, and Kumo twist.",
-        "- ➕/➖ lines are qualitative context only (TK, Tenkan-in-cloud, dynamic, cloud thickness).",
+        "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column; 🔁 Retest <4m is a fresh post-breakout cloud touch/entry.",
+        "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
+        "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
+        "- TK+ = Tenkan on the correct side of Kijun for the setup direction; card details show TK cross and Tenkan☁ instead of repeating TK+.",
+        "- ➕/➖ lines are qualitative context only (TK cross, Tenkan in cloud, dynamic, cloud thickness).",
         "- 🏷️ is the current scanner status/note; missing source fields stay as `-`.",
         "",
         "| " + " | ".join(headers) + " |",
-        "|---|---|---|",
+        "|---|---|---|---|",
     ]
     for row, info in prepared_rows:
-        cells = ["", "", ""]
+        cells = ["", "", "", ""]
         b = bucket((row, info))
         if b == "cloud":
-            cells[2] = item_text(row, info)
+            cells[2] = item_text(row, info, detailed=True)
+        elif b == "short_retest":
+            cells[3] = item_text(row, info, detailed=True)
         elif b == "strong":
-            cells[0] = item_text(row, info)
+            cells[0] = item_text(row, info, detailed=False)
         else:
-            cells[1] = item_text(row, info)
+            cells[1] = item_text(row, info, detailed=False)
         lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in cells) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

@@ -277,6 +277,7 @@ class FlipResult:
     first_valid_retest_pattern_date: str = "-"
     retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
     avg_turnover_10d_pln: float | None = None
+    ichimoku_status: str | None = None
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
     ichimoku_risk: str | None = None
@@ -1206,6 +1207,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+            flip.ichimoku_status = _ichimoku_status(enriched, flip.current_side)
             _apply_ichimoku_extra_metrics(flip, _ichimoku_extra_metrics(enriched, flip.current_side, flip.retest_status or ""))
             flip.latest_candle_date = latest_candle_date
             flip.expected_latest_session_date = expected_latest_session_date
@@ -1982,11 +1984,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Ichimoku status","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",

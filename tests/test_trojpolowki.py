@@ -77,15 +77,16 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
-    assert "|  |  | **🇵🇱 CRI 🔁 retest (8.9m)**<br>🎯 🟢 risk: 3% · ✅ Chikou over · 🟢 twist bullish" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🎯 🟢 risk: 3% · ✅ Chikou under · 🔴 twist bearish" in text
-    assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout |" in text
-    assert "- 🎯 Risk line shows only core source factors" in text
+    assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
+    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ✅ Chikou under · 🔴 twist bearish" in text
+    assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
+    assert "TK+ = Tenkan on the correct side of Kijun" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
-    assert "🎯 🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
-    assert "➕ TK+ yes · TK cross bullish · Tenkan☁ yes · dyn mild" in text
+    assert "🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
+    assert "➕ 🟢 TK cross bullish · Tenkan☁ yes · dyn mild" in text
     assert "➖ cloud shallow" in text
-    assert "[📈 chart](http://127.0.0.1:8765/run-command?command=" in text
+    assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 
