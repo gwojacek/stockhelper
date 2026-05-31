@@ -77,12 +77,14 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
-    assert "| **🇵🇱 CRI 🔁 retest (8.9m, risk 3%)**<br>🟢 above cloud · Kijun: Over Kijun-sen" in text
-    assert "| **🇩🇪 HFG.DE 🔁 retest (5.1m, risk 3%)**<br>🔴 below cloud · Kijun: Under Kijun-sen" in text
-    assert "Legenda: 🟢 above cloud" in text
+    assert "| **🇵🇱 CRI 🔁 retest (8.9m)**<br>🟢 above cloud · Kijun: Over Kijun-sen" in text
+    assert "| **🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🔴 below cloud · Kijun: Under Kijun-sen" in text
+    assert "- ☁️ **Cloud touch** is shown first" in text
+    assert "🎚️ Risk/grading details are intentionally shown only" in text
     assert "☁️ >4m above/below cloud" in text
     assert "🔁 Short retest <4m" in text
-    assert "**🇺🇸 MSFT.US 🔁 retest (2.0m, risk 2%)**" in text
+    assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
+    assert "🎚️ risk: 2% · TK: bullish TK cross" in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 

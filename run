@@ -976,20 +976,27 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "kijun"
         return "kijun"
 
-    def item_text(row: ScannerRow, info: dict[str, str]) -> str:
+    def item_text(row: ScannerRow, info: dict[str, str], detailed: bool = False) -> str:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
         note = info["note"] if info["note"] != "-" else "-"
-        return (
-            f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt}, risk {info['risk']})**<br>"
+        base = (
+            f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**<br>"
             f"{info['cloud_side']} · Kijun: {info['kijun']}<br>"
-            f"TK: {info['tk_cross']} · dyn: {info['dynamic']} · cloud: {info['cloud']}<br>"
-            f"Chikou: {info['chikou']} · twist: {info['twist']} · TK+: {info['tk_plus']} · Tenkan☁: {info['tenkan_in_cloud']}<br>"
-            f"note: {note} · {_stooq_link_for_troj(row)}"
+        )
+        if not detailed:
+            note_part = f"note: {note}<br>" if note != "-" else ""
+            return base + note_part + _stooq_link_for_troj(row)
+        return (
+            base
+            + f"🎚️ risk: {info['risk']} · TK: {info['tk_cross']} · dyn: {info['dynamic']} · cloud: {info['cloud']}<br>"
+            + f"✅ Chikou: {info['chikou']} · twist: {info['twist']} · TK+: {info['tk_plus']} · Tenkan☁: {info['tenkan_in_cloud']}<br>"
+            + f"🏷️ note: {note} · {_stooq_link_for_troj(row)}"
         )
 
+    bucket_priority = {"touch": 0, "short_retest": 1, "cloud_respect": 2, "kijun": 3}
     prepared_rows = [item for item in prepared_rows if include(item)]
-    prepared_rows.sort(key=lambda item: (-max(_risk_value(item[1]["risk"]), 0), 0 if item[0].category == "retest_breakout" else 1, -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+    prepared_rows.sort(key=lambda item: (bucket_priority.get(bucket(item), 9), -max(_risk_value(item[1]["risk"]), 0), 0 if item[0].category == "retest_breakout" else 1, -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
@@ -999,7 +1006,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         "",
         f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
-        "Legenda: 🟢 above cloud · 🔴 below cloud · 🟡 inside cloud · ☁️ touched cloud · ↗️ long · ↘️ short · 🔁 retest · 👀 watch · short retest = <4m after breakout and touching/entering cloud",
+        "Legenda:",
+        "- ☁️ **Cloud touch** is shown first and is the highest-priority watchlist column.",
+        "- 🔁 **Short retest <4m** = valid breakout/retest context, less than 4 months after breakout, and price touches or enters the cloud.",
+        "- 🎚️ Risk/grading details are intentionally shown only in the ☁️ Cloud touch and 🔁 Short retest columns.",
+        "- 🟢 above cloud · 🔴 below cloud · 🟡 inside cloud · ☁️ touched cloud · ↗️ long · ↘️ short · 👀 watch.",
+        "- ✅ Chikou / twist / TK+ / Tenkan☁ values are copied from current allsearch output; missing source fields stay as `-`.",
         "",
         "| " + " | ".join(headers) + " |",
         "|---|---|---|---|",
@@ -1008,13 +1020,13 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         cells = ["", "", "", ""]
         b = bucket((row, info))
         if b == "short_retest":
-            cells[3] = item_text(row, info)
+            cells[3] = item_text(row, info, detailed=True)
         elif b == "touch":
-            cells[2] = item_text(row, info)
+            cells[2] = item_text(row, info, detailed=True)
         elif b == "cloud_respect":
-            cells[0] = item_text(row, info)
+            cells[0] = item_text(row, info, detailed=False)
         else:
-            cells[1] = item_text(row, info)
+            cells[1] = item_text(row, info, detailed=False)
         lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in cells) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
