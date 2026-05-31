@@ -86,6 +86,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
+    assert text.index("**🇩🇪 HFG.DE") < text.index("**🇺🇸 MSFT.US") < text.index("**🇵🇱 CRI")
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 

@@ -1095,7 +1095,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return "<br>".join(lines)
 
     prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
-    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "strong": 2, "watch": 3}.get(bucket(item), 9), 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"

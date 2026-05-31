@@ -1485,18 +1485,32 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         else:
             breakout_dynamic = "-"
 
-        risk = 0
-        if chikou_confirmation == "yes":
-            risk += 1
-        if (not is_short and kumo_twist == "green") or (is_short and kumo_twist == "red"):
-            risk += 1
         context = (context_status or "").lower()
-        correct_cloud_side = close > cloud_top if not is_short else close < cloud_bottom
-        if correct_cloud_side and any(token in context for token in ("breakout", "retest", "pattern", "returned_to_cloud")):
-            risk += 1
+        risk_context = any(
+            token in context
+            for token in (
+                "breakout_confirmed",
+                "breakout confirmed",
+                "retest_breakout",
+                "retest breakout",
+                "retest_pattern",
+                "retest pattern",
+            )
+        )
+        risk_text = "-"
+        if risk_context:
+            risk = 0
+            if chikou_confirmation == "yes":
+                risk += 1
+            if (not is_short and kumo_twist == "green") or (is_short and kumo_twist == "red"):
+                risk += 1
+            correct_cloud_side = close > cloud_top if not is_short else close < cloud_bottom
+            if correct_cloud_side:
+                risk += 1
+            risk_text = f"{min(risk, 3)}%"
 
         return {
-            "ichimoku_risk": f"{min(risk, 3)}%",
+            "ichimoku_risk": risk_text,
             "tk_cross": tk_cross,
             "breakout_dynamic": breakout_dynamic,
             "cloud_thickness": cloud_thickness,
