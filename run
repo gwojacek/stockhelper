@@ -787,6 +787,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                     "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
                     "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                     "raw_status": str(r.get("Latest Retest status", "")),
+                    "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")),
                     "ichimoku_status": str(r.get("Ichimoku status", "")),
                     "risk": _metric_from_row(r, "Risk"), "tk_cross": _metric_from_row(r, "TK cross"),
                     "dynamic": _metric_from_row(r, "Dynamic"), "cloud": _metric_from_row(r, "Cloud"),
@@ -1001,14 +1002,17 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         return row.category == "retest_breakout" and months <= 4.0
 
-    def _short_retest_trigger(info: dict[str, str]) -> bool:
+    def _short_retest_trigger(row: ScannerRow, info: dict[str, str]) -> bool:
         touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
         touches_kijun = info["kijun"] == "touched"
+        previous_side = str(row.metrics.get("previous_side", "")).lower()
+        if not touches_kijun and previous_side:
+            touches_kijun = ("below" in previous_side and info["kijun"] == "over") or ("above" in previous_side and info["kijun"] == "under")
         return touches_cloud or touches_kijun
 
     def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         row, info = item
-        return _is_fresh_retest_window(row) and _short_retest_trigger(info)
+        return _is_fresh_retest_window(row) and _short_retest_trigger(row, info)
 
     def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item
@@ -1026,9 +1030,13 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         row, info = item
         if _is_retest_under_4m(item):
             return "short_retest"
+        if _is_fresh_retest_window(row):
+            return "skip"
         if _has_current_cloud_context(item):
             return "cloud"
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        if row.category == "position" and months < 4.0 and (("above" in info["cloud_side"] and info["kijun"] == "over") or ("below" in info["cloud_side"] and info["kijun"] == "under")):
+            return "skip"
         tk_cross_signal = info["tk_cross"] not in {"-", "none"}
         has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
         if info["kijun"] == "touched" or tk_cross_signal or (has_kijun_or_tk and months < 4.0):
@@ -1229,7 +1237,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
                 status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
-                metrics={"months": str(r.get("Mies. od wybicia", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
+                metrics={"months": str(r.get("Mies. od wybicia", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", "")), "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
         for r in i_w1:
@@ -1237,7 +1245,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="position", ticker=t,
                 status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))},
-                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
+                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "raw_status": str(r.get("Pozycja", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
             ))
         for r in f_w2:
