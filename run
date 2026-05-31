@@ -979,16 +979,19 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return "short" in info["bias"] or "below" in info["cloud_side"] or "under" in info["kijun"]
 
     def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
-        row, info = item
+        row, _info = item
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
-        touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
-        return row.category == "retest_breakout" and months < 4.0 and touches_cloud
+        return row.category == "retest_breakout" and months < 4.0
+
+    def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        _row, info = item
+        return any(token in info["cloud_side"] for token in ("inside", "touched"))
 
     def _has_current_cloud_context(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         row, info = item
         if _is_retest_under_4m(item):
             return False
-        if any(token in info["cloud_side"] for token in ("inside", "touched")):
+        if _touches_cloud(item):
             return True
         return info["note"] not in {"-", "above cloud", "below cloud"} and ("retest" in info["note"] or "returned" in info["note"] or "unsuccessful" in info["note"])
 
@@ -1045,6 +1048,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "🟢 TK cross bullish"
         if "bearish" in tk_cross:
             return "🔴 TK cross bearish"
+        if tk_cross == "none":
+            return "⚪ TK cross no cross yet"
         return None
 
     def _factor_lists(info: dict[str, str]) -> tuple[list[str], list[str]]:
@@ -1057,9 +1062,9 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             (minus if (short and is_bullish) or ((not short) and not is_bullish) else plus).append(tk)
         tenkan = info["tenkan_in_cloud"].lower()
         if tenkan == "yes":
-            plus.append("Tenkan☁ yes")
+            plus.append("Tenkan_in_☁: yes")
         elif tenkan == "no":
-            minus.append("Tenkan☁ no")
+            minus.append("Tenkan_in_☁: no")
         dynamic = info["dynamic"].lower()
         if dynamic in {"aggressive", "high", "mild"}:
             plus.append(f"dyn {dynamic}")
@@ -1090,7 +1095,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return "<br>".join(lines)
 
     prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
-    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "strong": 2, "watch": 3}.get(bucket(item), 9), -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "strong": 2, "watch": 3}.get(bucket(item), 9), 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
@@ -1101,11 +1106,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
         "Legenda:",
-        "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column; 🔁 Retest <4m is a fresh post-breakout cloud touch/entry.",
+        "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column.",
+        "- 🔁 Retest <4m contains fresh valid breakouts from the last 4 months; cloud touch/entry rows are sorted to the top inside that column.",
         "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
         "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
-        "- TK+ = Tenkan on the correct side of Kijun for the setup direction; card details show TK cross and Tenkan☁ instead of repeating TK+.",
-        "- ➕/➖ lines are qualitative context only (TK cross, Tenkan in cloud, dynamic, cloud thickness).",
+        "- TK cross values are shown as bullish / bearish / no cross yet; Tenkan_in_☁ shows whether Tenkan is inside the cloud.",
+        "- ➕/➖ lines are qualitative context only (TK cross, Tenkan_in_☁, dynamic, cloud thickness).",
         "- 🏷️ is the current scanner status/note; missing source fields stay as `-`.",
         "",
         "| " + " | ".join(headers) + " |",

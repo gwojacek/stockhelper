@@ -81,10 +81,10 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
     assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ✅ Chikou under · 🔴 twist bearish" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
-    assert "TK+ = Tenkan on the correct side of Kijun" in text
+    assert "TK cross values are shown as bullish / bearish / no cross yet" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
     assert "🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
-    assert "➕ 🟢 TK cross bullish · Tenkan☁ yes · dyn mild" in text
+    assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
