@@ -96,12 +96,28 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     mod.TROJPOLLOWKI_DIR = tmp_path / "Trojpolowki"
     out = tmp_path / "chart_program" / "data" / "all_insturments_search" / "allsearch" / "allsearch_latest_all.html"
     out.parent.mkdir(parents=True)
-    with mock.patch.object(mod, "_latest_scope_md", return_value=None):
+    fibo_md = tmp_path / "fibo_search_wig_latest.md"
+    fibo_md.write_text(
+        "# WYNIKI FIBO #1\n\n"
+        "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| AEP.US | long | reached_23_6_waiting_for_61_8 | p | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 62.5% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n",
+        encoding="utf-8",
+    )
+    def latest_md(kind: str, scope: str):
+        return fibo_md if kind == "fibo_search" else None
+    with mock.patch.object(mod, "_latest_scope_md", side_effect=latest_md):
         mod._build_html_report(["wig"], out)
     text = out.read_text(encoding="utf-8")
-    assert "Trójpolówki Fibo" in text
-    assert "Trójpolówki Ichimoku" in text
+    assert "ALLSEARCH REPORT" in text
+    assert "3P FIBO" in text
+    assert "3P ICHIMOKU" in text
+    assert "id='tab-allsearch' class='tab-panel active'" in text
+    assert "id='tab-troj-fibo' class='tab-panel'" in text
+    assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text
     assert "id='trojpolowki-ichimoku'" in text
+    assert "troj-name-actions" in text
+    assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text
