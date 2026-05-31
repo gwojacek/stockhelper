@@ -1424,16 +1424,33 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         else:
             cloud_thickness = "normal"
 
-        if len(df) >= 2:
-            prev = df.iloc[-2]
-            prev_delta = float(prev["tenkan"] - prev["kijun"])
-            cur_delta = float(c["tenkan"] - c["kijun"])
+        def _tk_cross_at(pos: int) -> str | None:
+            if pos <= 0 or pos >= len(df):
+                return None
+            prev_delta = float(df["tenkan"].iloc[pos - 1] - df["kijun"].iloc[pos - 1])
+            cur_delta = float(df["tenkan"].iloc[pos] - df["kijun"].iloc[pos])
             if prev_delta <= 0 < cur_delta:
-                tk_cross = "bullish TK cross"
-            elif prev_delta >= 0 > cur_delta:
-                tk_cross = "bearish TK cross"
-            else:
-                tk_cross = "none"
+                return "bullish TK cross"
+            if prev_delta >= 0 > cur_delta:
+                return "bearish TK cross"
+            return None
+
+        def _recent_tk_cross_before_cloud_entry(lookback: int = 22) -> str | None:
+            intersects_cloud = (df["High"] >= df["cloud_bottom"]) & (df["Low"] <= df["cloud_top"])
+            if not bool(intersects_cloud.iloc[-1]):
+                return None
+            entry_pos = len(df) - 1
+            while entry_pos > 0 and bool(intersects_cloud.iloc[entry_pos - 1]):
+                entry_pos -= 1
+            start_pos = max(1, entry_pos - lookback)
+            for pos in range(entry_pos, start_pos - 1, -1):
+                cross = _tk_cross_at(pos)
+                if cross:
+                    return cross
+            return None
+
+        if len(df) >= 2:
+            tk_cross = _tk_cross_at(len(df) - 1) or _recent_tk_cross_before_cloud_entry() or "none"
         else:
             tk_cross = "-"
 
