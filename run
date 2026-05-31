@@ -1117,17 +1117,20 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         "| " + " | ".join(headers) + " |",
         "|---|---|---|---|",
     ]
+    columns = [[], [], [], []]
     for row, info in prepared_rows:
-        cells = ["", "", "", ""]
         b = bucket((row, info))
         if b == "cloud":
-            cells[2] = item_text(row, info, detailed=True)
+            columns[2].append(item_text(row, info, detailed=True))
         elif b == "short_retest":
-            cells[3] = item_text(row, info, detailed=True)
+            columns[3].append(item_text(row, info, detailed=True))
         elif b == "strong":
-            cells[0] = item_text(row, info, detailed=False)
+            columns[0].append(item_text(row, info, detailed=False))
         else:
-            cells[1] = item_text(row, info, detailed=False)
+            columns[1].append(item_text(row, info, detailed=False))
+    max_rows = max([len(col) for col in columns] + [1])
+    for idx in range(max_rows):
+        cells = [columns[col_idx][idx] if idx < len(columns[col_idx]) else "" for col_idx in range(4)]
         lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in cells) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -1379,59 +1382,115 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return rendered.replace("</strong>", controls + "</strong>", 1)
         return controls + rendered
 
-    def _trojpolowki_html_section(md_path: Path, section_id: str, fallback_title: str) -> str:
+    def _read_troj_md_table(md_path: Path, fallback_title: str) -> dict[str, object]:
+        parsed: dict[str, object] = {"title": fallback_title, "updated": "", "legend": [], "headers": [], "rows": []}
         if not md_path.exists():
-            return ""
+            return parsed
         md_lines = md_path.read_text(encoding="utf-8").splitlines()
-        title = fallback_title
-        updated = ""
-        legend: list[str] = []
         table_idx: int | None = None
         for idx, line in enumerate(md_lines):
             stripped = line.strip()
             if stripped.startswith("# "):
-                title = stripped.lstrip("# ").strip()
+                parsed["title"] = stripped.lstrip("# ").strip()
             elif stripped.startswith("Updated from allsearch:"):
-                updated = stripped
+                parsed["updated"] = stripped
             elif stripped.startswith("- "):
-                legend.append(stripped[2:])
+                parsed["legend"].append(stripped[2:])
             elif stripped.startswith("|") and idx + 1 < len(md_lines) and md_lines[idx + 1].strip().startswith("|"):
                 table_idx = idx
                 break
         if table_idx is None:
-            return ""
+            return parsed
         headers = _split_md_row(md_lines[table_idx])
-        body_rows: list[list[str]] = []
+        rows_out: list[list[str]] = []
         idx = table_idx + 2
         while idx < len(md_lines) and md_lines[idx].strip().startswith("|"):
             cells = _split_md_row(md_lines[idx])
             if len(cells) == len(headers) and any(cells):
-                body_rows.append(cells)
+                rows_out.append(cells)
             idx += 1
+        parsed["headers"] = headers
+        parsed["rows"] = rows_out
+        return parsed
+
+    def _top_choice_table_html(title: str, items: list[tuple[str, str]], limit: int | None = None) -> str:
+        picked = items if limit is None else items[:limit]
+        if not picked:
+            return ""
+        html_rows = "".join(f"<tr><td>{html.escape(source)}</td><td>{_troj_cell_to_html(cell)}</td></tr>" for source, cell in picked if str(cell).strip())
+        if not html_rows:
+            return ""
+        return f"<div class='top-choice'><h3>{html.escape(title)}</h3><table class='troj-table'><thead><tr><th>Source</th><th>Instrument</th></tr></thead><tbody>{html_rows}</tbody></table></div>"
+
+    def _troj_top_choices(parsed: dict[str, object], preferred_cols: list[int], limit: int | None = None) -> list[tuple[str, str]]:
+        headers = parsed.get("headers", [])
+        rows_in = parsed.get("rows", [])
+        items: list[tuple[str, str]] = []
+        if not isinstance(headers, list) or not isinstance(rows_in, list):
+            return items
+        for col_idx in preferred_cols:
+            if col_idx >= len(headers):
+                continue
+            for row in rows_in:
+                if isinstance(row, list) and col_idx < len(row) and str(row[col_idx]).strip():
+                    items.append((str(headers[col_idx]), str(row[col_idx])))
+                    if limit is not None and len(items) >= limit:
+                        return items
+        return items
+
+    def _trojpolowki_html_section(parsed: dict[str, object], section_id: str, top_choice_cols: list[int] | None = None) -> str:
+        headers = parsed.get("headers", [])
+        body_rows = parsed.get("rows", [])
+        if not headers or not body_rows:
+            return ""
+        legend = parsed.get("legend", [])
         legend_html = ""
-        if legend:
-            legend_html = "<div class='legend troj-legend'><ul>" + "".join(f"<li>{_md_inline_to_html(item)}</li>" for item in legend) + "</ul></div>"
+        if isinstance(legend, list) and legend:
+            legend_html = "<div class='legend troj-legend'><ul>" + "".join(f"<li>{_md_inline_to_html(str(item))}</li>" for item in legend) + "</ul></div>"
         table_html = "<div style='overflow:auto'><table class='troj-table'><thead><tr>"
-        table_html += "".join(f"<th>{_md_inline_to_html(h)}</th>" for h in headers)
+        table_html += "".join(f"<th>{_md_inline_to_html(str(h))}</th>" for h in headers)
         table_html += "</tr></thead><tbody>"
         for row in body_rows:
-            table_html += "<tr>" + "".join(f"<td>{_troj_cell_to_html(cell)}</td>" for cell in row) + "</tr>"
+            table_html += "<tr>" + "".join(f"<td>{_troj_cell_to_html(str(cell))}</td>" for cell in row) + "</tr>"
         table_html += "</tbody></table></div>"
+        top_html = _top_choice_table_html("Top choices", _troj_top_choices(parsed, top_choice_cols or [])) if top_choice_cols else ""
         return (
             f"<section class='market troj-section' id='{section_id}'>"
-            f"<h2>{html.escape(title)}</h2>"
-            f"<p class='muted'>{html.escape(updated)}</p>"
-            f"{legend_html}{table_html}</section>"
+            f"<h2>{html.escape(str(parsed.get('title') or 'Trójpolówki'))}</h2>"
+            f"<p class='muted'>{html.escape(str(parsed.get('updated') or ''))}</p>"
+            f"{legend_html}{table_html}{top_html}</section>"
         )
 
+    troj_fibo_parsed = _read_troj_md_table(troj_fibo_path, "Trójpolówki — Fibo")
+    troj_ichi_parsed = _read_troj_md_table(troj_ichi_path, "Trójpolówki — Ichimoku")
+
+    def _allsearch_top_choices(limit_per_group: int = 2) -> str:
+        groups = [
+            ("Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
+            ("Ichimoku continuation", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "position"]),
+            ("Fibo waiting", [r for r in rows if r.scanner == "FIBO" and r.category == "waiting"]),
+            ("Fibo valid", [r for r in rows if r.scanner == "FIBO" and r.category == "valid"]),
+        ]
+        html_rows = ""
+        for label, group_rows in groups:
+            for r in group_rows[:limit_per_group]:
+                cmd = html.escape(_chart_command_for_row(r))
+                stooq = r.chart_url or _stooq_chart_url(r.ticker)
+                stooq_btn = f"<a class='btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
+                html_rows += f"<tr><td>{html.escape(label)}</td><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd)}</td></tr>"
+        if not html_rows:
+            return ""
+        return f"<section class='market top-choice'><h2>Top choices</h2><table class='data'><thead><tr><th>Source</th><th>Instrument</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{html_rows}</tbody></table></section>"
+
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}.troj-hero{background:linear-gradient(135deg,#312e81,#0f766e);color:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:0;padding-left:20px}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}.troj-hero{background:linear-gradient(135deg,#312e81,#0f766e);color:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:0;padding-left:20px}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<div class='troj-hero'><h2>⭐ Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button></div></div>")
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(f"<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
+    html_parts.append(_allsearch_top_choices())
     html_parts.append(_liquidity_legend_html())
     html_parts.append("<div style='display:flex;gap:10px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin:10px 0 14px'>"
                       "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status'>"
@@ -1491,7 +1550,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd)}</td><td>{html.escape(r.metrics.get('latest_data',''))}</td><td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_path, "trojpolowki-fibo", "Trójpolówki — Fibo") + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_path, "trojpolowki-ichimoku", "Trójpolówki — Ichimoku") + "</div>")
+    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div>")
     html_parts.append("<script>function showReportTab(name){document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));const el=document.getElementById('tab-'+name);if(el)el.classList.add('active');}function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});setButtonText(btn,'Opened');}catch(e){setButtonText(btn,'Failed');}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner');const scanBtns=[document.getElementById('flt-all'),document.getElementById('flt-ichi'),document.getElementById('flt-fibo')].filter(Boolean);function markActive(){scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;const okS=!sc.value||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();sc.value=b.dataset.scanner||'';markActive();f();});q.oninput=f;m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 

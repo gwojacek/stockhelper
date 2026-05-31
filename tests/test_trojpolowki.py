@@ -86,7 +86,11 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
-    assert text.index("**🇩🇪 HFG.DE") < text.index("**🇺🇸 MSFT.US") < text.index("**🇵🇱 CRI")
+    lines = text.splitlines()
+    data_rows = [line for line in lines if line.startswith("| ") and not line.startswith("|---")][1:]
+    assert "**🇩🇪 HFG.DE" in data_rows[0]
+    assert "**🇺🇸 MSFT.US" in data_rows[0]
+    assert "**🇵🇱 CRI" in data_rows[0]
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
@@ -96,6 +100,14 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     mod.TROJPOLLOWKI_DIR = tmp_path / "Trojpolowki"
     out = tmp_path / "chart_program" / "data" / "all_insturments_search" / "allsearch" / "allsearch_latest_all.html"
     out.parent.mkdir(parents=True)
+    ichi_md = tmp_path / "search_wig_latest.md"
+    ichi_md.write_text(
+        "# WYNIKI 2 ICHIMOKU\n\n"
+        "| Ticker | Poprzednia | Latest Retest status | Data wybicia | Mies. od wybicia | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| CRI | below | retest_breakout | 2026-01-01 | 2.0 | 1 | 1000 | 2026-05-30 | retest_breakout | Touched the cloud | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n",
+        encoding="utf-8",
+    )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
     fibo_md.write_text(
         "# WYNIKI FIBO #1\n\n"
@@ -105,7 +117,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         encoding="utf-8",
     )
     def latest_md(kind: str, scope: str):
-        return fibo_md if kind == "fibo_search" else None
+        return fibo_md if kind == "fibo_search" else ichi_md
     with mock.patch.object(mod, "_latest_scope_md", side_effect=latest_md):
         mod._build_html_report(["wig"], out)
     text = out.read_text(encoding="utf-8")
