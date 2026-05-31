@@ -43,6 +43,11 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"near61_raw": "62.5", "ratio_raw": "1.5", "incline_days": "46"}, chart_url="https://stooq.pl/aep",
         ),
         mod.ScannerRow(
+            market="DAX", scanner="FIBO", category="waiting", ticker="EARLY.DE", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2026-04-15", "incline": "2026-04-15->2026-05-20"},
+            metrics={"near61_raw": "10.0", "ratio_raw": "2.4", "incline_days": "35"}, chart_url="https://stooq.pl/early",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="valid", ticker="TPE", status="valid_reversal",
             direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-04-20"},
             metrics={"ratio_raw": "3.2", "incline_days": "28"}, chart_url="https://stooq.pl/tpe",
@@ -53,6 +58,7 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
     assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
+    assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15)**" in text
     assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text
     assert "[📈 chart]" not in text
@@ -84,7 +90,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
-            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Over Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/rwe",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/rwe",
         ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
@@ -121,7 +127,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| Ticker | Poprzednia | Latest Retest status | Data wybicia | Mies. od wybicia | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| CRI | below | breakout_confirmed | 2026-05-29 | 0.1 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 1 | 1000 | 2026-05-30 | - | Touched Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n",
         encoding="utf-8",
     )
