@@ -91,7 +91,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
-            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Over Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "previous_side": "below"}, chart_url="https://stooq.pl/rwe",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "previous_side": "below"}, chart_url="https://stooq.pl/rwe",
         ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
@@ -129,7 +129,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| Ticker | Poprzednia | Latest Retest status | Data wybicia | Mies. od wybicia | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| CRI | below | breakout_confirmed | 2026-05-29 | 0.1 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 1 | 1000 | 2026-05-30 | - | Touched Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n",
         encoding="utf-8",
     )

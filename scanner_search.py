@@ -1560,9 +1560,23 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
     if touched_cloud:
         return "Touched the cloud"
 
+    touched_kijun = low <= kijun <= high
+    if touched_kijun:
+        return "Touched Kijun-sen"
     if side == "above":
-        return "Over Kijun-sen" if high >= kijun else "Under Kijun-sen"
-    return "Under Kijun-sen" if low <= kijun else "Over Kijun-sen"
+        return "Over Kijun-sen" if low > kijun else "Under Kijun-sen"
+    return "Under Kijun-sen" if high < kijun else "Over Kijun-sen"
+
+
+def _flip_still_actionable(row: FlipResult) -> bool:
+    if row.months_since_flip >= 4.0:
+        return True
+    status = (row.ichimoku_status or "").lower()
+    if row.current_side == "above" and "over kijun" in status:
+        return False
+    if row.current_side == "below" and "under kijun" in status:
+        return False
+    return True
 
 
 def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
@@ -1989,6 +2003,7 @@ def run_ichimoku_search(target: str) -> int:
                     flip = _ensure_flip_ticker(flip, ticker)
                     flip_results.append(flip)
 
+    flip_results = [f for f in flip_results if _flip_still_actionable(f)]
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
     ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("search", group_name)

@@ -1020,9 +1020,6 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
     def _short_retest_trigger(row: ScannerRow, info: dict[str, str]) -> bool:
         touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
         touches_kijun = info["kijun"] == "touched"
-        previous_side = str(row.metrics.get("previous_side", "")).lower()
-        if not touches_kijun and previous_side:
-            touches_kijun = ("below" in previous_side and info["kijun"] == "over") or ("above" in previous_side and info["kijun"] == "under")
         return touches_cloud or touches_kijun
 
     def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:

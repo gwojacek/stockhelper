@@ -62,3 +62,37 @@ def test_risk_is_missing_without_valid_breakout_or_retest_pattern():
     metrics = scanner_search._ichimoku_extra_metrics(df, "above", "Touched the cloud")
 
     assert metrics["ichimoku_risk"] == "-"
+
+
+def test_ichimoku_status_distinguishes_over_from_kijun_touch():
+    df_over = pd.DataFrame([
+        {
+            "Open": 105.0, "High": 106.0, "Low": 104.0, "Close": 105.0,
+            "kijun": 100.0, "cloud_top": 102.0, "cloud_bottom": 99.0,
+        }
+    ])
+    df_touch = pd.DataFrame([
+        {
+            "Open": 105.0, "High": 106.0, "Low": 99.5, "Close": 105.0,
+            "kijun": 100.0, "cloud_top": 98.0, "cloud_bottom": 96.0,
+        }
+    ])
+
+    assert scanner_search._ichimoku_status(df_over, "above") == "Over Kijun-sen"
+    assert scanner_search._ichimoku_status(df_touch, "above") == "Touched Kijun-sen"
+
+
+def test_young_flip_over_kijun_is_not_actionable_until_retest():
+    row = scanner_search.FlipResult(
+        ticker="RWE.DE", previous_side="below", current_side="above",
+        flip_date="2026-05-29", months_since_flip=0.1, close=100.0,
+        ichimoku_status="Over Kijun-sen",
+    )
+    touched = scanner_search.FlipResult(
+        ticker="RWE.DE", previous_side="below", current_side="above",
+        flip_date="2026-05-29", months_since_flip=0.1, close=100.0,
+        ichimoku_status="Touched Kijun-sen",
+    )
+
+    assert not scanner_search._flip_still_actionable(row)
+    assert scanner_search._flip_still_actionable(touched)
