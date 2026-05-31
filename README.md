@@ -8,6 +8,7 @@ It helps you:
 - work with stocks, forex pairs, commodities, and CFD/index-like instruments;
 - download/cache daily market data from Stooq, Yahoo Finance, and Stooq web/table fallbacks;
 - scan market groups for Ichimoku cloud and Fibonacci setups;
+- generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists from the latest allsearch data;
 - open an interactive chart tool, select price levels, save/update config files, and export chart snapshots;
 - generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, and chart images.
 
@@ -27,7 +28,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Open chart with Ichimoku | `python run -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
 | Run Ichimoku scan | `python run -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
 | Run Fibonacci scan | `python run -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
-| Build combined report | `python run -allsearch all` | Runs both scanners and creates combined Markdown/HTML reports. |
+| Build combined report | `python run -allsearch all` | Runs both scanners and creates combined Markdown/HTML reports plus embedded 3P tabs. |
 | Reopen combined report | `python run --open-allsearch-report all` | Opens the latest existing HTML all-search report. |
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
@@ -49,10 +50,12 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - local CSV cache in `data/stocks/`, `data/forex/`, `data/commodities/`, and `data/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.
+- **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, Stooq/chart buttons in HTML, and PDF export from every report tab.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
 - **Interactive chart tool** with manual level selection, optional Ichimoku overlay, optional Fibonacci lines, saved sessions, generated configs, and chart snapshots.
 - **Reports and artifacts**:
   - Markdown scanner reports in `chart_program/data/search/ichimoku/` and `chart_program/data/search/fibo/`;
+  - Trójpolówki Markdown watchlists in `Trojpolowki/fibo.md` and `Trojpolowki/ichimoku.md`;
   - combined Markdown/HTML scanner reports in `chart_program/data/all_insturments_search/allsearch/`;
   - chart snapshots in `charts/`;
   - manual/session state in `data/sessions/`;
@@ -77,6 +80,7 @@ stockhelper/
 │   ├── forex/
 │   └── commodities/
 ├── chart_program/              # Interactive chart UI and config writer
+├── Trojpolowki/                # Generated compact 3P Fibo/Ichimoku watchlists
 ├── utilities/                  # Stooq/Yahoo/report/debug helpers
 ├── data/                       # Cached market data and chart sessions
 └── charts/                     # Generated chart snapshots
@@ -365,7 +369,10 @@ python run -allsearch all
 **Description:**
 
 - Runs Ichimoku and Fibonacci scanning and combines the outputs.
+- Regenerates compact Trójpolówki Markdown watchlists from the same allsearch run (no second instrument scan).
 - Builds a browser-friendly HTML report and a Markdown report.
+- Embeds three HTML tabs: `ALLSEARCH REPORT`, `3P FIBO`, and `3P ICHIMOKU`.
+- Adds top-choice sections, sortable/filterable tables, group Stooq-open buttons, StockHelper chart-open buttons, and a PDF export button that works from every tab.
 - Opens/serves the HTML report via the local report server when possible.
 
 **When to use it:**
@@ -376,8 +383,19 @@ python run -allsearch all
 
 - `chart_program/data/all_insturments_search/allsearch/allsearch_latest_<scope>.md`
 - `chart_program/data/all_insturments_search/allsearch/allsearch_latest_<scope>.html`
+- `Trojpolowki/fibo.md`
+- `Trojpolowki/ichimoku.md`
 
 > Note: the directory name is spelled `all_insturments_search` in the repository.
+
+**Trójpolówki details:**
+
+- `Trojpolowki/fibo.md` uses three compact columns: steep/early setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
+- `Trojpolowki/ichimoku.md` uses compact continuation/watch/cloud/retest columns and keeps risk/context details only where they are relevant.
+- The HTML report renders both 3P files as tabs, not as separate links, and keeps Stooq/chart controls next to instruments.
+- Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, and deeper Fibo pullbacks are prioritized.
+- WYNIKI 2 Ichimoku includes `Mies. respektu przed wybiciem`, showing how long the prior cloud side was respected before the breakout.
+
 
 **Common variants:**
 
@@ -635,6 +653,7 @@ Expected report folders:
 ```text
 chart_program/data/search/ichimoku/
 chart_program/data/search/fibo/
+Trojpolowki/
 ```
 
 ### Combined report does not open
@@ -650,6 +669,8 @@ Or open the HTML file directly from:
 ```text
 chart_program/data/all_insturments_search/allsearch/
 ```
+
+The combined HTML includes tabs for the allsearch report, 3P Fibo, and 3P Ichimoku. Use the `📄 Download PDF` button in the tab header to export the currently visible report view.
 
 ### Data history is too short
 

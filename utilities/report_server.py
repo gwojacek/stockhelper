@@ -38,6 +38,21 @@ def main() -> int:
             self.send_response(204)
             self.end_headers()
 
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            if parsed.path == "/run-command":
+                qs = parse_qs(parsed.query)
+                command = (qs.get("command", [""])[0] or "").strip()
+                if not command:
+                    self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
+                try:
+                    subprocess.Popen(command, shell=True, cwd=str(project_root))
+                    self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            super().do_GET()
+
         def do_POST(self):
             parsed = urlparse(self.path)
             if parsed.path == "/run-command":

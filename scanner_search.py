@@ -253,6 +253,14 @@ class ScanResult:
     ichimoku_status: str | None = None
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
+    ichimoku_risk: str | None = None
+    tk_cross: str | None = None
+    breakout_dynamic: str | None = None
+    cloud_thickness: str | None = None
+    chikou_confirmation: str | None = None
+    kumo_twist: str | None = None
+    tk_plus: str | None = None
+    tenkan_in_cloud: str | None = None
 
 
 @dataclass
@@ -269,8 +277,18 @@ class FlipResult:
     first_valid_retest_pattern_date: str = "-"
     retest_events: list[tuple[str, str, str]] | None = None  # (date, formation, depth)
     avg_turnover_10d_pln: float | None = None
+    ichimoku_status: str | None = None
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
+    ichimoku_risk: str | None = None
+    tk_cross: str | None = None
+    breakout_dynamic: str | None = None
+    cloud_thickness: str | None = None
+    chikou_confirmation: str | None = None
+    kumo_twist: str | None = None
+    tk_plus: str | None = None
+    tenkan_in_cloud: str | None = None
+    previous_respect_months: float | None = None
 
 
 @dataclass
@@ -831,6 +849,8 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     out["kijun"] = (high26 + low26) / 2
     span_a = ((out["tenkan"] + out["kijun"]) / 2).shift(26)
     span_b = ((out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2).shift(26)
+    out["span_a"] = span_a
+    out["span_b"] = span_b
     out["cloud_top"] = pd.concat([span_a, span_b], axis=1).max(axis=1)
     out["cloud_bottom"] = pd.concat([span_a, span_b], axis=1).min(axis=1)
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
@@ -1169,6 +1189,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                 result.latest_retest_date = "-"
                 result.latest_retest_pattern = "-"
             result.ichimoku_status = _ichimoku_status(enriched, result.side)
+            _apply_ichimoku_extra_metrics(result, _ichimoku_extra_metrics(enriched, result.side, result.ichimoku_status or ""))
             result.latest_candle_date = latest_candle_date
             result.expected_latest_session_date = expected_latest_session_date
             if instrument == "stock":
@@ -1187,6 +1208,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                 ), source_label
             flip.ticker = ticker
+            flip.ichimoku_status = _ichimoku_status(enriched, flip.current_side)
+            _apply_ichimoku_extra_metrics(flip, _ichimoku_extra_metrics(enriched, flip.current_side, flip.retest_status or ""))
             flip.latest_candle_date = latest_candle_date
             flip.expected_latest_session_date = expected_latest_session_date
             if instrument == "stock":
@@ -1361,6 +1384,157 @@ def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
             pass
 
 
+
+def _fmt_metric_or_dash(value: str | None) -> str:
+    text = str(value or "").strip()
+    return text if text else "-"
+
+
+def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "") -> dict[str, str]:
+    """Calculate compact Ichimoku fields once during the scanner run.
+
+    Trójpolówki and allsearch reports should only reuse these persisted values;
+    they must not rescan instruments later.
+    """
+    missing = {
+        "ichimoku_risk": "-",
+        "tk_cross": "-",
+        "breakout_dynamic": "-",
+        "cloud_thickness": "-",
+        "chikou_confirmation": "-",
+        "kumo_twist": "-",
+        "tk_plus": "-",
+        "tenkan_in_cloud": "-",
+    }
+    required = {"Close", "High", "Low", "Open", "tenkan", "kijun", "cloud_top", "cloud_bottom"}
+    if df is None or df.empty or not required.issubset(set(df.columns)):
+        return missing
+    try:
+        c = df.iloc[-1]
+        side_n = (side or "").strip().lower()
+        is_short = side_n == "below"
+        close = float(c["Close"])
+        cloud_top = float(c["cloud_top"])
+        cloud_bottom = float(c["cloud_bottom"])
+        thickness = max(cloud_top - cloud_bottom, 1e-9)
+        thickness_pct = thickness / max(abs(close), 1e-9)
+        if thickness_pct < 0.025:
+            cloud_thickness = "shallow"
+        elif thickness_pct > 0.06:
+            cloud_thickness = "thick"
+        else:
+            cloud_thickness = "normal"
+
+        def _tk_cross_at(pos: int) -> str | None:
+            if pos <= 0 or pos >= len(df):
+                return None
+            prev_delta = float(df["tenkan"].iloc[pos - 1] - df["kijun"].iloc[pos - 1])
+            cur_delta = float(df["tenkan"].iloc[pos] - df["kijun"].iloc[pos])
+            if prev_delta <= 0 < cur_delta:
+                return "bullish TK cross"
+            if prev_delta >= 0 > cur_delta:
+                return "bearish TK cross"
+            return None
+
+        def _recent_tk_cross_around_cloud_entry(lookback: int = 22) -> str | None:
+            intersects_cloud = (df["High"] >= df["cloud_bottom"]) & (df["Low"] <= df["cloud_top"])
+            if not bool(intersects_cloud.iloc[-1]):
+                return None
+            entry_pos = len(df) - 1
+            while entry_pos > 0 and bool(intersects_cloud.iloc[entry_pos - 1]):
+                entry_pos -= 1
+            start_pos = max(1, entry_pos - lookback)
+            for pos in range(len(df) - 1, start_pos - 1, -1):
+                cross = _tk_cross_at(pos)
+                if cross:
+                    return cross
+            return None
+
+        if len(df) >= 2:
+            tk_cross = _recent_tk_cross_around_cloud_entry() or _tk_cross_at(len(df) - 1) or "none"
+        else:
+            tk_cross = "-"
+
+        if "span_a" in df.columns and "span_b" in df.columns and pd.notna(c.get("span_a")) and pd.notna(c.get("span_b")):
+            diff = float(c["span_a"] - c["span_b"])
+            kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
+        else:
+            kumo_twist = "-"
+
+        tk_plus = "yes" if ((not is_short and float(c["tenkan"]) > float(c["kijun"])) or (is_short and float(c["tenkan"]) < float(c["kijun"]))) else "no"
+        tenkan = float(c["tenkan"])
+        tenkan_in_cloud = "yes" if cloud_bottom <= tenkan <= cloud_top else "no"
+
+        if len(df) > 26:
+            past_close = float(df["Close"].iloc[-27])
+            chikou_confirmation = "yes" if ((not is_short and close > past_close) or (is_short and close < past_close)) else "no"
+        else:
+            chikou_confirmation = "-"
+
+        recent = pd.to_numeric(df["Close"].tail(6), errors="coerce").dropna()
+        if len(recent) >= 2:
+            move = abs(float(recent.iloc[-1]) - float(recent.iloc[0]))
+            units = move / thickness
+            if units >= 2.0:
+                breakout_dynamic = "aggressive"
+            elif units >= 1.0:
+                breakout_dynamic = "high"
+            elif units >= 0.35:
+                breakout_dynamic = "mild"
+            else:
+                breakout_dynamic = "slow"
+        else:
+            breakout_dynamic = "-"
+
+        context = (context_status or "").lower()
+        risk_context = any(
+            token in context
+            for token in (
+                "breakout_confirmed",
+                "breakout confirmed",
+                "retest_breakout",
+                "retest breakout",
+                "retest_pattern",
+                "retest pattern",
+            )
+        )
+        risk_text = "-"
+        if risk_context:
+            risk = 0
+            if chikou_confirmation == "yes":
+                risk += 1
+            if (not is_short and kumo_twist == "green") or (is_short and kumo_twist == "red"):
+                risk += 1
+            correct_cloud_side = close > cloud_top if not is_short else close < cloud_bottom
+            if correct_cloud_side:
+                risk += 1
+            risk_text = f"{min(risk, 3)}%"
+
+        return {
+            "ichimoku_risk": risk_text,
+            "tk_cross": tk_cross,
+            "breakout_dynamic": breakout_dynamic,
+            "cloud_thickness": cloud_thickness,
+            "chikou_confirmation": chikou_confirmation,
+            "kumo_twist": kumo_twist,
+            "tk_plus": tk_plus,
+            "tenkan_in_cloud": tenkan_in_cloud,
+        }
+    except Exception:
+        return missing
+
+
+def _apply_ichimoku_extra_metrics(row: ScanResult | FlipResult, metrics: dict[str, str]) -> None:
+    row.ichimoku_risk = _fmt_metric_or_dash(metrics.get("ichimoku_risk"))
+    row.tk_cross = _fmt_metric_or_dash(metrics.get("tk_cross"))
+    row.breakout_dynamic = _fmt_metric_or_dash(metrics.get("breakout_dynamic"))
+    row.cloud_thickness = _fmt_metric_or_dash(metrics.get("cloud_thickness"))
+    row.chikou_confirmation = _fmt_metric_or_dash(metrics.get("chikou_confirmation"))
+    row.kumo_twist = _fmt_metric_or_dash(metrics.get("kumo_twist"))
+    row.tk_plus = _fmt_metric_or_dash(metrics.get("tk_plus"))
+    row.tenkan_in_cloud = _fmt_metric_or_dash(metrics.get("tenkan_in_cloud"))
+
+
 def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
     if df.empty:
         return "-"
@@ -1387,9 +1561,23 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
     if touched_cloud:
         return "Touched the cloud"
 
+    touched_kijun = low <= kijun <= high
+    if touched_kijun:
+        return "Touched Kijun-sen"
     if side == "above":
-        return "Over Kijun-sen" if close >= kijun else "Under Kijun-sen"
-    return "Under Kijun-sen" if close <= kijun else "Over Kijun-sen"
+        return "Over Kijun-sen" if low > kijun else "Under Kijun-sen"
+    return "Under Kijun-sen" if high < kijun else "Over Kijun-sen"
+
+
+def _flip_still_actionable(row: FlipResult) -> bool:
+    if row.months_since_flip >= 4.0:
+        return True
+    status = (row.ichimoku_status or "").lower()
+    if row.current_side == "above" and "over kijun" in status:
+        return False
+    if row.current_side == "below" and "under kijun" in status:
+        return False
+    return True
 
 
 def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
@@ -1466,7 +1654,7 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
         print("Brak wyników.")
         return []
     max_events = max((len(r.retest_events or []) for r in flip_results), default=0)
-    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Latest Retest status':<36} {'Retest count':<12} {'Avg10d PLN':>14}"
+    base_header = f"{'Ticker':<10} {'Było':<8} {'Jest':<8} {'Data wybicia':<12} {'Mies. od wybicia':<16} {'Mies. respektu':<14} {'Latest Retest status':<36} {'Retest count':<12} {'Avg10d PLN':>14}"
     event_headers = " ".join([f"{f'Retest #{i} (date pattern)':<34}" for i in range(1, max_events + 1)])
     print(f"{base_header} {event_headers} {'Link':<0}".rstrip())
     print("-" * 150)
@@ -1483,7 +1671,8 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
                 event_cells.append("-")
         event_cols = " ".join([f"{cell:<34}" for cell in event_cells])
         avg10_txt = f"{row.avg_turnover_10d_pln:,.0f}" if row.avg_turnover_10d_pln is not None else "-"
-        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {row.retest_status:<36} {row.valid_retests_count:<12} {avg10_txt:>14} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
+        prev_respect_txt = f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"
+        print(f"{row.ticker:<10} {row.previous_side:<8} {row.current_side:<8} {row.flip_date:<12} {row.months_since_flip:<16.1f} {prev_respect_txt:<14} {row.retest_status:<36} {row.valid_retests_count:<12} {avg10_txt:>14} {event_cols} {ANSI_CYAN}{link}{ANSI_RESET}".rstrip())
     return links
 
 
@@ -1506,6 +1695,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     flip_idx: int | None = None
     previous_side: str | None = None
     current_side: str | None = None
+    previous_respect_run = 0
 
     # Prefer latest valid flip below->above.
     for i in range(len(df) - 1, 0, -1):
@@ -1523,6 +1713,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
             flip_idx = i
             previous_side = "below"
             current_side = "above"
+            previous_respect_run = prev_run
             break
 
     # If not found, try latest valid flip above->below.
@@ -1542,6 +1733,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
                 flip_idx = i
                 previous_side = "above"
                 current_side = "below"
+                previous_respect_run = prev_run
                 break
 
     if flip_idx is None or previous_side is None or current_side is None:
@@ -1551,7 +1743,12 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - flip_ts).days + 1) / 30.44
 
+    previous_respect_start_idx = max(0, flip_idx - previous_respect_run)
+    previous_respect_start_ts = pd.to_datetime(df.iloc[previous_respect_start_idx]["Date"])
+    previous_respect_months = max(0.0, (flip_ts - previous_respect_start_ts).days / 30.44)
+
     flip = FlipResult("", previous_side, current_side, flip_ts.strftime("%Y-%m-%d"), round(months, 1), float(close.iloc[-1]))
+    flip.previous_respect_months = round(previous_respect_months, 1)
     (
         flip.retest_status,
         flip.retest_depth,
@@ -1816,17 +2013,18 @@ def run_ichimoku_search(target: str) -> int:
                     flip = _ensure_flip_ticker(flip, ticker)
                     flip_results.append(flip)
 
+    flip_results = [f for f in flip_results if _flip_still_actionable(f)]
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
     ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("search", group_name)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
     )
@@ -1842,11 +2040,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'),_stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Mies. respektu przed wybiciem","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Ichimoku status","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",

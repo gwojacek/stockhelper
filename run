@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal
 from urllib.request import urlopen
-from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
+from datetime import UTC, date, datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NoReturn
@@ -17,6 +18,20 @@ SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_search"
+
+TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
+
+TROJPOLLOWKI_RETEST_LABELS = {
+    "breakout_confirmed": "breakout confirmed",
+    "retest_breakout": "retest breakout",
+    "shallow_retest_pattern": "shallow retest",
+    "medium_retest_pattern": "medium retest",
+    "deep_retest_pattern": "deep retest",
+    "returned_to_cloud_waiting_for_pattern": "returned to cloud, waiting",
+    "no_breakout": "no breakout",
+    "unsuccessful_breakout": "unsuccessful breakout",
+}
+
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
 RED_DOT = "🔴"
@@ -628,6 +643,561 @@ def _serve_report_locally(path: Path) -> str | None:
                 return f"http://{host}:{port}/{report_url_path}"
     return None
 
+
+def _parse_markdown_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
+    out: dict[str, list[dict[str, str]]] = {}
+    if not md_path or not md_path.exists():
+        return out
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    last_heading = ""
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("#"):
+            last_heading = line.lstrip("#").strip()
+        if i + 2 < len(lines) and lines[i].strip().startswith("|") and lines[i + 1].strip().startswith("|"):
+            headers = [h.strip() for h in lines[i].strip().strip("|").split("|")]
+            separator = [sep.strip() for sep in lines[i + 1].strip().strip("|").split("|")]
+            if headers and separator and len(headers) == len(separator) and all(set(sep) <= {"-", ":"} and sep for sep in separator):
+                rows: list[dict[str, str]] = []
+                j = i + 2
+                while j < len(lines) and lines[j].strip().startswith("|"):
+                    vals = [v.strip() for v in lines[j].strip().strip("|").split("|")]
+                    if len(vals) == len(headers):
+                        row = {headers[k]: vals[k] for k in range(len(headers))}
+                        for link_key in ("Link", "Links"):
+                            link_cell = row.get(link_key, "")
+                            inline_match = re.match(r"^\[[^\]]+\]\(([^)]+)\)$", link_cell)
+                            if inline_match:
+                                row[link_key] = inline_match.group(1)
+                        rows.append(row)
+                    j += 1
+                out.setdefault(last_heading or "TABLE", []).extend(rows)
+                i = j
+                continue
+        i += 1
+    return out
+
+
+def _market_icon(scope: str, ticker: str = "") -> str:
+    scope_n = (scope or "").strip().lower()
+    ticker_u = (ticker or "").upper()
+    if ticker_u.endswith(".WA"):
+        return "🇵🇱"
+    if ticker_u.endswith(".DE"):
+        return "🇩🇪"
+    if ticker_u.endswith(".US"):
+        return "🇺🇸"
+    if scope_n == "wig":
+        return "🇵🇱"
+    if scope_n == "dax":
+        return "🇩🇪"
+    if scope_n in {"us100", "us"}:
+        return "🇺🇸"
+    if scope_n == "forex":
+        return "💱"
+    if scope_n == "commodities":
+        return "🛢️"
+    return "📊"
+
+
+
+def _market_order(scope: str, ticker: str = "") -> int:
+    icon = _market_icon(scope, ticker)
+    return {"🇵🇱": 0, "🇩🇪": 1, "🇺🇸": 2, "💱": 3, "🛢️": 4}.get(icon, 9)
+
+
+def _market_sort_key(row: ScannerRow) -> tuple[int, str]:
+    return (_market_order(row.market, row.ticker), str(row.ticker or ""))
+
+def _parse_float_text(value: str, default: float = 0.0) -> float:
+    txt = str(value or "").replace("%", "").replace("🟨", "").replace("🟢", "").replace("🟡", "").replace("🔴", "").strip()
+    txt = txt.replace(" ", "").replace(",", "")
+    try:
+        return float(txt)
+    except Exception:
+        return default
+
+
+def _ratio_value(row: dict[str, str]) -> float:
+    txt = str(row.get("Ratio(d)") or row.get("ratio_txt") or row.get("incline_decline_duration_ratio") or "")
+    m = re.search(r"\(([-+0-9.]+):1\)", txt)
+    if m:
+        return _parse_float_text(m.group(1), 0.0)
+    return _parse_float_text(txt, 0.0)
+
+
+def _incline_duration_days(row: dict[str, str]) -> int:
+    txt = str(row.get("Ratio(d)") or "")
+    m = re.match(r"\s*(\d+)\s*/", txt)
+    if m:
+        return int(m.group(1))
+    return int(_parse_float_text(str(row.get("incline_duration_days") or "0"), 0.0))
+
+
+def _extract_start_date(row: dict[str, str]) -> str:
+    incline = str(row.get("Incline") or row.get("incline") or "")
+    if "->" in incline:
+        return incline.split("->", 1)[0].strip() or "-"
+    return str(row.get("incline_start_date") or row.get("Start") or row.get("Data wybicia") or "-").strip() or "-"
+
+
+def _near61_pct(row: dict[str, str]) -> float:
+    near = str(row.get("Near61.8") or row.get("near61") or "")
+    if near and near != "-":
+        return _parse_float_text(near, -1.0)
+    return -1.0
+
+
+def _markdown_link(label: str, url: str | None) -> str:
+    txt = str(url or "").strip()
+    if not txt:
+        return "-"
+    return f"[{label}]({txt})"
+
+
+def _stockhelper_chart_url(command: str | None) -> str | None:
+    cmd = str(command or "").strip()
+    if not cmd:
+        return None
+    return f"http://127.0.0.1:8765/run-command?command={quote(cmd, safe='')}"
+
+
+def _links_for_troj(row: ScannerRow) -> str:
+    return _stooq_link_for_troj(row)
+
+
+def _stooq_link_for_troj(row: ScannerRow) -> str:
+    return _markdown_link("🔗 stooq", row.chart_url or (_stooq_chart_url(row.ticker) if row.ticker else ""))
+
+
+def _metric_from_row(row: dict[str, str], *names: str) -> str:
+    for name in names:
+        value = str(row.get(name, "")).strip()
+        if value:
+            return value
+    return "-"
+
+
+def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
+    rows: list[ScannerRow] = []
+    for scope in scopes:
+        market = scope.upper()
+        i_md = _latest_scope_md("search", scope)
+        f_md = _latest_scope_md("fibo_search", scope)
+        i_tables = _parse_markdown_tables(i_md) if i_md else {}
+        f_tables = _parse_markdown_tables(f_md) if f_md else {}
+        i_w2 = next((v for k, v in i_tables.items() if "WYNIKI 2" in k.upper()), [])
+        i_w1 = next((v for k, v in i_tables.items() if k.upper().strip() == "WYNIKI" or "WYNIKI 1" in k.upper()), [])
+        f_w2 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #2" in k.upper()), [])
+        f_w1 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #1" in k.upper()), [])
+        for r in i_w2:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(
+                market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
+                status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
+                metrics={
+                    "months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "retest_count": str(r.get("Retest count", "")),
+                    "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
+                    "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
+                    "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
+                    "raw_status": str(r.get("Latest Retest status", "")),
+                    "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")),
+                    "ichimoku_status": str(r.get("Ichimoku status", "")),
+                    "risk": _metric_from_row(r, "Risk"), "tk_cross": _metric_from_row(r, "TK cross"),
+                    "dynamic": _metric_from_row(r, "Dynamic"), "cloud": _metric_from_row(r, "Cloud"),
+                    "chikou": _metric_from_row(r, "Chikou"), "twist": _metric_from_row(r, "Twist"),
+                    "tk_plus": _metric_from_row(r, "TK plus"), "tenkan_in_cloud": _metric_from_row(r, "Tenkan in cloud"),
+                },
+                chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
+            ))
+        for r in i_w1:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(
+                market=market, scanner="ICHIMOKU", category="position", ticker=t,
+                status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))},
+                metrics={
+                    "candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")),
+                    "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")),
+                    "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
+                    "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
+                    "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
+                    "raw_status": str(r.get("Ichimoku status", "")),
+                    "risk": _metric_from_row(r, "Risk"), "tk_cross": _metric_from_row(r, "TK cross"),
+                    "dynamic": _metric_from_row(r, "Dynamic"), "cloud": _metric_from_row(r, "Cloud"),
+                    "chikou": _metric_from_row(r, "Chikou"), "twist": _metric_from_row(r, "Twist"),
+                    "tk_plus": _metric_from_row(r, "TK plus"), "tenkan_in_cloud": _metric_from_row(r, "Tenkan in cloud"),
+                },
+                chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
+            ))
+        for r in f_w2:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+        for r in f_w1:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")), pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
+    return rows
+
+
+def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
+    direction = "↘️" if str(row.direction).lower() == "short" else "↗️"
+    start = row.dates.get("start") or _extract_start_date({"Incline": row.dates.get("incline", "")})
+    parts = [f"{_market_icon(row.market, row.ticker)} {row.ticker} {direction} ({start})"]
+    if include_near:
+        near = _parse_float_text(str(row.metrics.get("near61_raw") or row.metrics.get("near61") or ""), -1.0)
+        if near >= 0:
+            parts.append(f"{near:.1f}%")
+    parts.append(_stooq_link_for_troj(row))
+    return "**" + " ".join(parts[:-1]) + "** " + parts[-1]
+
+
+def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
+    fibo = [r for r in rows if r.scanner == "FIBO"]
+    def _fibo_near(row: ScannerRow) -> float:
+        return _parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0)
+    def _fibo_steep(row: ScannerRow) -> bool:
+        return int(_parse_float_text(row.metrics.get("incline_days", "0"), 0)) >= 21 and _parse_float_text(row.metrics.get("ratio_raw", "0"), 0) >= 1.0
+    def _fibo_start(row: ScannerRow) -> str:
+        return str(row.dates.get("start") or "")
+    def _fibo_has_23_6_warning(row: ScannerRow) -> bool:
+        status = str(row.status or "").lower()
+        pattern = str(row.pattern or "").lower()
+        # Do not treat the scanner's generic 23.6 waiting status as bearish by itself;
+        # only explicit bearish/invalidated context should block the early steep column.
+        return "bearish" in status or "bearish" in pattern
+    col1 = [r for r in fibo if _fibo_steep(r) and "invalidated" not in r.status.lower() and not _fibo_has_23_6_warning(r) and (_fibo_near(r) < 0 or _fibo_near(r) < 15.0)]
+    col2 = [r for r in fibo if r.category == "waiting" and 15.0 <= _fibo_near(r) < 75.0]
+    col3 = [r for r in fibo if _fibo_near(r) >= 75.0]
+    col1.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("ratio_raw", "-1"), -1), _fibo_start(r), _market_sort_key(r)[1]))
+    col2.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))
+    col3.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "fibo.md"
+    max_len = max(len(col1), len(col2), len(col3), 1)
+    lines = ["# Trójpolówki — Fibo", "", f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}", "", "| 🚀 Steep incline / no major bearish signal | ⚠️ Bearish close around 23.6 | 🎯 Near 61.8 > 75% / deeper pullback |", "|---|---|---|"]
+    for idx in range(max_len):
+        cells = [
+            _fibo_item(col1[idx], include_near=False) if idx < len(col1) else "",
+            _fibo_item(col2[idx], include_near=True) if idx < len(col2) else "",
+            _fibo_item(col3[idx], include_near=True) if idx < len(col3) else "",
+        ]
+        lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _status_plain(value: str) -> str:
+    txt = re.sub(r"^[^A-Za-z0-9_]+\s*", "", str(value or "")).strip()
+    return txt or "-"
+
+
+def _is_missing(value: str | None) -> bool:
+    return str(value or "").strip() in {"", "-"}
+
+
+def _risk_value(value: str | None) -> int:
+    if _is_missing(value):
+        return -1
+    return int(_parse_float_text(str(value), -1.0))
+
+
+def _readable_breakout_note(status: str, ichimoku_status: str = "") -> str:
+    norm = _status_plain(status).lower().replace(" ", "_")
+    if "(" in norm:
+        norm = norm.split("(", 1)[0].strip()
+    if norm in TROJPOLLOWKI_RETEST_LABELS and norm != "no_breakout":
+        return TROJPOLLOWKI_RETEST_LABELS[norm]
+    text = _status_plain(ichimoku_status or status)
+    low = text.lower()
+    if "touch" in low and "cloud" in low:
+        return "touched cloud"
+    if "inside" in low and "cloud" in low:
+        return "inside cloud"
+    if "unsuccessful breakout" in low:
+        return "unsuccessful breakout"
+    return "-"
+
+
+def _cloud_side_label(row: ScannerRow) -> str:
+    text = f"{row.status} {row.metrics.get('ichimoku_status','')} {row.metrics.get('raw_status','')}".lower()
+    if "inside" in text and "cloud" in text:
+        return "🟡 inside cloud"
+    if "touch" in text and "cloud" in text:
+        return "☁️ touched cloud"
+    if "above" in text or "over kijun" in text:
+        return "🟢 above cloud"
+    if "below" in text or "under kijun" in text:
+        return "🔴 below cloud"
+    return "-"
+
+
+def _bias_label(row: ScannerRow, note: str) -> str:
+    if row.category == "retest_breakout" or note not in {"", "-"} and any(token in note for token in ("breakout", "retest", "returned")):
+        return "🔁 retest"
+    side = _cloud_side_label(row)
+    status = f"{row.status} {row.metrics.get('ichimoku_status','')}".lower()
+    if "below" in side or "under kijun" in status:
+        return "↘️ short"
+    if "above" in side or "over kijun" in status:
+        return "↗️ long"
+    if "inside" in side or "touched" in side:
+        return "👀 watch"
+    return "-"
+
+
+def _source_metric(row: ScannerRow, key: str) -> str:
+    value = str(row.metrics.get(key, "")).strip()
+    return value if value else "-"
+
+
+def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
+    candidates = [r for r in rows if r.scanner == "ICHIMOKU"]
+
+    def _kijun_label(raw: str) -> str:
+        low = str(raw or "").lower()
+        if "over kijun" in low:
+            return "over"
+        if "under kijun" in low:
+            return "under"
+        if "touched" in low and "kijun" in low:
+            return "touched"
+        return "-"
+
+    def _recent_ichimoku_date(value: str | None, max_days: int = 3) -> bool:
+        match = re.search(r"\d{4}-\d{2}-\d{2}", str(value or ""))
+        if not match:
+            return False
+        try:
+            d = datetime.strptime(match.group(0), "%Y-%m-%d").date()
+        except Exception:
+            return False
+        return 0 <= (timestamp.date() - d).days <= max_days
+
+    def prepared(row: ScannerRow) -> tuple[ScannerRow, dict[str, str]]:
+        raw_status = row.metrics.get("raw_status", row.status)
+        raw_kijun = _source_metric(row, "ichimoku_status")
+        kijun = _kijun_label(raw_kijun)
+        note = _readable_breakout_note(raw_status, raw_kijun)
+        info = {
+            "cloud_side": _cloud_side_label(row),
+            "kijun": kijun,
+            "note": note,
+            "risk": _source_metric(row, "risk"),
+            "tk_cross": _source_metric(row, "tk_cross"),
+            "dynamic": _source_metric(row, "dynamic"),
+            "cloud": _source_metric(row, "cloud"),
+            "chikou": _source_metric(row, "chikou"),
+            "twist": _source_metric(row, "twist"),
+            "tk_plus": _source_metric(row, "tk_plus"),
+            "tenkan_in_cloud": _source_metric(row, "tenkan_in_cloud"),
+        }
+        recent_breakout = note == "breakout confirmed" and _recent_ichimoku_date(row.dates.get("flip_date") or row.metrics.get("latest_date"))
+        if note == "breakout confirmed" and not recent_breakout and (("above" in info["cloud_side"] and kijun == "over") or ("below" in info["cloud_side"] and kijun == "under")):
+            info["note"] = "above cloud" if "above" in info["cloud_side"] else "below cloud"
+            info["bias"] = "↗️ long" if "above" in info["cloud_side"] else "↘️ short"
+        else:
+            info["bias"] = _bias_label(row, info["note"])
+        return row, info
+
+    prepared_rows = [prepared(r) for r in candidates]
+
+    def include(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        row, info = item
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        risk = _risk_value(info["risk"])
+        special = info["note"] != "-" or any(token in info["cloud_side"] for token in ("inside", "touched"))
+        tk_cross_signal = info["tk_cross"] not in {"-", "none"}
+        kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
+        return risk >= 1 or months >= 4.0 or special or kijun_or_tk
+
+    def is_short(info: dict[str, str]) -> bool:
+        return "short" in info["bias"] or "below" in info["cloud_side"] or "under" in info["kijun"]
+
+    def _is_fresh_retest_window(row: ScannerRow) -> bool:
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        return row.category == "retest_breakout" and months <= 4.0
+
+    def _short_retest_trigger(row: ScannerRow, info: dict[str, str]) -> bool:
+        touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
+        touches_kijun = info["kijun"] == "touched"
+        return touches_cloud or touches_kijun
+
+    def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        row, info = item
+        return _is_fresh_retest_window(row) and _short_retest_trigger(row, info)
+
+    def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        _row, info = item
+        return any(token in info["cloud_side"] for token in ("inside", "touched"))
+
+    def _has_current_cloud_context(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        row, info = item
+        if _is_fresh_retest_window(row):
+            return False
+        if _touches_cloud(item):
+            return True
+        return info["note"] not in {"-", "above cloud", "below cloud"} and ("retest" in info["note"] or "returned" in info["note"] or "unsuccessful" in info["note"])
+
+    def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
+        row, info = item
+        if _is_retest_under_4m(item):
+            return "short_retest"
+        if _is_fresh_retest_window(row):
+            return "skip"
+        if _has_current_cloud_context(item):
+            return "cloud"
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        if row.category == "position" and months < 4.0 and (("above" in info["cloud_side"] and info["kijun"] == "over") or ("below" in info["cloud_side"] and info["kijun"] == "under")):
+            return "skip"
+        tk_cross_signal = info["tk_cross"] not in {"-", "none"}
+        has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
+        if info["kijun"] == "touched" or tk_cross_signal or (has_kijun_or_tk and months < 4.0):
+            return "watch"
+        if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")):
+            return "strong"
+        if has_kijun_or_tk:
+            return "watch"
+        return "skip"
+
+    def _risk_icon(risk: str) -> str:
+        value = _risk_value(risk)
+        if value >= 3:
+            return "🟢"
+        if value == 2:
+            return "🟡"
+        if value == 1:
+            return "🔵"
+        if value == 0:
+            return "⚪"
+        return "⚪"
+
+    def _risk_text(risk: str) -> str:
+        return risk if not _is_missing(risk) else "-"
+
+    def _chikou_text(info: dict[str, str]) -> str:
+        value = info["chikou"].lower()
+        if value == "yes":
+            return "✅ Chikou under" if is_short(info) else "✅ Chikou over"
+        if value == "no":
+            return "❌ Chikou"
+        return "Chikou -"
+
+    def _twist_text(info: dict[str, str]) -> str:
+        value = info["twist"].lower()
+        if value == "green":
+            return "🟢 twist bullish"
+        if value == "red":
+            return "🔴 twist bearish"
+        if value == "neutral":
+            return "⚪ twist neutral"
+        return "twist -"
+
+    def _tk_cross_factor(info: dict[str, str]) -> str | None:
+        tk_cross = info["tk_cross"].lower()
+        if "bullish" in tk_cross:
+            return "🟢 TK cross bullish"
+        if "bearish" in tk_cross:
+            return "🔴 TK cross bearish"
+        if tk_cross == "none":
+            return "⚪ TK cross no cross yet"
+        return None
+
+    def _factor_lists(info: dict[str, str]) -> tuple[list[str], list[str]]:
+        plus: list[str] = []
+        minus: list[str] = []
+        short = is_short(info)
+        tk = _tk_cross_factor(info)
+        if tk:
+            is_bullish = "bullish" in tk
+            (minus if (short and is_bullish) or ((not short) and not is_bullish) else plus).append(tk)
+        tenkan = info["tenkan_in_cloud"].lower()
+        if tenkan == "yes":
+            plus.append("Tenkan_in_☁: yes")
+        elif tenkan == "no":
+            minus.append("Tenkan_in_☁: no")
+        dynamic = info["dynamic"].lower()
+        if dynamic in {"aggressive", "high", "mild"}:
+            plus.append(f"dyn {dynamic}")
+        elif dynamic in {"slow", "very slow"}:
+            minus.append(f"dyn {dynamic}")
+        cloud = info["cloud"].lower()
+        if cloud in {"thick", "normal"}:
+            plus.append(f"cloud {cloud}")
+        elif cloud == "shallow":
+            minus.append("cloud shallow")
+        return plus, minus
+
+    def item_text(row: ScannerRow, info: dict[str, str], detailed: bool) -> str:
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
+        note = info["note"] if info["note"] != "-" else "-"
+        if note != "-" and any(token in note.lower() for token in ("breakout", "retest", "pattern")):
+            note_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or row.dates.get("start_date") or "").strip()
+            if note_date and note_date != "-":
+                note = f"{note} ({note_date})"
+        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**"]
+        if detailed:
+            plus, minus = _factor_lists(info)
+            lines.append(f"{_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}")
+            if plus:
+                lines.append("➕ " + " · ".join(plus))
+            if minus:
+                lines.append("➖ " + " · ".join(minus))
+        elif info["kijun"] != "-":
+            lines.append(f"Kijun: {info['kijun']}")
+        lines.append(f"🏷️ {note} · {_links_for_troj(row)}")
+        return "<br>".join(lines)
+
+    prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
+    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), _market_sort_key(item[0])[0], 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "ichimoku.md"
+    headers = ["🟢 Strong / continuation", "👀 Kijun / watch", "☁️ Cloud / retest / breakout", "🔁 Retest <4m"]
+    lines = [
+        "# Trójpolówki — Ichimoku",
+        "",
+        f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "Legenda:",
+        "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column.",
+        "- 🔁 Retest <4m contains fresh valid breakouts from the last 4 months only when the newest candle touches Kijun, touches the cloud, or is inside the cloud; we wait for patterns in the last two cases.",
+        "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
+        "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
+        "- TK cross values are shown as bullish / bearish / no cross yet; Tenkan_in_☁ shows whether Tenkan is inside the cloud.",
+        "- ➕/➖ lines are qualitative context only (TK cross, Tenkan_in_☁, dynamic, cloud thickness).",
+        "- 🏷️ is the current scanner status/note; missing source fields stay as `-`.",
+        "",
+        "| " + " | ".join(headers) + " |",
+        "|---|---|---|---|",
+    ]
+    columns = [[], [], [], []]
+    for row, info in prepared_rows:
+        b = bucket((row, info))
+        if b == "cloud":
+            columns[2].append(item_text(row, info, detailed=True))
+        elif b == "short_retest":
+            columns[3].append(item_text(row, info, detailed=True))
+        elif b == "strong":
+            columns[0].append(item_text(row, info, detailed=False))
+        else:
+            columns[1].append(item_text(row, info, detailed=False))
+    max_rows = max([len(col) for col in columns] + [1])
+    for idx in range(max_rows):
+        cells = [columns[col_idx][idx] if idx < len(columns[col_idx]) else "" for col_idx in range(4)]
+        lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in cells) + " |")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_trojpolowki_reports(scopes: list[str], timestamp: datetime | None = None) -> tuple[Path, Path]:
+    ts = timestamp or datetime.now()
+    rows = _read_allsearch_rows(scopes)
+    fibo_path = _write_trojpolowki_fibo(rows, TROJPOLLOWKI_DIR, ts)
+    ichimoku_path = _write_trojpolowki_ichimoku(rows, TROJPOLLOWKI_DIR, ts)
+    return fibo_path, ichimoku_path
+
+
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
         out: dict[str, list[dict[str, str]]] = {}
@@ -679,7 +1249,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
                 status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
-                metrics={"months": str(r.get("Mies. od wybicia", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", ""))},
+                metrics={"months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", "")), "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
         for r in i_w1:
@@ -687,7 +1257,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="position", ticker=t,
                 status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))},
-                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", ""))},
+                metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "raw_status": str(r.get("Pozycja", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
             ))
         for r in f_w2:
@@ -695,8 +1265,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal",
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
-                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
-                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", ""))}, chart_url=str(r.get("Link", "")),
+                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)},
+                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="HIGH"
             ))
         for r in f_w1:
@@ -704,8 +1274,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")),
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
-                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", ""))},
-                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", ""))}, chart_url=str(r.get("Link", "")),
+                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)},
+                metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
 
@@ -828,15 +1398,316 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             "title='Open stockhelper chart' aria-label='Open stockhelper chart'>Open</button>"
         )
 
+    troj_timestamp = datetime.now()
+    troj_fibo_path = _write_trojpolowki_fibo(rows, TROJPOLLOWKI_DIR, troj_timestamp)
+    troj_ichi_path = _write_trojpolowki_ichimoku(rows, TROJPOLLOWKI_DIR, troj_timestamp)
+    troj_row_by_ticker = {r.ticker: r for r in rows if r.ticker}
+    troj_ichi_row_by_ticker = {r.ticker: r for r in rows if r.ticker and r.scanner == "ICHIMOKU"}
+    troj_fibo_row_by_ticker = {r.ticker: r for r in rows if r.ticker and r.scanner == "FIBO"}
+
+    def _md_inline_to_html(text: str) -> str:
+        rendered = html.escape(str(text or ""))
+        rendered = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", rendered)
+        rendered = re.sub(
+            r"\[([^\]]+)\]\(([^)]+)\)",
+            lambda m: f"<a class='btn' href='{html.escape(m.group(2), quote=True)}' target='_blank'>{html.escape(m.group(1))}</a>",
+            rendered,
+        )
+        return rendered.replace("&lt;br&gt;", "<br>")
+
+    def _split_md_row(line: str) -> list[str]:
+        return [cell.strip().replace("\\|", "|") for cell in line.strip().strip("|").split("|")]
+
+    def _troj_cell_to_html(cell: str, section_id: str = "") -> str:
+        raw = str(cell or "")
+        stooq_match = re.search(r"\[🔗 stooq\]\(([^)]+)\)", raw)
+        stooq_url = stooq_match.group(1) if stooq_match else ""
+        without_stooq = re.sub(r"\s*·?\s*\[🔗 stooq\]\([^)]+\)", "", raw).strip()
+        rendered = _md_inline_to_html(without_stooq)
+        ticker_match = re.search(r"\*\*[^A-Za-z0-9]*(?:[^\s]+\s+)?([A-Z0-9][A-Z0-9.]{0,15})(?=\s)", raw)
+        if not ticker_match:
+            return rendered
+        ticker = ticker_match.group(1)
+        if "ichimoku" in section_id:
+            row = troj_ichi_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
+        elif "fibo" in section_id:
+            row = troj_fibo_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
+        else:
+            row = troj_row_by_ticker.get(ticker)
+        cmd = html.escape(_chart_command_for_row(row)) if row else html.escape(f"python run -c {ticker}")
+        stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))
+        stooq_btn = f"<a class='btn troj-name-btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
+        chart_btn = _stockhelper_chart_button(cmd) if cmd else ""
+        controls = f" <span class='troj-name-actions'>{stooq_btn}{chart_btn}</span>"
+        if "</strong>" in rendered:
+            return rendered.replace("</strong>", controls + "</strong>", 1)
+        return controls + rendered
+
+    def _read_troj_md_table(md_path: Path, fallback_title: str) -> dict[str, object]:
+        parsed: dict[str, object] = {"title": fallback_title, "updated": "", "legend": [], "headers": [], "rows": []}
+        if not md_path.exists():
+            return parsed
+        md_lines = md_path.read_text(encoding="utf-8").splitlines()
+        table_idx: int | None = None
+        for idx, line in enumerate(md_lines):
+            stripped = line.strip()
+            if stripped.startswith("# "):
+                parsed["title"] = stripped.lstrip("# ").strip()
+            elif stripped.startswith("Updated from allsearch:"):
+                parsed["updated"] = stripped
+            elif stripped.startswith("- "):
+                parsed["legend"].append(stripped[2:])
+            elif stripped.startswith("|") and idx + 1 < len(md_lines) and md_lines[idx + 1].strip().startswith("|"):
+                table_idx = idx
+                break
+        if table_idx is None:
+            return parsed
+        headers = _split_md_row(md_lines[table_idx])
+        rows_out: list[list[str]] = []
+        idx = table_idx + 2
+        while idx < len(md_lines) and md_lines[idx].strip().startswith("|"):
+            cells = _split_md_row(md_lines[idx])
+            if len(cells) == len(headers) and any(cells):
+                rows_out.append(cells)
+            idx += 1
+        parsed["headers"] = headers
+        parsed["rows"] = rows_out
+        return parsed
+
+    def _date_from_text(value: str) -> date | None:
+        match = re.search(r"\d{4}-\d{2}-\d{2}", str(value or ""))
+        if not match:
+            return None
+        try:
+            return datetime.strptime(match.group(0), "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    def _is_recent_choice_date(value: str | None, reference: str | None = None, max_days: int = 3) -> bool:
+        d = _date_from_text(value or "")
+        if d is None:
+            return False
+        ref = _date_from_text(reference or "") or datetime.now().date()
+        return 0 <= (ref - d).days <= max_days
+
+    def _top_choice_rank(cell: str, source: str = "") -> tuple[int, int, float, str]:
+        text = f"{source} {cell}"
+        low = text.lower()
+        pct_values = [float(v) for v in re.findall(r"(\d+(?:\.\d+)?)%", low)]
+        pct_value = max(pct_values) if pct_values else None
+        if "pattern" in low and not re.search(r"pattern\s*[:=]?\s*-", low):
+            return (0, 0, 0.0, text)
+        if "61.8" in low and any(token in low for token in ("reached", "touched", "valid")):
+            return (1, 0, 0.0, text)
+        if pct_value is not None and pct_value >= 75.0:
+            return (2, 0, -pct_value, text)
+        d = _date_from_text(text)
+        today = datetime.now().date()
+        if d is not None:
+            days = (today - d).days
+            return (3 if 0 <= days <= 3 else 4, -d.toordinal(), 999.0, text)
+        months_match = re.search(r"\((\d+(?:\.\d+)?)m\)", text)
+        months = float(months_match.group(1)) if months_match else 999.0
+        return (5, 0, months, text)
+
+    def _fibo_top_choice_reason(cell: str, source: str = "") -> str | None:
+        text = f"{source} {cell}".lower()
+        pct_match = re.search(r"(\d+(?:\.\d+)?)%", cell)
+        pattern_match = re.search(r"pattern\s*[:=]?\s*([^·<|]+)", cell, re.IGNORECASE)
+        if pattern_match and pattern_match.group(1).strip().lower() not in {"", "-", "none"}:
+            return f"Fibo pattern: {pattern_match.group(1).strip()}"
+        if "61.8" in text and any(token in text for token in ("reached", "touched", "valid")):
+            return "61.8 reached"
+        if pct_match and float(pct_match.group(1)) >= 75.0:
+            return f"near 61.8: {float(pct_match.group(1)):.1f}%"
+        return None
+
+    def _ichimoku_top_choice_reason(cell: str, source: str = "") -> str | None:
+        text = str(cell or "").lower()
+        d = _date_from_text(cell)
+        date_suffix = f" ({d.isoformat()})" if d is not None else ""
+        if "breakout" in text:
+            if d is None or _is_recent_choice_date(cell):
+                return f"breakout / recent breakout{date_suffix}"
+            return None
+        if "retest" in text or "pattern" in text:
+            if d is not None and not _is_recent_choice_date(cell) and "inside cloud" not in text and "touched cloud" not in text:
+                return None
+            pattern_match = re.search(r"(?:🏷️|pattern[:=]?|retest pattern[:=]?)\s*([^·<|]+)", cell, re.IGNORECASE)
+            pattern = pattern_match.group(1).strip() if pattern_match else "retest pattern"
+            pattern = re.sub(r"\s*\(\d{4}-\d{2}-\d{2}\)\s*$", "", pattern)
+            return f"pattern/retest: {pattern}{date_suffix}"
+        if "inside cloud" in text or "inside the cloud" in text:
+            return "candle deep/inside cloud"
+        return None
+
+    def _top_choice_reason(cell: str, source: str = "") -> str | None:
+        text = f"{source} {cell}"
+        fibo_reason = _fibo_top_choice_reason(cell, source)
+        if fibo_reason:
+            return fibo_reason
+        ichi_reason = _ichimoku_top_choice_reason(cell, source)
+        if ichi_reason:
+            return ichi_reason
+        d = _date_from_text(text)
+        today = datetime.now().date()
+        if d is not None:
+            days = (today - d).days
+            if 0 <= days <= 3:
+                return f"pattern/breakout in last 3 days ({d.isoformat()})"
+        return None
+
+    def _top_choice_table_html(title: str, items: list[tuple[str, str, str]], section_id: str = "", limit: int | None = None) -> str:
+        picked = sorted(items, key=lambda item: _top_choice_rank(item[1], item[0]))
+        picked = picked if limit is None else picked[:limit]
+        if not picked:
+            return ""
+        html_rows = "".join(f"<tr title='{html.escape(reason, quote=True)}'><td>{_troj_cell_to_html(cell, section_id)}</td></tr>" for _source, cell, reason in picked if str(cell).strip())
+        if not html_rows:
+            return ""
+        open_btn = " <button class='iconbtn' title='Open stooq links from top choices' onclick=\"_openLinks(_tableLinks(this.closest('.top-choice').querySelector('table')))\">🔗</button>"
+        return f"<div class='top-choice'><h3>{html.escape(title)}{open_btn}</h3><table class='troj-table top-choice-compact sortable'><thead><tr><th>Instrument</th></tr></thead><tbody>{html_rows}</tbody></table></div>"
+
+    def _troj_top_choices(parsed: dict[str, object], preferred_cols: list[int], limit: int | None = None) -> list[tuple[str, str, str]]:
+        headers = parsed.get("headers", [])
+        rows_in = parsed.get("rows", [])
+        items: list[tuple[str, str, str]] = []
+        if not isinstance(headers, list) or not isinstance(rows_in, list):
+            return items
+        for col_idx in preferred_cols:
+            if col_idx >= len(headers):
+                continue
+            source = str(headers[col_idx])
+            for row in rows_in:
+                if isinstance(row, list) and col_idx < len(row) and str(row[col_idx]).strip():
+                    cell = str(row[col_idx])
+                    reason = _top_choice_reason(cell, source)
+                    if not reason:
+                        continue
+                    items.append((source, cell, reason))
+                    if limit is not None and len(items) >= limit:
+                        return items
+        return items
+
+    def _trojpolowki_html_section(parsed: dict[str, object], section_id: str, top_choice_cols: list[int] | None = None) -> str:
+        headers = parsed.get("headers", [])
+        body_rows = parsed.get("rows", [])
+        if not headers or not body_rows:
+            return ""
+        legend = parsed.get("legend", [])
+        legend_html = ""
+        if isinstance(legend, list) and legend:
+            legend_items = "".join(f"<li>{_md_inline_to_html(str(item))}</li>" for item in legend)
+            if "ichimoku" in section_id:
+                legend_html = f"<details class='legend troj-legend'><summary><b>Legenda</b> (kliknij, aby rozwinąć)</summary><ul>{legend_items}</ul></details>"
+            else:
+                legend_html = f"<div class='legend troj-legend'><ul>{legend_items}</ul></div>"
+        table_html = "<div style='overflow:auto'><table class='troj-table sortable'><thead><tr>"
+        group_cols = set(top_choice_cols or [])
+        for idx, h in enumerate(headers):
+            open_btn = ""
+            if idx in group_cols:
+                open_btn = f" <button class='iconbtn' title='Open stooq links from this column' onclick=\"openTrojColumnStooqLinks(this,{idx})\">🔗</button>"
+            table_html += f"<th>{_md_inline_to_html(str(h))}{open_btn}</th>"
+        table_html += "</tr></thead><tbody>"
+        for row in body_rows:
+            table_html += "<tr>" + "".join(f"<td>{_troj_cell_to_html(str(cell), section_id)}</td>" for cell in row) + "</tr>"
+        table_html += "</tbody></table></div>"
+        top_html = _top_choice_table_html("Top choices", _troj_top_choices(parsed, top_choice_cols or []), section_id) if top_choice_cols else ""
+        return (
+            f"<section class='market troj-section' id='{section_id}'>"
+            f"<h2>{html.escape(str(parsed.get('title') or 'Trójpolówki'))}</h2>"
+            f"<p class='muted'>{html.escape(str(parsed.get('updated') or ''))}</p>"
+            f"{legend_html}{table_html}{top_html}</section>"
+        )
+
+    troj_fibo_parsed = _read_troj_md_table(troj_fibo_path, "Trójpolówki — Fibo")
+    troj_ichi_parsed = _read_troj_md_table(troj_ichi_path, "Trójpolówki — Ichimoku")
+
+    def _row_top_choice_info(row: ScannerRow) -> tuple[tuple[int, int, float, str], str] | None:
+        status_text = " ".join(str(v) for v in [row.status, row.pattern, row.metrics.get("latest_retest_pattern", ""), row.metrics.get("latest_retest_date", ""), row.metrics.get("ichimoku_status", ""), row.dates.get("touch_61", ""), row.dates.get("flip_date", ""), row.dates.get("start_date", ""), row.metrics.get("near61", ""), row.metrics.get("latest_date", ""), row.ticker])
+        if row.scanner == "FIBO":
+            if row.category == "valid":
+                return None
+            pattern = str(row.pattern or "").strip()
+            if pattern and pattern.lower() not in {"-", "none"}:
+                return ((0, 0, 0.0, row.ticker), f"Fibo pattern: {pattern}")
+            if row.dates.get("touch_61") and row.dates.get("touch_61") != "-":
+                touch_date = row.dates.get("touch_61", "")
+                return (_top_choice_rank(f"61.8 reached {touch_date}", row.category), f"61.8 reached ({touch_date})")
+            near = _parse_float_text(str(row.metrics.get("near61") or row.metrics.get("near61_raw") or ""), -1.0)
+            if near >= 75.0:
+                return (_top_choice_rank(f"{near}% {status_text}", row.category), f"near 61.8: {near:.1f}%")
+            return None
+        text_low = status_text.lower()
+        recent_date = _date_from_text(status_text)
+        latest_date = row.metrics.get("latest_date") or row.metrics.get("expected_date") or ""
+        if "breakout" in text_low:
+            d = _date_from_text(row.dates.get("flip_date", "") or status_text)
+            if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date):
+                return None
+            suffix = f" ({d.isoformat()})" if d else ""
+            return (_top_choice_rank(status_text, row.category), f"breakout / recent breakout{suffix}")
+        if "pattern" in text_low and not re.search(r"pattern\s*[:=]?\s*-", text_low):
+            pattern = row.metrics.get("latest_retest_pattern") or row.status or "retest pattern"
+            d = _date_from_text(row.metrics.get("latest_retest_date", ""))
+            cloud_context = any(token in text_low for token in ("inside cloud", "inside the cloud", "touched cloud", "touched the cloud", "unsuccessful breakout"))
+            if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date) and not cloud_context:
+                return None
+            suffix = f" ({d.isoformat()})" if d else ""
+            return (_top_choice_rank(status_text, row.category), f"pattern/retest: {pattern}{suffix}")
+        if "returned_to_cloud_waiting_for_pattern" in text_low or "returned to cloud" in text_low:
+            d = _date_from_text(row.dates.get("flip_date", "") or row.metrics.get("latest_date", ""))
+            suffix = f" ({d.isoformat()})" if d else ""
+            return (_top_choice_rank(f"returned to cloud {status_text}", row.category), f"returned to cloud, waiting{suffix}")
+        if "inside cloud" in text_low or "inside the cloud" in text_low:
+            return (_top_choice_rank(status_text, row.category), "candle deep/inside cloud")
+        if recent_date is not None and _is_recent_choice_date(recent_date.isoformat(), latest_date) and row.category == "retest_breakout":
+            return (_top_choice_rank(status_text, row.category), f"recent retest/breakout date ({recent_date.isoformat()})")
+        return None
+
+    def _allsearch_top_choices(limit_per_group: int = 2) -> str:
+        groups = [
+            ("Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
+            ("Ichimoku continuation", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "position"]),
+            ("Fibo waiting", [r for r in rows if r.scanner == "FIBO" and r.category == "waiting"]),
+        ]
+
+        def _must_include_top_choice(rank: tuple[int, int, float, str], reason: str) -> bool:
+            low = reason.lower()
+            return rank[0] == 0 or "recent breakout" in low or "last 3 days" in low or "recent retest" in low or "returned to cloud" in low
+
+        html_rows = ""
+        for label, group_rows in groups:
+            qualified: list[tuple[tuple[int, int, float, str], ScannerRow, str]] = []
+            for r in group_rows:
+                info = _row_top_choice_info(r)
+                if info is not None:
+                    rank, reason = info
+                    qualified.append((rank, r, reason))
+            ranked = sorted(qualified, key=lambda item: item[0])
+            must = [item for item in ranked if _must_include_top_choice(item[0], item[2])]
+            selected = must + [item for item in ranked if item not in must][:max(0, limit_per_group - len(must))]
+            for _rank, r, reason in selected:
+                cmd = html.escape(_chart_command_for_row(r))
+                stooq = r.chart_url or _stooq_chart_url(r.ticker)
+                stooq_btn = f"<a class='btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
+                html_rows += f"<tr data-market='{html.escape(r.market)}' data-scanner='{html.escape(r.scanner)}'><td>{html.escape(label)}</td><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd)}</td></tr>"
+        if not html_rows:
+            return ""
+        open_btn = " <button class='iconbtn' title='Open stooq links from top choices' onclick=\"_openLinks(_tableLinks(this.closest('.top-choice').querySelector('table')))\">🔗</button>"
+        return f"<section class='market top-choice'><h2>Top choices{open_btn}</h2><table class='data'><thead><tr><th>Source</th><th>Instrument</th><th>Why top choice</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{html_rows}</tbody></table></section>"
+
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
-    html_parts.append("<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
-    html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
+    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn pdfbtn' type='button' onclick=\"downloadPdfReport()\">📄 Download PDF</button></div></div>")
+    html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
+    html_parts.append(_allsearch_top_choices())
     html_parts.append(_liquidity_legend_html())
     html_parts.append("<div style='display:flex;gap:10px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin:10px 0 14px'>"
-                      "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status'>"
+                      "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status'><button id='clear-q' class='btn' type='button'>Clear</button>"
                       "<label for='market'><b>Market</b></label><select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
                       "<div id='scanner-controls' style='display:inline-flex;gap:8px;align-items:center;margin-left:6px'>"
                       "<button id='flt-all' class='btn' data-scanner=''>📊 All</button>"
@@ -856,7 +1727,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if is_i1:
                 thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Ichimoku status</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_i2:
-                thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Retest count</th><th>Avg10d PLN</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Avg10d PLN</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f1:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Near61.8</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             else:
@@ -877,7 +1748,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd)}</td><td>{html.escape(r.metrics.get('latest_data',''))}</td><td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd)}</td><td>{html.escape(r.metrics.get('latest_data',''))}</td><td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f1:
                     s = str(r.status)
                     color_status = ("touched_61_8" in s) or ("valid_reversal" in s)
@@ -893,7 +1764,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd)}</td><td>{html.escape(r.metrics.get('latest_data',''))}</td><td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("<script>function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});setButtonText(btn,'Opened');}catch(e){setButtonText(btn,'Failed');}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner');const scanBtns=[document.getElementById('flt-all'),document.getElementById('flt-ichi'),document.getElementById('flt-fibo')].filter(Boolean);function markActive(){scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;const okS=!sc.value||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();sc.value=b.dataset.scanner||'';markActive();f();});q.oninput=f;m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
+    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div>")
+    html_parts.append("<script>function showReportTab(name){document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));const el=document.getElementById('tab-'+name);if(el)el.classList.add('active');}function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});setButtonText(btn,'Opened');}catch(e){setButtonText(btn,'Failed');}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openTrojColumnStooqLinks(btn,col){const table=btn?.closest('table');if(!table)return;const links=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[col]?.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);_openLinks(links);}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner'),clearQ=document.getElementById('clear-q');const scanBtns=[document.getElementById('flt-all'),document.getElementById('flt-ichi'),document.getElementById('flt-fibo')].filter(Boolean);function markActive(){scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;const okS=!sc.value||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data, table.sortable').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();sc.value=b.dataset.scanner||'';markActive();f();});q.oninput=f;if(clearQ)clearQ.onclick=()=>{q.value='';f();q.focus();};m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 
@@ -1008,8 +1880,12 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+    allsearch_timestamp = datetime.now()
+    troj_fibo, troj_ichimoku = _write_trojpolowki_reports(scopes, allsearch_timestamp)
     _build_html_report(scopes, report_html)
     print(f"\n[allsearch] combo report saved: {report}")
+    print(f"[allsearch] Trójpolówki Fibo saved: {troj_fibo}")
+    print(f"[allsearch] Trójpolówki Ichimoku saved: {troj_ichimoku}")
     print(f"[allsearch] html report saved: {report_html}")
     reopen_scope = "all" if [s.lower() for s in scopes] == ["wig", "dax", "us100", "forex", "commodities"] else ",".join(scopes).lower()
     print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
