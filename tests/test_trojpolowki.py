@@ -137,7 +137,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n",
+        "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n",
         encoding="utf-8",
     )
     def latest_md(kind: str, scope: str):
@@ -163,6 +164,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "openTrojColumnStooqLinks" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
+    assert "troj-table sortable" in text
+    assert "table.data, table.sortable" in text
+    assert "🇩🇪 EARLY.DE" in text
     assert "Ichimoku Active" not in text
     assert "id='clear-q'" in text
     assert "data-scanner='FIBO'" in text
