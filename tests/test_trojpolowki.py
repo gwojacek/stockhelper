@@ -67,6 +67,10 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             dates={"flip_date": "2026-01-01"}, metrics={"months": "8.9", "ichimoku_status": "Over Kijun-sen", "risk": "3%", "tk_cross": "none", "dynamic": "aggressive", "cloud": "thick", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "no", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/cri",
         ),
         mod.ScannerRow(
+            market="WIG", scanner="ICHIMOKU", category="position", ticker="ABC", status="🟢 above",
+            dates={"start_date": "2025-10-01"}, metrics={"months": "7.1", "ichimoku_status": "Over Kijun-sen", "risk": "-", "tk_cross": "-", "dynamic": "-", "cloud": "-", "chikou": "-", "twist": "-", "tk_plus": "-", "tenkan_in_cloud": "-", "raw_status": "above"}, chart_url="https://stooq.pl/abc",
+        ),
+        mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="HFG.DE", status="🔴 below",
             dates={"flip_date": "2026-02-01"}, metrics={"months": "5.1", "ichimoku_status": "Under Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "high", "cloud": "normal", "chikou": "yes", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "deep_retest_pattern"}, chart_url="https://stooq.pl/hfg",
         ),
@@ -91,6 +95,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇩🇪 HFG.DE" in data_rows[0]
     assert "**🇺🇸 MSFT.US" in data_rows[0]
     assert "**🇵🇱 CRI" in data_rows[0]
+    assert "**🇵🇱 ABC" in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
@@ -130,6 +135,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='trojpolowki-fibo'" in text
     assert "id='trojpolowki-ichimoku'" in text
     assert "troj-name-actions" in text
+    assert "Open all visible stooq chart links" not in text
+    assert "border:none" in text
+    assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
+    assert "Open stooq links from top choices" in text
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text

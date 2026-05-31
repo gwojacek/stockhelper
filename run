@@ -1001,9 +1001,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "short_retest"
         if _has_current_cloud_context(item):
             return "cloud"
-        risk = _risk_value(info["risk"])
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
-        if months >= 4.0 and risk >= 2 and any(token in info["cloud_side"] for token in ("above", "below")):
+        if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")):
             return "strong"
         if info["kijun"] in {"over", "under", "touched"} or info["tk_cross"] != "-" or info["tk_plus"] != "-":
             return "watch"
@@ -1413,14 +1412,36 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         parsed["rows"] = rows_out
         return parsed
 
+    def _date_from_text(value: str) -> datetime.date | None:
+        match = re.search(r"\d{4}-\d{2}-\d{2}", str(value or ""))
+        if not match:
+            return None
+        try:
+            return datetime.strptime(match.group(0), "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    def _top_choice_rank(cell: str, source: str = "") -> tuple[int, int, float, str]:
+        text = f"{source} {cell}"
+        d = _date_from_text(text)
+        today = datetime.now().date()
+        if d is not None:
+            days = (today - d).days
+            return (0 if 0 <= days <= 3 else 1, -d.toordinal(), 999.0, text)
+        months_match = re.search(r"\((\d+(?:\.\d+)?)m\)", text)
+        months = float(months_match.group(1)) if months_match else 999.0
+        return (2, 0, months, text)
+
     def _top_choice_table_html(title: str, items: list[tuple[str, str]], limit: int | None = None) -> str:
-        picked = items if limit is None else items[:limit]
+        picked = sorted(items, key=lambda item: _top_choice_rank(item[1], item[0]))
+        picked = picked if limit is None else picked[:limit]
         if not picked:
             return ""
         html_rows = "".join(f"<tr><td>{html.escape(source)}</td><td>{_troj_cell_to_html(cell)}</td></tr>" for source, cell in picked if str(cell).strip())
         if not html_rows:
             return ""
-        return f"<div class='top-choice'><h3>{html.escape(title)}</h3><table class='troj-table'><thead><tr><th>Source</th><th>Instrument</th></tr></thead><tbody>{html_rows}</tbody></table></div>"
+        open_btn = " <button class='iconbtn' title='Open stooq links from top choices' onclick=\"_openLinks(_tableLinks(this.closest('.top-choice').querySelector('table')))\">🔗</button>"
+        return f"<div class='top-choice'><h3>{html.escape(title)}{open_btn}</h3><table class='troj-table'><thead><tr><th>Source</th><th>Instrument</th></tr></thead><tbody>{html_rows}</tbody></table></div>"
 
     def _troj_top_choices(parsed: dict[str, object], preferred_cols: list[int], limit: int | None = None) -> list[tuple[str, str]]:
         headers = parsed.get("headers", [])
@@ -1446,7 +1467,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         legend = parsed.get("legend", [])
         legend_html = ""
         if isinstance(legend, list) and legend:
-            legend_html = "<div class='legend troj-legend'><ul>" + "".join(f"<li>{_md_inline_to_html(str(item))}</li>" for item in legend) + "</ul></div>"
+            legend_items = "".join(f"<li>{_md_inline_to_html(str(item))}</li>" for item in legend)
+            if "ichimoku" in section_id:
+                legend_html = f"<details class='legend troj-legend'><summary><b>Legenda</b> (kliknij, aby rozwinąć)</summary><ul>{legend_items}</ul></details>"
+            else:
+                legend_html = f"<div class='legend troj-legend'><ul>{legend_items}</ul></div>"
         table_html = "<div style='overflow:auto'><table class='troj-table'><thead><tr>"
         table_html += "".join(f"<th>{_md_inline_to_html(str(h))}</th>" for h in headers)
         table_html += "</tr></thead><tbody>"
@@ -1472,8 +1497,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             ("Fibo valid", [r for r in rows if r.scanner == "FIBO" and r.category == "valid"]),
         ]
         html_rows = ""
+        def _row_rank(row: ScannerRow) -> tuple[int, int, float, str]:
+            text = " ".join(str(v) for v in [row.metrics.get("latest_retest_date", ""), row.metrics.get("latest_retest_pattern", ""), row.dates.get("touch_61", ""), row.dates.get("flip_date", ""), row.dates.get("start_date", ""), row.ticker])
+            return _top_choice_rank(text, row.category)
         for label, group_rows in groups:
-            for r in group_rows[:limit_per_group]:
+            for r in sorted(group_rows, key=_row_rank)[:limit_per_group]:
                 cmd = html.escape(_chart_command_for_row(r))
                 stooq = r.chart_url or _stooq_chart_url(r.ticker)
                 stooq_btn = f"<a class='btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
@@ -1483,12 +1511,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         return f"<section class='market top-choice'><h2>Top choices</h2><table class='data'><thead><tr><th>Source</th><th>Instrument</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{html_rows}</tbody></table></section>"
 
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}.troj-hero{background:linear-gradient(135deg,#312e81,#0f766e);color:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:0;padding-left:20px}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}.troj-hero{background:linear-gradient(135deg,#312e81,#0f766e);color:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<div class='troj-hero'><h2>⭐ Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button></div></div>")
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
-    html_parts.append(f"<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
     html_parts.append(_allsearch_top_choices())
     html_parts.append(_liquidity_legend_html())
