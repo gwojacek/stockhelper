@@ -701,6 +701,15 @@ def _market_icon(scope: str, ticker: str = "") -> str:
     return "📊"
 
 
+
+def _market_order(scope: str, ticker: str = "") -> int:
+    icon = _market_icon(scope, ticker)
+    return {"🇵🇱": 0, "🇩🇪": 1, "🇺🇸": 2, "💱": 3, "🛢️": 4}.get(icon, 9)
+
+
+def _market_sort_key(row: ScannerRow) -> tuple[int, str]:
+    return (_market_order(row.market, row.ticker), str(row.ticker or ""))
+
 def _parse_float_text(value: str, default: float = 0.0) -> float:
     txt = str(value or "").replace("%", "").replace("🟨", "").replace("🟢", "").replace("🟡", "").replace("🔴", "").strip()
     txt = txt.replace(" ", "").replace(",", "")
@@ -859,9 +868,9 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
     col1 = [r for r in fibo if _fibo_steep(r) and "invalidated" not in r.status.lower() and not _fibo_has_23_6_warning(r) and (_fibo_near(r) < 0 or _fibo_near(r) < 15.0)]
     col2 = [r for r in fibo if r.category == "waiting" and 15.0 <= _fibo_near(r) < 75.0]
     col3 = [r for r in fibo if _fibo_near(r) >= 75.0]
-    col1.sort(key=lambda r: (_parse_float_text(r.metrics.get("ratio_raw", "-1"), -1), _fibo_start(r)), reverse=True)
-    col2.sort(key=lambda r: _parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), reverse=True)
-    col3.sort(key=lambda r: _parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), reverse=True)
+    col1.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("ratio_raw", "-1"), -1), _fibo_start(r), _market_sort_key(r)[1]))
+    col2.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))
+    col3.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "fibo.md"
     max_len = max(len(col1), len(col2), len(col3), 1)
@@ -1143,7 +1152,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return "<br>".join(lines)
 
     prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
-    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), _market_sort_key(item[0])[0], 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
