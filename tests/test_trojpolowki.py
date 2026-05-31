@@ -29,7 +29,7 @@ def load_run_module():
     return module
 
 
-def test_fibo_columns_and_links(tmp_path: Path):
+def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [
         mod.ScannerRow(
@@ -52,11 +52,11 @@ def test_fibo_columns_and_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
-    assert "🇵🇱 TPE ↗️" in text
-    assert "🇺🇸 AEP.US ↗️" in text and "near 61.8: 62.5%" in text
-    assert "🇵🇱 TRN ↗️" in text and "near 61.8: 93.2%" in text
-    assert "[📈 chart](http://127.0.0.1:8765/run-command?command=" in text
-    assert "[🔗 stooq](https://stooq.pl/trn)" in text
+    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
+    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
+    assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text
+    assert "[📈 chart]" not in text
+    assert "[🔗 stooq]" not in text
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
@@ -73,9 +73,9 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
-    assert "| 🇵🇱 CRI | 🟢 above cloud | 🔁 retest | Over Kijun-sen | 8.9 | 3% | none | aggressive | thick | yes | green | yes | no | breakout confirmed |" in text
-    assert "| 🇩🇪 HFG.DE | 🔴 below cloud | 🔁 retest | Under Kijun-sen | 5.1 | 3% | bearish TK cross | high | normal | yes | red | yes | yes | deep retest |" in text
-    assert "[📈 chart](http://127.0.0.1:8765/run-command?command=" in text
+    assert "|  | **🇵🇱 CRI 🔁 retest (8.9m, risk 3%)**<br>🟢 above cloud |  | Kijun: Over Kijun-sen<br>TK: none · dyn: aggressive · cloud: thick" in text
+    assert "|  | **🇩🇪 HFG.DE 🔁 retest (5.1m, risk 3%)**<br>🔴 below cloud |  | Kijun: Under Kijun-sen<br>TK: bearish TK cross · dyn: high · cloud: normal" in text
+    assert "Legenda: 🟢 above cloud" in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 

@@ -754,6 +754,10 @@ def _links_for_troj(row: ScannerRow) -> str:
     return f"{chart} {stooq}".strip()
 
 
+def _stooq_link_for_troj(row: ScannerRow) -> str:
+    return _markdown_link("🔗 stooq", row.chart_url or (_stooq_chart_url(row.ticker) if row.ticker else ""))
+
+
 def _metric_from_row(row: dict[str, str], *names: str) -> str:
     for name in names:
         value = str(row.get(name, "")).strip()
@@ -822,13 +826,13 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
 
 def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
     direction = "↘️" if str(row.direction).lower() == "short" else "↗️"
-    parts = [f"{_market_icon(row.market, row.ticker)} {row.ticker} {direction}", f"start: {row.dates.get('start') or _extract_start_date({'Incline': row.dates.get('incline','')})}"]
+    start = row.dates.get("start") or _extract_start_date({"Incline": row.dates.get("incline", "")})
+    parts = [f"{_market_icon(row.market, row.ticker)} {row.ticker} {direction} ({start})"]
     if include_near:
         near = _parse_float_text(str(row.metrics.get("near61_raw") or row.metrics.get("near61") or ""), -1.0)
         if near >= 0:
-            parts.append(f"near 61.8: {near:.1f}%")
-    parts.append(_links_for_troj(row))
-    return "<br>".join(parts)
+            parts.append(f"{near:.1f}%")
+    return "**" + " ".join(parts) + "**"
 
 
 def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
@@ -957,33 +961,54 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         special = info["note"] != "-" or any(token in info["cloud_side"] for token in ("inside", "touched"))
         return risk >= 1 or months >= 4.0 or special
 
+    def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
+        _row, info = item
+        if info["bias"] == "🔁 retest" or info["note"] != "-" or any(token in info["cloud_side"] for token in ("inside", "touched")):
+            return "retest"
+        if "short" in info["bias"] or "below" in info["cloud_side"]:
+            return "short"
+        return "long"
+
+    def item_text(row: ScannerRow, info: dict[str, str]) -> str:
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
+        return f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt}, risk {info['risk']})**<br>{info['cloud_side']}"
+
+    def info_text(row: ScannerRow, info: dict[str, str]) -> str:
+        note = f"note: {info['note']}" if info["note"] != "-" else "note: -"
+        return (
+            f"Kijun: {info['kijun']}<br>"
+            f"TK: {info['tk_cross']} · dyn: {info['dynamic']} · cloud: {info['cloud']}<br>"
+            f"Chikou: {info['chikou']} · twist: {info['twist']} · TK+: {info['tk_plus']} · Tenkan☁: {info['tenkan_in_cloud']}<br>"
+            f"{note} · {_stooq_link_for_troj(row)}"
+        )
+
     prepared_rows = [item for item in prepared_rows if include(item)]
     prepared_rows.sort(key=lambda item: (-max(_risk_value(item[1]["risk"]), 0), 0 if item[0].category == "retest_breakout" else 1, -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
-    headers = ["Instrument", "Cloud side", "Bias", "Kijun", "Months", "Risk", "TK cross", "Dynamic", "Cloud", "Chikou", "Twist", "TK plus", "Tenkan in cloud", "Breakout notes", "Links"]
-    lines = ["# Trójpolówki — Ichimoku", "", f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}", "", "| " + " | ".join(headers) + " |", "|---|---|---|---|---:|---:|---|---|---|---|---|---|---|---|---|"]
+    headers = ["↗️ Long / above cloud", "🔁 Retest / watch", "↘️ Short / below cloud", "ℹ️ Info"]
+    lines = [
+        "# Trójpolówki — Ichimoku",
+        "",
+        f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "Legenda: 🟢 above cloud · 🔴 below cloud · 🟡 inside cloud · ☁️ touched cloud · ↗️ long · ↘️ short · 🔁 retest · 👀 watch",
+        "",
+        "| " + " | ".join(headers) + " |",
+        "|---|---|---|---|",
+    ]
     for row, info in prepared_rows:
-        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
-        values = [
-            f"{_market_icon(row.market, row.ticker)} {row.ticker}",
-            info["cloud_side"],
-            info["bias"],
-            info["kijun"],
-            f"{months:.1f}" if str(row.metrics.get("months", "")).strip() else "-",
-            info["risk"],
-            info["tk_cross"],
-            info["dynamic"],
-            info["cloud"],
-            info["chikou"],
-            info["twist"],
-            info["tk_plus"],
-            info["tenkan_in_cloud"],
-            info["note"],
-            _links_for_troj(row),
-        ]
-        lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in values) + " |")
+        cells = ["", "", "", info_text(row, info)]
+        b = bucket((row, info))
+        if b == "retest":
+            cells[1] = item_text(row, info)
+        elif b == "short":
+            cells[2] = item_text(row, info)
+        else:
+            cells[0] = item_text(row, info)
+        lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in cells) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
