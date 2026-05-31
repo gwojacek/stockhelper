@@ -962,25 +962,30 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return risk >= 1 or months >= 4.0 or special
 
     def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
-        _row, info = item
-        if info["bias"] == "🔁 retest" or info["note"] != "-" or any(token in info["cloud_side"] for token in ("inside", "touched")):
-            return "retest"
-        if "short" in info["bias"] or "below" in info["cloud_side"]:
-            return "short"
-        return "long"
+        row, info = item
+        months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
+        has_breakout_or_retest = row.category == "retest_breakout" or info["note"] != "-"
+        if months < 4.0 and has_breakout_or_retest and touches_cloud:
+            return "short_retest"
+        if touches_cloud:
+            return "touch"
+        if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")):
+            return "cloud_respect"
+        if "kijun-sen" in info["kijun"].lower():
+            return "kijun"
+        return "kijun"
 
     def item_text(row: ScannerRow, info: dict[str, str]) -> str:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
-        return f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt}, risk {info['risk']})**<br>{info['cloud_side']}"
-
-    def info_text(row: ScannerRow, info: dict[str, str]) -> str:
-        note = f"note: {info['note']}" if info["note"] != "-" else "note: -"
+        note = info["note"] if info["note"] != "-" else "-"
         return (
-            f"Kijun: {info['kijun']}<br>"
+            f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt}, risk {info['risk']})**<br>"
+            f"{info['cloud_side']} · Kijun: {info['kijun']}<br>"
             f"TK: {info['tk_cross']} · dyn: {info['dynamic']} · cloud: {info['cloud']}<br>"
             f"Chikou: {info['chikou']} · twist: {info['twist']} · TK+: {info['tk_plus']} · Tenkan☁: {info['tenkan_in_cloud']}<br>"
-            f"{note} · {_stooq_link_for_troj(row)}"
+            f"note: {note} · {_stooq_link_for_troj(row)}"
         )
 
     prepared_rows = [item for item in prepared_rows if include(item)]
@@ -988,26 +993,28 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
-    headers = ["↗️ Long / above cloud", "🔁 Retest / watch", "↘️ Short / below cloud", "ℹ️ Info"]
+    headers = ["☁️ >4m above/below cloud", "↕️ Kijun side", "☁️ Cloud touch", "🔁 Short retest <4m"]
     lines = [
         "# Trójpolówki — Ichimoku",
         "",
         f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
-        "Legenda: 🟢 above cloud · 🔴 below cloud · 🟡 inside cloud · ☁️ touched cloud · ↗️ long · ↘️ short · 🔁 retest · 👀 watch",
+        "Legenda: 🟢 above cloud · 🔴 below cloud · 🟡 inside cloud · ☁️ touched cloud · ↗️ long · ↘️ short · 🔁 retest · 👀 watch · short retest = <4m after breakout and touching/entering cloud",
         "",
         "| " + " | ".join(headers) + " |",
         "|---|---|---|---|",
     ]
     for row, info in prepared_rows:
-        cells = ["", "", "", info_text(row, info)]
+        cells = ["", "", "", ""]
         b = bucket((row, info))
-        if b == "retest":
-            cells[1] = item_text(row, info)
-        elif b == "short":
+        if b == "short_retest":
+            cells[3] = item_text(row, info)
+        elif b == "touch":
             cells[2] = item_text(row, info)
-        else:
+        elif b == "cloud_respect":
             cells[0] = item_text(row, info)
+        else:
+            cells[1] = item_text(row, info)
         lines.append("| " + " | ".join(str(v).replace("|", "\\|") for v in cells) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

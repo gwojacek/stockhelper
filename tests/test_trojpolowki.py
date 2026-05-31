@@ -70,12 +70,19 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="HFG.DE", status="🔴 below",
             dates={"flip_date": "2026-02-01"}, metrics={"months": "5.1", "ichimoku_status": "Under Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "high", "cloud": "normal", "chikou": "yes", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "deep_retest_pattern"}, chart_url="https://stooq.pl/hfg",
         ),
+        mod.ScannerRow(
+            market="US100", scanner="ICHIMOKU", category="retest_breakout", ticker="MSFT.US", status="⚪ above",
+            dates={"flip_date": "2026-04-01"}, metrics={"months": "2.0", "ichimoku_status": "Touched the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "shallow", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "retest_breakout"}, chart_url="https://stooq.pl/msft",
+        ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
-    assert "|  | **🇵🇱 CRI 🔁 retest (8.9m, risk 3%)**<br>🟢 above cloud |  | Kijun: Over Kijun-sen<br>TK: none · dyn: aggressive · cloud: thick" in text
-    assert "|  | **🇩🇪 HFG.DE 🔁 retest (5.1m, risk 3%)**<br>🔴 below cloud |  | Kijun: Under Kijun-sen<br>TK: bearish TK cross · dyn: high · cloud: normal" in text
+    assert "| **🇵🇱 CRI 🔁 retest (8.9m, risk 3%)**<br>🟢 above cloud · Kijun: Over Kijun-sen" in text
+    assert "| **🇩🇪 HFG.DE 🔁 retest (5.1m, risk 3%)**<br>🔴 below cloud · Kijun: Under Kijun-sen" in text
     assert "Legenda: 🟢 above cloud" in text
+    assert "☁️ >4m above/below cloud" in text
+    assert "🔁 Short retest <4m" in text
+    assert "**🇺🇸 MSFT.US 🔁 retest (2.0m, risk 2%)**" in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 

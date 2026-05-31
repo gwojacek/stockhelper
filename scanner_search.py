@@ -1528,8 +1528,8 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
         return "Touched the cloud"
 
     if side == "above":
-        return "Over Kijun-sen" if close >= kijun else "Under Kijun-sen"
-    return "Under Kijun-sen" if close <= kijun else "Over Kijun-sen"
+        return "Over Kijun-sen" if high >= kijun else "Under Kijun-sen"
+    return "Under Kijun-sen" if low <= kijun else "Over Kijun-sen"
 
 
 def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: dict[tuple[str, str], str] | None = None) -> list[str]:
