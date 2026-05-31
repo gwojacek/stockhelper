@@ -973,7 +973,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         risk = _risk_value(info["risk"])
         special = info["note"] != "-" or any(token in info["cloud_side"] for token in ("inside", "touched"))
-        kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or info["tk_cross"] != "-" or info["tk_plus"] != "-"
+        tk_cross_signal = info["tk_cross"] not in {"-", "none"}
+        kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
         return risk >= 1 or months >= 4.0 or special or kijun_or_tk
 
     def is_short(info: dict[str, str]) -> bool:
@@ -1003,8 +1004,9 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         if _has_current_cloud_context(item):
             return "cloud"
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
-        has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or info["tk_cross"] != "-" or info["tk_plus"] != "-"
-        if has_kijun_or_tk and (months < 4.0 or info["tk_cross"] != "-" or info["kijun"] == "touched"):
+        tk_cross_signal = info["tk_cross"] not in {"-", "none"}
+        has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
+        if info["kijun"] == "touched" or tk_cross_signal or (has_kijun_or_tk and months < 4.0):
             return "watch"
         if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")):
             return "strong"
