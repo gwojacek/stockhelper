@@ -101,4 +101,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "Trójpolówki Fibo" in text
     assert "Trójpolówki Ichimoku" in text
-    assert "fibo.md" in text and "ichimoku.md" in text
+    assert "id='trojpolowki-fibo'" in text
+    assert "id='trojpolowki-ichimoku'" in text
+    assert "href='fibo.md'" not in text
+    assert "href='ichimoku.md'" not in text

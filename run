@@ -1341,15 +1341,82 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             "title='Open stockhelper chart' aria-label='Open stockhelper chart'>Open</button>"
         )
 
+    troj_timestamp = datetime.now()
+    troj_fibo_path = _write_trojpolowki_fibo(rows, TROJPOLLOWKI_DIR, troj_timestamp)
+    troj_ichi_path = _write_trojpolowki_ichimoku(rows, TROJPOLLOWKI_DIR, troj_timestamp)
+
+    def _md_inline_to_html(text: str) -> str:
+        rendered = html.escape(str(text or ""))
+        rendered = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", rendered)
+        rendered = re.sub(
+            r"\[([^\]]+)\]\(([^)]+)\)",
+            lambda m: f"<a class='btn' href='{html.escape(m.group(2), quote=True)}' target='_blank'>{html.escape(m.group(1))}</a>",
+            rendered,
+        )
+        return rendered.replace("&lt;br&gt;", "<br>")
+
+    def _split_md_row(line: str) -> list[str]:
+        return [cell.strip().replace("\\|", "|") for cell in line.strip().strip("|").split("|")]
+
+    def _trojpolowki_html_section(md_path: Path, section_id: str, fallback_title: str) -> str:
+        if not md_path.exists():
+            return ""
+        md_lines = md_path.read_text(encoding="utf-8").splitlines()
+        title = fallback_title
+        updated = ""
+        legend: list[str] = []
+        table_idx: int | None = None
+        for idx, line in enumerate(md_lines):
+            stripped = line.strip()
+            if stripped.startswith("# "):
+                title = stripped.lstrip("# ").strip()
+            elif stripped.startswith("Updated from allsearch:"):
+                updated = stripped
+            elif stripped.startswith("- "):
+                legend.append(stripped[2:])
+            elif stripped.startswith("|") and idx + 1 < len(md_lines) and md_lines[idx + 1].strip().startswith("|"):
+                table_idx = idx
+                break
+        if table_idx is None:
+            return ""
+        headers = _split_md_row(md_lines[table_idx])
+        body_rows: list[list[str]] = []
+        idx = table_idx + 2
+        while idx < len(md_lines) and md_lines[idx].strip().startswith("|"):
+            cells = _split_md_row(md_lines[idx])
+            if len(cells) == len(headers) and any(cells):
+                body_rows.append(cells)
+            idx += 1
+        legend_html = ""
+        if legend:
+            legend_html = "<div class='legend troj-legend'><ul>" + "".join(f"<li>{_md_inline_to_html(item)}</li>" for item in legend) + "</ul></div>"
+        table_html = "<div style='overflow:auto'><table class='troj-table'><thead><tr>"
+        table_html += "".join(f"<th>{_md_inline_to_html(h)}</th>" for h in headers)
+        table_html += "</tr></thead><tbody>"
+        for row in body_rows:
+            table_html += "<tr>" + "".join(f"<td>{_md_inline_to_html(cell)}</td>" for cell in row) + "</tr>"
+        table_html += "</tbody></table></div>"
+        return (
+            f"<section class='market troj-section' id='{section_id}'>"
+            f"<h2>{html.escape(title)}</h2>"
+            f"<p class='muted'>{html.escape(updated)}</p>"
+            f"{legend_html}{table_html}</section>"
+        )
+
+    troj_sections_html = (
+        _trojpolowki_html_section(troj_fibo_path, "trojpolowki-fibo", "Trójpolówki — Fibo")
+        + _trojpolowki_html_section(troj_ichi_path, "trojpolowki-ichimoku", "Trójpolówki — Ichimoku")
+    )
+
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell{text-align:center;white-space:nowrap}.troj-hero{background:linear-gradient(135deg,#312e81,#0f766e);color:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:0;padding-left:20px}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
-    troj_fibo_rel = html.escape(os.path.relpath(TROJPOLLOWKI_DIR / 'fibo.md', output_path.parent))
-    troj_ichi_rel = html.escape(os.path.relpath(TROJPOLLOWKI_DIR / 'ichimoku.md', output_path.parent))
-    html_parts.append(f"<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button> &nbsp; <a class='btn' href='{troj_fibo_rel}' target='_blank'>Trójpolówki Fibo</a> <a class='btn' href='{troj_ichi_rel}' target='_blank'>Trójpolówki Ichimoku</a></p>")
+    html_parts.append("<div class='troj-hero'><h2>⭐ Trójpolówki watchlists</h2><p>Compact Fibo and Ichimoku summaries are embedded below and regenerated with this allsearch report.</p><div class='troj-nav'><a class='btn troj-cta' href='#trojpolowki-fibo'>Trójpolówki Fibo</a><a class='btn troj-cta' href='#trojpolowki-ichimoku'>Trójpolówki Ichimoku</a></div></div>")
+    html_parts.append(f"<p class='muted'>🔗 <button class='iconbtn' title='Open all stooq links from all visible tables' onclick='openAllStooqLinks()'>🌐</button> Open all visible stooq chart links (may open many tabs). &nbsp; 📄 <button class='iconbtn' title='Download report as PDF (browser print dialog)' onclick='downloadPdfReport()'>⬇️ PDF</button></p>")
     html_parts.append("<div class='cards'>" + "".join([f"<div class='card'><b>{k.replace('_',' ').title()}</b><div>{v}</div></div>" for k,v in {**counts, 'markets_with_no_results': empty_markets}.items()]) + "</div>")
     html_parts.append(_liquidity_legend_html())
+    html_parts.append(troj_sections_html)
     html_parts.append("<div style='display:flex;gap:10px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin:10px 0 14px'>"
                       "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status'>"
                       "<label for='market'><b>Market</b></label><select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
