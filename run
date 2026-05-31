@@ -1429,52 +1429,90 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
     def _top_choice_rank(cell: str, source: str = "") -> tuple[int, int, float, str]:
         text = f"{source} {cell}"
+        low = text.lower()
+        pct_match = re.search(r"(\d+(?:\.\d+)?)%", low)
+        if "pattern" in low and not re.search(r"pattern\s*[:=]?\s*-", low):
+            return (0, 0, 0.0, text)
+        if "61.8" in low and any(token in low for token in ("reached", "touched", "valid")):
+            return (1, 0, 0.0, text)
+        if pct_match and float(pct_match.group(1)) >= 75.0:
+            return (2, 0, -float(pct_match.group(1)), text)
         d = _date_from_text(text)
         today = datetime.now().date()
         if d is not None:
             days = (today - d).days
-            return (0 if 0 <= days <= 3 else 1, -d.toordinal(), 999.0, text)
+            return (3 if 0 <= days <= 3 else 4, -d.toordinal(), 999.0, text)
         months_match = re.search(r"\((\d+(?:\.\d+)?)m\)", text)
         months = float(months_match.group(1)) if months_match else 999.0
-        return (2, 0, months, text)
+        return (5, 0, months, text)
 
-    def _top_choice_reason(cell: str, source: str = "") -> str:
+    def _fibo_top_choice_reason(cell: str, source: str = "") -> str | None:
+        text = f"{source} {cell}".lower()
+        pct_match = re.search(r"(\d+(?:\.\d+)?)%", text)
+        if pct_match and float(pct_match.group(1)) >= 75.0:
+            return f"near 61.8: {float(pct_match.group(1)):.1f}%"
+        if "61.8" in text and any(token in text for token in ("reached", "touched", "valid")):
+            return "61.8 reached"
+        if "pattern" in text and not re.search(r"pattern\s*[:=]?\s*-", text):
+            return "Fibo pattern"
+        return None
+
+    def _ichimoku_top_choice_reason(cell: str, source: str = "") -> str | None:
+        text = f"{source} {cell}".lower()
+        if "breakout" in text:
+            return "breakout / recent breakout"
+        if "retest" in text or "pattern" in text:
+            pattern_match = re.search(r"(?:🏷️|pattern[:=]?|retest pattern[:=]?)\s*([^·<|]+)", cell, re.IGNORECASE)
+            pattern = pattern_match.group(1).strip() if pattern_match else "retest pattern"
+            return f"pattern/retest: {pattern}"
+        if "inside cloud" in text or "inside the cloud" in text:
+            return "candle deep/inside cloud"
+        return None
+
+    def _top_choice_reason(cell: str, source: str = "") -> str | None:
         text = f"{source} {cell}"
+        fibo_reason = _fibo_top_choice_reason(cell, source)
+        if fibo_reason:
+            return fibo_reason
+        ichi_reason = _ichimoku_top_choice_reason(cell, source)
+        if ichi_reason:
+            return ichi_reason
         d = _date_from_text(text)
         today = datetime.now().date()
         if d is not None:
             days = (today - d).days
             if 0 <= days <= 3:
                 return f"pattern/breakout in last 3 days ({d.isoformat()})"
-            return f"closest recent date ({d.isoformat()})"
-        months_match = re.search(r"\((\d+(?:\.\d+)?)m\)", text)
-        if months_match:
-            return f"closest by months ({months_match.group(1)}m)"
-        return "selected by watchlist priority"
+        return None
 
-    def _top_choice_table_html(title: str, items: list[tuple[str, str]], limit: int | None = None) -> str:
+    def _top_choice_table_html(title: str, items: list[tuple[str, str, str]], limit: int | None = None) -> str:
         picked = sorted(items, key=lambda item: _top_choice_rank(item[1], item[0]))
         picked = picked if limit is None else picked[:limit]
         if not picked:
             return ""
-        html_rows = "".join(f"<tr><td>{html.escape(source)}</td><td>{_troj_cell_to_html(cell)}</td><td>{html.escape(_top_choice_reason(cell, source))}</td></tr>" for source, cell in picked if str(cell).strip())
+        html_rows = "".join(f"<tr><td>{html.escape(source)}</td><td>{_troj_cell_to_html(cell)}</td><td>{html.escape(reason)}</td></tr>" for source, cell, reason in picked if str(cell).strip())
         if not html_rows:
             return ""
         open_btn = " <button class='iconbtn' title='Open stooq links from top choices' onclick=\"_openLinks(_tableLinks(this.closest('.top-choice').querySelector('table')))\">🔗</button>"
         return f"<div class='top-choice'><h3>{html.escape(title)}{open_btn}</h3><table class='troj-table'><thead><tr><th>Source</th><th>Instrument</th><th>Why top choice</th></tr></thead><tbody>{html_rows}</tbody></table></div>"
 
-    def _troj_top_choices(parsed: dict[str, object], preferred_cols: list[int], limit: int | None = None) -> list[tuple[str, str]]:
+    def _troj_top_choices(parsed: dict[str, object], preferred_cols: list[int], limit: int | None = None) -> list[tuple[str, str, str]]:
         headers = parsed.get("headers", [])
         rows_in = parsed.get("rows", [])
-        items: list[tuple[str, str]] = []
+        items: list[tuple[str, str, str]] = []
         if not isinstance(headers, list) or not isinstance(rows_in, list):
             return items
         for col_idx in preferred_cols:
             if col_idx >= len(headers):
                 continue
+            source = str(headers[col_idx])
             for row in rows_in:
                 if isinstance(row, list) and col_idx < len(row) and str(row[col_idx]).strip():
-                    items.append((str(headers[col_idx]), str(row[col_idx])))
+                    cell = str(row[col_idx])
+                    reason = _top_choice_reason(cell, source)
+                    if not reason:
+                        continue
+                    items.append((source, cell, reason))
                     if limit is not None and len(items) >= limit:
                         return items
         return items
@@ -1514,6 +1552,30 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     troj_fibo_parsed = _read_troj_md_table(troj_fibo_path, "Trójpolówki — Fibo")
     troj_ichi_parsed = _read_troj_md_table(troj_ichi_path, "Trójpolówki — Ichimoku")
 
+    def _row_top_choice_info(row: ScannerRow) -> tuple[tuple[int, int, float, str], str] | None:
+        status_text = " ".join(str(v) for v in [row.status, row.pattern, row.metrics.get("latest_retest_pattern", ""), row.metrics.get("ichimoku_status", ""), row.dates.get("touch_61", ""), row.dates.get("flip_date", ""), row.dates.get("start_date", ""), row.metrics.get("near61", ""), row.ticker])
+        if row.scanner == "FIBO":
+            if row.pattern and row.pattern != "-":
+                return ((0, 0, 0.0, row.ticker), f"Fibo pattern: {row.pattern}")
+            near = _parse_float_text(str(row.metrics.get("near61") or row.metrics.get("near61_raw") or ""), -1.0)
+            if near >= 75.0:
+                return (_top_choice_rank(f"{near}% {status_text}", row.category), f"near 61.8: {near:.1f}%")
+            if row.dates.get("touch_61") and row.dates.get("touch_61") != "-":
+                return (_top_choice_rank(row.dates.get("touch_61", ""), row.category), "61.8 reached")
+            return None
+        text_low = status_text.lower()
+        recent_date = _date_from_text(status_text)
+        if "breakout" in text_low:
+            return (_top_choice_rank(status_text, row.category), "breakout / recent breakout")
+        if "pattern" in text_low and not re.search(r"pattern\s*[:=]?\s*-", text_low):
+            pattern = row.metrics.get("latest_retest_pattern") or row.status or "retest pattern"
+            return (_top_choice_rank(status_text, row.category), f"pattern/retest: {pattern}")
+        if recent_date is not None and 0 <= (datetime.now().date() - recent_date).days <= 3 and row.category == "retest_breakout":
+            return (_top_choice_rank(status_text, row.category), f"recent retest/breakout date ({recent_date.isoformat()})")
+        if "inside cloud" in text_low or "inside the cloud" in text_low:
+            return (_top_choice_rank(status_text, row.category), "candle deep/inside cloud")
+        return None
+
     def _allsearch_top_choices(limit_per_group: int = 2) -> str:
         groups = [
             ("Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
@@ -1522,16 +1584,18 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             ("Fibo valid", [r for r in rows if r.scanner == "FIBO" and r.category == "valid"]),
         ]
         html_rows = ""
-        def _row_rank(row: ScannerRow) -> tuple[int, int, float, str]:
-            text = " ".join(str(v) for v in [row.metrics.get("latest_retest_date", ""), row.metrics.get("latest_retest_pattern", ""), row.dates.get("touch_61", ""), row.dates.get("flip_date", ""), row.dates.get("start_date", ""), row.ticker])
-            return _top_choice_rank(text, row.category)
         for label, group_rows in groups:
-            for r in sorted(group_rows, key=_row_rank)[:limit_per_group]:
+            qualified: list[tuple[tuple[int, int, float, str], ScannerRow, str]] = []
+            for r in group_rows:
+                info = _row_top_choice_info(r)
+                if info is not None:
+                    rank, reason = info
+                    qualified.append((rank, r, reason))
+            for _rank, r, reason in sorted(qualified, key=lambda item: item[0])[:limit_per_group]:
                 cmd = html.escape(_chart_command_for_row(r))
                 stooq = r.chart_url or _stooq_chart_url(r.ticker)
                 stooq_btn = f"<a class='btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
-                reason_text = " ".join(str(v) for v in [r.metrics.get("latest_retest_date", ""), r.metrics.get("latest_retest_pattern", ""), r.dates.get("touch_61", ""), r.dates.get("flip_date", ""), r.dates.get("start_date", ""), r.ticker])
-                html_rows += f"<tr><td>{html.escape(label)}</td><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(_top_choice_reason(reason_text, r.category))}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd)}</td></tr>"
+                html_rows += f"<tr><td>{html.escape(label)}</td><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd)}</td></tr>"
         if not html_rows:
             return ""
         return f"<section class='market top-choice'><h2>Top choices</h2><table class='data'><thead><tr><th>Source</th><th>Instrument</th><th>Why top choice</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{html_rows}</tbody></table></section>"

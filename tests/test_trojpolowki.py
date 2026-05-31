@@ -147,7 +147,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Open stooq links from this column" in text
     assert "openTrojColumnStooqLinks" in text
     assert "Why top choice" in text
-    assert "closest recent date" in text or "pattern/breakout in last 3 days" in text
+    assert "breakout / recent breakout" in text
+    assert "Fibo pattern: p" in text
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text
