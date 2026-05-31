@@ -21,6 +21,8 @@ ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_sear
 
 TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
 
+DEFAULT_ALLSEARCH_SCOPES = ["wig", "dax", "us100", "forex", "commodities", "indexes"]
+
 TROJPOLLOWKI_RETEST_LABELS = {
     "breakout_confirmed": "breakout confirmed",
     "retest_breakout": "retest breakout",
@@ -78,13 +80,13 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         return ""
     ticker_cmd = ticker
     market = (row.market or "").upper()
-    if market == "COMMODITIES":
+    if market in {"COMMODITIES", "INDEXES"}:
         mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
         if mapped:
             ticker_cmd = str(mapped).upper()
     elif market == "WIG" and "." not in ticker_cmd and len(ticker_cmd) <= 5:
         ticker_cmd = f"{ticker_cmd}.WA"
-    instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market == "COMMODITIES" else "stock"))
+    instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market in {"COMMODITIES", "INDEXES"} else "stock"))
     if row.scanner == "ICHIMOKU":
         return f"python run -c {ticker_cmd} --ichimoku-mode on"
     if row.scanner == "FIBO":
@@ -105,7 +107,7 @@ def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
 
 def _scope_label(scope: str) -> str:
     s = scope.upper()
-    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️"}
+    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️", "INDEXES": "📊"}
     return f"{flags.get(s, '📊')} {s}"
 
 def _liquidity_legend_html() -> str:
@@ -432,6 +434,9 @@ def _scope_file_keys(scope: str) -> list[str]:
         "wig": ["wig"],
         "forex": ["forex", "fx"],
         "commodities": ["commodities", "commodity"],
+        "indexes": ["indexes", "indices", "index"],
+        "indices": ["indexes", "indices", "index"],
+        "index": ["indexes", "indices", "index"],
     }
     return aliases.get(key, [key])
 
@@ -439,7 +444,7 @@ def _allsearch_report_stem(scopes: list[str]) -> str:
     if not scopes:
         return "allsearch_latest"
     normalized = [s.strip().lower() for s in scopes if s.strip()]
-    if normalized == ["wig", "dax", "us100", "forex", "commodities"] or normalized == ["all"]:
+    if normalized == DEFAULT_ALLSEARCH_SCOPES or normalized == ["all"]:
         return "allsearch_latest_all"
     if len(normalized) == 1:
         return f"allsearch_latest_{normalized[0]}"
@@ -447,7 +452,7 @@ def _allsearch_report_stem(scopes: list[str]) -> str:
 
 def _open_existing_allsearch_report(scope: str) -> int:
     normalized = (scope or "all").strip().lower()
-    scopes = ["wig", "dax", "us100", "forex", "commodities"] if normalized == "all" else [normalized]
+    scopes = DEFAULT_ALLSEARCH_SCOPES if normalized == "all" else [normalized]
     stem = _allsearch_report_stem(scopes)
     report_html = ALL_REPORT_DIR / "allsearch" / f"{stem}.html"
     if not report_html.exists():
@@ -1887,7 +1892,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     print(f"[allsearch] Trójpolówki Fibo saved: {troj_fibo}")
     print(f"[allsearch] Trójpolówki Ichimoku saved: {troj_ichimoku}")
     print(f"[allsearch] html report saved: {report_html}")
-    reopen_scope = "all" if [s.lower() for s in scopes] == ["wig", "dax", "us100", "forex", "commodities"] else ",".join(scopes).lower()
+    reopen_scope = "all" if [s.lower() for s in scopes] == DEFAULT_ALLSEARCH_SCOPES else ",".join(scopes).lower()
     print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
     print(f"[allsearch] reopen html command: python run --open-allsearch-report {reopen_scope}")
     _open_html_report(report_html)
@@ -1960,7 +1965,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     with report.open("a", encoding="utf-8") as out:
         out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
     print(f"\n[batch] combo report saved: {report}")
-    if batch == ["wig", "dax", "us100", "forex", "commodities"]:
+    if batch == DEFAULT_ALLSEARCH_SCOPES:
         print(f"[batch] reopen command: python run -{mode}_search all")
     elif len(batch) == 1:
         print(f"[batch] reopen command: python run -{mode}_search {batch[0]}")
@@ -2248,7 +2253,7 @@ def main()->int:
             print("Stooq debug mode does not update CSV files. Add --debug-stooq-fetch to merge visible rows into the commodity CSV.")
         return 0
     if args.search_target:
-        if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku',['wig','dax','us100','forex','commodities'])
+        if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku', DEFAULT_ALLSEARCH_SCOPES)
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
@@ -2257,12 +2262,12 @@ def main()->int:
     if args.allsearch_target:
         normalized = args.allsearch_target.strip().lower()
         if normalized == "all":
-            return _run_allsearch_combo(["wig", "dax", "us100", "forex", "commodities"])
+            return _run_allsearch_combo(DEFAULT_ALLSEARCH_SCOPES)
         return _run_allsearch_combo([normalized])
     if args.fibo_explain_target:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
-        if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo',['wig','dax','us100','forex','commodities'])
+        if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo', DEFAULT_ALLSEARCH_SCOPES)
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         from scanner_search import run_fibo_search; return run_fibo_search(args.fibo_search_target)

@@ -187,3 +187,20 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text
+
+
+def test_allsearch_all_scopes_include_indexes():
+    mod = load_run_module()
+    assert mod.DEFAULT_ALLSEARCH_SCOPES == ["wig", "dax", "us100", "forex", "commodities", "indexes"]
+    assert mod._allsearch_report_stem(mod.DEFAULT_ALLSEARCH_SCOPES) == "allsearch_latest_all"
+    assert mod._scope_file_keys("indices") == ["indexes", "indices", "index"]
+    assert "📊 INDEXES" == mod._scope_label("indexes")
+
+
+def test_bullish_harami_retest_can_stay_inside_cloud():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def _is_bullish_harami")
+    end = source.index("def _is_morning_star", start)
+    harami_source = source[start:end]
+    assert "and cl2 > level" not in harami_source
+    assert "_touches_level(c1, level) or _touches_level(c2, level)" in harami_source
