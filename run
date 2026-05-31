@@ -843,7 +843,10 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         return int(_parse_float_text(row.metrics.get("incline_days", "0"), 0)) >= 21 and _parse_float_text(row.metrics.get("ratio_raw", "0"), 0) >= 1.0
     def _fibo_start(row: ScannerRow) -> str:
         return str(row.dates.get("start") or "")
-    col1 = [r for r in fibo if _fibo_steep(r) and "invalidated" not in r.status.lower() and r.category == "valid" and (_fibo_near(r) < 0 or _fibo_near(r) < 15.0)]
+    def _fibo_has_23_6_warning(row: ScannerRow) -> bool:
+        status = str(row.status or "").lower()
+        return "23_6" in status or "23.6" in status or "bearish" in status
+    col1 = [r for r in fibo if _fibo_steep(r) and "invalidated" not in r.status.lower() and not _fibo_has_23_6_warning(r) and (_fibo_near(r) < 0 or _fibo_near(r) < 15.0)]
     col2 = [r for r in fibo if r.category == "waiting" and 0 <= _fibo_near(r) < 75.0]
     col3 = [r for r in fibo if _fibo_near(r) >= 75.0]
     col1.sort(key=lambda r: (_parse_float_text(r.metrics.get("ratio_raw", "-1"), -1), _fibo_start(r)), reverse=True)
@@ -941,6 +944,16 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "touched"
         return "-"
 
+    def _recent_ichimoku_date(value: str | None, max_days: int = 3) -> bool:
+        match = re.search(r"\d{4}-\d{2}-\d{2}", str(value or ""))
+        if not match:
+            return False
+        try:
+            d = datetime.strptime(match.group(0), "%Y-%m-%d").date()
+        except Exception:
+            return False
+        return 0 <= (timestamp.date() - d).days <= max_days
+
     def prepared(row: ScannerRow) -> tuple[ScannerRow, dict[str, str]]:
         raw_status = row.metrics.get("raw_status", row.status)
         raw_kijun = _source_metric(row, "ichimoku_status")
@@ -959,7 +972,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             "tk_plus": _source_metric(row, "tk_plus"),
             "tenkan_in_cloud": _source_metric(row, "tenkan_in_cloud"),
         }
-        if note == "breakout confirmed" and (("above" in info["cloud_side"] and kijun == "over") or ("below" in info["cloud_side"] and kijun == "under")):
+        recent_breakout = note == "breakout confirmed" and _recent_ichimoku_date(row.dates.get("flip_date") or row.metrics.get("latest_date"))
+        if note == "breakout confirmed" and not recent_breakout and (("above" in info["cloud_side"] and kijun == "over") or ("below" in info["cloud_side"] and kijun == "under")):
             info["note"] = "above cloud" if "above" in info["cloud_side"] else "below cloud"
             info["bias"] = "↗️ long" if "above" in info["cloud_side"] else "↘️ short"
         else:
@@ -984,7 +998,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         row, info = item
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
-        return row.category == "retest_breakout" and months <= 4.0 and touches_cloud
+        current_breakout = "breakout" in info["note"]
+        return row.category == "retest_breakout" and months <= 4.0 and (touches_cloud or current_breakout)
 
     def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item
@@ -1439,6 +1454,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         except Exception:
             return None
 
+    def _is_recent_choice_date(value: str | None, reference: str | None = None, max_days: int = 3) -> bool:
+        d = _date_from_text(value or "")
+        if d is None:
+            return False
+        ref = _date_from_text(reference or "") or datetime.now().date()
+        return 0 <= (ref - d).days <= max_days
+
     def _top_choice_rank(cell: str, source: str = "") -> tuple[int, int, float, str]:
         text = f"{source} {cell}"
         low = text.lower()
@@ -1476,8 +1498,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         d = _date_from_text(cell)
         date_suffix = f" ({d.isoformat()})" if d is not None else ""
         if "breakout" in text:
-            return f"breakout / recent breakout{date_suffix}"
+            if d is None or _is_recent_choice_date(cell):
+                return f"breakout / recent breakout{date_suffix}"
+            return None
         if "retest" in text or "pattern" in text:
+            if d is not None and not _is_recent_choice_date(cell) and "inside cloud" not in text and "touched cloud" not in text:
+                return None
             pattern_match = re.search(r"(?:🏷️|pattern[:=]?|retest pattern[:=]?)\s*([^·<|]+)", cell, re.IGNORECASE)
             pattern = pattern_match.group(1).strip() if pattern_match else "retest pattern"
             pattern = re.sub(r"\s*\(\d{4}-\d{2}-\d{2}\)\s*$", "", pattern)
@@ -1570,7 +1596,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     troj_ichi_parsed = _read_troj_md_table(troj_ichi_path, "Trójpolówki — Ichimoku")
 
     def _row_top_choice_info(row: ScannerRow) -> tuple[tuple[int, int, float, str], str] | None:
-        status_text = " ".join(str(v) for v in [row.status, row.pattern, row.metrics.get("latest_retest_pattern", ""), row.metrics.get("ichimoku_status", ""), row.dates.get("touch_61", ""), row.dates.get("flip_date", ""), row.dates.get("start_date", ""), row.metrics.get("near61", ""), row.ticker])
+        status_text = " ".join(str(v) for v in [row.status, row.pattern, row.metrics.get("latest_retest_pattern", ""), row.metrics.get("latest_retest_date", ""), row.metrics.get("ichimoku_status", ""), row.dates.get("touch_61", ""), row.dates.get("flip_date", ""), row.dates.get("start_date", ""), row.metrics.get("near61", ""), row.metrics.get("latest_date", ""), row.ticker])
         if row.scanner == "FIBO":
             if row.category == "valid":
                 return None
@@ -1586,16 +1612,22 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return None
         text_low = status_text.lower()
         recent_date = _date_from_text(status_text)
+        latest_date = row.metrics.get("latest_date") or row.metrics.get("expected_date") or ""
         if "breakout" in text_low:
-            d = _date_from_text(status_text)
+            d = _date_from_text(row.dates.get("flip_date", "") or status_text)
+            if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date):
+                return None
             suffix = f" ({d.isoformat()})" if d else ""
             return (_top_choice_rank(status_text, row.category), f"breakout / recent breakout{suffix}")
         if "pattern" in text_low and not re.search(r"pattern\s*[:=]?\s*-", text_low):
             pattern = row.metrics.get("latest_retest_pattern") or row.status or "retest pattern"
-            d = _date_from_text(status_text)
+            d = _date_from_text(row.metrics.get("latest_retest_date", ""))
+            cloud_context = any(token in text_low for token in ("inside cloud", "inside the cloud", "touched cloud", "touched the cloud", "unsuccessful breakout"))
+            if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date) and not cloud_context:
+                return None
             suffix = f" ({d.isoformat()})" if d else ""
             return (_top_choice_rank(status_text, row.category), f"pattern/retest: {pattern}{suffix}")
-        if recent_date is not None and 0 <= (datetime.now().date() - recent_date).days <= 3 and row.category == "retest_breakout":
+        if recent_date is not None and _is_recent_choice_date(recent_date.isoformat(), latest_date) and row.category == "retest_breakout":
             return (_top_choice_rank(status_text, row.category), f"recent retest/breakout date ({recent_date.isoformat()})")
         if "inside cloud" in text_low or "inside the cloud" in text_low:
             return (_top_choice_rank(status_text, row.category), "candle deep/inside cloud")

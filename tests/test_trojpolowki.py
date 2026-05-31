@@ -82,6 +82,10 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             market="US100", scanner="ICHIMOKU", category="retest_breakout", ticker="MSFT.US", status="⚪ above",
             dates={"flip_date": "2026-04-01"}, metrics={"months": "2.0", "ichimoku_status": "Touched the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "shallow", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "retest_breakout"}, chart_url="https://stooq.pl/msft",
         ),
+        mod.ScannerRow(
+            market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Over Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/rwe",
+        ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
@@ -91,6 +95,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK cross values are shown as bullish / bearish / no cross yet" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
+    assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
     assert "🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
@@ -115,8 +120,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "# WYNIKI 2 ICHIMOKU\n\n"
         "| Ticker | Poprzednia | Latest Retest status | Data wybicia | Mies. od wybicia | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-        "| CRI | below | retest_breakout | 2026-01-01 | 2.0 | 1 | 1000 | 2026-05-30 | retest_breakout | Touched the cloud | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| RWE.DE | below | retest_breakout | 2026-01-02 | 4.0 | 1 | 1000 | 2026-05-30 | retest_breakout | Touched the cloud | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n",
+        "| CRI | below | breakout_confirmed | 2026-05-29 | 0.1 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n",
         encoding="utf-8",
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
@@ -155,7 +161,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='clear-q'" in text
     assert "data-scanner='FIBO'" in text
     assert "data-scanner='ICHIMOKU'" in text
-    assert "breakout / recent breakout (2026-01-01)" in text
+    assert "breakout / recent breakout (2026-05-29)" in text
+    assert "pattern/retest: bullish_harami" not in text
     assert "near 61.8: 90.0%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
     assert "Fibo pattern: none" not in text
