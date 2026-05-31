@@ -2,7 +2,7 @@
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal
 from urllib.request import urlopen
 from urllib.parse import quote
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NoReturn
@@ -1412,7 +1412,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         parsed["rows"] = rows_out
         return parsed
 
-    def _date_from_text(value: str) -> datetime.date | None:
+    def _date_from_text(value: str) -> date | None:
         match = re.search(r"\d{4}-\d{2}-\d{2}", str(value or ""))
         if not match:
             return None
