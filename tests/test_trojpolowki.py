@@ -153,6 +153,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🌈🐱 Scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
+    assert "📄 Download PDF" in text
+    assert 'onclick="downloadPdfReport()"' in text
     assert "id='tab-allsearch' class='tab-panel active'" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
