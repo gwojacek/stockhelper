@@ -115,7 +115,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "# WYNIKI 2 ICHIMOKU\n\n"
         "| Ticker | Poprzednia | Latest Retest status | Data wybicia | Mies. od wybicia | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-        "| CRI | below | retest_breakout | 2026-01-01 | 2.0 | 1 | 1000 | 2026-05-30 | retest_breakout | Touched the cloud | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n",
+        "| CRI | below | retest_breakout | 2026-01-01 | 2.0 | 1 | 1000 | 2026-05-30 | retest_breakout | Touched the cloud | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| RWE.DE | below | retest_breakout | 2026-01-02 | 4.0 | 1 | 1000 | 2026-05-30 | retest_breakout | Touched the cloud | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n",
         encoding="utf-8",
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
@@ -123,7 +124,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "# WYNIKI FIBO #1\n\n"
         "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-        "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n",
+        "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n",
         encoding="utf-8",
     )
     def latest_md(kind: str, scope: str):
@@ -132,6 +134,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         mod._build_html_report(["wig"], out)
     text = out.read_text(encoding="utf-8")
     assert "ALLSEARCH REPORT" in text
+    assert "🌈🐱 Scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
     assert "id='tab-allsearch' class='tab-panel active'" in text
@@ -147,11 +150,14 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Open stooq links from this column" in text
     assert "openTrojColumnStooqLinks" in text
     assert "Why top choice" in text
+    assert "top-choice-compact" in text
+    assert "Ichimoku Active" not in text
     assert "id='clear-q'" in text
     assert "data-scanner='FIBO'" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "breakout / recent breakout (2026-01-01)" in text
     assert "near 61.8: 90.0%" in text
+    assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
