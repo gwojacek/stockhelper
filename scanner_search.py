@@ -460,20 +460,28 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct) is not None
 
 
-def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) -> int | None:
+def _select_impulse_start_long(
+    w: pd.DataFrame,
+    peak_idx: int,
+    min_days: int,
+    max_lookback: int = 140,
+    reset_after_sideways: bool = True,
+) -> int | None:
     low = pd.to_numeric(w["Low"], errors="coerce")
-    left = max(0, peak_idx - 140)
+    left = max(0, peak_idx - max_lookback)
     right = peak_idx - min_days
     if right <= left:
         return None
     # If a long sideways block exists before the selected peak, treat the breakout
     # after that block as a newer impulse and avoid anchoring to very old lows.
-    seg = w.iloc[left:peak_idx + 1]
-    sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
-    if sideways_end is not None:
-        candidate_left = left + sideways_end + 1
-        if candidate_left < right:
-            left = candidate_left
+    # 3P can disable this to prefer a larger valid formation when one exists.
+    if reset_after_sideways:
+        seg = w.iloc[left:peak_idx + 1]
+        sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
+        if sideways_end is not None:
+            candidate_left = left + sideways_end + 1
+            if candidate_left < right:
+                left = candidate_left
     # Use the lowest low in the allowed pre-peak window as impulse base.
     return int(low.iloc[left:right + 1].idxmin())
 
@@ -2104,6 +2112,8 @@ def _select_fibo_long_impulse_base(
     min_incline_days: int,
     log: Callable[[str], None] | None = None,
     stale_cycle_mode: str = "reject",
+    max_lookback: int = 140,
+    reset_after_sideways: bool = True,
 ) -> tuple[int, float, float] | None:
     """Select the long Fibo impulse bottom using the regular formation rules."""
     def _log(msg: str) -> None:
@@ -2112,9 +2122,15 @@ def _select_fibo_long_impulse_base(
 
     high = pd.to_numeric(w["High"], errors="coerce")
     low = pd.to_numeric(w["Low"], errors="coerce")
-    i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
+    i_start = _select_impulse_start_long(
+        w,
+        i_peak,
+        min_incline_days,
+        max_lookback=max_lookback,
+        reset_after_sideways=reset_after_sideways,
+    )
     if i_start is None or i_peak <= i_start + min_incline_days:
-        left_fallback = max(0, i_peak - 140)
+        left_fallback = max(0, i_peak - max_lookback)
         right_fallback = i_peak - min_incline_days
         if right_fallback > left_fallback:
             i_start = int(low.iloc[left_fallback:right_fallback + 1].idxmin())
@@ -2254,7 +2270,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: less than 80 candles.")
         return None
 
-    w = df.tail(220).reset_index(drop=True)
+    w = df.tail(320).reset_index(drop=True)
     high = pd.to_numeric(w["High"], errors="coerce")
     low = pd.to_numeric(w["Low"], errors="coerce")
     close = pd.to_numeric(w["Close"], errors="coerce")
@@ -2275,7 +2291,15 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: recent high is not near the dominant high.")
         return None
 
-    base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log, stale_cycle_mode="reset")
+    base = _select_fibo_long_impulse_base(
+        w,
+        i_peak,
+        min_incline_days,
+        _log,
+        stale_cycle_mode="reset",
+        max_lookback=260,
+        reset_after_sideways=False,
+    )
     if base is None:
         return None
     i_start, fib_start, fib_end = base
