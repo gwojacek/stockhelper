@@ -186,6 +186,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Open stooq links from top choices" in text
     assert "Open stooq links from this column" in text
     assert "event.stopPropagation();openTrojColumnStooqLinks" in text
+    for col_idx in range(4):
+        assert f"openTrojColumnStooqLinks(this,{col_idx})" in text
+        assert f"copyTrojColumnSheetsCells(this,{col_idx})" in text
     assert "copyTrojColumnSheetsCells" in text
     assert "📋 Column" in text
     assert "formulas.join('\\n')" in text

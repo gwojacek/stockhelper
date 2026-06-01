@@ -1677,14 +1677,14 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if "ichimoku" in section_id:
             table_controls = f"<div class='troj-toolbar'><button class='btn compactbtn' type='button' onclick=\"toggleTrojExtra('{html.escape(section_id, quote=True)}', this)\">Hide additional info</button></div>"
         table_html = table_controls + "<div style='overflow:auto'><table class='troj-table'><thead><tr>"
-        group_cols = set(top_choice_cols or [])
+        # Every Trójpolówki column can contain grouped instrument cells, so expose
+        # the bulk open/copy controls on every header instead of only top-choice
+        # columns. Empty columns are harmless: the JS helpers simply no-op.
         for idx, h in enumerate(headers):
-            open_btn = ""
-            if idx in group_cols:
-                open_btn = (
-                    f" <button class='iconbtn' title='Open stooq links from this column' onclick=\"event.stopPropagation();openTrojColumnStooqLinks(this,{idx})\">🔗</button>"
-                    f" <button class='iconbtn' title='Copy Google Sheets cells from this column' onclick=\"event.stopPropagation();copyTrojColumnSheetsCells(this,{idx})\">📋 Column</button>"
-                )
+            open_btn = (
+                f" <button class='iconbtn' title='Open stooq links from this column' onclick=\"event.stopPropagation();openTrojColumnStooqLinks(this,{idx})\">🔗</button>"
+                f" <button class='iconbtn' title='Copy Google Sheets cells from this column' onclick=\"event.stopPropagation();copyTrojColumnSheetsCells(this,{idx})\">📋 Column</button>"
+            )
             table_html += f"<th>{_md_inline_to_html(str(h))}{open_btn}</th>"
         table_html += "</tr></thead><tbody>"
         for row in body_rows:
