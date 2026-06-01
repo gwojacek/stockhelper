@@ -171,8 +171,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Open stooq links from this column" in text
     assert "event.stopPropagation();openTrojColumnStooqLinks" in text
     assert "toggleTrojExtra" in text
-    assert "Hide 3P info" in text
-    assert "global-hide-info" in text
+    assert "Hide 3P info" not in text
+    assert "global-hide-info" not in text
     assert "Hide additional info" in text
     assert "troj-extra-info" in text
     assert "Why top choice" in text
