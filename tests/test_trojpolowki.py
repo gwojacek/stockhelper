@@ -75,7 +75,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
         ),
         mod.ScannerRow(
             market="WIG", scanner="ICHIMOKU", category="position", ticker="ABC", status="🟢 above",
-            dates={"start_date": "2025-10-01"}, metrics={"months": "7.1", "ichimoku_status": "Over Kijun-sen", "risk": "-", "tk_cross": "-", "dynamic": "-", "cloud": "-", "chikou": "-", "twist": "-", "tk_plus": "-", "tenkan_in_cloud": "-", "raw_status": "above"}, chart_url="https://stooq.pl/abc",
+            dates={"start_date": "2025-10-01"}, metrics={"months": "7.1", "ichimoku_status": "Over Kijun-sen", "risk": "-", "tk_cross": "bullish TK cross", "dynamic": "-", "cloud": "-", "chikou": "-", "twist": "-", "tk_plus": "-", "tenkan_in_cloud": "-", "raw_status": "above"}, chart_url="https://stooq.pl/abc",
         ),
         mod.ScannerRow(
             market="US100", scanner="ICHIMOKU", category="position", ticker="AMGN.US", status="⚪ watch",
@@ -122,6 +122,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇺🇸 MSFT.US" in text
     assert "**🇵🇱 CRI" in data_rows[0]
     assert "**🇵🇱 ABC" in text
+    assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
     assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>Kijun: over" not in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
@@ -185,6 +186,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Open stooq links from top choices" in text
     assert "Open stooq links from this column" in text
     assert "event.stopPropagation();openTrojColumnStooqLinks" in text
+    assert "copyTrojColumnSheetsCells" in text
+    assert "📋 Column" in text
+    assert "formulas.join('\\n')" in text
     assert "toggleTrojExtra" in text
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
