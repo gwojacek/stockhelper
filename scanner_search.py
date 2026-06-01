@@ -2214,12 +2214,13 @@ def _select_fibo_long_impulse_base(
     return int(i_start), float(fib_start), float(fib_end)
 
 def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain: list[str] | None = None) -> FiboScanResult | None:
-    """Find an early 3P steep-incline candidate before regular 23.6/61.8 Fibo setup rules.
+    """Find a 3P steep-incline candidate independently of 23.6/61.8 pullback rules.
 
     The regular Fibo scanner intentionally waits for a pullback to at least the
     23.6 retracement (or a 61.8 reversal). The first Trójpolówki Fibo column is
-    an earlier watchlist: liquid instruments with a current, steep impulse before
-    regular second-column pullback conditions become relevant.
+    an incline-quality watchlist: liquid instruments with a current, steep
+    impulse, regardless of whether regular second-column pullback checks are
+    already relevant.
     """
     def _log(msg: str) -> None:
         if explain is not None:
@@ -2276,14 +2277,10 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     fib_382 = fib_end - rng * 0.382
     fib_618 = fib_end - rng * 0.618
     current_close = float(close.iloc[-1])
-    latest_low_after_peak = float(low.iloc[i_peak:].min())
 
-    # First-column candidates are pre-second-column setups: they have not closed
-    # into the 23.6->61.8 warning/retracement zone yet.
-    if current_close < fib_236 or latest_low_after_peak <= fib_236:
-        _log("Rejected 3P steep: pullback already reached 23.6 warning zone.")
-        return None
-
+    # Do not reject first-column 3P steep candidates just because price already
+    # touched or closed around 23.6. The second/third columns still use the
+    # regular Fibo pullback rules; this detector is only about incline quality.
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
     if gain_pct < 0.18 or avg_daily_gain < 0.004:
@@ -3080,7 +3077,7 @@ def run_fibo_search(target: str) -> int:
     rows0_md=[[r.ticker,r.direction,"🚀 3p_steep_incline",f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline, pre-23.6)",["Ticker","Dir","Status","Incline","Ratio(d)","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
+    _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
 
