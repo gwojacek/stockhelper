@@ -3148,6 +3148,19 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
     df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+    steep_steps: list[str] = []
+    steep = _find_fibo_3p_steep_setup(df, "long", explain=steep_steps)
+    print(f"\n=== 3P steep incline ===")
+    print(f"- {'MATCH' if steep else 'NO MATCH'}")
+    if steep:
+        print(
+            "  "
+            f"status={steep.status}, incline={steep.incline_start_date}->{steep.incline_end_date}, "
+            f"ratio={steep.incline_decline_duration_ratio:.2f}, close={steep.current_close:.4f}, "
+            f"fib23.6={steep.fib_23_6:.4f}, fib61.8={steep.fib_61_8:.4f}"
+        )
+    for s in steep_steps:
+        print(f"    • {s}")
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:
