@@ -324,6 +324,14 @@ def _fibo_formation_size(result: FiboScanResult) -> float:
         return 0.0
 
 
+def _fibo_formation_strength(result: FiboScanResult) -> float:
+    """Average daily impulse gain; used to choose between close-bottom duplicates."""
+    try:
+        return _fibo_formation_size(result) / max(abs(float(result.stop_loss)), 1e-9) / max(int(result.incline_duration_days), 1)
+    except Exception:
+        return 0.0
+
+
 def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
     if str(a.ticker).upper() != str(b.ticker).upper() or str(a.direction).lower() != str(b.direction).lower():
         return False
@@ -333,19 +341,28 @@ def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
         return False
     size_similarity = min(size_a, size_b) / max(size_a, size_b)
     anchor_gap = abs(float(a.stop_loss) - float(b.stop_loss)) / max(abs(float(a.stop_loss)), abs(float(b.stop_loss)), 1e-9)
-    # Nested formations are useful only when they are materially different.
-    # If both the fib range and bottom/top anchor are almost the same scale, keep
-    # the broader candidate and suppress the near-duplicate. PKO-like formations
-    # survive because their older base makes a much larger range.
-    return size_similarity >= 0.78 and anchor_gap <= 0.08
+    # Nested formations are useful only when they are materially different. If
+    # bottoms are close, require a clearly larger fib range before keeping both;
+    # otherwise choose the stronger following impulse from those nearby bottoms.
+    if anchor_gap <= 0.08:
+        return size_similarity >= 0.62
+    return size_similarity >= 0.78
 
 
 def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[FiboScanResult]:
     picked: list[FiboScanResult] = []
 
     def prefer(candidate: FiboScanResult, current: FiboScanResult) -> bool:
+        candidate_anchor = float(candidate.stop_loss)
+        current_anchor = float(current.stop_loss)
+        anchor_gap = abs(candidate_anchor - current_anchor) / max(abs(candidate_anchor), abs(current_anchor), 1e-9)
         candidate_size = _fibo_formation_size(candidate)
         current_size = _fibo_formation_size(current)
+        if anchor_gap <= 0.08:
+            candidate_strength = _fibo_formation_strength(candidate)
+            current_strength = _fibo_formation_strength(current)
+            if abs(candidate_strength - current_strength) > max(candidate_strength, current_strength, 1e-9) * 0.03:
+                return candidate_strength > current_strength
         if abs(candidate_size - current_size) > max(candidate_size, current_size, 1e-9) * 0.03:
             return candidate_size > current_size
         if candidate.incline_duration_days != current.incline_duration_days:
@@ -2271,6 +2288,9 @@ def _select_fibo_long_impulse_base(
         return False, None
 
     stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
+    if stale_cycle and stale_cycle_mode == "allow":
+        _log("Long: allowing broader stale-cycle candidate because a materially larger formation may coexist.")
+        return int(i_start), float(fib_start), float(fib_end)
     reset_attempts = 0
     while stale_cycle and stale_cycle_mode == "reset" and stale_reset is not None and reset_attempts < 3:
         reset_idx, reset_low, peak_idx = stale_reset
@@ -2379,7 +2399,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
-    if gain_pct < 0.18 or avg_daily_gain < 0.004:
+    if gain_pct < 0.18 or avg_daily_gain < 0.003:
         _log(
             "Rejected 3P steep: incline not steep enough "
             f"(gain={gain_pct * 100:.2f}%, avg_daily={avg_daily_gain * 100:.2f}%)."
@@ -2405,7 +2425,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         current_close=current_close,
     )
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None) -> FiboScanResult | None:
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject") -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)
@@ -2429,7 +2449,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
-        base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log)
+        base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode)
         if base is None:
             return None
         i_start, fib_start, fib_end = base
@@ -2888,6 +2908,9 @@ def run_fibo_search(target: str) -> int:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
+                broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow")
+                if broad_cand:
+                    long_candidates.append(broad_cand)
             if long_candidates:
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
                 # Keep at most three distinct formations, preferring:
@@ -3232,6 +3255,14 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
                 print(f"  status={res.status}, pattern={res.reversal_pattern_name}, touch_date={res.first_61_8_touch_date}, close={res.current_close:.4f}")
             for s in steps:
                 print(f"    • {s}")
+            if direction == "long":
+                broad_steps: list[str] = []
+                broad = _find_fibo_setup(df, direction, end_offset=off, explain=broad_steps, stale_cycle_mode="allow")
+                if broad and (not res or broad.incline_start_date != res.incline_start_date or broad.incline_end_date != res.incline_end_date):
+                    print(f"- offset={off} broad: MATCH")
+                    print(f"  status={broad.status}, pattern={broad.reversal_pattern_name}, touch_date={broad.first_61_8_touch_date}, close={broad.current_close:.4f}, incline={broad.incline_start_date}->{broad.incline_end_date}")
+                    for s in broad_steps:
+                        print(f"    • {s}")
     return 0
 
 

@@ -913,9 +913,15 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
             if duplicate_idx is None:
                 picked.append(row)
             else:
-                existing_start = parsed_start(picked[duplicate_idx])
-                if row_start is not None and existing_start is not None and row_start < existing_start:
+                existing = picked[duplicate_idx]
+                row_strength = _parse_float_text(row.metrics.get("ratio_raw", "0"), 0.0)
+                existing_strength = _parse_float_text(existing.metrics.get("ratio_raw", "0"), 0.0)
+                if row_strength > existing_strength:
                     picked[duplicate_idx] = row
+                elif row_strength == existing_strength:
+                    existing_start = parsed_start(existing)
+                    if row_start is not None and existing_start is not None and row_start < existing_start:
+                        picked[duplicate_idx] = row
         return picked
     fibo = _dedupe_nearby_same_scale_display(_dedupe_same_fibo_start(fibo))
     def _fibo_near(row: ScannerRow) -> float:
