@@ -40,6 +40,29 @@ def test_tk_cross_around_cloud_entry_uses_newest_cross():
     assert metrics["tk_cross"] == "bearish TK cross"
 
 
+def test_tk_metric_falls_back_to_current_tenkan_kijun_alignment():
+    rows = []
+    for idx in range(35):
+        rows.append(
+            {
+                "Open": 27.0,
+                "High": 27.3,
+                "Low": 26.8,
+                "Close": 27.0,
+                "tenkan": 27.15,
+                "kijun": 27.05,
+                "cloud_top": 27.2,
+                "cloud_bottom": 26.9,
+                "span_a": 27.0,
+                "span_b": 27.1,
+            }
+        )
+    df = pd.DataFrame(rows)
+
+    metrics = scanner_search._ichimoku_extra_metrics(df, "below", "shallow_retest_pattern")
+
+    assert metrics["tk_cross"] == "bullish TK cross"
+
 def test_risk_is_missing_without_valid_breakout_or_retest_pattern():
     rows = []
     for _idx in range(35):
