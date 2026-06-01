@@ -1450,10 +1450,22 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
                     return cross
             return None
 
+        def _current_tk_alignment() -> str:
+            cur_delta = float(c["tenkan"] - c["kijun"])
+            if cur_delta > 0:
+                return "bullish TK cross"
+            if cur_delta < 0:
+                return "bearish TK cross"
+            return "neutral TK cross"
+
         if len(df) >= 2:
-            tk_cross = _recent_tk_cross_around_cloud_entry() or _tk_cross_at(len(df) - 1) or "none"
+            # Prefer an actual fresh cross near the current cloud interaction,
+            # but never report "no cross" when the latest Tenkan/Kijun
+            # relationship is visible on the chart. 3P needs the newest
+            # actionable TK direction when no fresh crossing event is found.
+            tk_cross = _recent_tk_cross_around_cloud_entry() or _tk_cross_at(len(df) - 1) or _current_tk_alignment()
         else:
-            tk_cross = "-"
+            tk_cross = _current_tk_alignment()
 
         if len(df) >= 52 and pd.notna(c.get("tenkan")) and pd.notna(c.get("kijun")):
             # Kumo twist should describe the leading cloud projected to the
@@ -1477,9 +1489,17 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         tenkan = float(c["tenkan"])
         tenkan_in_cloud = "yes" if cloud_bottom <= tenkan <= cloud_top else "no"
 
+        chikou_is_confirming = False
         if len(df) > 26:
             past_close = float(df["Close"].iloc[-27])
-            chikou_confirmation = "yes" if ((not is_short and close > past_close) or (is_short and close < past_close)) else "no"
+            if close > past_close:
+                chikou_confirmation = "↑ over"
+                chikou_is_confirming = not is_short
+            elif close < past_close:
+                chikou_confirmation = "↓ under"
+                chikou_is_confirming = is_short
+            else:
+                chikou_confirmation = "↔ equal"
         else:
             chikou_confirmation = "-"
 
@@ -1513,7 +1533,7 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         risk_text = "-"
         if risk_context:
             risk = 0
-            if chikou_confirmation == "yes":
+            if chikou_is_confirming:
                 risk += 1
             if (not is_short and kumo_twist == "green") or (is_short and kumo_twist == "red"):
                 risk += 1

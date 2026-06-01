@@ -75,7 +75,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
         ),
         mod.ScannerRow(
             market="WIG", scanner="ICHIMOKU", category="position", ticker="ABC", status="🟢 above",
-            dates={"start_date": "2025-10-01"}, metrics={"months": "7.1", "ichimoku_status": "Over Kijun-sen", "risk": "-", "tk_cross": "-", "dynamic": "-", "cloud": "-", "chikou": "-", "twist": "-", "tk_plus": "-", "tenkan_in_cloud": "-", "raw_status": "above"}, chart_url="https://stooq.pl/abc",
+            dates={"start_date": "2025-10-01"}, metrics={"months": "7.1", "ichimoku_status": "Over Kijun-sen", "risk": "-", "tk_cross": "bullish TK cross", "dynamic": "-", "cloud": "-", "chikou": "-", "twist": "-", "tk_plus": "-", "tenkan_in_cloud": "-", "raw_status": "above"}, chart_url="https://stooq.pl/abc",
         ),
         mod.ScannerRow(
             market="US100", scanner="ICHIMOKU", category="position", ticker="AMGN.US", status="⚪ watch",
@@ -93,26 +93,36 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
             dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "previous_side": "below"}, chart_url="https://stooq.pl/rwe",
         ),
+        mod.ScannerRow(
+            market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="BEAR.DE", status="breakout_confirmed",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "0.0", "ichimoku_status": "Touched Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "current_side": "🔴 below"}, chart_url="https://stooq.pl/bear",
+        ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ✅ Chikou under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
-    assert "TK cross values are shown as bullish / bearish / no cross yet" in text
+    assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
     assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
-    assert "🟡 risk: 2% · ✅ Chikou over · 🟢 kumo" in text
+    assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
+    assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn high · cloud normal" in text
+    assert "**🇩🇪 BEAR.DE 🔁 retest (0.0m)**" in text
+    assert "🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn mild · cloud normal" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
     lines = text.splitlines()
     data_rows = [line for line in lines if line.startswith("| ") and not line.startswith("|---")][1:]
     assert "**🇩🇪 HFG.DE" in data_rows[0]
-    assert "**🇩🇪 RWE.DE" in data_rows[0]
+    assert "**🇩🇪 BEAR.DE" in data_rows[0]
+    assert any("**🇩🇪 RWE.DE" in row for row in data_rows)
     assert "**🇺🇸 MSFT.US" in text
     assert "**🇵🇱 CRI" in data_rows[0]
     assert "**🇵🇱 ABC" in text
+    assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
     assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>Kijun: over" not in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
@@ -164,12 +174,21 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='trojpolowki-fibo'" in text
     assert "id='trojpolowki-ichimoku'" in text
     assert "troj-name-actions" in text
+    assert "copySheetsCell" in text
+    assert "📋 Cell" in text
+    assert "href='https://stooq.pl/rwe-ichi' target='_blank' title='Open stooq chart'>📈</a><button class='btn sheets-cell-btn'" in text
+    assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/rwe-ichi&quot;; &quot;RWE.DE&quot;)'" in text
+    assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/aep&quot;; &quot;AEP.US&quot;)'" in text
+    assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/gpp&quot;; &quot;GPP&quot;)'" in text
     assert "Open all visible stooq chart links" not in text
     assert "border:none" in text
     assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
     assert "Open stooq links from top choices" in text
     assert "Open stooq links from this column" in text
     assert "event.stopPropagation();openTrojColumnStooqLinks" in text
+    assert "copyTrojColumnSheetsCells" in text
+    assert "📋 Column" in text
+    assert "formulas.join('\\n')" in text
     assert "toggleTrojExtra" in text
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text

@@ -808,6 +808,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                     "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                     "raw_status": str(r.get("Latest Retest status", "")),
                     "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")),
+                    "current_side": str(r.get("Jest", "") or r.get("Current", "")),
                     "ichimoku_status": str(r.get("Ichimoku status", "")),
                     "risk": _metric_from_row(r, "Risk"), "tk_cross": _metric_from_row(r, "TK cross"),
                     "dynamic": _metric_from_row(r, "Dynamic"), "cloud": _metric_from_row(r, "Cloud"),
@@ -924,7 +925,7 @@ def _readable_breakout_note(status: str, ichimoku_status: str = "") -> str:
 
 
 def _cloud_side_label(row: ScannerRow) -> str:
-    text = f"{row.status} {row.metrics.get('ichimoku_status','')} {row.metrics.get('raw_status','')}".lower()
+    text = f"{row.status} {row.metrics.get('current_side','')} {row.metrics.get('ichimoku_status','')} {row.metrics.get('raw_status','')}".lower()
     if "inside" in text and "cloud" in text:
         return "🟡 inside cloud"
     if "touch" in text and "cloud" in text:
@@ -987,6 +988,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             "cloud_side": _cloud_side_label(row),
             "kijun": kijun,
             "note": note,
+            "current_side": _source_metric(row, "current_side"),
             "risk": _source_metric(row, "risk"),
             "tk_cross": _source_metric(row, "tk_cross"),
             "dynamic": _source_metric(row, "dynamic"),
@@ -1016,7 +1018,17 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return risk >= 1 or months >= 4.0 or special or kijun_or_tk
 
     def is_short(info: dict[str, str]) -> bool:
-        return "short" in info["bias"] or "below" in info["cloud_side"] or "under" in info["kijun"]
+        text = f"{info.get('bias', '')} {info.get('cloud_side', '')} {info.get('current_side', '')} {info.get('kijun', '')}".lower()
+        if "short" in text or "below" in text or "under" in text:
+            return True
+        chikou_under = any(token in info.get("chikou", "").lower() for token in ("under", "below", "↓", "down"))
+        bearish_breakout_context = (
+            info.get("note", "") not in {"", "-", "above cloud", "below cloud"}
+            and info.get("twist", "").lower() == "red"
+            and chikou_under
+            and _risk_value(info.get("risk", "-")) >= 2
+        )
+        return bearish_breakout_context
 
     def _is_fresh_retest_window(row: ScannerRow) -> bool:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
@@ -1056,10 +1068,10 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "skip"
         tk_cross_signal = info["tk_cross"] not in {"-", "none"}
         has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
+        if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")) and info["kijun"] != "touched":
+            return "strong"
         if info["kijun"] == "touched" or tk_cross_signal or (has_kijun_or_tk and months < 4.0):
             return "watch"
-        if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")):
-            return "strong"
         if has_kijun_or_tk:
             return "watch"
         return "skip"
@@ -1079,12 +1091,28 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
     def _risk_text(risk: str) -> str:
         return risk if not _is_missing(risk) else "-"
 
-    def _chikou_text(info: dict[str, str]) -> str:
+    def _chikou_direction(info: dict[str, str]) -> str:
         value = info["chikou"].lower()
         if value == "yes":
-            return "✅ Chikou under" if is_short(info) else "✅ Chikou over"
-        if value == "no":
-            return "❌ Chikou"
+            return "under" if is_short(info) else "over"
+        if "under" in value or "below" in value or "↓" in value or "down" in value:
+            return "under"
+        if "over" in value or "above" in value or "↑" in value or "up" in value:
+            return "over"
+        if "equal" in value or "flat" in value or "↔" in value:
+            return "equal"
+        return "-"
+
+    def _chikou_text(info: dict[str, str]) -> str:
+        direction = _chikou_direction(info)
+        if direction == "over":
+            return "⬆️ Chikou over"
+        if direction == "under":
+            return "⬇️ Chikou under"
+        if direction == "equal":
+            return "↔️ Chikou equal"
+        if info["chikou"].lower() == "no":
+            return "Chikou -"
         return "Chikou -"
 
     def _twist_text(info: dict[str, str]) -> str:
@@ -1103,18 +1131,27 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "🟢 TK cross bullish"
         if "bearish" in tk_cross:
             return "🔴 TK cross bearish"
-        if tk_cross == "none":
-            return "⚪ TK cross no cross yet"
+        if "neutral" in tk_cross:
+            return "⚪ TK neutral"
         return None
+
+    def _tk_cross_confirms_context(info: dict[str, str], tk: str) -> bool:
+        # The same TK cross can be plus or minus depending on the setup:
+        # bearish crosses support bearish breakout/retest contexts, while they
+        # are a warning for long/reversal contexts. Bullish crosses are the
+        # mirror image.
+        bearish_context = is_short(info)
+        is_bullish_cross = "bullish" in tk
+        if "neutral" in tk:
+            return True
+        return is_bullish_cross != bearish_context
 
     def _factor_lists(info: dict[str, str]) -> tuple[list[str], list[str]]:
         plus: list[str] = []
         minus: list[str] = []
-        short = is_short(info)
         tk = _tk_cross_factor(info)
         if tk:
-            is_bullish = "bullish" in tk
-            (minus if (short and is_bullish) or ((not short) and not is_bullish) else plus).append(tk)
+            (plus if _tk_cross_confirms_context(info, tk) else minus).append(tk)
         tenkan = info["tenkan_in_cloud"].lower()
         if tenkan == "yes":
             plus.append("Tenkan_in_☁: yes")
@@ -1169,7 +1206,9 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         "- 🔁 Retest <4m contains fresh valid breakouts from the last 4 months only when the newest candle touches Kijun, touches the cloud, or is inside the cloud; we wait for patterns in the last two cases.",
         "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
         "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
-        "- TK cross values are shown as bullish / bearish / no cross yet; Tenkan_in_☁ shows whether Tenkan is inside the cloud; kumo color is the projected cloud to the right of the latest candle.",
+        "- Chikou uses arrow-only direction: ⬆️ over price and ⬇️ under price (under price supports bearish breakout/retest context).",
+        "- TK values use the latest actionable Tenkan/Kijun direction (bullish/bearish, with neutral only when equal); the ➕/➖ placement is context-aware (bearish TK is ➕ for bearish breakout/retest, but ➖ for long/reversal context).",
+        "- Tenkan_in_☁ shows whether Tenkan is inside the cloud; kumo color is the projected cloud to the right of the latest candle.",
         "- ➕/➖ lines are qualitative context only (TK cross, Tenkan_in_☁, dynamic, cloud thickness).",
         "- 🏷️ is the current scanner status/note; missing source fields stay as `-`.",
         "",
@@ -1254,7 +1293,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
                 status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
-                metrics={"months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", "")), "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
+                metrics={"months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", "")), "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")), "current_side": str(r.get("Jest", "") or r.get("Current", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
         for r in i_w1:
@@ -1403,6 +1442,28 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             "title='Open stockhelper chart' aria-label='Open stockhelper chart'>Open</button>"
         )
 
+    def _google_sheets_hyperlink_formula(stooq_url: str, ticker: str) -> str:
+        safe_url = str(stooq_url or "").replace('"', '""')
+        safe_ticker = str(ticker or "").replace('"', '""')
+        return f'=HYPERLINK("{safe_url}"; "{safe_ticker}")'
+
+    def _sheets_cell_button(stooq_url: str | None, ticker: str | None) -> str:
+        if not stooq_url or not ticker:
+            return ""
+        formula = _google_sheets_hyperlink_formula(str(stooq_url), str(ticker).strip().upper())
+        return (
+            "<button class='btn sheets-cell-btn' type='button' onclick='copySheetsCell(this)' "
+            f"data-formula='{html.escape(formula, quote=True)}' "
+            "title='Copy Google Sheets HYPERLINK formula' aria-label='Copy Google Sheets HYPERLINK formula'>📋 Cell</button>"
+        )
+
+    def _stooq_link_with_cell_button(stooq_url: str | None, ticker: str | None, extra_class: str = "") -> str:
+        if not stooq_url:
+            return ""
+        class_attr = f"btn {extra_class}".strip()
+        link = f"<a class='{html.escape(class_attr, quote=True)}' href='{html.escape(str(stooq_url), quote=True)}' target='_blank' title='Open stooq chart'>📈</a>"
+        return link + _sheets_cell_button(str(stooq_url), ticker)
+
     troj_timestamp = datetime.now()
     troj_fibo_path = _write_trojpolowki_fibo(rows, TROJPOLLOWKI_DIR, troj_timestamp)
     troj_ichi_path = _write_trojpolowki_ichimoku(rows, TROJPOLLOWKI_DIR, troj_timestamp)
@@ -1441,7 +1502,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             row = troj_row_by_ticker.get(ticker)
         cmd = html.escape(_chart_command_for_row(row)) if row else html.escape(f"python run -c {ticker}")
         stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))
-        stooq_btn = f"<a class='btn troj-name-btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
+        stooq_btn = _stooq_link_with_cell_button(stooq, ticker, "troj-name-btn")
         chart_btn = _stockhelper_chart_button(cmd) if cmd else ""
         controls = f" <span class='troj-name-actions'>{stooq_btn}{chart_btn}</span>"
         if "</strong>" in rendered:
@@ -1620,7 +1681,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         for idx, h in enumerate(headers):
             open_btn = ""
             if idx in group_cols:
-                open_btn = f" <button class='iconbtn' title='Open stooq links from this column' onclick=\"event.stopPropagation();openTrojColumnStooqLinks(this,{idx})\">🔗</button>"
+                open_btn = (
+                    f" <button class='iconbtn' title='Open stooq links from this column' onclick=\"event.stopPropagation();openTrojColumnStooqLinks(this,{idx})\">🔗</button>"
+                    f" <button class='iconbtn' title='Copy Google Sheets cells from this column' onclick=\"event.stopPropagation();copyTrojColumnSheetsCells(this,{idx})\">📋 Column</button>"
+                )
             table_html += f"<th>{_md_inline_to_html(str(h))}{open_btn}</th>"
         table_html += "</tr></thead><tbody>"
         for row in body_rows:
@@ -1704,7 +1768,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             for _rank, r, reason in selected:
                 cmd = html.escape(_chart_command_for_row(r))
                 stooq = r.chart_url or _stooq_chart_url(r.ticker)
-                stooq_btn = f"<a class='btn' href='{html.escape(stooq, quote=True)}' target='_blank' title='Open stooq chart'>📈</a>" if stooq else ""
+                stooq_btn = _stooq_link_with_cell_button(stooq, r.ticker)
                 html_rows += f"<tr data-market='{html.escape(r.market)}' data-scanner='{html.escape(r.scanner)}'><td>{html.escape(label)}</td><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd)}</td></tr>"
         if not html_rows:
             return ""
@@ -1753,7 +1817,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             html_parts.append(f"<table class='data'><thead>{thead}</thead><tbody>")
             for r in grows:
                 cmd = html.escape(_chart_command_for_row(r))
-                chart_btn = ('<a class="btn" href="'+html.escape(r.chart_url)+'" target="_blank" title="Open stooq chart">📈</a>' if r.chart_url else '')
+                chart_btn = _stooq_link_with_cell_button(r.chart_url, r.ticker)
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
@@ -1778,7 +1842,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div>")
-    html_parts.append("<script>function showReportTab(name){document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));const el=document.getElementById('tab-'+name);if(el)el.classList.add('active');}function toggleTrojExtra(sectionId,btn){const el=document.getElementById(sectionId);if(!el)return;const hidden=el.classList.toggle('troj-hide-extra');if(btn)btn.textContent=hidden?'Show additional info':'Hide additional info';}function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});setButtonText(btn,'Opened');}catch(e){setButtonText(btn,'Failed');}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openTrojColumnStooqLinks(btn,col){const table=btn?.closest('table');if(!table)return;const links=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[col]?.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);_openLinks(links);}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner'),clearQ=document.getElementById('clear-q');const scanBtns=[document.getElementById('flt-all'),document.getElementById('flt-ichi'),document.getElementById('flt-fibo')].filter(Boolean);function markActive(){scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;const okS=!sc.value||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();sc.value=b.dataset.scanner||'';markActive();f();});q.oninput=f;if(clearQ)clearQ.onclick=()=>{q.value='';f();q.focus();};m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
+    html_parts.append("<script>function showReportTab(name){document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));const el=document.getElementById('tab-'+name);if(el)el.classList.add('active');}function toggleTrojExtra(sectionId,btn){const el=document.getElementById(sectionId);if(!el)return;const hidden=el.classList.toggle('troj-hide-extra');if(btn)btn.textContent=hidden?'Show additional info':'Hide additional info';}function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function copySheetsCell(btn){const text=btn?.dataset?.formula||'';if(!text)return;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(btn,'Copied');}catch(e){setButtonText(btn,'Failed');}}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;try{await fetch('/run-command?command='+encodeURIComponent(c),{method:'POST'});setButtonText(btn,'Opened');}catch(e){setButtonText(btn,'Failed');}}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openTrojColumnStooqLinks(btn,col){const table=btn?.closest('table');if(!table)return;const links=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[col]?.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);_openLinks(links);}async function copyTrojColumnSheetsCells(btn,col){const table=btn?.closest('table');if(!table)return;const formulas=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[col]?.querySelector('.sheets-cell-btn')?.dataset?.formula||'').filter(Boolean);if(!formulas.length)return;const text=formulas.join('\\n');try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(btn,'Copied');}catch(e){setButtonText(btn,'Failed');}}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner'),clearQ=document.getElementById('clear-q');const scanBtns=[document.getElementById('flt-all'),document.getElementById('flt-ichi'),document.getElementById('flt-fibo')].filter(Boolean);function markActive(){scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const okM=!m.value||r.dataset.market===m.value;const okS=!sc.value||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();sc.value=b.dataset.scanner||'';markActive();f();});q.oninput=f;if(clearQ)clearQ.onclick=()=>{q.value='';f();q.focus();};m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 
