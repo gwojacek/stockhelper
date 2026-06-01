@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
 from importlib import util
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -2096,13 +2097,129 @@ def run_ichimoku_search(target: str) -> int:
 
 
 
+
+def _select_fibo_long_impulse_base(
+    w: pd.DataFrame,
+    i_peak: int,
+    min_incline_days: int,
+    log: Callable[[str], None] | None = None,
+) -> tuple[int, float, float] | None:
+    """Select the long Fibo impulse bottom using the regular formation rules."""
+    def _log(msg: str) -> None:
+        if log is not None:
+            log(msg)
+
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
+    if i_start is None or i_peak <= i_start + min_incline_days:
+        left_fallback = max(0, i_peak - 140)
+        right_fallback = i_peak - min_incline_days
+        if right_fallback > left_fallback:
+            i_start = int(low.iloc[left_fallback:right_fallback + 1].idxmin())
+            _log(f"Long: fallback impulse start chosen at index={i_start}.")
+        else:
+            _log("Rejected long: invalid impulse start/peak distance.")
+            return None
+    if i_peak <= i_start + min_incline_days:
+        _log("Rejected long: invalid impulse start/peak distance.")
+        return None
+
+    i_end = len(w) - 1
+    # Guard: selected impulse peak should be the dominant high in analyzed window.
+    # This prevents anchoring a newer/lower local top while an earlier higher top
+    # in the same structure was never fully reset by a proper 61.8 cycle.
+    win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
+    if win_peak != i_peak:
+        _log(
+            "Rejected long: selected peak is not dominant in window "
+            f"(selected={i_peak}, dominant={win_peak})."
+        )
+        return None
+
+    # Extend fib-base search left of the selected impulse start.
+    # In strong accelerations, impulse-start selector can land on a later pullback
+    # while the true swing base is a bit earlier. Widening this local back-scan
+    # preserves recency while allowing nearby earlier lows to become the fib anchor.
+    orig_i_start = int(i_start)
+    pre_start_left = max(0, min(i_start - 15, i_peak - 40))
+    fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
+    _log(
+        f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
+        f"(peak_idx={i_peak}) -> idx={fib_start_idx}."
+    )
+    i_start = fib_start_idx
+    fib_start = float(low.iloc[fib_start_idx])
+    fib_end = float(high.iloc[i_peak])
+
+    min_reset_impulse_days = 5
+
+    def _reset_to_newer_lower_low(start_idx: int, start_low: float) -> tuple[int, float]:
+        reset_right = i_peak - min_reset_impulse_days
+        if reset_right <= start_idx:
+            return start_idx, start_low
+        reset_slice = low.iloc[start_idx + 1:reset_right + 1]
+        if not reset_slice.empty:
+            reset_idx = int(reset_slice.idxmin())
+            reset_low = float(low.iloc[reset_idx])
+            if reset_low < start_low:
+                _log(
+                    "Long: newer lower fib start reset "
+                    f"idx={start_idx} low={start_low:.4f} -> "
+                    f"idx={reset_idx} low={reset_low:.4f}."
+                )
+                return reset_idx, reset_low
+        return start_idx, start_low
+
+    i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
+
+    # Guard against stale multi-cycle impulses: if an earlier local peak (after
+    # the chosen start, before the chosen peak) already completed a >=61.8
+    # correction, this start is too old.
+    min_stale_guard_days = 10  # ~2 weeks
+
+    def _has_stale_cycle(start_idx: int, start_low: float) -> bool:
+        for p in range(start_idx + min_incline_days, max(start_idx + min_incline_days, i_peak - 8)):
+            if (p - start_idx) <= min_stale_guard_days:
+                continue
+            win_l = max(start_idx, p - 4)
+            win_r = min(i_peak, p + 5)
+            if float(high.iloc[p]) < float(high.iloc[win_l:win_r].max()):
+                continue
+            p_high = float(high.iloc[p])
+            p_rng = p_high - start_low
+            if p_rng <= 0:
+                continue
+            p_fib_618 = p_high - p_rng * 0.618
+            post_low = float(low.iloc[p:i_peak + 1].min())
+            if post_low <= p_fib_618:
+                _log(f"Rejected long: stale impulse start (earlier peak idx={p} already corrected below its 61.8).")
+                return True
+        return False
+
+    stale_cycle = _has_stale_cycle(i_start, fib_start)
+    if stale_cycle and i_start != orig_i_start:
+        fallback_start = float(low.iloc[orig_i_start])
+        _log(
+            "Long: widened fib start triggered stale-cycle guard; "
+            f"fallback to original impulse start idx={orig_i_start}."
+        )
+        i_start = orig_i_start
+        fib_start = fallback_start
+        i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
+        stale_cycle = _has_stale_cycle(i_start, fib_start)
+    if stale_cycle:
+        return None
+
+    return int(i_start), float(fib_start), float(fib_end)
+
 def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain: list[str] | None = None) -> FiboScanResult | None:
     """Find an early 3P steep-incline candidate before regular 23.6/61.8 Fibo setup rules.
 
     The regular Fibo scanner intentionally waits for a pullback to at least the
     23.6 retracement (or a 61.8 reversal). The first Trójpolówki Fibo column is
-    an earlier watchlist: liquid instruments with a current, steep impulse and no
-    major bearish/pullback signal yet.
+    an earlier watchlist: liquid instruments with a current, steep impulse before
+    regular second-column pullback conditions become relevant.
     """
     def _log(msg: str) -> None:
         if explain is not None:
@@ -2136,42 +2253,28 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: recent high is not near the dominant high.")
         return None
 
-    i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
-    if i_start is None or i_peak <= i_start + min_incline_days:
-        _log("Rejected 3P steep: invalid impulse start/peak distance.")
+    base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log)
+    if base is None:
         return None
-
-    # Keep the anchor after the last long sideways block. That allows a base
-    # after consolidation, but rejects impulses that themselves spend >~1 month
-    # moving sideways in a narrow range.
-    fib_start = float(low.iloc[i_start])
-    reset_right = i_peak - 5
-    if reset_right > i_start:
-        reset_slice = low.iloc[i_start + 1:reset_right + 1]
-        if not reset_slice.empty:
-            reset_idx = int(reset_slice.idxmin())
-            reset_low = float(low.iloc[reset_idx])
-            if reset_low < fib_start and i_peak > reset_idx + 5:
-                i_start = reset_idx
-                fib_start = reset_low
+    i_start, fib_start, fib_end = base
 
     incline_days = i_peak - i_start
     if incline_days < min_incline_days:
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=23, band_pct=0.06):
-        _log("Rejected 3P steep: impulse contains >~1 month sideways/flat block.")
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
+        _log("Rejected 3P steep: impulse is sideways/flat.")
         return None
 
-    rng = peak_high - fib_start
+    rng = fib_end - fib_start
     if rng <= 0:
         _log("Rejected 3P steep: non-positive range.")
         return None
 
-    fib_236 = peak_high - rng * 0.236
-    fib_382 = peak_high - rng * 0.382
-    fib_618 = peak_high - rng * 0.618
+    fib_236 = fib_end - rng * 0.236
+    fib_382 = fib_end - rng * 0.382
+    fib_618 = fib_end - rng * 0.618
     current_close = float(close.iloc[-1])
     latest_low_after_peak = float(low.iloc[i_peak:].min())
 
@@ -2189,14 +2292,6 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
             f"(gain={gain_pct * 100:.2f}%, avg_daily={avg_daily_gain * 100:.2f}%)."
         )
         return None
-
-    # Avoid fresh bearish reversal-looking candles at the current top. This is
-    # deliberately lighter than the regular second-column/61.8 rules.
-    for j in range(max(i_peak, len(w) - 3), len(w)):
-        c = w.iloc[j]
-        if _is_bearish_shooting_star(c):
-            _log("Rejected 3P steep: recent bearish shooting-star style candle.")
-            return None
 
     return FiboScanResult(
         ticker="",
@@ -2241,30 +2336,11 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
-        i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
-        if i_start is None or i_peak <= i_start + min_incline_days:
-            left_fallback = max(0, i_peak - 140)
-            right_fallback = i_peak - min_incline_days
-            if right_fallback > left_fallback:
-                i_start = int(low.iloc[left_fallback:right_fallback + 1].idxmin())
-                _log(f"Long: fallback impulse start chosen at index={i_start}.")
-            else:
-                _log("Rejected long: invalid impulse start/peak distance.")
-                return None
-        if i_peak <= i_start + min_incline_days:
-            _log("Rejected long: invalid impulse start/peak distance.")
+        base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log)
+        if base is None:
             return None
+        i_start, fib_start, fib_end = base
         i_end = len(w) - 1
-        # Guard: selected impulse peak should be the dominant high in analyzed window.
-        # This prevents anchoring a newer/lower local top while an earlier higher top
-        # in the same structure was never fully reset by a proper 61.8 cycle.
-        win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
-        if win_peak != i_peak:
-            _log(
-                "Rejected long: selected peak is not dominant in window "
-                f"(selected={i_peak}, dominant={win_peak})."
-            )
-            return None
         corr_bars = i_end - i_peak
         early_correction_accepted = False
         if corr_bars < 8:
@@ -2280,91 +2356,6 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             else:
                 _log("Rejected long: correction leg too short (<8 bars).")
                 return None
-        # Extend fib-base search left of the selected impulse start.
-        # In strong accelerations, impulse-start selector can land on a later pullback
-        # (e.g. 2026-04-16) while the true swing base is a bit earlier (e.g. 2026-04-07).
-        #
-        # 6 bars was too tight for some DAX names (e.g. BAYN.DE in Nov 2025),
-        # where the relevant swing low printed ~10 sessions before the selected
-        # impulse start. Widening this local back-scan preserves recency while
-        # allowing nearby earlier lows to become the fib anchor.
-        orig_i_start = int(i_start)
-        pre_start_left = max(0, min(i_start - 15, i_peak - 40))
-        fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
-        _log(
-            f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
-            f"(peak_idx={i_peak}) -> idx={fib_start_idx}."
-        )
-        i_start = fib_start_idx
-        fib_start = float(low.iloc[fib_start_idx])
-        fib_end = float(high.iloc[i_peak])
-        # If price prints a lower swing bottom after the initially selected
-        # impulse start, reset the Fibonacci base to that newer/lower low.  The
-        # original start selector intentionally keeps a minimum pre-peak length
-        # (~2 weeks), but this can leave an obsolete anchor in place when a
-        # sharp final impulse begins from a lower bottom slightly closer to the
-        # peak (for example ATT.WA: 2026-03-23 low 17.10 was kept even though
-        # 2026-04-22 printed a lower low at 16.98 before the 2026-05-06 peak).
-        # For Fibonacci drawing the lower reset point is the correct 0/100%
-        # anchor as long as there is still a real impulse leg afterwards.
-        min_reset_impulse_days = 5
-
-        def _reset_to_newer_lower_low(start_idx: int, start_low: float) -> tuple[int, float]:
-            reset_right = i_peak - min_reset_impulse_days
-            if reset_right <= start_idx:
-                return start_idx, start_low
-            reset_slice = low.iloc[start_idx + 1:reset_right + 1]
-            if not reset_slice.empty:
-                reset_idx = int(reset_slice.idxmin())
-                reset_low = float(low.iloc[reset_idx])
-                if reset_low < start_low:
-                    _log(
-                        "Long: newer lower fib start reset "
-                        f"idx={start_idx} low={start_low:.4f} -> "
-                        f"idx={reset_idx} low={reset_low:.4f}."
-                    )
-                    return reset_idx, reset_low
-            return start_idx, start_low
-
-        i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
-        # Guard against stale multi-cycle impulses:
-        # if an earlier local peak (after the chosen start, before the chosen peak)
-        # already completed a >=61.8 correction, this start is too old.
-        # Skip guard checks for short pre-impulses (<= ~2 weeks) to avoid rejecting
-        # noisy early bumps that do not represent a full impulse leg.
-        min_stale_guard_days = 10  # ~2 weeks
-        def _has_stale_cycle(start_idx: int, start_low: float) -> bool:
-            for p in range(start_idx + min_incline_days, max(start_idx + min_incline_days, i_peak - 8)):
-                if (p - start_idx) <= min_stale_guard_days:
-                    continue
-                win_l = max(start_idx, p - 4)
-                win_r = min(i_peak, p + 5)
-                if float(high.iloc[p]) < float(high.iloc[win_l:win_r].max()):
-                    continue
-                p_high = float(high.iloc[p])
-                p_rng = p_high - start_low
-                if p_rng <= 0:
-                    continue
-                p_fib_618 = p_high - p_rng * 0.618
-                post_low = float(low.iloc[p:i_peak + 1].min())
-                if post_low <= p_fib_618:
-                    _log(f"Rejected long: stale impulse start (earlier peak idx={p} already corrected below its 61.8).")
-                    return True
-            return False
-
-        stale_cycle = _has_stale_cycle(i_start, fib_start)
-        if stale_cycle and i_start != orig_i_start:
-            fallback_start = float(low.iloc[orig_i_start])
-            _log(
-                "Long: widened fib start triggered stale-cycle guard; "
-                f"fallback to original impulse start idx={orig_i_start}."
-            )
-            i_start = orig_i_start
-            fib_start = fallback_start
-            i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
-            stale_cycle = _has_stale_cycle(i_start, fib_start)
-        if stale_cycle:
-            return None
         rng = fib_end - fib_start
         if rng <= 0:
             _log("Rejected long: non-positive fib range.")
