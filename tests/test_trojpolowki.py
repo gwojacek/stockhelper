@@ -43,6 +43,11 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"near61_raw": "91.6", "ratio_raw": "2.8", "incline_days": "91"}, chart_url="https://stooq.pl/trn",
         ),
         mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="TRN", status="3p_steep_incline",
+            direction="long", dates={"start": "2025-12-29", "incline": "2025-12-29->2026-05-21"},
+            metrics={"near61_raw": "91.6", "ratio_raw": "698.3", "incline_days": "143"}, chart_url="https://stooq.pl/trn",
+        ),
+        mod.ScannerRow(
             market="US100", scanner="FIBO", category="waiting", ticker="AEP.US", status="reached_23_6_waiting_for_61_8",
             direction="long", dates={"start": "2026-01-05", "incline": "2026-01-05->2026-02-20"},
             metrics={"near61_raw": "62.5", "ratio_raw": "1.5", "incline_days": "46"}, chart_url="https://stooq.pl/aep",

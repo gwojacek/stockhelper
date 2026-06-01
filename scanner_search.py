@@ -353,6 +353,13 @@ def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[Fibo
     picked: list[FiboScanResult] = []
 
     def prefer(candidate: FiboScanResult, current: FiboScanResult) -> bool:
+        candidate_steep = str(candidate.status).startswith("3p_steep")
+        current_steep = str(current.status).startswith("3p_steep")
+        # If a synthetic #0 steep row and a regular Fibo row describe the same
+        # scale, keep the regular row. The #0 row is only a watchlist substitute
+        # while regular 23.6/61.8 logic has not produced a formation.
+        if candidate_steep != current_steep:
+            return not candidate_steep
         candidate_anchor = float(candidate.stop_loss)
         current_anchor = float(current.stop_loss)
         anchor_gap = abs(candidate_anchor - current_anchor) / max(abs(candidate_anchor), abs(current_anchor), 1e-9)
@@ -3131,9 +3138,14 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             continue
 
-    rows0 = _dedupe_same_scale_fibo_formations([r for r in rows0 if _passes_fibo_liquidity(r)])
-    rows1 = _dedupe_same_scale_fibo_formations([r for r in rows1 if _passes_fibo_liquidity(r)])
-    rows2 = _dedupe_same_scale_fibo_formations([r for r in rows2 if _passes_fibo_liquidity(r)])
+    rows0_liquid = [r for r in rows0 if _passes_fibo_liquidity(r)]
+    rows1_liquid = [r for r in rows1 if _passes_fibo_liquidity(r)]
+    rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
+    rows2_ids = {id(r) for r in rows2_liquid}
+    deduped_fibo_rows = _dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid)
+    rows0 = [r for r in deduped_fibo_rows if r.status.startswith("3p_steep")]
+    rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
+    rows1 = [r for r in deduped_fibo_rows if not r.status.startswith("3p_steep") and id(r) not in rows2_ids]
     rows0 = sorted(
         rows0,
         key=lambda r: (

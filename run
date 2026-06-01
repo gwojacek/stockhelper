@@ -900,7 +900,6 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
                 if (
                     str(row.ticker or "").upper() == str(existing.ticker or "").upper()
                     and str(row.direction or "").lower() == str(existing.direction or "").lower()
-                    and row.category == existing.category
                     and row_start is not None
                     and existing_start is not None
                     and abs((row_start - existing_start).days) <= 45
@@ -914,11 +913,16 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
                 picked.append(row)
             else:
                 existing = picked[duplicate_idx]
+                category_rank = {"waiting": 0, "steep": 1, "valid": 2}
+                row_rank = category_rank.get(row.category, 9)
+                existing_rank = category_rank.get(existing.category, 9)
                 row_strength = _parse_float_text(row.metrics.get("ratio_raw", "0"), 0.0)
                 existing_strength = _parse_float_text(existing.metrics.get("ratio_raw", "0"), 0.0)
-                if row_strength > existing_strength:
+                if row_rank < existing_rank:
                     picked[duplicate_idx] = row
-                elif row_strength == existing_strength:
+                elif row_rank == existing_rank and row_strength > existing_strength:
+                    picked[duplicate_idx] = row
+                elif row_rank == existing_rank and row_strength == existing_strength:
                     existing_start = parsed_start(existing)
                     if row_start is not None and existing_start is not None and row_start < existing_start:
                         picked[duplicate_idx] = row
