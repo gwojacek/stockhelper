@@ -2095,6 +2095,128 @@ def run_ichimoku_search(target: str) -> int:
     return 0
 
 
+
+def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain: list[str] | None = None) -> FiboScanResult | None:
+    """Find an early 3P steep-incline candidate before regular 23.6/61.8 Fibo setup rules.
+
+    The regular Fibo scanner intentionally waits for a pullback to at least the
+    23.6 retracement (or a 61.8 reversal). The first Trójpolówki Fibo column is
+    an earlier watchlist: liquid instruments with a current, steep impulse and no
+    major bearish/pullback signal yet.
+    """
+    def _log(msg: str) -> None:
+        if explain is not None:
+            explain.append(msg)
+
+    if direction != "long":
+        _log("Rejected 3P steep: only long direction is supported.")
+        return None
+    if len(df) < 80:
+        _log("Rejected 3P steep: less than 80 candles.")
+        return None
+
+    w = df.tail(220).reset_index(drop=True)
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    close = pd.to_numeric(w["Close"], errors="coerce")
+    if high.dropna().empty or low.dropna().empty or close.dropna().empty:
+        _log("Rejected 3P steep: missing OHLC data.")
+        return None
+
+    min_incline_days = 21
+    recent_left = max(min_incline_days, len(w) - 35)
+    if recent_left >= len(w):
+        _log("Rejected 3P steep: not enough recent candles.")
+        return None
+
+    global_high = float(high.max())
+    i_peak = int(high.iloc[recent_left:].idxmax())
+    peak_high = float(high.iloc[i_peak])
+    if global_high <= 0 or peak_high < global_high * 0.97:
+        _log("Rejected 3P steep: recent high is not near the dominant high.")
+        return None
+
+    i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
+    if i_start is None or i_peak <= i_start + min_incline_days:
+        _log("Rejected 3P steep: invalid impulse start/peak distance.")
+        return None
+
+    # Keep the anchor after the last long sideways block. That allows a base
+    # after consolidation, but rejects impulses that themselves spend >~1 month
+    # moving sideways in a narrow range.
+    fib_start = float(low.iloc[i_start])
+    reset_right = i_peak - 5
+    if reset_right > i_start:
+        reset_slice = low.iloc[i_start + 1:reset_right + 1]
+        if not reset_slice.empty:
+            reset_idx = int(reset_slice.idxmin())
+            reset_low = float(low.iloc[reset_idx])
+            if reset_low < fib_start and i_peak > reset_idx + 5:
+                i_start = reset_idx
+                fib_start = reset_low
+
+    incline_days = i_peak - i_start
+    if incline_days < min_incline_days:
+        _log("Rejected 3P steep: incline shorter than 21 sessions.")
+        return None
+
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=23, band_pct=0.06):
+        _log("Rejected 3P steep: impulse contains >~1 month sideways/flat block.")
+        return None
+
+    rng = peak_high - fib_start
+    if rng <= 0:
+        _log("Rejected 3P steep: non-positive range.")
+        return None
+
+    fib_236 = peak_high - rng * 0.236
+    fib_382 = peak_high - rng * 0.382
+    fib_618 = peak_high - rng * 0.618
+    current_close = float(close.iloc[-1])
+    latest_low_after_peak = float(low.iloc[i_peak:].min())
+
+    # First-column candidates are pre-second-column setups: they have not closed
+    # into the 23.6->61.8 warning/retracement zone yet.
+    if current_close < fib_236 or latest_low_after_peak <= fib_236:
+        _log("Rejected 3P steep: pullback already reached 23.6 warning zone.")
+        return None
+
+    gain_pct = rng / max(abs(fib_start), 1e-9)
+    avg_daily_gain = gain_pct / max(incline_days, 1)
+    if gain_pct < 0.18 or avg_daily_gain < 0.004:
+        _log(
+            "Rejected 3P steep: incline not steep enough "
+            f"(gain={gain_pct * 100:.2f}%, avg_daily={avg_daily_gain * 100:.2f}%)."
+        )
+        return None
+
+    # Avoid fresh bearish reversal-looking candles at the current top. This is
+    # deliberately lighter than the regular second-column/61.8 rules.
+    for j in range(max(i_peak, len(w) - 3), len(w)):
+        c = w.iloc[j]
+        if _is_bearish_shooting_star(c):
+            _log("Rejected 3P steep: recent bearish shooting-star style candle.")
+            return None
+
+    return FiboScanResult(
+        ticker="",
+        direction="long",
+        status="3p_steep_incline",
+        incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
+        incline_end_date=str(pd.to_datetime(w.iloc[i_peak]["Date"]).date()),
+        incline_duration_days=incline_days,
+        decline_end_date=str(pd.to_datetime(w.iloc[-1]["Date"]).date()),
+        decline_duration_days=1,
+        incline_decline_duration_ratio=round(gain_pct * 100.0, 2),
+        fib_23_6=fib_236,
+        fib_38_2=fib_382,
+        fib_61_8=fib_618,
+        first_61_8_touch_date="",
+        reversal_pattern_name="none",
+        stop_loss=fib_start,
+        current_close=current_close,
+    )
+
 def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
@@ -2612,6 +2734,7 @@ def run_fibo_search(target: str) -> int:
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     current_datetime = datetime.now(UTC)
     rows: list[FiboScanResult] = []
+    rows3p_steep: list[FiboScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
             return False
@@ -2666,6 +2789,14 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
+            steep_3p = _find_fibo_3p_steep_setup(df, "long")
+            if steep_3p:
+                steep_3p.ticker = ticker
+                if pd.notna(latest_close):
+                    steep_3p.current_close = latest_close
+                steep_3p.latest_candle_date = latest_candle_date
+                steep_3p.expected_latest_session_date = expected_latest_session_date
+                out_rows.append(steep_3p)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2783,13 +2914,18 @@ def run_fibo_search(target: str) -> int:
                         if not _prompt_vpn_continue_or_stop():
                             print("[fibo] Scan stopped by user after rate-limit detection.", flush=True)
                             return 1
-                rows.extend(found)
+                for item in found:
+                    if item.status == "3p_steep_incline":
+                        rows3p_steep.append(item)
+                    else:
+                        rows.append(item)
             _submit_more()
         if STOP_SCAN_EVENT.is_set():
             return 1
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
+    rows0 = list(rows3p_steep)
     rows2 = [
         r for r in rows
         if r.status == "valid_reversal"
@@ -2864,7 +3000,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
-        for r in rows:
+        for r in rows + rows0:
             if r.ticker == ticker:
                 rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
 
@@ -2888,8 +3024,18 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             continue
 
+    rows0 = [r for r in rows0 if _passes_fibo_liquidity(r)]
     rows1 = [r for r in rows1 if _passes_fibo_liquidity(r)]
     rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
+    rows0 = sorted(
+        rows0,
+        key=lambda r: (
+            _country_code_from_ticker(r.ticker),
+            -float(r.incline_decline_duration_ratio),
+            r.ticker,
+        ),
+        reverse=False,
+    )
     rows1 = sorted(
         rows1,
         key=lambda r: (
@@ -2935,18 +3081,20 @@ def run_fibo_search(target: str) -> int:
         ichimoku_retest_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = ichimoku_retest_by_ticker[tk]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
-    # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
+    # can render exactly the same instrument sets as terminal WYNIKI #0/#1/#2.
     top3_ratio_keys: set[tuple[str, str, str, str]] = {
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
+    rows0_md=[[r.ticker,r.direction,"🚀 3p_steep_incline",f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md)
+    _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline, pre-23.6)",["Ticker","Dir","Status","Incline","Ratio(d)","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
-    print(f"\n[fibo] znaleziono: {len(rows)}")
+    print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}")
     print(f"[fibo] md: {out_md}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:

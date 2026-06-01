@@ -48,6 +48,11 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"near61_raw": "10.0", "ratio_raw": "9.9", "incline_days": "35"}, chart_url="https://stooq.pl/early",
         ),
         mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="OPL", status="3p_steep_incline",
+            direction="long", dates={"start": "2026-01-15", "incline": "2026-01-15->2026-05-29"},
+            metrics={"ratio_raw": "82.0", "incline_days": "95", "near61_raw": "-1"}, chart_url="https://stooq.pl/opl",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="valid", ticker="TPE", status="valid_reversal",
             direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-04-20"},
             metrics={"ratio_raw": "3.2", "incline_days": "28"}, chart_url="https://stooq.pl/tpe",
@@ -58,8 +63,9 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
     assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
+    assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15)**" in text
-    assert text.index("**🇵🇱 TPE ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
+    assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇵🇱 TPE ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
     assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text
     assert "[📈 chart]" not in text

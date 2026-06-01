@@ -794,6 +794,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
         f_tables = _parse_markdown_tables(f_md) if f_md else {}
         i_w2 = next((v for k, v in i_tables.items() if "WYNIKI 2" in k.upper()), [])
         i_w1 = next((v for k, v in i_tables.items() if k.upper().strip() == "WYNIKI" or "WYNIKI 1" in k.upper()), [])
+        f_w0 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #0" in k.upper()), [])
         f_w2 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #2" in k.upper()), [])
         f_w1 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #1" in k.upper()), [])
         for r in i_w2:
@@ -836,6 +837,9 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                 },
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
             ))
+        for r in f_w0:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": "-1"}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
@@ -1286,6 +1290,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         f_tables = _parse_md_tables(f_md) if f_md else {}
         i_w2 = next((v for k, v in i_tables.items() if "WYNIKI 2" in k.upper()), [])
         i_w1 = next((v for k, v in i_tables.items() if k.upper().strip() == "WYNIKI" or "WYNIKI 1" in k.upper()), [])
+        f_w0 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #0" in k.upper()), [])
         f_w2 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #2" in k.upper()), [])
         f_w1 = next((v for k, v in f_tables.items() if "WYNIKI FIBO #1" in k.upper()), [])
         for r in i_w2:
@@ -1304,6 +1309,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 metrics={"candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")), "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "raw_status": str(r.get("Pozycja", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="LOW"
             ))
+        for r in f_w0:
+            t = str(r.get("Ticker", "")).strip()
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": "-1"}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
