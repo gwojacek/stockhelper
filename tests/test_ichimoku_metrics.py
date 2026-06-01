@@ -64,6 +64,41 @@ def test_risk_is_missing_without_valid_breakout_or_retest_pattern():
     assert metrics["ichimoku_risk"] == "-"
 
 
+def test_chikou_metric_uses_direction_arrow_and_contextual_risk():
+    base_rows = []
+    for idx in range(60):
+        base_rows.append(
+            {
+                "Open": 100.0,
+                "High": 106.0,
+                "Low": 94.0,
+                "Close": 100.0,
+                "tenkan": 102.0,
+                "kijun": 100.0,
+                "cloud_top": 99.0,
+                "cloud_bottom": 95.0,
+                "span_a": 101.0,
+                "span_b": 100.0,
+            }
+        )
+    df_over = pd.DataFrame(base_rows)
+    df_over.loc[len(df_over) - 27, "Close"] = 90.0
+    df_over.loc[len(df_over) - 1, "Close"] = 110.0
+
+    long_metrics = scanner_search._ichimoku_extra_metrics(df_over, "above", "breakout_confirmed")
+
+    assert long_metrics["chikou_confirmation"] == "↑ over"
+    assert long_metrics["ichimoku_risk"] == "3%"
+
+    df_under = pd.DataFrame(base_rows)
+    df_under.loc[len(df_under) - 27, "Close"] = 110.0
+    df_under.loc[len(df_under) - 1, "Close"] = 90.0
+
+    short_metrics = scanner_search._ichimoku_extra_metrics(df_under, "below", "deep_retest_pattern")
+
+    assert short_metrics["chikou_confirmation"] == "↓ under"
+    assert short_metrics["ichimoku_risk"] == "2%"
+
 def test_ichimoku_status_distinguishes_over_from_kijun_touch():
     df_over = pd.DataFrame([
         {

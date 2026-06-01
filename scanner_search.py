@@ -1477,9 +1477,17 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         tenkan = float(c["tenkan"])
         tenkan_in_cloud = "yes" if cloud_bottom <= tenkan <= cloud_top else "no"
 
+        chikou_is_confirming = False
         if len(df) > 26:
             past_close = float(df["Close"].iloc[-27])
-            chikou_confirmation = "yes" if ((not is_short and close > past_close) or (is_short and close < past_close)) else "no"
+            if close > past_close:
+                chikou_confirmation = "↑ over"
+                chikou_is_confirming = not is_short
+            elif close < past_close:
+                chikou_confirmation = "↓ under"
+                chikou_is_confirming = is_short
+            else:
+                chikou_confirmation = "↔ equal"
         else:
             chikou_confirmation = "-"
 
@@ -1513,7 +1521,7 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         risk_text = "-"
         if risk_context:
             risk = 0
-            if chikou_confirmation == "yes":
+            if chikou_is_confirming:
                 risk += 1
             if (not is_short and kumo_twist == "green") or (is_short and kumo_twist == "red"):
                 risk += 1
