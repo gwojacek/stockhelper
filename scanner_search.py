@@ -1455,9 +1455,21 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         else:
             tk_cross = "-"
 
-        if "span_a" in df.columns and "span_b" in df.columns and pd.notna(c.get("span_a")) and pd.notna(c.get("span_b")):
-            diff = float(c["span_a"] - c["span_b"])
-            kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
+        if len(df) >= 52 and pd.notna(c.get("tenkan")) and pd.notna(c.get("kijun")):
+            # Kumo twist should describe the leading cloud projected to the
+            # right of the current candle, not the shifted cloud under price.
+            # The shifted span_a/span_b columns are used for current support/
+            # resistance; here we recompute the unshifted leading spans so a
+            # newly appearing red/green future kumo is visible in reports.
+            leading_span_a = (float(c["tenkan"]) + float(c["kijun"])) / 2.0
+            high52 = pd.to_numeric(df["High"].tail(52), errors="coerce")
+            low52 = pd.to_numeric(df["Low"].tail(52), errors="coerce")
+            if high52.notna().any() and low52.notna().any():
+                leading_span_b = (float(high52.max()) + float(low52.min())) / 2.0
+                diff = leading_span_a - leading_span_b
+                kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
+            else:
+                kumo_twist = "-"
         else:
             kumo_twist = "-"
 
