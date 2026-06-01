@@ -93,24 +93,32 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
             dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "previous_side": "below"}, chart_url="https://stooq.pl/rwe",
         ),
+        mod.ScannerRow(
+            market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="BEAR.DE", status="breakout_confirmed",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "0.0", "ichimoku_status": "Touched Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "current_side": "🔴 below"}, chart_url="https://stooq.pl/bear",
+        ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ✅ Chikou ↓ under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK cross values are shown as bullish / bearish / no cross yet" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
     assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
-    assert "🟡 risk: 2% · ✅ Chikou ↑ over · 🟢 kumo" in text
+    assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
     assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn high · cloud normal" in text
+    assert "**🇩🇪 BEAR.DE 🔁 retest (0.0m)**" in text
+    assert "🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn mild · cloud normal" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
     lines = text.splitlines()
     data_rows = [line for line in lines if line.startswith("| ") and not line.startswith("|---")][1:]
     assert "**🇩🇪 HFG.DE" in data_rows[0]
-    assert "**🇩🇪 RWE.DE" in data_rows[0]
+    assert "**🇩🇪 BEAR.DE" in data_rows[0]
+    assert any("**🇩🇪 RWE.DE" in row for row in data_rows)
     assert "**🇺🇸 MSFT.US" in text
     assert "**🇵🇱 CRI" in data_rows[0]
     assert "**🇵🇱 ABC" in text
