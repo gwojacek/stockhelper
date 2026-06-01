@@ -2332,10 +2332,12 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     fib_618 = fib_end - rng * 0.618
     current_close = float(close.iloc[-1])
 
-    # Do not reject 3P steep candidates just because price already touched or
-    # closed around 23.6. That state is carried in status so Trójpolówki can route
-    # it to the second column; this detector is only about incline quality.
-    around_23_6 = current_close <= fib_236 * 1.05
+    # Route to the 23.6 warning column only when the newest long close is
+    # actually under 23.6 and still very close to that line. If price is still
+    # above 23.6, keep it as a pure first-column steep incline.
+    band_236_to_618 = max(abs(fib_236 - fib_618), 1e-9)
+    progress_to_618 = (fib_236 - current_close) / band_236_to_618
+    around_23_6 = 0.0 <= progress_to_618 <= 0.15
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)

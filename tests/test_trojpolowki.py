@@ -70,9 +70,9 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🇵🇱 TPE ↗️ (2026-03-23)**" not in text
     assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
     assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
-    assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15)**" in text
+    assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
     assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
-    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
+    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" not in text
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
