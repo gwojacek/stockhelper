@@ -35,7 +35,12 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
         mod.ScannerRow(
             market="WIG", scanner="FIBO", category="waiting", ticker="TRN", status="reached_23_6_waiting_for_61_8",
             direction="long", dates={"start": "2026-01-30", "incline": "2026-01-30->2026-03-30"},
-            metrics={"near61_raw": "93.2", "ratio_raw": "2.0", "incline_days": "59"}, chart_url="https://stooq.pl/trn",
+            metrics={"near61_raw": "92.7", "ratio_raw": "2.0", "incline_days": "59"}, chart_url="https://stooq.pl/trn",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="waiting", ticker="TRN", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2025-12-29", "incline": "2025-12-29->2026-03-30"},
+            metrics={"near61_raw": "91.6", "ratio_raw": "2.8", "incline_days": "91"}, chart_url="https://stooq.pl/trn",
         ),
         mod.ScannerRow(
             market="US100", scanner="FIBO", category="waiting", ticker="AEP.US", status="reached_23_6_waiting_for_61_8",
@@ -84,7 +89,9 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
     assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
     assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" not in text
-    assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text
+    assert text.count("**🇵🇱 TRN ↗️") == 1
+    assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" in text
+    assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" not in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
     assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)

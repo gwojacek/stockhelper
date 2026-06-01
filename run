@@ -878,7 +878,46 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
             if prev is None or priority(row) < priority(prev):
                 picked[key] = row
         return list(picked.values())
-    fibo = _dedupe_same_fibo_start(fibo)
+    def _dedupe_nearby_same_scale_display(items: list[ScannerRow]) -> list[ScannerRow]:
+        # Markdown rows do not carry fib anchor prices, so use a conservative
+        # fallback for historical reports: when the same instrument/direction has
+        # nearly identical near-61.8 values and starts only a few weeks apart, treat
+        # it as the same-scale formation and keep the older/broader row.
+        def parsed_start(row: ScannerRow) -> date | None:
+            try:
+                value = str(row.dates.get("start") or "")
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except Exception:
+                return None
+        picked: list[ScannerRow] = []
+        for row in items:
+            row_start = parsed_start(row)
+            row_near = _parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0)
+            duplicate_idx: int | None = None
+            for idx, existing in enumerate(picked):
+                existing_start = parsed_start(existing)
+                existing_near = _parse_float_text(existing.metrics.get("near61_raw", existing.metrics.get("near61", "-1")), -1.0)
+                if (
+                    str(row.ticker or "").upper() == str(existing.ticker or "").upper()
+                    and str(row.direction or "").lower() == str(existing.direction or "").lower()
+                    and row.category == existing.category
+                    and row_start is not None
+                    and existing_start is not None
+                    and abs((row_start - existing_start).days) <= 45
+                    and row_near >= 0
+                    and existing_near >= 0
+                    and abs(row_near - existing_near) <= 5.0
+                ):
+                    duplicate_idx = idx
+                    break
+            if duplicate_idx is None:
+                picked.append(row)
+            else:
+                existing_start = parsed_start(picked[duplicate_idx])
+                if row_start is not None and existing_start is not None and row_start < existing_start:
+                    picked[duplicate_idx] = row
+        return picked
+    fibo = _dedupe_nearby_same_scale_display(_dedupe_same_fibo_start(fibo))
     def _fibo_near(row: ScannerRow) -> float:
         return _parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0)
     def _fibo_steep(row: ScannerRow) -> bool:

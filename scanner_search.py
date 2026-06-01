@@ -314,6 +314,53 @@ class FiboScanResult:
     expected_latest_session_date: date | None = None
 
 
+def _fibo_formation_size(result: FiboScanResult) -> float:
+    """Approximate absolute fib range from the 23.6 line and stop anchor."""
+    try:
+        anchor = float(result.stop_loss)
+        fib_end = (float(result.fib_23_6) - 0.236 * anchor) / 0.764
+        return abs(fib_end - anchor)
+    except Exception:
+        return 0.0
+
+
+def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
+    if str(a.ticker).upper() != str(b.ticker).upper() or str(a.direction).lower() != str(b.direction).lower():
+        return False
+    size_a = _fibo_formation_size(a)
+    size_b = _fibo_formation_size(b)
+    if size_a <= 0 or size_b <= 0:
+        return False
+    size_similarity = min(size_a, size_b) / max(size_a, size_b)
+    anchor_gap = abs(float(a.stop_loss) - float(b.stop_loss)) / max(abs(float(a.stop_loss)), abs(float(b.stop_loss)), 1e-9)
+    # Nested formations are useful only when they are materially different.
+    # If both the fib range and bottom/top anchor are almost the same scale, keep
+    # the broader candidate and suppress the near-duplicate. PKO-like formations
+    # survive because their older base makes a much larger range.
+    return size_similarity >= 0.78 and anchor_gap <= 0.08
+
+
+def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[FiboScanResult]:
+    picked: list[FiboScanResult] = []
+
+    def prefer(candidate: FiboScanResult, current: FiboScanResult) -> bool:
+        candidate_size = _fibo_formation_size(candidate)
+        current_size = _fibo_formation_size(current)
+        if abs(candidate_size - current_size) > max(candidate_size, current_size, 1e-9) * 0.03:
+            return candidate_size > current_size
+        if candidate.incline_duration_days != current.incline_duration_days:
+            return candidate.incline_duration_days > current.incline_duration_days
+        return candidate.incline_start_date < current.incline_start_date
+
+    for item in items:
+        duplicate_idx = next((idx for idx, existing in enumerate(picked) if _same_scale_fibo_formation(item, existing)), None)
+        if duplicate_idx is None:
+            picked.append(item)
+        elif prefer(item, picked[duplicate_idx]):
+            picked[duplicate_idx] = item
+    return picked
+
+
 def _is_bullish_hammer(c: pd.Series) -> bool:
     body = abs(float(c["Close"] - c["Open"]))
     if body == 0:
@@ -3061,9 +3108,9 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             continue
 
-    rows0 = [r for r in rows0 if _passes_fibo_liquidity(r)]
-    rows1 = [r for r in rows1 if _passes_fibo_liquidity(r)]
-    rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
+    rows0 = _dedupe_same_scale_fibo_formations([r for r in rows0 if _passes_fibo_liquidity(r)])
+    rows1 = _dedupe_same_scale_fibo_formations([r for r in rows1 if _passes_fibo_liquidity(r)])
+    rows2 = _dedupe_same_scale_fibo_formations([r for r in rows2 if _passes_fibo_liquidity(r)])
     rows0 = sorted(
         rows0,
         key=lambda r: (
