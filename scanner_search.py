@@ -2103,6 +2103,7 @@ def _select_fibo_long_impulse_base(
     i_peak: int,
     min_incline_days: int,
     log: Callable[[str], None] | None = None,
+    stale_cycle_mode: str = "reject",
 ) -> tuple[int, float, float] | None:
     """Select the long Fibo impulse bottom using the regular formation rules."""
     def _log(msg: str) -> None:
@@ -2178,7 +2179,8 @@ def _select_fibo_long_impulse_base(
     # correction, this start is too old.
     min_stale_guard_days = 10  # ~2 weeks
 
-    def _has_stale_cycle(start_idx: int, start_low: float) -> bool:
+    def _stale_cycle_reset_candidate(start_idx: int, start_low: float) -> tuple[bool, tuple[int, float, int] | None]:
+        latest_reset: tuple[int, float, int] | None = None
         for p in range(start_idx + min_incline_days, max(start_idx + min_incline_days, i_peak - 8)):
             if (p - start_idx) <= min_stale_guard_days:
                 continue
@@ -2191,13 +2193,32 @@ def _select_fibo_long_impulse_base(
             if p_rng <= 0:
                 continue
             p_fib_618 = p_high - p_rng * 0.618
-            post_low = float(low.iloc[p:i_peak + 1].min())
+            post_slice = low.iloc[p:i_peak + 1]
+            post_idx = int(post_slice.idxmin())
+            post_low = float(low.iloc[post_idx])
             if post_low <= p_fib_618:
-                _log(f"Rejected long: stale impulse start (earlier peak idx={p} already corrected below its 61.8).")
-                return True
-        return False
+                stale_msg_prefix = "Long: stale impulse start" if stale_cycle_mode == "reset" else "Rejected long: stale impulse start"
+                _log(f"{stale_msg_prefix} (earlier peak idx={p} already corrected below its 61.8).")
+                if i_peak > post_idx + min_incline_days:
+                    latest_reset = (post_idx, post_low, p)
+                else:
+                    return True, None
+        if latest_reset is not None:
+            return True, latest_reset
+        return False, None
 
-    stale_cycle = _has_stale_cycle(i_start, fib_start)
+    stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
+    reset_attempts = 0
+    while stale_cycle and stale_cycle_mode == "reset" and stale_reset is not None and reset_attempts < 3:
+        reset_idx, reset_low, peak_idx = stale_reset
+        _log(
+            "Long: stale-cycle guard reset impulse start "
+            f"(earlier_peak_idx={peak_idx}, idx={i_start} -> {reset_idx})."
+        )
+        i_start = reset_idx
+        fib_start = reset_low
+        reset_attempts += 1
+        stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
     if stale_cycle and i_start != orig_i_start:
         fallback_start = float(low.iloc[orig_i_start])
         _log(
@@ -2207,7 +2228,7 @@ def _select_fibo_long_impulse_base(
         i_start = orig_i_start
         fib_start = fallback_start
         i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
-        stale_cycle = _has_stale_cycle(i_start, fib_start)
+        stale_cycle, _stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
     if stale_cycle:
         return None
 
@@ -2254,7 +2275,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: recent high is not near the dominant high.")
         return None
 
-    base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log)
+    base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log, stale_cycle_mode="reset")
     if base is None:
         return None
     i_start, fib_start, fib_end = base
@@ -2314,7 +2335,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     # Do not reject 3P steep candidates just because price already touched or
     # closed around 23.6. That state is carried in status so Trójpolówki can route
     # it to the second column; this detector is only about incline quality.
-    around_23_6 = current_close <= fib_236 * 1.015
+    around_23_6 = current_close <= fib_236 * 1.05
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
