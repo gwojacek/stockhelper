@@ -58,6 +58,16 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"ratio_raw": "55.0", "incline_days": "35", "near61_raw": "0.0"}, chart_url="https://stooq.pl/cps",
         ),
         mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="GPW", status="3p_steep_23_6_zone",
+            direction="long", dates={"start": "2026-03-27", "incline": "2026-03-27->2026-05-29"},
+            metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="waiting", ticker="GPW", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2026-03-27", "incline": "2026-03-27->2026-05-29"},
+            metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="valid", ticker="TPE", status="valid_reversal",
             direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-04-20"},
             metrics={"ratio_raw": "3.2", "incline_days": "28"}, chart_url="https://stooq.pl/tpe",
@@ -71,6 +81,7 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
     assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
+    assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
     assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
     assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" not in text
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text

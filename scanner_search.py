@@ -2304,39 +2304,6 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         return None
     i_start, fib_start, fib_end = base
 
-    def _reset_steep_start_after_deep_mid_retrace(start_idx: int, start_low: float) -> tuple[int, float]:
-        """For 3P steep, keep the anchor on the vertical leg, not before a long chop."""
-        best_reset: tuple[int, float, int] | None = None
-        for p in range(start_idx + min_incline_days, max(start_idx + min_incline_days, i_peak - 8)):
-            win_l = max(start_idx, p - 4)
-            win_r = min(i_peak, p + 5)
-            if float(high.iloc[p]) < float(high.iloc[win_l:win_r].max()):
-                continue
-            p_high = float(high.iloc[p])
-            p_rng = p_high - start_low
-            if p_rng <= 0:
-                continue
-            # A 38.2%+ mid-impulse retrace means the earlier base is no longer
-            # the start of the steep/vertical leg (e.g. LPP's long Jan-Mar chop).
-            p_fib_382 = p_high - p_rng * 0.382
-            post_slice = low.iloc[p:i_peak + 1]
-            if post_slice.empty:
-                continue
-            post_idx = int(post_slice.idxmin())
-            post_low = float(low.iloc[post_idx])
-            if post_low <= p_fib_382 and i_peak > post_idx + min_incline_days:
-                best_reset = (post_idx, post_low, p)
-        if best_reset is None:
-            return start_idx, start_low
-        reset_idx, reset_low, peak_idx = best_reset
-        _log(
-            "3P steep: reset start after deep mid-impulse retrace "
-            f"(earlier_peak_idx={peak_idx}, start_idx={start_idx} -> {reset_idx})."
-        )
-        return reset_idx, reset_low
-
-    i_start, fib_start = _reset_steep_start_after_deep_mid_retrace(i_start, fib_start)
-
     incline_days = i_peak - i_start
     if incline_days < min_incline_days:
         _log("Rejected 3P steep: incline shorter than 21 sessions.")

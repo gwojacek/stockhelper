@@ -863,6 +863,22 @@ def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
 
 def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
     fibo = [r for r in rows if r.scanner == "FIBO"]
+    def _dedupe_same_fibo_start(items: list[ScannerRow]) -> list[ScannerRow]:
+        # One instrument may have both a larger and a smaller valid formation, but
+        # duplicate rows for the same bottom are noise (e.g. #0 steep + #1 waiting).
+        # Keep one row per ticker/direction/start and prefer regular waiting rows
+        # over synthetic steep rows when both describe the same formation.
+        def priority(row: ScannerRow) -> tuple[int, float]:
+            category_rank = {"waiting": 0, "steep": 1, "valid": 2}.get(row.category, 9)
+            return (category_rank, -_parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0))
+        picked: dict[tuple[str, str, str], ScannerRow] = {}
+        for row in items:
+            key = (str(row.ticker or "").upper(), str(row.direction or "").lower(), str(row.dates.get("start") or ""))
+            prev = picked.get(key)
+            if prev is None or priority(row) < priority(prev):
+                picked[key] = row
+        return list(picked.values())
+    fibo = _dedupe_same_fibo_start(fibo)
     def _fibo_near(row: ScannerRow) -> float:
         return _parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0)
     def _fibo_steep(row: ScannerRow) -> bool:
