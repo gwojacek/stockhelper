@@ -366,7 +366,7 @@ def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     if not (cl1 < o1 and cl2 > o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 > level
+    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
 
 def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
@@ -1455,9 +1455,21 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
         else:
             tk_cross = "-"
 
-        if "span_a" in df.columns and "span_b" in df.columns and pd.notna(c.get("span_a")) and pd.notna(c.get("span_b")):
-            diff = float(c["span_a"] - c["span_b"])
-            kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
+        if len(df) >= 52 and pd.notna(c.get("tenkan")) and pd.notna(c.get("kijun")):
+            # Kumo twist should describe the leading cloud projected to the
+            # right of the current candle, not the shifted cloud under price.
+            # The shifted span_a/span_b columns are used for current support/
+            # resistance; here we recompute the unshifted leading spans so a
+            # newly appearing red/green future kumo is visible in reports.
+            leading_span_a = (float(c["tenkan"]) + float(c["kijun"])) / 2.0
+            high52 = pd.to_numeric(df["High"].tail(52), errors="coerce")
+            low52 = pd.to_numeric(df["Low"].tail(52), errors="coerce")
+            if high52.notna().any() and low52.notna().any():
+                leading_span_b = (float(high52.max()) + float(low52.min())) / 2.0
+                diff = leading_span_a - leading_span_b
+                kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
+            else:
+                kumo_twist = "-"
         else:
             kumo_twist = "-"
 

@@ -98,12 +98,12 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ✅ Chikou under · 🔴 twist bearish" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ✅ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK cross values are shown as bullish / bearish / no cross yet" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
     assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
-    assert "🟡 risk: 2% · ✅ Chikou over · 🟢 twist bullish" in text
+    assert "🟡 risk: 2% · ✅ Chikou over · 🟢 kumo" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
     assert "➖ cloud shallow" in text
     lines = text.splitlines()
@@ -153,8 +153,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🌈🐱 Scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
-    assert "📄 Download PDF" in text
+    assert "📄 PDF" in text
+    assert "📄 Download PDF" not in text
     assert 'onclick="downloadPdfReport()"' in text
+    assert "@media print" in text
+    assert "zoom:.78" in text
     assert "id='tab-allsearch' class='tab-panel active'" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
@@ -166,11 +169,18 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
     assert "Open stooq links from top choices" in text
     assert "Open stooq links from this column" in text
-    assert "openTrojColumnStooqLinks" in text
+    assert "event.stopPropagation();openTrojColumnStooqLinks" in text
+    assert "toggleTrojExtra" in text
+    assert "Hide 3P info" not in text
+    assert "global-hide-info" not in text
+    assert "Hide additional info" in text
+    assert "troj-extra-info" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
-    assert "troj-table sortable" in text
-    assert "table.data, table.sortable" in text
+    assert "troj-table sortable" not in text
+    assert "top-choice-compact sortable" not in text
+    assert "table.data, table.sortable" not in text
+    assert "document.querySelectorAll('table.data')" in text
     assert "🇩🇪 EARLY.DE" in text
     assert "Ichimoku Active" not in text
     assert "id='clear-q'" in text
@@ -187,3 +197,30 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text
+
+
+def test_allsearch_all_scopes_include_indexes():
+    mod = load_run_module()
+    assert mod.DEFAULT_ALLSEARCH_SCOPES == ["wig", "dax", "us100", "forex", "commodities", "indexes"]
+    assert mod._allsearch_report_stem(mod.DEFAULT_ALLSEARCH_SCOPES) == "allsearch_latest_all"
+    assert mod._scope_file_keys("indices") == ["indexes", "indices", "index"]
+    assert "📊 INDEXES" == mod._scope_label("indexes")
+
+
+def test_bullish_harami_retest_can_stay_inside_cloud():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def _is_bullish_harami")
+    end = source.index("def _is_morning_star", start)
+    harami_source = source[start:end]
+    assert "and cl2 > level" not in harami_source
+    assert "_touches_level(c1, level) or _touches_level(c2, level)" in harami_source
+
+
+def test_kumo_twist_uses_projected_cloud_source():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def _ichimoku_extra_metrics")
+    end = source.index("tk_plus =", start)
+    metrics_source = source[start:end]
+    assert "leading_span_a" in metrics_source
+    assert "High\"].tail(52)" in metrics_source
+    assert "span_a\"] - c[\"span_b" not in metrics_source
