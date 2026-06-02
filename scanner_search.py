@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
 from importlib import util
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -313,6 +314,77 @@ class FiboScanResult:
     expected_latest_session_date: date | None = None
 
 
+def _fibo_formation_size(result: FiboScanResult) -> float:
+    """Approximate absolute fib range from the 23.6 line and stop anchor."""
+    try:
+        anchor = float(result.stop_loss)
+        fib_end = (float(result.fib_23_6) - 0.236 * anchor) / 0.764
+        return abs(fib_end - anchor)
+    except Exception:
+        return 0.0
+
+
+def _fibo_formation_strength(result: FiboScanResult) -> float:
+    """Average daily impulse gain; used to choose between close-bottom duplicates."""
+    try:
+        return _fibo_formation_size(result) / max(abs(float(result.stop_loss)), 1e-9) / max(int(result.incline_duration_days), 1)
+    except Exception:
+        return 0.0
+
+
+def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
+    if str(a.ticker).upper() != str(b.ticker).upper() or str(a.direction).lower() != str(b.direction).lower():
+        return False
+    size_a = _fibo_formation_size(a)
+    size_b = _fibo_formation_size(b)
+    if size_a <= 0 or size_b <= 0:
+        return False
+    size_similarity = min(size_a, size_b) / max(size_a, size_b)
+    anchor_gap = abs(float(a.stop_loss) - float(b.stop_loss)) / max(abs(float(a.stop_loss)), abs(float(b.stop_loss)), 1e-9)
+    # Nested formations are useful only when they are materially different. If
+    # bottoms are close, require a clearly larger fib range before keeping both;
+    # otherwise choose the stronger following impulse from those nearby bottoms.
+    if anchor_gap <= 0.08:
+        return size_similarity >= 0.62
+    return size_similarity >= 0.78
+
+
+def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[FiboScanResult]:
+    picked: list[FiboScanResult] = []
+
+    def prefer(candidate: FiboScanResult, current: FiboScanResult) -> bool:
+        candidate_steep = str(candidate.status).startswith("3p_steep")
+        current_steep = str(current.status).startswith("3p_steep")
+        # If a synthetic #0 steep row and a regular Fibo row describe the same
+        # scale, keep the regular row. The #0 row is only a watchlist substitute
+        # while regular 23.6/61.8 logic has not produced a formation.
+        if candidate_steep != current_steep:
+            return not candidate_steep
+        candidate_anchor = float(candidate.stop_loss)
+        current_anchor = float(current.stop_loss)
+        anchor_gap = abs(candidate_anchor - current_anchor) / max(abs(candidate_anchor), abs(current_anchor), 1e-9)
+        candidate_size = _fibo_formation_size(candidate)
+        current_size = _fibo_formation_size(current)
+        if anchor_gap <= 0.08:
+            candidate_strength = _fibo_formation_strength(candidate)
+            current_strength = _fibo_formation_strength(current)
+            if abs(candidate_strength - current_strength) > max(candidate_strength, current_strength, 1e-9) * 0.03:
+                return candidate_strength > current_strength
+        if abs(candidate_size - current_size) > max(candidate_size, current_size, 1e-9) * 0.03:
+            return candidate_size > current_size
+        if candidate.incline_duration_days != current.incline_duration_days:
+            return candidate.incline_duration_days > current.incline_duration_days
+        return candidate.incline_start_date < current.incline_start_date
+
+    for item in items:
+        duplicate_idx = next((idx for idx, existing in enumerate(picked) if _same_scale_fibo_formation(item, existing)), None)
+        if duplicate_idx is None:
+            picked.append(item)
+        elif prefer(item, picked[duplicate_idx]):
+            picked[duplicate_idx] = item
+    return picked
+
+
 def _is_bullish_hammer(c: pd.Series) -> bool:
     body = abs(float(c["Close"] - c["Open"]))
     if body == 0:
@@ -459,20 +531,28 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct) is not None
 
 
-def _select_impulse_start_long(w: pd.DataFrame, peak_idx: int, min_days: int) -> int | None:
+def _select_impulse_start_long(
+    w: pd.DataFrame,
+    peak_idx: int,
+    min_days: int,
+    max_lookback: int = 140,
+    reset_after_sideways: bool = True,
+) -> int | None:
     low = pd.to_numeric(w["Low"], errors="coerce")
-    left = max(0, peak_idx - 140)
+    left = max(0, peak_idx - max_lookback)
     right = peak_idx - min_days
     if right <= left:
         return None
     # If a long sideways block exists before the selected peak, treat the breakout
     # after that block as a newer impulse and avoid anchoring to very old lows.
-    seg = w.iloc[left:peak_idx + 1]
-    sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
-    if sideways_end is not None:
-        candidate_left = left + sideways_end + 1
-        if candidate_left < right:
-            left = candidate_left
+    # 3P can disable this to prefer a larger valid formation when one exists.
+    if reset_after_sideways:
+        seg = w.iloc[left:peak_idx + 1]
+        sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
+        if sideways_end is not None:
+            candidate_left = left + sideways_end + 1
+            if candidate_left < right:
+                left = candidate_left
     # Use the lowest low in the allowed pre-peak window as impulse base.
     return int(low.iloc[left:right + 1].idxmin())
 
@@ -1989,8 +2069,12 @@ def run_ichimoku_search(target: str) -> int:
         sequential = False
         print("[search] WIG mode: parallel scan enabled (refresh probe already completed).")
     elif group_name == "commodities":
-        sequential = False
-        print("[search] COMMODITIES mode: parallel fetch enabled (captcha/inspector handled per worker).")
+        if os.getenv("STOCKHELPER_COMMODITIES_SEQUENTIAL", "0") == "1":
+            sequential = True
+            print("[search] COMMODITIES mode: sequential Stooq web fetch by STOCKHELPER_COMMODITIES_SEQUENTIAL=1.")
+        else:
+            sequential = False
+            print("[search] COMMODITIES mode: bounded parallel Stooq web fetch (xdist-style workers; prompts still locked).")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
@@ -2008,7 +2092,7 @@ def run_ichimoku_search(target: str) -> int:
 
     rest = members[1:]
     if sequential or len(rest) == 0:
-        if sequential:
+        if sequential and group_name != "commodities":
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix, current_datetime)
@@ -2025,7 +2109,14 @@ def run_ichimoku_search(target: str) -> int:
                 flip = _ensure_flip_ticker(flip, ticker)
                 flip_results.append(flip)
     else:
-        max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
+        if group_name == "commodities":
+            try:
+                commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "2"))
+            except ValueError:
+                commodity_workers = 2
+            max_workers = min(max(2, commodity_workers), len(rest))
+        else:
+            max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
@@ -2095,7 +2186,275 @@ def run_ichimoku_search(target: str) -> int:
     return 0
 
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None) -> FiboScanResult | None:
+
+
+def _select_fibo_long_impulse_base(
+    w: pd.DataFrame,
+    i_peak: int,
+    min_incline_days: int,
+    log: Callable[[str], None] | None = None,
+    stale_cycle_mode: str = "reject",
+    max_lookback: int = 140,
+    reset_after_sideways: bool = True,
+) -> tuple[int, float, float] | None:
+    """Select the long Fibo impulse bottom using the regular formation rules."""
+    def _log(msg: str) -> None:
+        if log is not None:
+            log(msg)
+
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    i_start = _select_impulse_start_long(
+        w,
+        i_peak,
+        min_incline_days,
+        max_lookback=max_lookback,
+        reset_after_sideways=reset_after_sideways,
+    )
+    if i_start is None or i_peak <= i_start + min_incline_days:
+        left_fallback = max(0, i_peak - max_lookback)
+        right_fallback = i_peak - min_incline_days
+        if right_fallback > left_fallback:
+            i_start = int(low.iloc[left_fallback:right_fallback + 1].idxmin())
+            _log(f"Long: fallback impulse start chosen at index={i_start}.")
+        else:
+            _log("Rejected long: invalid impulse start/peak distance.")
+            return None
+    if i_peak <= i_start + min_incline_days:
+        _log("Rejected long: invalid impulse start/peak distance.")
+        return None
+
+    i_end = len(w) - 1
+    # Guard: selected impulse peak should be the dominant high in analyzed window.
+    # This prevents anchoring a newer/lower local top while an earlier higher top
+    # in the same structure was never fully reset by a proper 61.8 cycle.
+    win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
+    if win_peak != i_peak:
+        _log(
+            "Rejected long: selected peak is not dominant in window "
+            f"(selected={i_peak}, dominant={win_peak})."
+        )
+        return None
+
+    # Extend fib-base search left of the selected impulse start.
+    # In strong accelerations, impulse-start selector can land on a later pullback
+    # while the true swing base is a bit earlier. Widening this local back-scan
+    # preserves recency while allowing nearby earlier lows to become the fib anchor.
+    orig_i_start = int(i_start)
+    pre_start_left = max(0, min(i_start - 15, i_peak - 40))
+    fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
+    _log(
+        f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
+        f"(peak_idx={i_peak}) -> idx={fib_start_idx}."
+    )
+    i_start = fib_start_idx
+    fib_start = float(low.iloc[fib_start_idx])
+    fib_end = float(high.iloc[i_peak])
+
+    min_reset_impulse_days = 5
+
+    def _reset_to_newer_lower_low(start_idx: int, start_low: float) -> tuple[int, float]:
+        reset_right = i_peak - min_reset_impulse_days
+        if reset_right <= start_idx:
+            return start_idx, start_low
+        reset_slice = low.iloc[start_idx + 1:reset_right + 1]
+        if not reset_slice.empty:
+            reset_idx = int(reset_slice.idxmin())
+            reset_low = float(low.iloc[reset_idx])
+            if reset_low < start_low:
+                _log(
+                    "Long: newer lower fib start reset "
+                    f"idx={start_idx} low={start_low:.4f} -> "
+                    f"idx={reset_idx} low={reset_low:.4f}."
+                )
+                return reset_idx, reset_low
+        return start_idx, start_low
+
+    i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
+
+    # Guard against stale multi-cycle impulses: if a *large enough* earlier
+    # formation (after the chosen start, before the chosen peak) already completed
+    # a >=61.8 correction, this start is too old. Short one-month-ish cycles are
+    # allowed to cross 61.8; bigger cycles must restart after the new bottom.
+    min_completed_cycle_days = 32
+    max_short_completed_cycle_days = 45
+    min_completed_cycle_gain = 0.18
+
+    def _stale_cycle_reset_candidate(start_idx: int, start_low: float) -> tuple[bool, tuple[int, float, int] | None]:
+        latest_reset: tuple[int, float, int] | None = None
+        scan_left = start_idx + min_completed_cycle_days
+        scan_right = max(scan_left, i_peak - 8)
+        for p in range(scan_left, scan_right):
+            win_l = max(start_idx, p - 4)
+            win_r = min(i_peak, p + 5)
+            local_peak = float(high.iloc[p]) >= float(high.iloc[win_l:win_r].max())
+            dominant_so_far = float(high.iloc[p]) >= float(high.iloc[start_idx:p + 1].max()) * 0.97
+            if not (local_peak or dominant_so_far):
+                continue
+            p_high = float(high.iloc[p])
+            p_rng = p_high - start_low
+            if p_rng <= 0:
+                continue
+            completed_days = p - start_idx
+            gain_pct = p_rng / max(abs(start_low), 1e-9)
+            if completed_days <= max_short_completed_cycle_days or gain_pct < min_completed_cycle_gain:
+                continue
+            p_fib_618 = p_high - p_rng * 0.618
+            post_slice = low.iloc[p:i_peak + 1]
+            post_idx = int(post_slice.idxmin())
+            post_low = float(low.iloc[post_idx])
+            if post_low <= p_fib_618:
+                stale_msg_prefix = "Long: stale impulse start" if stale_cycle_mode == "reset" else "Rejected long: stale impulse start"
+                _log(
+                    f"{stale_msg_prefix} (earlier large formation peak idx={p}, "
+                    f"{completed_days}d, gain={gain_pct * 100:.2f}% already corrected below its 61.8)."
+                )
+                if i_peak > post_idx + min_incline_days:
+                    latest_reset = (post_idx, post_low, p)
+                else:
+                    return True, None
+        if latest_reset is not None:
+            return True, latest_reset
+        return False, None
+
+    stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
+    if stale_cycle and stale_cycle_mode == "allow":
+        _log("Long: broad candidate still rejected because a large completed formation already crossed 61.8; restart after the new bottom.")
+    reset_attempts = 0
+    while stale_cycle and stale_cycle_mode == "reset" and stale_reset is not None and reset_attempts < 3:
+        reset_idx, reset_low, peak_idx = stale_reset
+        _log(
+            "Long: stale-cycle guard reset impulse start "
+            f"(earlier_peak_idx={peak_idx}, idx={i_start} -> {reset_idx})."
+        )
+        i_start = reset_idx
+        fib_start = reset_low
+        reset_attempts += 1
+        stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
+    if stale_cycle and i_start != orig_i_start:
+        fallback_start = float(low.iloc[orig_i_start])
+        _log(
+            "Long: widened fib start triggered stale-cycle guard; "
+            f"fallback to original impulse start idx={orig_i_start}."
+        )
+        i_start = orig_i_start
+        fib_start = fallback_start
+        i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
+        stale_cycle, _stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
+    if stale_cycle:
+        return None
+
+    return int(i_start), float(fib_start), float(fib_end)
+
+def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain: list[str] | None = None) -> FiboScanResult | None:
+    """Find a 3P steep-incline candidate independently of 23.6/61.8 pullback rules.
+
+    The regular Fibo scanner intentionally waits for a pullback to at least the
+    23.6 retracement (or a 61.8 reversal). The first Trójpolówki Fibo column is
+    an incline-quality watchlist: liquid instruments with a current, steep
+    impulse, regardless of whether regular second-column pullback checks are
+    already relevant.
+    """
+    def _log(msg: str) -> None:
+        if explain is not None:
+            explain.append(msg)
+
+    if direction != "long":
+        _log("Rejected 3P steep: only long direction is supported.")
+        return None
+    if len(df) < 80:
+        _log("Rejected 3P steep: less than 80 candles.")
+        return None
+
+    w = df.tail(320).reset_index(drop=True)
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    close = pd.to_numeric(w["Close"], errors="coerce")
+    if high.dropna().empty or low.dropna().empty or close.dropna().empty:
+        _log("Rejected 3P steep: missing OHLC data.")
+        return None
+
+    min_incline_days = 21
+    recent_left = max(min_incline_days, len(w) - 35)
+    if recent_left >= len(w):
+        _log("Rejected 3P steep: not enough recent candles.")
+        return None
+
+    global_high = float(high.max())
+    i_peak = int(high.iloc[recent_left:].idxmax())
+    peak_high = float(high.iloc[i_peak])
+    if global_high <= 0 or peak_high < global_high * 0.97:
+        _log("Rejected 3P steep: recent high is not near the dominant high.")
+        return None
+
+    base = _select_fibo_long_impulse_base(
+        w,
+        i_peak,
+        min_incline_days,
+        _log,
+        stale_cycle_mode="reset",
+        max_lookback=260,
+        reset_after_sideways=False,
+    )
+    if base is None:
+        return None
+    i_start, fib_start, fib_end = base
+
+    incline_days = i_peak - i_start
+    if incline_days < min_incline_days:
+        _log("Rejected 3P steep: incline shorter than 21 sessions.")
+        return None
+
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
+        _log("Rejected 3P steep: impulse is sideways/flat.")
+        return None
+
+    rng = fib_end - fib_start
+    if rng <= 0:
+        _log("Rejected 3P steep: non-positive range.")
+        return None
+
+    fib_236 = fib_end - rng * 0.236
+    fib_382 = fib_end - rng * 0.382
+    fib_618 = fib_end - rng * 0.618
+    current_close = float(close.iloc[-1])
+
+    # Route to the 23.6 warning column only when the newest long close is
+    # actually under 23.6 and still very close to that line. If price is still
+    # above 23.6, keep it as a pure first-column steep incline.
+    band_236_to_618 = max(abs(fib_236 - fib_618), 1e-9)
+    progress_to_618 = (fib_236 - current_close) / band_236_to_618
+    around_23_6 = 0.0 <= progress_to_618 <= 0.15
+
+    gain_pct = rng / max(abs(fib_start), 1e-9)
+    avg_daily_gain = gain_pct / max(incline_days, 1)
+    if gain_pct < 0.18 or avg_daily_gain < 0.003:
+        _log(
+            "Rejected 3P steep: incline not steep enough "
+            f"(gain={gain_pct * 100:.2f}%, avg_daily={avg_daily_gain * 100:.2f}%)."
+        )
+        return None
+
+    return FiboScanResult(
+        ticker="",
+        direction="long",
+        status=("3p_steep_23_6_zone" if around_23_6 else "3p_steep_incline"),
+        incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
+        incline_end_date=str(pd.to_datetime(w.iloc[i_peak]["Date"]).date()),
+        incline_duration_days=incline_days,
+        decline_end_date=str(pd.to_datetime(w.iloc[-1]["Date"]).date()),
+        decline_duration_days=1,
+        incline_decline_duration_ratio=round(gain_pct * 100.0, 2),
+        fib_23_6=fib_236,
+        fib_38_2=fib_382,
+        fib_61_8=fib_618,
+        first_61_8_touch_date="",
+        reversal_pattern_name="none",
+        stop_loss=fib_start,
+        current_close=current_close,
+    )
+
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject") -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)
@@ -2119,30 +2478,11 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
-        i_start = _select_impulse_start_long(w, i_peak, min_incline_days)
-        if i_start is None or i_peak <= i_start + min_incline_days:
-            left_fallback = max(0, i_peak - 140)
-            right_fallback = i_peak - min_incline_days
-            if right_fallback > left_fallback:
-                i_start = int(low.iloc[left_fallback:right_fallback + 1].idxmin())
-                _log(f"Long: fallback impulse start chosen at index={i_start}.")
-            else:
-                _log("Rejected long: invalid impulse start/peak distance.")
-                return None
-        if i_peak <= i_start + min_incline_days:
-            _log("Rejected long: invalid impulse start/peak distance.")
+        base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode)
+        if base is None:
             return None
+        i_start, fib_start, fib_end = base
         i_end = len(w) - 1
-        # Guard: selected impulse peak should be the dominant high in analyzed window.
-        # This prevents anchoring a newer/lower local top while an earlier higher top
-        # in the same structure was never fully reset by a proper 61.8 cycle.
-        win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
-        if win_peak != i_peak:
-            _log(
-                "Rejected long: selected peak is not dominant in window "
-                f"(selected={i_peak}, dominant={win_peak})."
-            )
-            return None
         corr_bars = i_end - i_peak
         early_correction_accepted = False
         if corr_bars < 8:
@@ -2158,91 +2498,6 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             else:
                 _log("Rejected long: correction leg too short (<8 bars).")
                 return None
-        # Extend fib-base search left of the selected impulse start.
-        # In strong accelerations, impulse-start selector can land on a later pullback
-        # (e.g. 2026-04-16) while the true swing base is a bit earlier (e.g. 2026-04-07).
-        #
-        # 6 bars was too tight for some DAX names (e.g. BAYN.DE in Nov 2025),
-        # where the relevant swing low printed ~10 sessions before the selected
-        # impulse start. Widening this local back-scan preserves recency while
-        # allowing nearby earlier lows to become the fib anchor.
-        orig_i_start = int(i_start)
-        pre_start_left = max(0, min(i_start - 15, i_peak - 40))
-        fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
-        _log(
-            f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
-            f"(peak_idx={i_peak}) -> idx={fib_start_idx}."
-        )
-        i_start = fib_start_idx
-        fib_start = float(low.iloc[fib_start_idx])
-        fib_end = float(high.iloc[i_peak])
-        # If price prints a lower swing bottom after the initially selected
-        # impulse start, reset the Fibonacci base to that newer/lower low.  The
-        # original start selector intentionally keeps a minimum pre-peak length
-        # (~2 weeks), but this can leave an obsolete anchor in place when a
-        # sharp final impulse begins from a lower bottom slightly closer to the
-        # peak (for example ATT.WA: 2026-03-23 low 17.10 was kept even though
-        # 2026-04-22 printed a lower low at 16.98 before the 2026-05-06 peak).
-        # For Fibonacci drawing the lower reset point is the correct 0/100%
-        # anchor as long as there is still a real impulse leg afterwards.
-        min_reset_impulse_days = 5
-
-        def _reset_to_newer_lower_low(start_idx: int, start_low: float) -> tuple[int, float]:
-            reset_right = i_peak - min_reset_impulse_days
-            if reset_right <= start_idx:
-                return start_idx, start_low
-            reset_slice = low.iloc[start_idx + 1:reset_right + 1]
-            if not reset_slice.empty:
-                reset_idx = int(reset_slice.idxmin())
-                reset_low = float(low.iloc[reset_idx])
-                if reset_low < start_low:
-                    _log(
-                        "Long: newer lower fib start reset "
-                        f"idx={start_idx} low={start_low:.4f} -> "
-                        f"idx={reset_idx} low={reset_low:.4f}."
-                    )
-                    return reset_idx, reset_low
-            return start_idx, start_low
-
-        i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
-        # Guard against stale multi-cycle impulses:
-        # if an earlier local peak (after the chosen start, before the chosen peak)
-        # already completed a >=61.8 correction, this start is too old.
-        # Skip guard checks for short pre-impulses (<= ~2 weeks) to avoid rejecting
-        # noisy early bumps that do not represent a full impulse leg.
-        min_stale_guard_days = 10  # ~2 weeks
-        def _has_stale_cycle(start_idx: int, start_low: float) -> bool:
-            for p in range(start_idx + min_incline_days, max(start_idx + min_incline_days, i_peak - 8)):
-                if (p - start_idx) <= min_stale_guard_days:
-                    continue
-                win_l = max(start_idx, p - 4)
-                win_r = min(i_peak, p + 5)
-                if float(high.iloc[p]) < float(high.iloc[win_l:win_r].max()):
-                    continue
-                p_high = float(high.iloc[p])
-                p_rng = p_high - start_low
-                if p_rng <= 0:
-                    continue
-                p_fib_618 = p_high - p_rng * 0.618
-                post_low = float(low.iloc[p:i_peak + 1].min())
-                if post_low <= p_fib_618:
-                    _log(f"Rejected long: stale impulse start (earlier peak idx={p} already corrected below its 61.8).")
-                    return True
-            return False
-
-        stale_cycle = _has_stale_cycle(i_start, fib_start)
-        if stale_cycle and i_start != orig_i_start:
-            fallback_start = float(low.iloc[orig_i_start])
-            _log(
-                "Long: widened fib start triggered stale-cycle guard; "
-                f"fallback to original impulse start idx={orig_i_start}."
-            )
-            i_start = orig_i_start
-            fib_start = fallback_start
-            i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
-            stale_cycle = _has_stale_cycle(i_start, fib_start)
-        if stale_cycle:
-            return None
         rng = fib_end - fib_start
         if rng <= 0:
             _log("Rejected long: non-positive fib range.")
@@ -2344,8 +2599,11 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         _log(f"Long pattern={pattern}, crossed_618={crossed_618}, corr_low={corr_low:.4f}, fib_618={fib_618:.4f}")
         if pattern == "none":
             if crossed_618:
-                _log("Rejected long: 61.8 crossed but no valid pattern.")
-                return None
+                if (i_peak - i_start) <= 45:
+                    _log("Long: accepting short completed cycle despite 61.8 cross without pattern.")
+                else:
+                    _log("Rejected long: large formation crossed 61.8 but no valid pattern; next formation must start after the new bottom.")
+                    return None
             close_after_peak = pd.to_numeric(w.iloc[i_peak:i_end + 1]["Close"], errors="coerce")
             below_236_idx = [j for j, v in enumerate(close_after_peak.tolist()) if pd.notna(v) and float(v) < fib_236]
             if below_236_idx:
@@ -2612,6 +2870,7 @@ def run_fibo_search(target: str) -> int:
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     current_datetime = datetime.now(UTC)
     rows: list[FiboScanResult] = []
+    rows3p_steep: list[FiboScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
             return False
@@ -2666,6 +2925,14 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
+            steep_3p = _find_fibo_3p_steep_setup(df, "long")
+            if steep_3p:
+                steep_3p.ticker = ticker
+                if pd.notna(latest_close):
+                    steep_3p.current_close = latest_close
+                steep_3p.latest_candle_date = latest_candle_date
+                steep_3p.expected_latest_session_date = expected_latest_session_date
+                out_rows.append(steep_3p)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
@@ -2673,6 +2940,9 @@ def run_fibo_search(target: str) -> int:
                 cand = _find_fibo_setup(df, "long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
+                broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow")
+                if broad_cand:
+                    long_candidates.append(broad_cand)
             if long_candidates:
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c)]
                 # Keep at most three distinct formations, preferring:
@@ -2783,13 +3053,18 @@ def run_fibo_search(target: str) -> int:
                         if not _prompt_vpn_continue_or_stop():
                             print("[fibo] Scan stopped by user after rate-limit detection.", flush=True)
                             return 1
-                rows.extend(found)
+                for item in found:
+                    if item.status.startswith("3p_steep"):
+                        rows3p_steep.append(item)
+                    else:
+                        rows.append(item)
             _submit_more()
         if STOP_SCAN_EVENT.is_set():
             return 1
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
     four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
+    rows0 = list(rows3p_steep)
     rows2 = [
         r for r in rows
         if r.status == "valid_reversal"
@@ -2864,7 +3139,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
-        for r in rows:
+        for r in rows + rows0:
             if r.ticker == ticker:
                 rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
 
@@ -2888,8 +3163,23 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             continue
 
-    rows1 = [r for r in rows1 if _passes_fibo_liquidity(r)]
-    rows2 = [r for r in rows2 if _passes_fibo_liquidity(r)]
+    rows0_liquid = [r for r in rows0 if _passes_fibo_liquidity(r)]
+    rows1_liquid = [r for r in rows1 if _passes_fibo_liquidity(r)]
+    rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
+    rows2_ids = {id(r) for r in rows2_liquid}
+    deduped_fibo_rows = _dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid)
+    rows0 = [r for r in deduped_fibo_rows if r.status.startswith("3p_steep")]
+    rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
+    rows1 = [r for r in deduped_fibo_rows if not r.status.startswith("3p_steep") and id(r) not in rows2_ids]
+    rows0 = sorted(
+        rows0,
+        key=lambda r: (
+            _country_code_from_ticker(r.ticker),
+            -float(r.incline_decline_duration_ratio),
+            r.ticker,
+        ),
+        reverse=False,
+    )
     rows1 = sorted(
         rows1,
         key=lambda r: (
@@ -2935,18 +3225,20 @@ def run_fibo_search(target: str) -> int:
         ichimoku_retest_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = ichimoku_retest_by_ticker[tk]
 
     # Persist terminal-equivalent filtered outputs so external reporters (allsearch)
-    # can render exactly the same instrument sets as terminal WYNIKI #1/#2.
+    # can render exactly the same instrument sets as terminal WYNIKI #0/#1/#2.
     top3_ratio_keys: set[tuple[str, str, str, str]] = {
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
+    rows0_md=[[r.ticker,r.direction,("⚠️ 3p_steep_23_6_zone" if r.status == "3p_steep_23_6_zone" else "🚀 3p_steep_incline"),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)",(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%"),(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md)
+    _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
-    print(f"\n[fibo] znaleziono: {len(rows)}")
+    print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}")
     print(f"[fibo] md: {out_md}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
@@ -2977,6 +3269,19 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
     df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+    steep_steps: list[str] = []
+    steep = _find_fibo_3p_steep_setup(df, "long", explain=steep_steps)
+    print(f"\n=== 3P steep incline ===")
+    print(f"- {'MATCH' if steep else 'NO MATCH'}")
+    if steep:
+        print(
+            "  "
+            f"status={steep.status}, incline={steep.incline_start_date}->{steep.incline_end_date}, "
+            f"ratio={steep.incline_decline_duration_ratio:.2f}, close={steep.current_close:.4f}, "
+            f"fib23.6={steep.fib_23_6:.4f}, fib61.8={steep.fib_61_8:.4f}"
+        )
+    for s in steep_steps:
+        print(f"    • {s}")
     for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:
@@ -2987,6 +3292,14 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
                 print(f"  status={res.status}, pattern={res.reversal_pattern_name}, touch_date={res.first_61_8_touch_date}, close={res.current_close:.4f}")
             for s in steps:
                 print(f"    • {s}")
+            if direction == "long":
+                broad_steps: list[str] = []
+                broad = _find_fibo_setup(df, direction, end_offset=off, explain=broad_steps, stale_cycle_mode="allow")
+                if broad and (not res or broad.incline_start_date != res.incline_start_date or broad.incline_end_date != res.incline_end_date):
+                    print(f"- offset={off} broad: MATCH")
+                    print(f"  status={broad.status}, pattern={broad.reversal_pattern_name}, touch_date={broad.first_61_8_touch_date}, close={broad.current_close:.4f}, incline={broad.incline_start_date}->{broad.incline_end_date}")
+                    for s in broad_steps:
+                        print(f"    • {s}")
     return 0
 
 

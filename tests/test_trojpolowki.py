@@ -35,7 +35,17 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
         mod.ScannerRow(
             market="WIG", scanner="FIBO", category="waiting", ticker="TRN", status="reached_23_6_waiting_for_61_8",
             direction="long", dates={"start": "2026-01-30", "incline": "2026-01-30->2026-03-30"},
-            metrics={"near61_raw": "93.2", "ratio_raw": "2.0", "incline_days": "59"}, chart_url="https://stooq.pl/trn",
+            metrics={"near61_raw": "92.7", "ratio_raw": "3.2", "incline_days": "59"}, chart_url="https://stooq.pl/trn",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="waiting", ticker="TRN", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2025-12-29", "incline": "2025-12-29->2026-03-30"},
+            metrics={"near61_raw": "91.6", "ratio_raw": "2.8", "incline_days": "91"}, chart_url="https://stooq.pl/trn",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="TRN", status="3p_steep_incline",
+            direction="long", dates={"start": "2025-12-29", "incline": "2025-12-29->2026-05-21"},
+            metrics={"near61_raw": "91.6", "ratio_raw": "698.3", "incline_days": "143"}, chart_url="https://stooq.pl/trn",
         ),
         mod.ScannerRow(
             market="US100", scanner="FIBO", category="waiting", ticker="AEP.US", status="reached_23_6_waiting_for_61_8",
@@ -48,6 +58,26 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"near61_raw": "10.0", "ratio_raw": "9.9", "incline_days": "35"}, chart_url="https://stooq.pl/early",
         ),
         mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="OPL", status="3p_steep_incline",
+            direction="long", dates={"start": "2026-01-15", "incline": "2026-01-15->2026-05-29"},
+            metrics={"ratio_raw": "82.0", "incline_days": "95", "near61_raw": "-1"}, chart_url="https://stooq.pl/opl",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="CPS", status="3p_steep_23_6_zone",
+            direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-05-14"},
+            metrics={"ratio_raw": "55.0", "incline_days": "35", "near61_raw": "0.0"}, chart_url="https://stooq.pl/cps",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="GPW", status="3p_steep_23_6_zone",
+            direction="long", dates={"start": "2026-03-27", "incline": "2026-03-27->2026-05-29"},
+            metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
+        ),
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="waiting", ticker="GPW", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2026-03-27", "incline": "2026-03-27->2026-05-29"},
+            metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="valid", ticker="TPE", status="valid_reversal",
             direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-04-20"},
             metrics={"ratio_raw": "3.2", "incline_days": "28"}, chart_url="https://stooq.pl/tpe",
@@ -57,11 +87,20 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
-    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
-    assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15)**" in text
-    assert text.index("**🇵🇱 TPE ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
-    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
-    assert "**🇵🇱 TRN ↗️ (2026-01-30) 93.2%**" in text
+    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" not in text
+    assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
+    assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
+    assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
+    assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
+    assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
+    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" not in text
+    assert text.count("**🇵🇱 TRN ↗️") == 1
+    assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
+    assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
+    data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
+    split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
+    assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)
+    assert not any("**🇵🇱 CPS" in cells[0] for cells in split_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/trn)" in text
 
@@ -141,7 +180,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| CRI | below | breakout_confirmed | 2026-05-29 | 0.1 | 6.2 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 7.5 | 1 | 1000 | 2026-05-30 | - | Touched Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 5.8 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n"
-        "| SCW | below | returned_to_cloud_waiting_for_pattern | 2026-05-28 | 0.1 | 6.0 | 0 | 6728668 | - | - | Inside the cloud | - | none | mild | thick | no | neutral | no | yes | https://stooq.pl/scw | python run -c SCW | yes | 2026-05-29 | 2026-05-29 |\n",
+        "| SCW | below | returned_to_cloud_waiting_for_pattern | 2026-05-28 | 0.1 | 6.0 | 0 | 6728668 | - | - | Inside the cloud | - | none | mild | thick | no | neutral | no | yes | https://stooq.pl/scw | python run -c SCW | yes | 2026-05-29 | 2026-05-29 |\n"
+        "\n# WYNIKI 1 ICHIMOKU\n\n"
+        "| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| ENR.DE | ⚪ above | 175 | 8.2 | 2025-11-24 | 160.0000 | 1761117868 | Unsuccessful breakout to the other side | 2 | 2026-05-29 | hammer | https://stooq.pl/enr | python run -c ENR.DE | yes | 2026-06-01 | 2026-06-01 |\n",
         encoding="utf-8",
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
@@ -209,6 +252,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-scanner='FIBO'" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "breakout / recent breakout (2026-05-29)" in text
+    assert "Ichimoku continuation</td><td><strong>🇩🇪 ENR.DE</strong></td><td>breakout / recent breakout" not in text
+    assert "Unsuccessful breakout to the other side" in text
     assert "returned to cloud, waiting (2026-05-28)" in text
     assert "Mies. respektu przed wybiciem" in text
     assert "pattern/retest: bullish_harami" not in text
