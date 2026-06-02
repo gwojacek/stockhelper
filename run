@@ -1794,6 +1794,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         text_low = status_text.lower()
         recent_date = _date_from_text(status_text)
         latest_date = row.metrics.get("latest_date") or row.metrics.get("expected_date") or ""
+        if "unsuccessful breakout" in text_low:
+            return None
         if "breakout" in text_low:
             d = _date_from_text(row.dates.get("flip_date", "") or status_text)
             if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date):

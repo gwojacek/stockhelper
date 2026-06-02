@@ -180,7 +180,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| CRI | below | breakout_confirmed | 2026-05-29 | 0.1 | 6.2 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 7.5 | 1 | 1000 | 2026-05-30 | - | Touched Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 5.8 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n"
-        "| SCW | below | returned_to_cloud_waiting_for_pattern | 2026-05-28 | 0.1 | 6.0 | 0 | 6728668 | - | - | Inside the cloud | - | none | mild | thick | no | neutral | no | yes | https://stooq.pl/scw | python run -c SCW | yes | 2026-05-29 | 2026-05-29 |\n",
+        "| SCW | below | returned_to_cloud_waiting_for_pattern | 2026-05-28 | 0.1 | 6.0 | 0 | 6728668 | - | - | Inside the cloud | - | none | mild | thick | no | neutral | no | yes | https://stooq.pl/scw | python run -c SCW | yes | 2026-05-29 | 2026-05-29 |\n"
+        "\n# WYNIKI 1 ICHIMOKU\n\n"
+        "| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| ENR.DE | ⚪ above | 175 | 8.2 | 2025-11-24 | 160.0000 | 1761117868 | Unsuccessful breakout to the other side | 2 | 2026-05-29 | hammer | https://stooq.pl/enr | python run -c ENR.DE | yes | 2026-06-01 | 2026-06-01 |\n",
         encoding="utf-8",
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
@@ -248,6 +252,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-scanner='FIBO'" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "breakout / recent breakout (2026-05-29)" in text
+    assert "Ichimoku continuation</td><td><strong>🇩🇪 ENR.DE</strong></td><td>breakout / recent breakout" not in text
+    assert "Unsuccessful breakout to the other side" in text
     assert "returned to cloud, waiting (2026-05-28)" in text
     assert "Mies. respektu przed wybiciem" in text
     assert "pattern/retest: bullish_harami" not in text
