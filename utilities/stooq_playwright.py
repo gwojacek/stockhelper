@@ -99,6 +99,61 @@ def _open_page(playwright, interactive: bool = False):
     return browser, page
 
 
+
+
+def _page_has_history_rows(page) -> bool:
+    try:
+        if _extract_rows_from_frame(page):
+            return True
+        for fr in page.frames:
+            if _extract_rows_from_frame(fr):
+                return True
+    except Exception:
+        pass
+    try:
+        return page.locator("#fth1, table tr td").count() > 0 and not _page_has_rate_limit_or_captcha(page)
+    except Exception:
+        return False
+
+
+def _page_is_blank_or_without_captcha_and_rows(page) -> bool:
+    if _page_has_captcha_image(page) or _page_has_history_rows(page):
+        return False
+    try:
+        body_text = page.locator("body").inner_text(timeout=1500).strip()
+    except Exception:
+        body_text = ""
+    # Includes truly blank pages and Stooq limit shells where neither captcha nor
+    # historical rows are rendered yet. Those are usually solved by VPN change +
+    # reload, not by opening the inspector immediately.
+    return len(body_text) < 300 or _page_has_rate_limit_or_captcha(page)
+
+
+def _vpn_pause_and_reload_stooq_page(page, url: str, symbol: str, reason: str) -> None:
+    print(
+        f"[stooq-web] {reason} for {symbol}. Change VPN if needed, then press Enter to retry before opening inspector.",
+        flush=True,
+    )
+    try:
+        input("[stooq-web] VPN changed / ready to retry? Press Enter to continue...")
+    except EOFError:
+        print("[stooq-web] non-interactive input; retrying page once before inspector.", flush=True)
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+    except Exception:
+        try:
+            page.reload(wait_until="domcontentloaded")
+        except Exception:
+            return
+    try:
+        _accept_consent_if_present(page, first_page=True)
+    except Exception:
+        pass
+    try:
+        _wait_for_table_or_limit_with_retry(page, retries=3)
+    except Exception:
+        pass
+
 def _switch_to_inspector_for_captcha(
     playwright,
     browser,
@@ -121,13 +176,24 @@ def _switch_to_inspector_for_captcha(
     captcha_image_visible = _page_has_captcha_image(page)
     if not blocked and not suspected:
         return browser, page, False
-    # A blank/no-row page is only treated as a captcha when the captcha image is
-    # actually present. Do not open the inspector just because one commodity page
-    # returned no rows.
-    if suspected and not blocked and not captcha_image_visible:
+    blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
+    if suspected and not blocked and not captcha_image_visible and not blank_or_no_rows:
         return browser, page, False
     if not interactive_captcha:
         return browser, page, True
+
+    if blank_or_no_rows and not captcha_image_visible:
+        with _CAPTCHA_INSPECTOR_LOCK:
+            _vpn_pause_and_reload_stooq_page(page, url, symbol, "Blank/no-table Stooq page before captcha")
+            if _try_solve_stooq_captcha(page, symbol):
+                return browser, page, False
+            blocked = _page_has_rate_limit_or_captcha(page)
+            captcha_image_visible = _page_has_captcha_image(page)
+            if _page_has_history_rows(page):
+                return browser, page, False
+            blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
+            if blank_or_no_rows and not captcha_image_visible:
+                print(f"[stooq-web] blank/no-table page persisted for {symbol}; opening inspector on second failure.", flush=True)
 
     if _try_solve_stooq_captcha(page, symbol):
         return browser, page, False
@@ -152,6 +218,8 @@ def _switch_to_inspector_for_captcha(
         except Exception:
             return browser, page, True
         _accept_consent_if_present(page, first_page=True)
+        if _try_solve_stooq_captcha(page, symbol):
+            return browser, page, False
         print("[stooq-web] If captcha/limit is visible, solve it; then click Resume in Playwright inspector.")
         try:
             page.pause()
@@ -638,7 +706,7 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     and confirmation submit #f13. If cv2/EasyOCR/pytesseract are unavailable
     or OCR is uncertain, return False and let the headed inspector fallback handle it.
     """
-    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "3")))
+    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
     print("resolving rate limit captcha and consent...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
