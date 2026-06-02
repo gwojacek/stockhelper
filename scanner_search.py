@@ -2308,8 +2308,7 @@ def _select_fibo_long_impulse_base(
 
     stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
     if stale_cycle and stale_cycle_mode == "allow":
-        _log("Long: allowing broader stale-cycle candidate because a materially larger formation may coexist.")
-        return int(i_start), float(fib_start), float(fib_end)
+        _log("Long: broad candidate still rejected because a large completed formation already crossed 61.8; restart after the new bottom.")
     reset_attempts = 0
     while stale_cycle and stale_cycle_mode == "reset" and stale_reset is not None and reset_attempts < 3:
         reset_idx, reset_low, peak_idx = stale_reset
