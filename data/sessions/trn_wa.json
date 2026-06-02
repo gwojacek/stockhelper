@@ -7,62 +7,67 @@
     {
       "id": "auto-fibo-1000",
       "type": "fib",
-      "label": "FIB 100% (3.7)",
-      "x0": "2026-01-30",
-      "x1": "2027-04-21",
-      "y0": 3.7,
-      "y1": 3.7,
-      "price": 3.7,
+      "label": "FIB 100% (3.52)",
+      "x0": "2025-12-29",
+      "x1": "2027-07-29",
+      "y0": 3.52,
+      "y1": 3.52,
+      "price": 3.52,
       "color": "#f59e0b",
-      "group_id": "auto-fibo"
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
       "id": "auto-fibo-0",
       "type": "fib",
-      "label": "FIB 0.0% (28.1)",
+      "label": "FIB 0% (28.1)",
       "x0": "2026-05-19",
-      "x1": "2027-04-21",
+      "x1": "2027-07-29",
       "y0": 28.1,
       "y1": 28.1,
       "price": 28.1,
       "color": "#f59e0b",
-      "group_id": "auto-fibo"
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
       "id": "auto-fibo-236",
       "type": "fib",
-      "label": "FIB 23.6% (22.3416)",
+      "label": "FIB 23.6% (22.29912)",
       "x0": "2026-05-19",
-      "x1": "2027-04-21",
-      "y0": 22.3416,
-      "y1": 22.3416,
-      "price": 22.3416,
+      "x1": "2027-07-29",
+      "y0": 22.29912,
+      "y1": 22.29912,
+      "price": 22.29912,
       "color": "#f59e0b",
-      "group_id": "auto-fibo"
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
       "id": "auto-fibo-382",
       "type": "fib",
-      "label": "FIB 38.2% (18.7792)",
+      "label": "FIB 38.2% (18.71044)",
       "x0": "2026-05-19",
-      "x1": "2027-04-21",
-      "y0": 18.7792,
-      "y1": 18.7792,
-      "price": 18.7792,
+      "x1": "2027-07-29",
+      "y0": 18.71044,
+      "y1": 18.71044,
+      "price": 18.71044,
       "color": "#f59e0b",
-      "group_id": "auto-fibo"
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
       "id": "auto-fibo-618",
       "type": "fib",
-      "label": "FIB 61.8% (13.0208)",
+      "label": "FIB 61.8% (12.90956)",
       "x0": "2026-05-19",
-      "x1": "2027-04-21",
-      "y0": 13.0208,
-      "y1": 13.0208,
-      "price": 13.0208,
-      "color": "#f59e0b",
-      "group_id": "auto-fibo"
+      "x1": "2027-07-29",
+      "y0": 12.90956,
+      "y1": 12.90956,
+      "price": 12.90956,
+      "color": "#22c55e",
+      "group_id": "auto-fibo",
+      "direction": "long"
     }
   ]
 }
