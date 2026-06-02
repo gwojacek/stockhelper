@@ -313,6 +313,10 @@ class WedgeScanResult:
     width_start_pct: float
     width_end_pct: float
     slope_pct_per_day: float
+    slope_strength: str
+    fit_quality: float
+    recent_proximity_pct: float
+    compression_pct: float
     score: float
     current_close: float
     latest_candle_date: date | None = None
@@ -2368,7 +2372,52 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 width_end_pct = width_end / max(abs(last_close), 1e-9) * 100.0
                 slope_pct = abs(upper_slope - lower_slope) / max(abs(last_close), 1e-9) * 100.0
                 duration = end - first_validation + 1
-                score = width_start_pct * max(duration, 1) * (1.0 + slope_pct * 10.0) / max(width_end_pct, 0.5)
+                duration_months = duration / 21.0
+                compression_pct = max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0))
+
+                recent_from = max(first_validation, end - 35)
+                recent_widths: list[float] = []
+                recent_upper_gaps: list[float] = []
+                recent_lower_gaps: list[float] = []
+                recent_min_gaps: list[float] = []
+                for k in range(recent_from, end + 1):
+                    up_k = _wedge_line_value(k, upper_a, upper_b)
+                    lo_k = _wedge_line_value(k, lower_a, lower_b)
+                    width_k = max(up_k - lo_k, 1e-9)
+                    recent_widths.append(width_k)
+                    upper_gap = max(0.0, up_k - highs[k]) / width_k
+                    lower_gap = max(0.0, lows[k] - lo_k) / width_k
+                    recent_upper_gaps.append(upper_gap)
+                    recent_lower_gaps.append(lower_gap)
+                    recent_min_gaps.append(min(upper_gap, lower_gap))
+                median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
+                median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
+                median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
+                last_upper_contact_age = end - max(upper_contacts)
+                last_lower_contact_age = end - max(lower_contacts)
+                # Reject theoretical oversized wedges whose upper boundary no longer
+                # follows the active structure. A useful wedge has recent price
+                # compression near both trendlines, especially the upper line.
+                if median_upper_gap > 0.62 or median_lower_gap > 0.70 or last_upper_contact_age > 75:
+                    continue
+
+                touch_quality = min(1.0, (up_count + lo_count) / 7.0) * (0.75 + 0.25 * min(up_count, lo_count) / max(up_count, lo_count))
+                proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
+                compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
+                fit_quality = max(0.0, min(100.0, touch_quality * proximity_quality * 100.0))
+                if fit_quality < 35.0 or compression_quality < 0.12:
+                    continue
+                if slope_pct >= 0.40:
+                    slope_strength = "very strong"
+                elif slope_pct >= 0.20:
+                    slope_strength = "strong"
+                elif slope_pct >= 0.08:
+                    slope_strength = "moderate"
+                else:
+                    slope_strength = "mild"
+                slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * proximity_quality * (0.70 + compression_quality) * slope_bonus
+                recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 upper_start, upper_end = sorted([upper_a, upper_b], key=lambda x: x[0])
                 lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
                 cand = WedgeScanResult(
@@ -2389,6 +2438,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     width_start_pct=round(width_start_pct, 2),
                     width_end_pct=round(width_end_pct, 2),
                     slope_pct_per_day=round(slope_pct, 4),
+                    slope_strength=slope_strength,
+                    fit_quality=round(fit_quality, 1),
+                    recent_proximity_pct=round(recent_proximity_pct, 1),
+                    compression_pct=round(compression_pct, 1),
                     score=round(score, 2),
                     current_close=last_close,
                 )
@@ -3454,9 +3507,9 @@ def run_fibo_search(target: str) -> int:
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
-    rows_wedge_md=[[r.ticker,"falling_wedge_unbroken",f"{r.start_date}->{r.end_date}",r.duration_days,f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",f"{r.slope_pct_per_day:.4f}%",f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
+    rows_wedge_md=[[r.ticker,"falling_wedge_unbroken",f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,f"{r.fit_quality:.1f}",f"{r.recent_proximity_pct:.1f}",f"{r.compression_pct:.1f}%",f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
-    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
+    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Fit","Proximity","Compression","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
 

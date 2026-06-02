@@ -593,9 +593,41 @@ def run_level_selector(raw_args=None):
                     first = min(up0[0], up1[0], lo0[0], lo1[0])
                     x_right = x_right + max(x_right - first, pd.Timedelta(days=7))
 
-                def _extend(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[str, float, str, float]:
+                chart_dates = pd.to_datetime(df["Date"], errors="coerce").reset_index(drop=True) if not df.empty else pd.Series(dtype="datetime64[ns]")
+
+                def _nearest_idx(ts: pd.Timestamp) -> int | None:
+                    if chart_dates.empty:
+                        return None
+                    return int((chart_dates - ts).abs().idxmin())
+
+                def _price_at_date(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], ts: pd.Timestamp) -> float:
                     x0, y0 = p0
                     x1, y1 = p1
+                    span_days = max((x1 - x0).days, 1)
+                    return float(y0) + (float(y1) - float(y0)) * ((ts - x0).days / span_days)
+
+                def _visible_pair(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[tuple[pd.Timestamp, float], tuple[pd.Timestamp, float]]:
+                    # Move both anchors a little left along the same slanted line.
+                    # This mirrors the fibo-line workaround: the true anchor still
+                    # comes from the scanner, but the visible line is not hidden by
+                    # the candle's own high/low wick/barrier.
+                    i0 = _nearest_idx(p0[0])
+                    i1 = _nearest_idx(p1[0])
+                    if i0 is None or i1 is None:
+                        return p0, p1
+                    shift = 2
+                    vi0 = max(0, i0 - shift)
+                    vi1 = max(0, i1 - shift)
+                    x0v = chart_dates.iloc[vi0]
+                    x1v = chart_dates.iloc[vi1]
+                    if pd.isna(x0v) or pd.isna(x1v) or x0v == x1v:
+                        return p0, p1
+                    return (x0v, _price_at_date(p0, p1, x0v)), (x1v, _price_at_date(p0, p1, x1v))
+
+                def _extend(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[str, float, str, float]:
+                    p0v, p1v = _visible_pair(p0, p1)
+                    x0, y0 = p0v
+                    x1, y1 = p1v
                     end_ts = x_right if args.wedge_right and not pd.isna(x_right) else x1
                     span_days = max((x1 - x0).days, 1)
                     end_days = (end_ts - x0).days
@@ -605,8 +637,8 @@ def run_level_selector(raw_args=None):
                 ux0, uy0, ux1, uy1 = _extend(up0, up1)
                 lx0, ly0, lx1, ly1 = _extend(lo0, lo1)
                 existing["drawn_objects"] = [
-                    {"id": "auto-wedge-upper", "type": "line", "label": "Falling wedge upper", "x0": ux0, "x1": ux1, "y0": uy0, "y1": uy1, "price": uy1, "color": "#dc2626", "group_id": "auto-wedge"},
-                    {"id": "auto-wedge-lower", "type": "line", "label": "Falling wedge lower", "x0": lx0, "x1": lx1, "y0": ly0, "y1": ly1, "price": ly1, "color": "#2563eb", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x0": ux0, "x1": ux1, "y0": uy0, "y1": uy1, "price": uy1, "color": "#dc2626", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x0": lx0, "x1": lx1, "y0": ly0, "y1": ly1, "price": ly1, "color": "#2563eb", "group_id": "auto-wedge"},
                 ]
                 print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
         except Exception as exc:

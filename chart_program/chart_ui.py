@@ -304,9 +304,37 @@ class ChartLevelSelectorUI:
         for obj in (objects or []):
             obj_type = obj.get("type")
             is_preview_line = obj_type == "preview_line"
+            is_auto_wedge = obj_type == "wedge" or obj.get("group_id") == "auto-wedge"
             is_fib_618 = obj_type == "fib" and "61.8%" in str(obj.get("label", ""))
-            line_width = 2.0 if is_fib_618 else (1.6 if obj_type == "fib" else 1.2)
+            line_width = 2.4 if is_auto_wedge else (2.0 if is_fib_618 else (1.6 if obj_type == "fib" else 1.2))
             line_color = "#94a3b8" if is_preview_line else obj.get("color", LINE_COLORS["gold"])
+            if is_auto_wedge:
+                # Use a data-coordinate Plotly shape for scanner-loaded wedge
+                # lines. The shape remains anchored to candle dates/prices during
+                # zoom/pan; a tiny legend-only trace keeps the object discoverable.
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=obj.get("x0"),
+                    y0=obj.get("y0"),
+                    x1=obj.get("x1"),
+                    y1=obj.get("y1"),
+                    line={"color": line_color, "width": line_width},
+                    layer="above",
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=[None],
+                        y=[None],
+                        mode="lines",
+                        line={"color": line_color, "width": line_width},
+                        name=obj.get("label", "Falling wedge"),
+                        hoverinfo="skip",
+                        showlegend=True,
+                    )
+                )
+                continue
             mode = "lines" if is_preview_line else ("lines+text+markers" if is_fib_618 else "lines+text")
             fig.add_trace(
                 go.Scatter(
