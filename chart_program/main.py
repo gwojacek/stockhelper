@@ -19,6 +19,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", help="Optional API key passed to data provider")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--no-run-after-save", action="store_true", help="Do not run analysis script after saving config")
+    parser.add_argument("--wedge-lines", action="store_true")
+    parser.add_argument("--wedge-upper-start")
+    parser.add_argument("--wedge-upper-end")
+    parser.add_argument("--wedge-lower-start")
+    parser.add_argument("--wedge-lower-end")
+    parser.add_argument("--wedge-right", action="store_true")
     return parser
 
 
@@ -60,6 +66,18 @@ def main() -> int:
     if args.api_key:
         forwarded.extend(["--api-key", args.api_key])
     forwarded.extend(["--data-source", args.data_source])
+    if args.wedge_lines:
+        forwarded.append("--wedge-lines")
+    for flag, value in [
+        ("--wedge-upper-start", args.wedge_upper_start),
+        ("--wedge-upper-end", args.wedge_upper_end),
+        ("--wedge-lower-start", args.wedge_lower_start),
+        ("--wedge-lower-end", args.wedge_lower_end),
+    ]:
+        if value:
+            forwarded.extend([flag, value])
+    if args.wedge_right:
+        forwarded.append("--wedge-right")
     forwarded.extend(unknown)
 
     from chart_program.level_selector import run_level_selector

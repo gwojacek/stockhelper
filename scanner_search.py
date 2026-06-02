@@ -292,6 +292,32 @@ class FlipResult:
     previous_respect_months: float | None = None
 
 
+
+
+@dataclass
+class WedgeScanResult:
+    ticker: str
+    start_date: str
+    end_date: str
+    duration_days: int
+    upper_start_date: str
+    upper_start_price: float
+    upper_end_date: str
+    upper_end_price: float
+    lower_start_date: str
+    lower_start_price: float
+    lower_end_date: str
+    lower_end_price: float
+    upper_touches: int
+    lower_touches: int
+    width_start_pct: float
+    width_end_pct: float
+    slope_pct_per_day: float
+    score: float
+    current_close: float
+    latest_candle_date: date | None = None
+    expected_latest_session_date: date | None = None
+
 @dataclass
 class FiboScanResult:
     ticker: str
@@ -1405,7 +1431,7 @@ def _scan_source_label(src: str) -> str:
 
 
 
-def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "") -> str:
+def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "", wedge: WedgeScanResult | None = None) -> str:
     t = (ticker or "").strip()
     if "." not in t and len(t) <= 5:
         cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
@@ -1416,6 +1442,15 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"
         return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+    if mode == "wedge" and wedge is not None:
+        return (
+            f"{base} --wedge-lines "
+            f"--wedge-upper-start {wedge.upper_start_date},{wedge.upper_start_price} "
+            f"--wedge-upper-end {wedge.upper_end_date},{wedge.upper_end_price} "
+            f"--wedge-lower-start {wedge.lower_start_date},{wedge.lower_start_price} "
+            f"--wedge-lower-end {wedge.lower_end_date},{wedge.lower_end_price} "
+            f"--wedge-right"
+        )
     return base + " --ichimoku-mode on"
 
 
@@ -2188,6 +2223,180 @@ def run_ichimoku_search(target: str) -> int:
 
 
 
+
+def _wedge_line_value(idx: int, anchor_a: tuple[int, float], anchor_b: tuple[int, float]) -> float:
+    ia, ya = anchor_a
+    ib, yb = anchor_b
+    if ib == ia:
+        return float(ya)
+    return float(ya) + (float(yb) - float(ya)) * ((idx - ia) / (ib - ia))
+
+
+def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
+    if not indices:
+        return 0
+    ordered = sorted(set(indices))
+    groups = 1
+    prev = ordered[0]
+    for idx in ordered[1:]:
+        if idx - prev > max_gap:
+            groups += 1
+        prev = idx
+    return groups
+
+
+def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
+    """Detect an unbroken descending wedge ending at the latest candle.
+
+    The first two touches on each side are exact OHLC extremes (line anchors).
+    Later touches may be wick/body probes as long as the candle does not close
+    outside the line. Adjacent candles touching a line are counted as one touch.
+    """
+    required = {"Date", "Open", "High", "Low", "Close"}
+    if df is None or df.empty or not required.issubset(df.columns) or len(df) < 55:
+        return None
+    w = df.copy()
+    w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
+    for col in ["Open", "High", "Low", "Close"]:
+        w[col] = pd.to_numeric(w[col], errors="coerce")
+    w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
+    if len(w) < 55:
+        return None
+    if len(w) > 240:
+        w = w.tail(240).reset_index(drop=True)
+
+    best: WedgeScanResult | None = None
+    highs = w["High"].astype(float).to_numpy()
+    lows = w["Low"].astype(float).to_numpy()
+    opens = w["Open"].astype(float).to_numpy()
+    closes = w["Close"].astype(float).to_numpy()
+    dates = w["Date"]
+    n = len(w)
+
+    def _fmt_date(i: int) -> str:
+        return str(pd.to_datetime(dates.iloc[i]).date())
+
+    def _touch_tolerance(start: int, end: int) -> float:
+        avg_range = float(pd.Series(highs[start : end + 1] - lows[start : end + 1]).dropna().tail(30).mean())
+        last_close = max(abs(float(closes[end])), 1e-9)
+        return max(avg_range * 0.18 if pd.notna(avg_range) else 0.0, last_close * 0.004)
+
+    for length in range(min(180, n), 44, -5):
+        start = n - length
+        end = n - 1
+        seg_high = highs[start : end + 1]
+        seg_low = lows[start : end + 1]
+        if len(seg_high) < 45:
+            continue
+        high_abs = start + int(seg_high.argmax())
+        low_abs = start + int(seg_low.argmin())
+        # A falling wedge should be a currently active formation, not a random
+        # old channel. Its highest point normally starts the formation.
+        if high_abs > start + int(length * 0.45):
+            continue
+
+        upper_anchor2_candidates: list[int] = []
+        for j in range(high_abs + 5, end - 4):
+            if highs[j] >= highs[high_abs]:
+                continue
+            if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
+                upper_anchor2_candidates.append(j)
+        if not upper_anchor2_candidates:
+            continue
+
+        lower_anchor2_candidates: list[int] = []
+        for j in range(start + 2, end - 2):
+            if j == low_abs:
+                continue
+            if abs(j - low_abs) < 5:
+                continue
+            if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1] and lows[j] > lows[low_abs]:
+                lower_anchor2_candidates.append(j)
+        if not lower_anchor2_candidates:
+            continue
+
+        for uh2 in upper_anchor2_candidates[:14]:
+            upper_a = (high_abs, float(highs[high_abs]))
+            upper_b = (uh2, float(highs[uh2]))
+            upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
+            if upper_slope >= 0:
+                continue
+            for lh2 in lower_anchor2_candidates[:22]:
+                # Use the lowest low as one exact lower anchor, as requested.
+                lower_a = (low_abs, float(lows[low_abs]))
+                lower_b = (lh2, float(lows[lh2]))
+                lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
+                if lower_b[0] < lower_a[0]:
+                    lower_slope = (lower_a[1] - lower_b[1]) / (lower_a[0] - lower_b[0])
+                if lower_slope >= 0:
+                    continue
+                # Upper line must fall faster than lower line so the wedge narrows.
+                if upper_slope >= lower_slope:
+                    continue
+
+                first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
+                tol = _touch_tolerance(start, end)
+                upper_contacts = [high_abs, uh2]
+                lower_contacts = [low_abs, lh2]
+                broken = False
+                width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
+                width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
+                if width_start <= 0 or width_end <= 0 or width_end >= width_start * 0.92:
+                    continue
+                for i in range(first_validation, end + 1):
+                    up = _wedge_line_value(i, upper_a, upper_b)
+                    lo = _wedge_line_value(i, lower_a, lower_b)
+                    if lo >= up:
+                        broken = True
+                        break
+                    # No close outside either side. Wicks/opens may violate.
+                    if closes[i] > up + tol * 0.25 or closes[i] < lo - tol * 0.25:
+                        broken = True
+                        break
+                    if i not in {high_abs, uh2} and closes[i] <= up + tol * 0.25 and (lows[i] <= up <= highs[i] or abs(highs[i] - up) <= tol or abs(opens[i] - up) <= tol):
+                        upper_contacts.append(i)
+                    if i not in {low_abs, lh2} and closes[i] >= lo - tol * 0.25 and (lows[i] <= lo <= highs[i] or abs(lows[i] - lo) <= tol or abs(opens[i] - lo) <= tol):
+                        lower_contacts.append(i)
+                if broken:
+                    continue
+                up_count = _clustered_contact_count(upper_contacts)
+                lo_count = _clustered_contact_count(lower_contacts)
+                if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
+                    continue
+                last_close = float(closes[end])
+                width_start_pct = width_start / max(abs(last_close), 1e-9) * 100.0
+                width_end_pct = width_end / max(abs(last_close), 1e-9) * 100.0
+                slope_pct = abs(upper_slope - lower_slope) / max(abs(last_close), 1e-9) * 100.0
+                duration = end - first_validation + 1
+                score = width_start_pct * max(duration, 1) * (1.0 + slope_pct * 10.0) / max(width_end_pct, 0.5)
+                upper_start, upper_end = sorted([upper_a, upper_b], key=lambda x: x[0])
+                lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
+                cand = WedgeScanResult(
+                    ticker="",
+                    start_date=_fmt_date(first_validation),
+                    end_date=_fmt_date(end),
+                    duration_days=duration,
+                    upper_start_date=_fmt_date(upper_start[0]),
+                    upper_start_price=round(float(upper_start[1]), 5),
+                    upper_end_date=_fmt_date(upper_end[0]),
+                    upper_end_price=round(float(upper_end[1]), 5),
+                    lower_start_date=_fmt_date(lower_start[0]),
+                    lower_start_price=round(float(lower_start[1]), 5),
+                    lower_end_date=_fmt_date(lower_end[0]),
+                    lower_end_price=round(float(lower_end[1]), 5),
+                    upper_touches=up_count,
+                    lower_touches=lo_count,
+                    width_start_pct=round(width_start_pct, 2),
+                    width_end_pct=round(width_end_pct, 2),
+                    slope_pct_per_day=round(slope_pct, 4),
+                    score=round(score, 2),
+                    current_close=last_close,
+                )
+                if best is None or cand.score > best.score:
+                    best = cand
+    return best
+
+
 def _select_fibo_long_impulse_base(
     w: pd.DataFrame,
     i_peak: int,
@@ -2871,6 +3080,7 @@ def run_fibo_search(target: str) -> int:
     current_datetime = datetime.now(UTC)
     rows: list[FiboScanResult] = []
     rows3p_steep: list[FiboScanResult] = []
+    wedge_rows: list[WedgeScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
             return False
@@ -2925,6 +3135,14 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
+            wedge = _find_falling_wedge_setup(df)
+            if wedge:
+                wedge.ticker = ticker
+                wedge.latest_candle_date = latest_candle_date
+                wedge.expected_latest_session_date = expected_latest_session_date
+                if pd.notna(latest_close):
+                    wedge.current_close = latest_close
+                out_rows.append(wedge)
             steep_3p = _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
@@ -3054,7 +3272,9 @@ def run_fibo_search(target: str) -> int:
                             print("[fibo] Scan stopped by user after rate-limit detection.", flush=True)
                             return 1
                 for item in found:
-                    if item.status.startswith("3p_steep"):
+                    if isinstance(item, WedgeScanResult):
+                        wedge_rows.append(item)
+                    elif item.status.startswith("3p_steep"):
                         rows3p_steep.append(item)
                     else:
                         rows.append(item)
@@ -3233,12 +3453,15 @@ def run_fibo_search(target: str) -> int:
     rows0_md=[[r.ticker,r.direction,("⚠️ 3p_steep_23_6_zone" if r.status == "3p_steep_23_6_zone" else "🚀 3p_steep_incline"),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)",(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%"),(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
+    wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
+    rows_wedge_md=[[r.ticker,"falling_wedge_unbroken",f"{r.start_date}->{r.end_date}",r.duration_days,f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",f"{r.slope_pct_per_day:.4f}%",f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
+    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
-    print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}")
+    print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
     print(f"[fibo] md: {out_md}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:

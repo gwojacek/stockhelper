@@ -84,6 +84,12 @@ def _parse_args(raw_args=None):
     parser.add_argument("--fibo-anchor-start")
     parser.add_argument("--fibo-anchor-end")
     parser.add_argument("--fibo-right", action="store_true")
+    parser.add_argument("--wedge-lines", action="store_true")
+    parser.add_argument("--wedge-upper-start")
+    parser.add_argument("--wedge-upper-end")
+    parser.add_argument("--wedge-lower-start")
+    parser.add_argument("--wedge-lower-end")
+    parser.add_argument("--wedge-right", action="store_true")
     return parser.parse_args(raw_args)
 
 
@@ -565,6 +571,46 @@ def run_level_selector(raw_args=None):
                 print(f"[chart] auto-fibo preloaded: {len(objs)} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}, direction={'short' if is_short else 'long'}")
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
+
+    if args.wedge_lines:
+        try:
+            def _parse_wedge_point(raw: str | None) -> tuple[pd.Timestamp, float] | None:
+                if not raw or "," not in raw:
+                    return None
+                d_txt, p_txt = raw.split(",", 1)
+                ts = pd.to_datetime(d_txt.strip(), errors="coerce")
+                if pd.isna(ts):
+                    return None
+                return ts, float(p_txt.strip())
+
+            up0 = _parse_wedge_point(args.wedge_upper_start)
+            up1 = _parse_wedge_point(args.wedge_upper_end)
+            lo0 = _parse_wedge_point(args.wedge_lower_start)
+            lo1 = _parse_wedge_point(args.wedge_lower_end)
+            if up0 and up1 and lo0 and lo1:
+                x_right = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce") if not df.empty else max(up1[0], lo1[0])
+                if args.wedge_right and not pd.isna(x_right):
+                    first = min(up0[0], up1[0], lo0[0], lo1[0])
+                    x_right = x_right + max(x_right - first, pd.Timedelta(days=7))
+
+                def _extend(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[str, float, str, float]:
+                    x0, y0 = p0
+                    x1, y1 = p1
+                    end_ts = x_right if args.wedge_right and not pd.isna(x_right) else x1
+                    span_days = max((x1 - x0).days, 1)
+                    end_days = (end_ts - x0).days
+                    y_end = y0 + (y1 - y0) * (end_days / span_days)
+                    return str(x0.date()), round(float(y0), 5), str(end_ts.date()), round(float(y_end), 5)
+
+                ux0, uy0, ux1, uy1 = _extend(up0, up1)
+                lx0, ly0, lx1, ly1 = _extend(lo0, lo1)
+                existing["drawn_objects"] = [
+                    {"id": "auto-wedge-upper", "type": "line", "label": "Falling wedge upper", "x0": ux0, "x1": ux1, "y0": uy0, "y1": uy1, "price": uy1, "color": "#dc2626", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-lower", "type": "line", "label": "Falling wedge lower", "x0": lx0, "x1": lx1, "y0": ly0, "y1": ly1, "price": ly1, "color": "#2563eb", "group_id": "auto-wedge"},
+                ]
+                print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
+        except Exception as exc:
+            print(f"[chart] auto-wedge preload failed: {exc}")
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
