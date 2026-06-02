@@ -2069,12 +2069,12 @@ def run_ichimoku_search(target: str) -> int:
         sequential = False
         print("[search] WIG mode: parallel scan enabled (refresh probe already completed).")
     elif group_name == "commodities":
-        if os.getenv("STOCKHELPER_COMMODITIES_PARALLEL", "0") == "1":
-            sequential = False
-            print("[search] COMMODITIES mode: parallel fetch enabled by STOCKHELPER_COMMODITIES_PARALLEL=1.")
-        else:
+        if os.getenv("STOCKHELPER_COMMODITIES_SEQUENTIAL", "0") == "1":
             sequential = True
-            print("[search] COMMODITIES mode: sequential Stooq web fetch (keeps VPN/captcha prompts single-threaded).")
+            print("[search] COMMODITIES mode: sequential Stooq web fetch by STOCKHELPER_COMMODITIES_SEQUENTIAL=1.")
+        else:
+            sequential = False
+            print("[search] COMMODITIES mode: bounded parallel Stooq web fetch (xdist-style workers; prompts still locked).")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
@@ -2109,7 +2109,14 @@ def run_ichimoku_search(target: str) -> int:
                 flip = _ensure_flip_ticker(flip, ticker)
                 flip_results.append(flip)
     else:
-        max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
+        if group_name == "commodities":
+            try:
+                commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "2"))
+            except ValueError:
+                commodity_workers = 2
+            max_workers = min(max(2, commodity_workers), len(rest))
+        else:
+            max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
