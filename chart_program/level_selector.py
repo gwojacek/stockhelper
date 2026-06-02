@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -619,6 +620,35 @@ def run_level_selector(raw_args=None):
                         span = 1
                     return float(p0[1]) + (float(p1[1]) - float(p0[1])) * ((idx - i0) / span)
 
+                def _slope_intercept(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[float, float] | None:
+                    i0 = _nearest_idx(p0[0])
+                    i1 = _nearest_idx(p1[0])
+                    if i0 is None or i1 is None or i0 == i1:
+                        return None
+                    slope = (float(p1[1]) - float(p0[1])) / (i1 - i0)
+                    return slope, float(p0[1]) - slope * i0
+
+                def _wedge_cross_index() -> int | None:
+                    upper_line = _slope_intercept(up0, up1)
+                    lower_line = _slope_intercept(lo0, lo1)
+                    if upper_line is None or lower_line is None:
+                        return None
+                    upper_slope, upper_intercept = upper_line
+                    lower_slope, lower_intercept = lower_line
+                    denom = upper_slope - lower_slope
+                    if abs(denom) < 1e-9:
+                        return None
+                    cross_idx = int(math.ceil((lower_intercept - upper_intercept) / denom))
+                    last_idx = len(chart_dates) - 1
+                    if cross_idx <= last_idx:
+                        return None
+                    # Keep the line long enough to show the wedge ending/cross, but
+                    # cap pathological projections so the chart remains usable.
+                    max_projection = last_idx + max(len(chart_dates), 80)
+                    return min(cross_idx + 5, max_projection)
+
+                common_wedge_end_idx = _wedge_cross_index() if args.wedge_right else None
+
                 def _line_object_points(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[list[str], list[float]]:
                     i0 = _nearest_idx(p0[0])
                     i1 = _nearest_idx(p1[0])
@@ -627,8 +657,9 @@ def run_level_selector(raw_args=None):
                     first_idx = min(i0, i1)
                     second_idx = max(i0, i1)
                     if args.wedge_right:
-                        extension = max(abs(i1 - i0), 7)
-                        end_idx = (len(chart_dates) - 1) + extension
+                        extension = max(abs(i1 - i0) * 2, 80)
+                        fallback_end_idx = (len(chart_dates) - 1) + extension
+                        end_idx = max(common_wedge_end_idx or fallback_end_idx, fallback_end_idx)
                     else:
                         end_idx = second_idx
                     # Build a polyline on every trading/index step. With Plotly

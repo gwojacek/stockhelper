@@ -371,7 +371,9 @@ class ChartLevelSelectorUI:
         y_grid = np.linspace(y_low, y_high, grid_points)
         x_min_data = pd.to_datetime(self.df["Date"].min(), errors="coerce")
         x_max_data = pd.to_datetime(self.df["Date"].max(), errors="coerce")
-        pad_days = 10
+        # Keep extra empty space after the latest candle so manual line-tool
+        # drawings and auto-wedge extensions can continue to the right.
+        pad_days = 80
         x_grid = list(self.df["Date"])
         if not pd.isna(x_min_data) and not pd.isna(x_max_data):
             if has_weekend_data:
