@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import webbrowser
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
@@ -860,7 +861,13 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
 
-    probes = members[:1] if group_l == "single" else members[:min(5, len(members))]
+    if group_l == "single":
+        probes = members[:1]
+    else:
+        probe_count = min(5, len(members))
+        probes = random.sample(list(members), k=probe_count) if probe_count else []
+        if probes:
+            print(f"[refresh-check] {group_name}: random freshness probes: {', '.join(probes)}")
     checked = 0
     for ticker in probes:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
@@ -3657,11 +3664,11 @@ def run_fibo_search(target: str) -> int:
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
-    rows_wedge_md=[[r.ticker,("falling_wedge_breakout" if r.breakout_direction in {"long", "short"} else "falling_wedge_unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,f"{r.fit_quality:.1f}",f"{r.recent_proximity_pct:.1f}",f"{r.compression_pct:.1f}%",(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
+    rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
-    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Fit","Proximity","Compression","Breakout date","Breakout direction","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
+    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
