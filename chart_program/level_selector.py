@@ -588,55 +588,71 @@ def run_level_selector(raw_args=None):
             lo0 = _parse_wedge_point(args.wedge_lower_start)
             lo1 = _parse_wedge_point(args.wedge_lower_end)
             if up0 and up1 and lo0 and lo1:
-                x_right = pd.to_datetime(df.iloc[-1]["Date"], errors="coerce") if not df.empty else max(up1[0], lo1[0])
-                if args.wedge_right and not pd.isna(x_right):
-                    first = min(up0[0], up1[0], lo0[0], lo1[0])
-                    x_right = x_right + max(x_right - first, pd.Timedelta(days=7))
-
                 chart_dates = pd.to_datetime(df["Date"], errors="coerce").reset_index(drop=True) if not df.empty else pd.Series(dtype="datetime64[ns]")
+                has_weekend_data = bool((chart_dates.dt.weekday >= 5).any()) if not chart_dates.empty else False
 
                 def _nearest_idx(ts: pd.Timestamp) -> int | None:
                     if chart_dates.empty:
                         return None
                     return int((chart_dates - ts).abs().idxmin())
 
-                def _price_at_date(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], ts: pd.Timestamp) -> float:
-                    x0, y0 = p0
-                    x1, y1 = p1
-                    span_days = (x1 - x0).days
-                    if span_days == 0:
-                        span_days = 1
-                    return float(y0) + (float(y1) - float(y0)) * ((ts - x0).days / span_days)
+                def _date_for_index(idx: int) -> pd.Timestamp:
+                    if chart_dates.empty:
+                        return pd.Timestamp.today().normalize()
+                    if 0 <= idx < len(chart_dates):
+                        return pd.to_datetime(chart_dates.iloc[idx])
+                    last = pd.to_datetime(chart_dates.iloc[-1])
+                    extra = idx - (len(chart_dates) - 1)
+                    if extra <= 0:
+                        return pd.to_datetime(chart_dates.iloc[max(0, idx)])
+                    if has_weekend_data:
+                        return last + pd.Timedelta(days=extra)
+                    return last + pd.tseries.offsets.BDay(extra)
 
-                def _visible_pair(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[tuple[pd.Timestamp, float], tuple[pd.Timestamp, float]]:
-                    # Move both anchors a little left along the same slanted line.
-                    # This mirrors the fibo-line workaround: the true anchor still
-                    # comes from the scanner, but the visible line is not hidden by
-                    # the candle's own high/low wick/barrier.
+                def _price_at_index(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], idx: int) -> float:
                     i0 = _nearest_idx(p0[0])
                     i1 = _nearest_idx(p1[0])
                     if i0 is None or i1 is None:
-                        return p0, p1
+                        return float(p0[1])
+                    span = i1 - i0
+                    if span == 0:
+                        span = 1
+                    return float(p0[1]) + (float(p1[1]) - float(p0[1])) * ((idx - i0) / span)
+
+                def _visible_pair(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[tuple[pd.Timestamp, float, int], tuple[pd.Timestamp, float, int]] | None:
+                    # Move both anchors a little left along the same slanted line.
+                    # All Y values are interpolated by candle index, not calendar
+                    # days, so the trace stays aligned with Plotly rangebreaks
+                    # during zoom/pan just like manually drawn chart lines.
+                    i0 = _nearest_idx(p0[0])
+                    i1 = _nearest_idx(p1[0])
+                    if i0 is None or i1 is None:
+                        return None
                     shift = 2
                     vi0 = max(0, i0 - shift)
                     vi1 = max(0, i1 - shift)
-                    x0v = chart_dates.iloc[vi0]
-                    x1v = chart_dates.iloc[vi1]
-                    if pd.isna(x0v) or pd.isna(x1v) or x0v == x1v:
-                        return p0, p1
-                    return (x0v, _price_at_date(p0, p1, x0v)), (x1v, _price_at_date(p0, p1, x1v))
+                    if vi0 == vi1:
+                        return None
+                    return (_date_for_index(vi0), _price_at_index(p0, p1, vi0), vi0), (_date_for_index(vi1), _price_at_index(p0, p1, vi1), vi1)
 
                 def _extend(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[str, float, str, float]:
-                    p0v, p1v = _visible_pair(p0, p1)
-                    x0, y0 = p0v
-                    x1, y1 = p1v
-                    end_ts = x_right if args.wedge_right and not pd.isna(x_right) else x1
-                    span_days = (x1 - x0).days
-                    if span_days == 0:
-                        span_days = 1
-                    end_days = (end_ts - x0).days
-                    y_end = y0 + (y1 - y0) * (end_days / span_days)
-                    return str(x0.date()), round(float(y0), 5), str(end_ts.date()), round(float(y_end), 5)
+                    pair = _visible_pair(p0, p1)
+                    if pair is None:
+                        x0, y0 = p0
+                        x1, y1 = p1
+                        return str(x0.date()), round(float(y0), 5), str(x1.date()), round(float(y1), 5)
+                    (x0, y0, i0), (_x1_anchor, _y1_anchor, i1) = pair
+                    if args.wedge_right:
+                        extension = max(abs(i1 - i0), 7)
+                        end_idx = (len(chart_dates) - 1) + extension
+                    else:
+                        end_idx = i1
+                    end_ts = _date_for_index(end_idx)
+                    span_idx = i1 - i0
+                    if span_idx == 0:
+                        span_idx = 1
+                    y_end = y0 + (_y1_anchor - y0) * ((end_idx - i0) / span_idx)
+                    return str(pd.to_datetime(x0).date()), round(float(y0), 5), str(pd.to_datetime(end_ts).date()), round(float(y_end), 5)
 
                 ux0, uy0, ux1, uy1 = _extend(up0, up1)
                 lx0, ly0, lx1, ly1 = _extend(lo0, lo1)

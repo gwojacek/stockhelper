@@ -2418,12 +2418,13 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
                 score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * proximity_quality * (0.70 + compression_quality) * slope_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
-                # Keep anchor direction semantic: upper line starts at the highest
-                # wedge high, lower line starts at the lowest wedge low. Both first
-                # two anchors are exact candle extremes; they are not tolerance
-                # contacts.
+                # The first two anchors for each line are exact candle extremes,
+                # not tolerance contacts. For display/export, keep the upper line
+                # anchored from the highest high, and start the lower line from its
+                # first chronological anchor so the bottom boundary is drawn from
+                # the first visible contact rather than the second.
                 upper_start, upper_end = upper_a, upper_b
-                lower_start, lower_end = lower_a, lower_b
+                lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
                 cand = WedgeScanResult(
                     ticker="",
                     start_date=_fmt_date(first_validation),
