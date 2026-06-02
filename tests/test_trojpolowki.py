@@ -241,7 +241,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert 'copyTrojColumnSheetsCells(this,0)">📋</button>' in text
     assert "Open stockhelper charts from top choices" in text
     assert "Open all stockhelper charts from this table" in text
-    assert "formulas.join('\\n')" in text
+    assert "String.fromCharCode(10)" in text
+    assert "formulas.join('\n')" not in text
     assert "toggleTrojExtra" in text
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
