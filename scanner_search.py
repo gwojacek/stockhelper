@@ -2158,24 +2158,94 @@ def run_ichimoku_search(target: str) -> int:
             max_workers = min(max(2, commodity_workers), len(rest))
         else:
             max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
-        print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
-            for fut in as_completed(fut_map):
-                idx, ticker = fut_map[fut]
-                display_symbol, result, flip, err, src, stopped = fut.result()
-                print(f"[{idx}/{len(members)}] {ticker}", flush=True)
-                processed_count += 1
-                if stopped:
-                    return 1
-                if err:
-                    error_count += 1
-                    print(f"  pominięto ({_compact_error(err)})", flush=True)
-                elif result:
-                    results.append(result)
-                if flip:
-                    flip = _ensure_flip_ticker(flip, ticker)
-                    flip_results.append(flip)
+        print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers, bounded queue).")
+        try:
+            stall_seconds = max(10.0, float(os.getenv("STOCKHELPER_SCAN_STALL_SECONDS", "45")))
+        except ValueError:
+            stall_seconds = 45.0
+        indexed_rest = list(enumerate(rest, start=2))
+        next_pos = 0
+        pending: dict = {}
+        queue_limit = max_workers * 2
+        last_stall_log = 0.0
+        ex = ThreadPoolExecutor(max_workers=max_workers)
+
+        def _submit_more() -> None:
+            nonlocal next_pos
+            while (
+                next_pos < len(indexed_rest)
+                and len(pending) < queue_limit
+                and not STOP_SCAN_EVENT.is_set()
+                and not PAUSE_SCAN_EVENT.is_set()
+            ):
+                idx, ticker = indexed_rest[next_pos]
+                fut = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime)
+                pending[fut] = (idx, ticker, time.monotonic())
+                next_pos += 1
+
+        try:
+            _submit_more()
+            while pending:
+                done, _not_done = wait(list(pending.keys()), timeout=1.0, return_when=FIRST_COMPLETED)
+                now = time.monotonic()
+                if not done:
+                    if STOP_SCAN_EVENT.is_set():
+                        break
+                    stalled = [
+                        f"{idx}/{len(members)} {ticker} ({int(now - started)}s)"
+                        for _f, (idx, ticker, started) in pending.items()
+                        if now - started >= stall_seconds
+                    ]
+                    if stalled and now - last_stall_log >= 15.0:
+                        shown = ", ".join(stalled[:8])
+                        extra = " ..." if len(stalled) > 8 else ""
+                        print(
+                            f"[search] waiting for slow workers: {shown}{extra}. "
+                            "If this is a network/VPN stall, press Ctrl+C once to cancel cleanly or set "
+                            "STOCKHELPER_SCAN_STALL_SECONDS to tune this warning.",
+                            flush=True,
+                        )
+                        last_stall_log = now
+                    if not PAUSE_SCAN_EVENT.is_set():
+                        _submit_more()
+                    continue
+                for fut in done:
+                    idx, ticker, _started = pending.pop(fut)
+                    try:
+                        display_symbol, result, flip, err, src, stopped = fut.result()
+                    except Exception as exc:
+                        display_symbol, result, flip, err, src, stopped = ticker, None, None, _compact_error(str(exc)), "unknown", False
+                    print(f"[{idx}/{len(members)}] {ticker}", flush=True)
+                    processed_count += 1
+                    if stopped:
+                        STOP_SCAN_EVENT.set()
+                        break
+                    if err:
+                        error_count += 1
+                        print(f"  pominięto ({_compact_error(err)})", flush=True)
+                    elif result:
+                        results.append(result)
+                    if flip:
+                        flip = _ensure_flip_ticker(flip, ticker)
+                        flip_results.append(flip)
+                if STOP_SCAN_EVENT.is_set():
+                    break
+                _submit_more()
+        except KeyboardInterrupt:
+            STOP_SCAN_EVENT.set()
+            for fut in pending:
+                fut.cancel()
+            print(
+                "\n[search] Ctrl+C received: cancelling pending Ichimoku workers. "
+                "Running downloads will stop after their current network timeout.",
+                flush=True,
+            )
+            ex.shutdown(wait=False, cancel_futures=True)
+            return 130
+        finally:
+            ex.shutdown(wait=not STOP_SCAN_EVENT.is_set(), cancel_futures=True)
+        if STOP_SCAN_EVENT.is_set():
+            return 1
 
     flip_results = [f for f in flip_results if _flip_still_actionable(f)]
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
