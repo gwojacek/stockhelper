@@ -2069,8 +2069,12 @@ def run_ichimoku_search(target: str) -> int:
         sequential = False
         print("[search] WIG mode: parallel scan enabled (refresh probe already completed).")
     elif group_name == "commodities":
-        sequential = False
-        print("[search] COMMODITIES mode: parallel fetch enabled (captcha/inspector handled per worker).")
+        if os.getenv("STOCKHELPER_COMMODITIES_PARALLEL", "0") == "1":
+            sequential = False
+            print("[search] COMMODITIES mode: parallel fetch enabled by STOCKHELPER_COMMODITIES_PARALLEL=1.")
+        else:
+            sequential = True
+            print("[search] COMMODITIES mode: sequential Stooq web fetch (keeps VPN/captcha prompts single-threaded).")
     elif group_name.startswith("WIG_PART"):
         sequential = False
         print("[search] WIG_PART mode: parallel scan enabled (xdist-friendly split batch).")
@@ -2088,7 +2092,7 @@ def run_ichimoku_search(target: str) -> int:
 
     rest = members[1:]
     if sequential or len(rest) == 0:
-        if sequential:
+        if sequential and group_name != "commodities":
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix, current_datetime)
