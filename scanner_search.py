@@ -1388,7 +1388,7 @@ def _prompt_vpn_continue_or_stop() -> bool:
 
 
 
-def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None):
+def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None, *, allow_prompt: bool = True):
     while True:
         if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
             return ticker, None, None, "scan stopped", "unknown", True
@@ -1396,6 +1396,9 @@ def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_su
         if err and _rate_limit_detected(err):
             if not _should_prompt_rate_limit(group_name):
                 PAUSE_SCAN_EVENT.clear()
+                return display_symbol, result, flip, err, src, False
+            PAUSE_SCAN_EVENT.set()
+            if not allow_prompt:
                 return display_symbol, result, flip, err, src, False
             if _prompt_vpn_continue_or_stop():
                 print("[search] Retrying same instrument after VPN change...", flush=True)
@@ -2175,6 +2178,7 @@ def run_ichimoku_search(target: str) -> int:
         pending: dict = {}
         queue_limit = max_workers * 2
         last_stall_log = 0.0
+        last_vpn_continue_at = 0.0
         ex = ThreadPoolExecutor(max_workers=max_workers)
 
         def _submit_more() -> None:
@@ -2186,7 +2190,7 @@ def run_ichimoku_search(target: str) -> int:
                 and not PAUSE_SCAN_EVENT.is_set()
             ):
                 idx, ticker = indexed_rest[next_pos]
-                fut = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime)
+                fut = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime, allow_prompt=False)
                 pending[fut] = (idx, ticker, time.monotonic())
                 next_pos += 1
 
@@ -2203,15 +2207,10 @@ def run_ichimoku_search(target: str) -> int:
                         for _f, (idx, ticker, started) in pending.items()
                         if now - started >= stall_seconds
                     ]
-                    if stalled and now - last_stall_log >= 15.0:
-                        shown = ", ".join(stalled[:8])
-                        extra = " ..." if len(stalled) > 8 else ""
-                        print(
-                            f"[search] waiting for slow workers: {shown}{extra}. "
-                            "If this is a network/VPN stall, press Ctrl+C once to cancel cleanly or set "
-                            "STOCKHELPER_SCAN_STALL_SECONDS to tune this warning.",
-                            flush=True,
-                        )
+                    if stalled and not PAUSE_SCAN_EVENT.is_set() and now - last_stall_log >= 30.0:
+                        shown = ", ".join(stalled[:3])
+                        extra = f" (+{len(stalled) - 3})" if len(stalled) > 3 else ""
+                        print(f"[search] slow workers: {shown}{extra}. Ctrl+C cancels; STOCKHELPER_SCAN_STALL_SECONDS tunes this.", flush=True)
                         last_stall_log = now
                     if not PAUSE_SCAN_EVENT.is_set():
                         _submit_more()
@@ -2222,6 +2221,24 @@ def run_ichimoku_search(target: str) -> int:
                         display_symbol, result, flip, err, src, stopped = fut.result()
                     except Exception as exc:
                         display_symbol, result, flip, err, src, stopped = ticker, None, None, _compact_error(str(exc)), "unknown", False
+                    if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                        print(f"[{idx}/{len(members)}] {ticker}", flush=True)
+                        print(f"  pauza VPN/rate-limit ({_compact_error(err)})", flush=True)
+                        if _started < last_vpn_continue_at:
+                            print(f"[search] stale pre-VPN rate-limit result for {ticker}; retrying without another prompt...", flush=True)
+                            fut_retry = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime, allow_prompt=False)
+                            pending[fut_retry] = (idx, ticker, time.monotonic())
+                            continue
+                        PAUSE_SCAN_EVENT.set()
+                        if _prompt_vpn_continue_or_stop():
+                            last_vpn_continue_at = time.monotonic()
+                            print(f"[search] VPN continue confirmed; retrying {ticker}...", flush=True)
+                            fut_retry = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime, allow_prompt=False)
+                            pending[fut_retry] = (idx, ticker, time.monotonic())
+                            continue
+                        print("[search] Scan stopped by user after rate-limit detection.", flush=True)
+                        STOP_SCAN_EVENT.set()
+                        break
                     print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                     processed_count += 1
                     if stopped:
