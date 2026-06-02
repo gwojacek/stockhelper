@@ -2338,8 +2338,30 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if upper_slope >= lower_slope:
                     continue
 
-                first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
                 tol = _touch_tolerance(start, end)
+
+                def _anchors_uninterrupted(anchor_a: tuple[int, float], anchor_b: tuple[int, float], side: str) -> bool:
+                    # The first two anchor points must define a clean extreme-to-extreme
+                    # segment. No intermediate candle shadow may break beyond that
+                    # segment before the second anchor is reached.
+                    left, right = sorted((anchor_a[0], anchor_b[0]))
+                    if right - left <= 1:
+                        return True
+                    eps = max(tol * 0.05, max(abs(anchor_a[1]), abs(anchor_b[1]), 1e-9) * 1e-6)
+                    for k in range(left + 1, right):
+                        line_value = _wedge_line_value(k, anchor_a, anchor_b)
+                        if side == "upper" and highs[k] > line_value + eps:
+                            return False
+                        if side == "lower" and lows[k] < line_value - eps:
+                            return False
+                    return True
+
+                if not _anchors_uninterrupted(upper_a, upper_b, "upper"):
+                    continue
+                if not _anchors_uninterrupted(lower_a, lower_b, "lower"):
+                    continue
+
+                first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
                 upper_contacts = [high_abs, uh2]
                 lower_contacts = [low_abs, lh2]
                 broken = False
