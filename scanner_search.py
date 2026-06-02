@@ -2325,7 +2325,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
             upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
             if upper_slope >= 0:
                 continue
-            for lh2 in lower_anchor2_candidates[:22]:
+            for lh2 in lower_anchor2_candidates[:40]:
                 # Use the lowest low as one exact lower anchor, as requested.
                 lower_a = (low_abs, float(lows[low_abs]))
                 lower_b = (lh2, float(lows[lh2]))
@@ -2362,6 +2362,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     continue
 
                 first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
+                upper_anchor_indices = {high_abs, uh2}
+                lower_anchor_indices = {low_abs, lh2}
+                upper_exact_contacts = [high_abs, uh2]
+                lower_exact_contacts = [low_abs, lh2]
                 upper_contacts = [high_abs, uh2]
                 lower_contacts = [low_abs, lh2]
                 broken = False
@@ -2369,24 +2373,47 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
                 if width_start <= 0 or width_end <= 0 or width_end >= width_start * 0.92:
                     continue
+                close_eps = max(tol * 0.02, max(abs(float(closes[end])), 1e-9) * 1e-6)
+                exact_tol = max(tol * 0.12, max(abs(float(closes[end])), 1e-9) * 1e-6)
+
+                def _is_local_extreme(i: int, side: str) -> bool:
+                    if i <= 0 or i >= n - 1:
+                        return True
+                    if side == "upper":
+                        return highs[i] >= highs[i - 1] and highs[i] >= highs[i + 1]
+                    return lows[i] <= lows[i - 1] and lows[i] <= lows[i + 1]
+
                 for i in range(first_validation, end + 1):
                     up = _wedge_line_value(i, upper_a, upper_b)
                     lo = _wedge_line_value(i, lower_a, lower_b)
                     if lo >= up:
                         broken = True
                         break
-                    # No close outside either side. Wicks/opens may violate.
-                    if closes[i] > up + tol * 0.25 or closes[i] < lo - tol * 0.25:
+                    # No candle may close on the other side of the wedge. Wicks
+                    # and opens may probe through, but closes must remain inside.
+                    if closes[i] > up + close_eps or closes[i] < lo - close_eps:
                         broken = True
                         break
-                    if i not in {high_abs, uh2} and closes[i] <= up + tol * 0.25 and (lows[i] <= up <= highs[i] or abs(highs[i] - up) <= tol or abs(opens[i] - up) <= tol):
-                        upper_contacts.append(i)
-                    if i not in {low_abs, lh2} and closes[i] >= lo - tol * 0.25 and (lows[i] <= lo <= highs[i] or abs(lows[i] - lo) <= tol or abs(opens[i] - lo) <= tol):
-                        lower_contacts.append(i)
+                    if i not in upper_anchor_indices and closes[i] <= up + close_eps:
+                        if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= exact_tol:
+                            upper_exact_contacts.append(i)
+                            upper_contacts.append(i)
+                        elif lows[i] <= up <= highs[i] or abs(highs[i] - up) <= tol or abs(opens[i] - up) <= tol:
+                            upper_contacts.append(i)
+                    if i not in lower_anchor_indices and closes[i] >= lo - close_eps:
+                        if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= exact_tol:
+                            lower_exact_contacts.append(i)
+                            lower_contacts.append(i)
+                        elif lows[i] <= lo <= highs[i] or abs(lows[i] - lo) <= tol or abs(opens[i] - lo) <= tol:
+                            lower_contacts.append(i)
                 if broken:
                     continue
                 up_count = _clustered_contact_count(upper_contacts)
                 lo_count = _clustered_contact_count(lower_contacts)
+                lower_exact_count = _clustered_contact_count(lower_exact_contacts)
+                upper_exact_count = _clustered_contact_count(upper_exact_contacts)
+                if lower_exact_count < 2:
+                    continue
                 if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
                     continue
                 last_close = float(closes[end])
@@ -2424,9 +2451,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     continue
 
                 touch_quality = min(1.0, (up_count + lo_count) / 7.0) * (0.75 + 0.25 * min(up_count, lo_count) / max(up_count, lo_count))
+                exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
                 proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
                 compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
-                fit_quality = max(0.0, min(100.0, touch_quality * proximity_quality * 100.0))
+                fit_quality = max(0.0, min(100.0, touch_quality * exact_anchor_bonus * proximity_quality * 100.0))
                 if fit_quality < 35.0 or compression_quality < 0.12:
                     continue
                 if slope_pct >= 0.40:
@@ -2438,7 +2466,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 else:
                     slope_strength = "mild"
                 slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * proximity_quality * (0.70 + compression_quality) * slope_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line
