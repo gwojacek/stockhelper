@@ -603,7 +603,9 @@ def run_level_selector(raw_args=None):
                 def _price_at_date(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], ts: pd.Timestamp) -> float:
                     x0, y0 = p0
                     x1, y1 = p1
-                    span_days = max((x1 - x0).days, 1)
+                    span_days = (x1 - x0).days
+                    if span_days == 0:
+                        span_days = 1
                     return float(y0) + (float(y1) - float(y0)) * ((ts - x0).days / span_days)
 
                 def _visible_pair(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[tuple[pd.Timestamp, float], tuple[pd.Timestamp, float]]:
@@ -629,7 +631,9 @@ def run_level_selector(raw_args=None):
                     x0, y0 = p0v
                     x1, y1 = p1v
                     end_ts = x_right if args.wedge_right and not pd.isna(x_right) else x1
-                    span_days = max((x1 - x0).days, 1)
+                    span_days = (x1 - x0).days
+                    if span_days == 0:
+                        span_days = 1
                     end_days = (end_ts - x0).days
                     y_end = y0 + (y1 - y0) * (end_days / span_days)
                     return str(x0.date()), round(float(y0), 5), str(end_ts.date()), round(float(y_end), 5)
