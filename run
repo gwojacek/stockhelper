@@ -877,7 +877,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                 dates={"wedge": str(r.get("Wedge", ""))},
                 metrics={
                     "days": str(r.get("Days", "")), "months": str(r.get("Months", "")), "upper_touches": str(r.get("Upper touches", "")), "lower_touches": str(r.get("Lower touches", "")),
-                    "start_width": str(r.get("Start width", "")), "end_width": str(r.get("End width", "")), "slope": str(r.get("Slope", "")), "fit": str(r.get("Fit", "")), "proximity": str(r.get("Proximity", "")), "compression": str(r.get("Compression", "")), "score": str(r.get("Score", "")),
+                    "start_width": str(r.get("Start width", "")), "end_width": str(r.get("End width", "")), "slope": str(r.get("Slope", "")), "fit": str(r.get("Fit", "")), "proximity": str(r.get("Proximity", "")), "compression": str(r.get("Compression", "")), "breakout_date": str(r.get("Breakout date", "-")), "breakout_direction": str(r.get("Breakout direction", "-")), "score": str(r.get("Score", "")),
                     "upper_start": upper_start, "upper_end": upper_end, "lower_start": lower_start, "lower_end": lower_end,
                     "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                 },
@@ -1439,7 +1439,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 dates={"wedge": str(r.get("Wedge", ""))},
                 metrics={
                     "days": str(r.get("Days", "")), "months": str(r.get("Months", "")), "upper_touches": str(r.get("Upper touches", "")), "lower_touches": str(r.get("Lower touches", "")),
-                    "start_width": str(r.get("Start width", "")), "end_width": str(r.get("End width", "")), "slope": str(r.get("Slope", "")), "fit": str(r.get("Fit", "")), "proximity": str(r.get("Proximity", "")), "compression": str(r.get("Compression", "")), "score": str(r.get("Score", "")),
+                    "start_width": str(r.get("Start width", "")), "end_width": str(r.get("End width", "")), "slope": str(r.get("Slope", "")), "fit": str(r.get("Fit", "")), "proximity": str(r.get("Proximity", "")), "compression": str(r.get("Compression", "")), "breakout_date": str(r.get("Breakout date", "-")), "breakout_direction": str(r.get("Breakout direction", "-")), "score": str(r.get("Score", "")),
                     "upper_start": upper_start, "upper_end": upper_end, "lower_start": lower_start, "lower_end": lower_end,
                     "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                 },
@@ -1855,7 +1855,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
             slope_label = _wedge_slope_strength(row.metrics.get("slope", ""))
             contacts = f"{row.metrics.get('upper_touches','?')}/{row.metrics.get('lower_touches','?')}"
-            return ((0, 0, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}, score {score:.0f}")
+            breakout_date = (row.metrics.get("breakout_date", "-") or "-").strip()
+            breakout_direction = (row.metrics.get("breakout_direction", "-") or "-").strip()
+            breakout_rank = 1 if breakout_direction in {"long", "short"} and breakout_date not in {"", "-"} else 0
+            breakout_text = f", wybicie {breakout_direction} {breakout_date}" if breakout_rank else ""
+            return ((0, -breakout_rank, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający{breakout_text}: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}, score {score:.0f}")
         if row.scanner == "FIBO":
             if row.category == "valid":
                 return None
@@ -1900,29 +1904,36 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
 
     def _wedge_tab_html() -> str:
-        wedge = sorted([r for r in rows if r.scanner == "WEDGE"], key=lambda r: (_market_order(r.market, r.ticker), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))
+        def _wedge_breakout_rank(r: ScannerRow) -> int:
+            direction = (r.metrics.get("breakout_direction", "-") or "-").strip()
+            bdate = (r.metrics.get("breakout_date", "-") or "-").strip()
+            return 1 if direction in {"long", "short"} and bdate not in {"", "-"} else 0
+        wedge = sorted([r for r in rows if r.scanner == "WEDGE"], key=lambda r: (_market_order(r.market, r.ticker), -_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))
         if not wedge:
             return "<section class='market'><h2>🔻 Kliny opadające</h2><p class='muted'>Brak niewybitych klinów opadających.</p></section>"
         parts = ["<section class='market'><h2>🔻 Kliny opadające</h2><p class='muted'>Osobna lista klinów: w marketach najwyżej są formacje z najlepszym dopasowaniem linii, aktywną bliskością ceny do klinu, kompresją, rozmiarem i nachyleniem.</p>"]
-        top = sorted(wedge, key=lambda r: -(_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:10]
+        top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:10]
         def _wedge_summary(r: ScannerRow) -> str:
             touches = f"{r.metrics.get('upper_touches','?')}/{r.metrics.get('lower_touches','?')}"
             months = _parse_float_text(r.metrics.get("months", ""), 0.0)
             slope_label = _wedge_slope_strength(r.metrics.get("slope", ""))
-            return f"{months:.1f}m · styki U/D {touches} · nachylenie {slope_label}"
+            breakout_date = (r.metrics.get("breakout_date", "-") or "-").strip()
+            breakout_direction = (r.metrics.get("breakout_direction", "-") or "-").strip()
+            breakout = f" · wybicie {breakout_direction} {breakout_date}" if breakout_direction in {"long", "short"} and breakout_date not in {"", "-"} else ""
+            return f"{months:.1f}m · styki U/D {touches} · nachylenie {slope_label}{breakout}"
         top_rows = "".join(
-            f"<tr data-market='{html.escape(r.market)}' data-scanner='WEDGE'><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_summary(r))}</td><td>{html.escape(r.metrics.get('fit',''))}</td><td>{html.escape(r.metrics.get('proximity',''))}</td><td>{html.escape(r.metrics.get('compression',''))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)))}</td></tr>"
+            f"<tr data-market='{html.escape(r.market)}' data-scanner='WEDGE'><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(r.status)}</td><td>{html.escape(_wedge_summary(r))}</td><td>{html.escape(r.metrics.get('fit',''))}</td><td>{html.escape(r.metrics.get('proximity',''))}</td><td>{html.escape(r.metrics.get('compression',''))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)))}</td></tr>"
             for r in top
         )
-        parts.append(f"<div class='top-choice'><h3>Top choices <button class='iconbtn' title='Open stooq links from top choices' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from top choices' onclick='openClosestStockhelperCharts(this)'>📊</button></h3><table class='data'><thead><tr><th>Instrument</th><th>Market</th><th>Klin</th><th>Fit</th><th>Proximity</th><th>Compression</th><th>Score</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{top_rows}</tbody></table></div>")
+        parts.append(f"<div class='top-choice'><h3>Top choices <button class='iconbtn' title='Open stooq links from top choices' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from top choices' onclick='openClosestStockhelperCharts(this)'>📊</button></h3><table class='data'><thead><tr><th>Instrument</th><th>Market</th><th>Status</th><th>Klin</th><th>Fit</th><th>Proximity</th><th>Compression</th><th>Breakout</th><th>Dir</th><th>Score</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{top_rows}</tbody></table></div>")
         for market in by_market:
             group = [r for r in wedge if r.market == market]
             if not group:
                 continue
-            parts.append(f"<h3>{html.escape(_scope_label(market.lower()))} ({len(group)}) <button class='iconbtn' title='Open stooq links from this table' onclick='openNextTableStooqLinks(this)'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from this table' onclick='openNextTableStockhelperCharts(this)'>📊</button></h3><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Wedge</th><th>Months</th><th>Touches U/L</th><th>Start width</th><th>End width</th><th>Slope</th><th>Fit</th><th>Proximity</th><th>Compression</th><th>Score</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
+            parts.append(f"<h3>{html.escape(_scope_label(market.lower()))} ({len(group)}) <button class='iconbtn' title='Open stooq links from this table' onclick='openNextTableStooqLinks(this)'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from this table' onclick='openNextTableStockhelperCharts(this)'>📊</button></h3><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Status</th><th>Wedge</th><th>Months</th><th>Touches U/L</th><th>Start width</th><th>End width</th><th>Slope</th><th>Fit</th><th>Proximity</th><th>Compression</th><th>Breakout</th><th>Dir</th><th>Score</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
             for r in group:
                 touches = f"{r.metrics.get('upper_touches','')}/{r.metrics.get('lower_touches','')}"
-                parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='WEDGE'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.dates.get('wedge',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(touches)}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('fit',''))}</td><td>{html.escape(r.metrics.get('proximity',''))}</td><td>{html.escape(r.metrics.get('compression',''))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)))}</td></tr>")
+                parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='WEDGE'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('wedge',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(touches)}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('fit',''))}</td><td>{html.escape(r.metrics.get('proximity',''))}</td><td>{html.escape(r.metrics.get('compression',''))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)))}</td></tr>")
             parts.append("</tbody></table></div>")
         parts.append("</section>")
         return "".join(parts)

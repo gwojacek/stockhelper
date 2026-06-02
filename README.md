@@ -373,7 +373,7 @@ python run -allsearch all
 - Runs Ichimoku and Fibonacci scanning and combines the outputs.
 - Regenerates compact Trójpolówki Markdown watchlists from the same allsearch run (no second instrument scan).
 - Builds a browser-friendly HTML report and a Markdown report.
-- Embeds three HTML tabs: `ALLSEARCH REPORT`, `3P FIBO`, and `3P ICHIMOKU`.
+- Embeds four HTML tabs: `ALLSEARCH REPORT`, `3P FIBO`, `3P ICHIMOKU`, and `🔻 Kliny`.
 - Adds top-choice sections, sortable/filterable tables, group Stooq-open buttons, StockHelper chart-open buttons, and a PDF export button that works from every tab.
 - Opens/serves the HTML report via the local report server when possible.
 
@@ -395,7 +395,9 @@ python run -allsearch all
 - `Trojpolowki/fibo.md` uses three compact columns: steep/early `WYNIKI FIBO #0` setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
 - `Trojpolowki/ichimoku.md` uses compact continuation/watch/cloud/retest columns and keeps risk/context details only where they are relevant.
 - The HTML report renders both 3P files as tabs, not as separate links, and keeps Stooq/chart controls next to instruments.
-- Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, and deeper Fibo pullbacks are prioritized.
+- Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, deeper Fibo pullbacks, and the strongest falling-wedge setups are prioritized.
+- The `🔻 Kliny` tab groups falling wedges by market, keeps chart links/StockHelper open buttons next to each instrument, and marks breakout rows with `Breakout date` plus `Breakout direction` (`long` for upper-line breakout, `short` for lower-line breakdown).
+- Falling-wedge scanner rows are written at the end of Fibo markdown under `WYNIKI KLINY OPADAJĄCE`; a wedge remains valid only while no candle closes outside its boundaries, except for an accepted breakout/breakdown on the latest candle or within the last 5 candles, which becomes the absolute top-choice wedge case.
 - WYNIKI 2 Ichimoku includes `Mies. respektu przed wybiciem`, showing how long the prior cloud side was respected before the breakout.
 
 

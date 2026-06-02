@@ -319,6 +319,8 @@ class WedgeScanResult:
     compression_pct: float
     score: float
     current_close: float
+    breakout_date: str = "-"
+    breakout_direction: str = "-"
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
 
@@ -2368,7 +2370,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_exact_contacts = [low_abs, lh2]
                 upper_contacts = [high_abs, uh2]
                 lower_contacts = [low_abs, lh2]
-                broken = False
+                breakout_idx: int | None = None
+                breakout_direction = "-"
+                invalid = False
                 width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
                 width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
                 if width_start <= 0 or width_end <= 0 or width_end >= width_start * 0.92:
@@ -2387,13 +2391,26 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     up = _wedge_line_value(i, upper_a, upper_b)
                     lo = _wedge_line_value(i, lower_a, lower_b)
                     if lo >= up:
-                        broken = True
+                        invalid = True
                         break
-                    # No candle may close on the other side of the wedge. Wicks
-                    # and opens may probe through, but closes must remain inside.
+                    # No candle may close on the other side of a still-valid wedge.
+                    # The only accepted outside close is the first breakout/breakdown
+                    # candle, and it must be very recent (latest candle or up to the
+                    # previous 5 candles) to be treated as an absolute top-choice setup.
                     if closes[i] > up + close_eps or closes[i] < lo - close_eps:
-                        broken = True
+                        if breakout_idx is None and i >= end - 5:
+                            breakout_idx = i
+                            breakout_direction = "long" if closes[i] > up + close_eps else "short"
+                            continue
+                        if breakout_idx is not None:
+                            if breakout_direction == "long" and closes[i] >= lo - close_eps:
+                                continue
+                            if breakout_direction == "short" and closes[i] <= up + close_eps:
+                                continue
+                        invalid = True
                         break
+                    if breakout_idx is not None:
+                        continue
                     if i not in upper_anchor_indices and closes[i] <= up + close_eps:
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= exact_tol:
                             upper_exact_contacts.append(i)
@@ -2406,7 +2423,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             lower_contacts.append(i)
                         elif lows[i] <= lo <= highs[i] or abs(lows[i] - lo) <= tol or abs(opens[i] - lo) <= tol:
                             lower_contacts.append(i)
-                if broken:
+                if invalid:
                     continue
                 up_count = _clustered_contact_count(upper_contacts)
                 lo_count = _clustered_contact_count(lower_contacts)
@@ -2442,8 +2459,13 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
                 median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
                 median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
-                last_upper_contact_age = end - max(upper_contacts)
-                last_lower_contact_age = end - max(lower_contacts)
+                breakout_recent_bonus = 0.0
+                breakout_age = None
+                if breakout_idx is not None:
+                    breakout_age = end - breakout_idx
+                    breakout_recent_bonus = max(0.0, 6.0 - float(breakout_age)) / 6.0
+                last_upper_contact_age = (breakout_idx if breakout_idx is not None else end) - max(upper_contacts)
+                last_lower_contact_age = (breakout_idx if breakout_idx is not None else end) - max(lower_contacts)
                 # Reject theoretical oversized wedges whose upper boundary no longer
                 # follows the active structure. A useful wedge has recent price
                 # compression near both trendlines, especially the upper line.
@@ -2466,7 +2488,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 else:
                     slope_strength = "mild"
                 slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus
+                breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line
@@ -2499,6 +2522,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     compression_pct=round(compression_pct, 1),
                     score=round(score, 2),
                     current_close=last_close,
+                    breakout_date=_fmt_date(breakout_idx) if breakout_idx is not None else "-",
+                    breakout_direction=breakout_direction,
                 )
                 if best is None or cand.score > best.score:
                     best = cand
@@ -3562,11 +3587,11 @@ def run_fibo_search(target: str) -> int:
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
-    rows_wedge_md=[[r.ticker,"falling_wedge_unbroken",f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,f"{r.fit_quality:.1f}",f"{r.recent_proximity_pct:.1f}",f"{r.compression_pct:.1f}%",f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
+    rows_wedge_md=[[r.ticker,("falling_wedge_breakout" if r.breakout_direction in {"long", "short"} else "falling_wedge_unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,f"{r.fit_quality:.1f}",f"{r.recent_proximity_pct:.1f}",f"{r.compression_pct:.1f}%",(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
-    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Fit","Proximity","Compression","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
+    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Fit","Proximity","Compression","Breakout date","Breakout direction","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
