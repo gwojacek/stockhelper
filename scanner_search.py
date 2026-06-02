@@ -2261,23 +2261,32 @@ def _select_fibo_long_impulse_base(
 
     i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
 
-    # Guard against stale multi-cycle impulses: if an earlier local peak (after
-    # the chosen start, before the chosen peak) already completed a >=61.8
-    # correction, this start is too old.
-    min_stale_guard_days = 10  # ~2 weeks
+    # Guard against stale multi-cycle impulses: if a *large enough* earlier
+    # formation (after the chosen start, before the chosen peak) already completed
+    # a >=61.8 correction, this start is too old. Short one-month-ish cycles are
+    # allowed to cross 61.8; bigger cycles must restart after the new bottom.
+    min_completed_cycle_days = 32
+    max_short_completed_cycle_days = 45
+    min_completed_cycle_gain = 0.18
 
     def _stale_cycle_reset_candidate(start_idx: int, start_low: float) -> tuple[bool, tuple[int, float, int] | None]:
         latest_reset: tuple[int, float, int] | None = None
-        for p in range(start_idx + min_incline_days, max(start_idx + min_incline_days, i_peak - 8)):
-            if (p - start_idx) <= min_stale_guard_days:
-                continue
+        scan_left = start_idx + min_completed_cycle_days
+        scan_right = max(scan_left, i_peak - 8)
+        for p in range(scan_left, scan_right):
             win_l = max(start_idx, p - 4)
             win_r = min(i_peak, p + 5)
-            if float(high.iloc[p]) < float(high.iloc[win_l:win_r].max()):
+            local_peak = float(high.iloc[p]) >= float(high.iloc[win_l:win_r].max())
+            dominant_so_far = float(high.iloc[p]) >= float(high.iloc[start_idx:p + 1].max()) * 0.97
+            if not (local_peak or dominant_so_far):
                 continue
             p_high = float(high.iloc[p])
             p_rng = p_high - start_low
             if p_rng <= 0:
+                continue
+            completed_days = p - start_idx
+            gain_pct = p_rng / max(abs(start_low), 1e-9)
+            if completed_days <= max_short_completed_cycle_days or gain_pct < min_completed_cycle_gain:
                 continue
             p_fib_618 = p_high - p_rng * 0.618
             post_slice = low.iloc[p:i_peak + 1]
@@ -2285,7 +2294,10 @@ def _select_fibo_long_impulse_base(
             post_low = float(low.iloc[post_idx])
             if post_low <= p_fib_618:
                 stale_msg_prefix = "Long: stale impulse start" if stale_cycle_mode == "reset" else "Rejected long: stale impulse start"
-                _log(f"{stale_msg_prefix} (earlier peak idx={p} already corrected below its 61.8).")
+                _log(
+                    f"{stale_msg_prefix} (earlier large formation peak idx={p}, "
+                    f"{completed_days}d, gain={gain_pct * 100:.2f}% already corrected below its 61.8)."
+                )
                 if i_peak > post_idx + min_incline_days:
                     latest_reset = (post_idx, post_low, p)
                 else:
@@ -2577,8 +2589,11 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         _log(f"Long pattern={pattern}, crossed_618={crossed_618}, corr_low={corr_low:.4f}, fib_618={fib_618:.4f}")
         if pattern == "none":
             if crossed_618:
-                _log("Rejected long: 61.8 crossed but no valid pattern.")
-                return None
+                if (i_peak - i_start) <= 45:
+                    _log("Long: accepting short completed cycle despite 61.8 cross without pattern.")
+                else:
+                    _log("Rejected long: large formation crossed 61.8 but no valid pattern; next formation must start after the new bottom.")
+                    return None
             close_after_peak = pd.to_numeric(w.iloc[i_peak:i_end + 1]["Close"], errors="coerce")
             below_236_idx = [j for j, v in enumerate(close_after_peak.tolist()) if pd.notna(v) and float(v) < fib_236]
             if below_236_idx:
