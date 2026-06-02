@@ -609,7 +609,7 @@ def run_level_selector(raw_args=None):
                         return last + pd.Timedelta(days=extra)
                     return last + pd.tseries.offsets.BDay(extra)
 
-                def _price_at_index(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], idx: int) -> float:
+                def _line_price_at_index(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], idx: int) -> float:
                     i0 = _nearest_idx(p0[0])
                     i1 = _nearest_idx(p1[0])
                     if i0 is None or i1 is None:
@@ -619,46 +619,31 @@ def run_level_selector(raw_args=None):
                         span = 1
                     return float(p0[1]) + (float(p1[1]) - float(p0[1])) * ((idx - i0) / span)
 
-                def _visible_pair(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[tuple[pd.Timestamp, float, int], tuple[pd.Timestamp, float, int]] | None:
-                    # Move both anchors a little left along the same slanted line.
-                    # All Y values are interpolated by candle index, not calendar
-                    # days, so the trace stays aligned with Plotly rangebreaks
-                    # during zoom/pan just like manually drawn chart lines.
+                def _line_object_points(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[list[str], list[float]]:
                     i0 = _nearest_idx(p0[0])
                     i1 = _nearest_idx(p1[0])
                     if i0 is None or i1 is None:
-                        return None
-                    shift = 2
-                    vi0 = max(0, i0 - shift)
-                    vi1 = max(0, i1 - shift)
-                    if vi0 == vi1:
-                        return None
-                    return (_date_for_index(vi0), _price_at_index(p0, p1, vi0), vi0), (_date_for_index(vi1), _price_at_index(p0, p1, vi1), vi1)
-
-                def _extend(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[str, float, str, float]:
-                    pair = _visible_pair(p0, p1)
-                    if pair is None:
-                        x0, y0 = p0
-                        x1, y1 = p1
-                        return str(x0.date()), round(float(y0), 5), str(x1.date()), round(float(y1), 5)
-                    (x0, y0, i0), (_x1_anchor, _y1_anchor, i1) = pair
+                        return [str(p0[0].date()), str(p1[0].date())], [round(float(p0[1]), 5), round(float(p1[1]), 5)]
+                    first_idx = min(i0, i1)
+                    second_idx = max(i0, i1)
                     if args.wedge_right:
                         extension = max(abs(i1 - i0), 7)
                         end_idx = (len(chart_dates) - 1) + extension
                     else:
-                        end_idx = i1
-                    end_ts = _date_for_index(end_idx)
-                    span_idx = i1 - i0
-                    if span_idx == 0:
-                        span_idx = 1
-                    y_end = y0 + (_y1_anchor - y0) * ((end_idx - i0) / span_idx)
-                    return str(pd.to_datetime(x0).date()), round(float(y0), 5), str(pd.to_datetime(end_ts).date()), round(float(y_end), 5)
+                        end_idx = second_idx
+                    # Build a polyline on every trading/index step. With Plotly
+                    # rangebreaks this avoids calendar-time interpolation drift and
+                    # keeps the auto line glued to the same candles at every zoom.
+                    indexes = list(range(first_idx, end_idx + 1))
+                    x_vals = [str(pd.to_datetime(_date_for_index(i)).date()) for i in indexes]
+                    y_vals = [round(_line_price_at_index(p0, p1, i), 5) for i in indexes]
+                    return x_vals, y_vals
 
-                ux0, uy0, ux1, uy1 = _extend(up0, up1)
-                lx0, ly0, lx1, ly1 = _extend(lo0, lo1)
+                upper_x, upper_y = _line_object_points(up0, up1)
+                lower_x, lower_y = _line_object_points(lo0, lo1)
                 existing["drawn_objects"] = [
-                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x0": ux0, "x1": ux1, "y0": uy0, "y1": uy1, "price": uy1, "color": "#dc2626", "group_id": "auto-wedge"},
-                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x0": lx0, "x1": lx1, "y0": ly0, "y1": ly1, "price": ly1, "color": "#2563eb", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x": upper_x, "y": upper_y, "x0": upper_x[0], "x1": upper_x[-1], "y0": upper_y[0], "y1": upper_y[-1], "anchor_x": [str(up0[0].date()), str(up1[0].date())], "anchor_y": [round(float(up0[1]), 5), round(float(up1[1]), 5)], "price": upper_y[-1], "color": "#dc2626", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge"},
                 ]
                 print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
         except Exception as exc:

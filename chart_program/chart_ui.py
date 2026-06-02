@@ -313,10 +313,12 @@ class ChartLevelSelectorUI:
                 # like manual line-tool drawings. Plotly shapes can drift visually
                 # against candlesticks when rangebreaks/zooming are active; traces
                 # remain glued to candle date/price coordinates.
+                x_values = obj.get("x") or [obj.get("x0"), obj.get("x1")]
+                y_values = obj.get("y") or [obj.get("y0"), obj.get("y1")]
                 fig.add_trace(
                     go.Scatter(
-                        x=[obj.get("x0"), obj.get("x1")],
-                        y=[obj.get("y0"), obj.get("y1")],
+                        x=x_values,
+                        y=y_values,
                         mode="lines",
                         line={"color": line_color, "width": line_width},
                         name=obj.get("label", "Falling wedge"),
@@ -324,6 +326,20 @@ class ChartLevelSelectorUI:
                         showlegend=True,
                     )
                 )
+                anchor_x = obj.get("anchor_x") or []
+                anchor_y = obj.get("anchor_y") or []
+                if anchor_x and anchor_y and len(anchor_x) == len(anchor_y):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=anchor_x,
+                            y=anchor_y,
+                            mode="markers",
+                            marker={"size": 7, "symbol": "diamond", "color": line_color, "line": {"width": 1, "color": "#f8fafc"}},
+                            name=f"{obj.get('label', 'Falling wedge')} anchors",
+                            hovertemplate=f"Anchor: %{{y:.{display_precision}f}}<extra></extra>",
+                            showlegend=False,
+                        )
+                    )
                 continue
             mode = "lines" if is_preview_line else ("lines+text+markers" if is_fib_618 else "lines+text")
             fig.add_trace(
