@@ -322,6 +322,7 @@ class WedgeScanResult:
     current_close: float
     breakout_date: str = "-"
     breakout_direction: str = "-"
+    avg_turnover_10d_pln: float | None = None
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
 
@@ -3549,28 +3550,46 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             return 1.0
 
+    def _avg10d_turnover_pln_for_symbol(symbol: str, instrument_type: str) -> float | None:
+        try:
+            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
+        except Exception:
+            return None
+        if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
+            return None
+        turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
+        turnover_native = turnover_native.dropna()
+        if len(turnover_native) < 10:
+            return None
+        fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
+        return float((turnover_native.tail(10) * fx_to_pln).mean())
+
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
         if row is None:
             return False
-        symbol = row[0]
-        try:
-            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=row[1], persist=True)
-        except Exception:
+        symbol, instrument_type = row
+        avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
+        if avg_10d_pln is None:
             return False
-        if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
-            return False
-        turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
-        turnover_native = turnover_native.dropna()
-        if len(turnover_native) < 10:
-            return False
-        fx_to_pln = _fx_to_pln_for_turnover(symbol, row[1])
-        avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
         avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
         return avg_10d_pln >= min_avg
 
+    def _passes_wedge_liquidity(r: WedgeScanResult) -> bool:
+        row = wedge_source_by_ticker.get(r.ticker)
+        if row is None:
+            return False
+        symbol, instrument_type = row
+        avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
+        if avg_10d_pln is None:
+            return False
+        r.avg_turnover_10d_pln = avg_10d_pln
+        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
+        return avg_10d_pln >= min_avg
+
     rows_by_key: dict[tuple[str, str, str, str], tuple[str, str]] = {}
+    wedge_source_by_ticker: dict[str, tuple[str, str]] = {}
     # Build lookup using the same symbol normalization as scanner.
     for ticker in members:
         instrument = "stock"
@@ -3586,6 +3605,8 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
+        if any(w.ticker == ticker for w in wedge_rows):
+            wedge_source_by_ticker[ticker] = (fetch_symbol, instrument)
         for r in rows + rows0:
             if r.ticker == ticker:
                 rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
@@ -3600,16 +3621,14 @@ def run_fibo_search(target: str) -> int:
             continue
         symbol, instrument_type = row
         try:
-            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
-            turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
-            turnover_native = turnover_native.dropna()
-            if len(turnover_native) < 10:
+            avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
+            if avg_10d_pln is None:
                 continue
-            fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
-            avg_turnover_10d_by_key[k] = float((turnover_native.tail(10) * fx_to_pln).mean())
+            avg_turnover_10d_by_key[k] = avg_10d_pln
         except Exception:
             continue
 
+    wedge_rows = [r for r in wedge_rows if _passes_wedge_liquidity(r)]
     rows0_liquid = [r for r in rows0 if _passes_fibo_liquidity(r)]
     rows1_liquid = [r for r in rows1 if _passes_fibo_liquidity(r)]
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
@@ -3681,11 +3700,11 @@ def run_fibo_search(target: str) -> int:
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
-    rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
+    rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
-    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
+    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")

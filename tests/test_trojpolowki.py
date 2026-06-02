@@ -196,9 +196,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "\n# WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)\n\n"
-        "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Link | Python command | Latest data? | Latest date | Expected date |\n"
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-        "| WDG | 🚀 breakout | 2026-01-02->2026-05-30 | 105 | 5.0 | 2026-01-02@100.0->2026-03-01@80.0 | 2026-02-01@60.0->2026-04-01@55.0 | 3 | 3 | 40.00% | 12.00% | strong | 2026-05-30 | long | 9999.00 | https://stooq.pl/wdg | python run -c WDG --wedge-lines | yes | 2026-05-30 | 2026-05-30 |\n",
+        "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| WDG | 🚀 breakout | 2026-01-02->2026-05-30 | 105 | 5.0 | 2026-01-02@100.0->2026-03-01@80.0 | 2026-02-01@60.0->2026-04-01@55.0 | 3 | 3 | 40.00% | 12.00% | strong | 2026-05-30 | long | 9999.00 | 1000000 | https://stooq.pl/wdg | python run -c WDG --wedge-lines | yes | 2026-05-30 | 2026-05-30 |\n",
         encoding="utf-8",
     )
     def latest_md(kind: str, scope: str):
@@ -266,6 +266,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Proximity</th>" not in text
     assert "<th>Compression</th>" not in text
     assert "<th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th>" in text
+    assert "<th>Score</th><th>Avg10d PLN</th>" in text
+    assert "1.000.000" in text
     assert "copyNextTableSheetsCells" in text
     assert "Copy Google Sheets links from this table" in text
     assert "data-cmd='python run -c WDG.WA --wedge-upper-start 2026-01-02,100.0 --wedge-upper-end 2026-03-01,80.0 --wedge-lower-start 2026-02-01,60.0 --wedge-lower-end 2026-04-01,55.0 --wedge-lines --wedge-right'" in text
