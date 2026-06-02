@@ -145,8 +145,10 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_FORCE_REMOTE_REFRESH` | `1` | Forces data refresh even when local CSV cache looks usable. |
 | `STOCKHELPER_STOOQ_DEBUG` | `1` | Enables verbose Stooq scraper/debug logging. Also enabled by `python run --search-debug ...`. |
 | `STOCKHELPER_STOOQ_CAPTCHA_DEBUG` | `1` | Prints extra CAPTCHA OCR/debug details and writes CAPTCHA debug screenshots. |
-| `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS` | `3` | Number of OCR CAPTCHA attempts before giving up/falling back. Default in code is `3`. |
+| `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS` | `5` | Number of OCR CAPTCHA attempts before giving up/falling back. Default in code is `5`. |
 | `STOCKHELPER_STOOQ_MAX_RUNTIME_S` | `900` | Watchdog timeout for Stooq web scraping. Code enforces at least 30 seconds. |
+| `STOCKHELPER_COMMODITIES_WORKERS` | `2` | Worker count for bounded parallel commodity Stooq web scans. Default is `2`; increase only when Stooq is stable. |
+| `STOCKHELPER_COMMODITIES_SEQUENTIAL` | `1` | Forces commodity scans to single-threaded Stooq web fetching. Useful when VPN/CAPTCHA prompts are noisy. |
 | `STOCKHELPER_DEBUG_SYMBOL` | `XTB.WA` | Enables detailed scanner debug logs for one symbol. |
 | `STOCKHELPER_DEFER_OPEN_LINKS` | `1` | Prevents scanner flows from prompting/opening all result links immediately. Used internally by batch reports. |
 | `STOCKHELPER_BATCH_MODE` | `1` | Marks scanner execution as batch mode. Used internally by batch report workflows. |
@@ -390,7 +392,7 @@ python run -allsearch all
 
 **Trójpolówki details:**
 
-- `Trojpolowki/fibo.md` uses three compact columns: steep/early setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
+- `Trojpolowki/fibo.md` uses three compact columns: steep/early `WYNIKI FIBO #0` setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
 - `Trojpolowki/ichimoku.md` uses compact continuation/watch/cloud/retest columns and keeps risk/context details only where they are relevant.
 - The HTML report renders both 3P files as tabs, not as separate links, and keeps Stooq/chart controls next to instruments.
 - Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, and deeper Fibo pullbacks are prioritized.
@@ -403,6 +405,8 @@ python run -allsearch all
 python run -allsearch wig
 python run -allsearch dax
 python run -allsearch commodities
+STOCKHELPER_COMMODITIES_WORKERS=3 python run -allsearch commodities
+STOCKHELPER_COMMODITIES_SEQUENTIAL=1 python run -allsearch commodities
 python run --open-allsearch-report all
 ```
 
@@ -514,7 +518,7 @@ Use this when remote data providers are slow, rate-limited, or unavailable and y
 STOCKHELPER_STOOQ_DEBUG=1 python run -fibo_search commodities
 ```
 
-Use this to see Stooq scraper progress and fallback decisions.
+Use this to see Stooq scraper progress and fallback decisions, including blank-page refreshes, VPN prompts, CAPTCHA attempts, and table extraction progress.
 
 ### Debug one scanner symbol
 
@@ -531,6 +535,8 @@ STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --debug-stooq CB.F --inspector
 ```
 
 Use this when Stooq shows a CAPTCHA, limit page, blank table, or incomplete rows. `--inspector` is useful only in an environment with a desktop/X server. The source contains a manual-mode tip mentioning `STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA`, but the launcher-supported switch is `--inspector`.
+
+In normal commodity scans, Stooq blank/no-table pages are handled before the inspector: the scraper refreshes a blank page before consent up to two times, then asks for VPN change and reloads, then tries OCR CAPTCHA solving before opening the headed inspector. CAPTCHA OCR attempts default to `5` and can be changed with `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS`.
 
 ### Check syntax without running data downloads
 
@@ -638,6 +644,8 @@ STOCKHELPER_STOOQ_DEBUG=1 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --debug-s
 ```
 
 Check `debug/stooq/` for JSON, HTML, and screenshots. If visible rows are correct and you want to merge them into commodity CSV cache, add `--debug-stooq-fetch`.
+
+For `python run -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=2`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1`; if Stooq is stable, you can cautiously increase workers. Blank/no-table pages before consent are refreshed twice before the VPN prompt is shown.
 
 ### No scanner Markdown is created
 
