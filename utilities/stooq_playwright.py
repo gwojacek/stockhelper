@@ -155,8 +155,39 @@ def _vpn_pause_and_reload_stooq_page(page, url: str, symbol: str, reason: str) -
         pass
 
 
-def _retry_blank_page_with_vpn_before_inspector(page, url: str, symbol: str, reason: str) -> bool:
-    """Retry blank/no-table Stooq pages once after VPN change, before inspector.
+def _refresh_blank_page_before_vpn(page, url: str, symbol: str, reason: str, max_refreshes: int = 2) -> bool:
+    """Reload blank/no-table Stooq pages before asking for VPN change.
+
+    Returns True when a reload reached data rows or solved a captcha.
+    Returns False when the caller should continue captcha/VPN/inspector handling.
+    """
+    for attempt in range(1, max(0, max_refreshes) + 1):
+        if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
+            break
+        print(
+            f"[stooq-web] {reason} for {symbol}; refreshing page before VPN prompt ({attempt}/{max_refreshes}).",
+            flush=True,
+        )
+        try:
+            page.reload(wait_until="domcontentloaded")
+        except Exception:
+            try:
+                page.goto(url, wait_until="domcontentloaded")
+            except Exception:
+                break
+        try:
+            _wait_for_table_or_limit_with_retry(page, retries=2)
+        except Exception:
+            pass
+        if _page_has_history_rows(page):
+            return True
+        if _try_solve_stooq_captcha(page, symbol):
+            return True
+    return False
+
+
+def _retry_blank_page_with_vpn_before_inspector(page, url: str, symbol: str, reason: str, pre_vpn_refreshes: int = 0) -> bool:
+    """Retry blank/no-table Stooq pages after optional refreshes and VPN change.
 
     Returns True when the retry already reached data rows or solved a captcha.
     Returns False when the caller should continue normal captcha/inspector handling.
@@ -164,6 +195,12 @@ def _retry_blank_page_with_vpn_before_inspector(page, url: str, symbol: str, rea
     if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
         return False
     with _CAPTCHA_INSPECTOR_LOCK:
+        if pre_vpn_refreshes > 0 and _refresh_blank_page_before_vpn(page, url, symbol, reason, pre_vpn_refreshes):
+            return True
+        if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
+            if _try_solve_stooq_captcha(page, symbol):
+                return True
+            return _page_has_history_rows(page)
         _vpn_pause_and_reload_stooq_page(page, url, symbol, reason)
         if _try_solve_stooq_captcha(page, symbol):
             return True
@@ -881,7 +918,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 except Exception:
                     break
                 if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
-                    page, url, symbol, "Blank/no-table Stooq page before consent"
+                    page, url, symbol, "Blank/no-table Stooq page before consent", pre_vpn_refreshes=2
                 ):
                     pass
                 if _page_has_rate_limit_or_captcha(page):
