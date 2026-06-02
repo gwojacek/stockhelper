@@ -1,0 +1,74 @@
+{
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (140231.2)",
+      "x0": "2025-10-10",
+      "x1": "2027-11-26",
+      "y0": 140231.2,
+      "y1": 140231.2,
+      "price": 140231.2,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (199354.8)",
+      "x0": "2026-04-10",
+      "x1": "2027-11-26",
+      "y0": 199354.8,
+      "y1": 199354.8,
+      "price": 199354.8,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (185401.6304)",
+      "x0": "2026-04-10",
+      "x1": "2027-11-26",
+      "y0": 185401.6304,
+      "y1": 185401.6304,
+      "price": 185401.6304,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (176769.5848)",
+      "x0": "2026-04-10",
+      "x1": "2027-11-26",
+      "y0": 176769.5848,
+      "y1": 176769.5848,
+      "price": 176769.5848,
+      "color": "#f59e0b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (162816.4152)",
+      "x0": "2026-04-10",
+      "x1": "2027-11-26",
+      "y0": 162816.4152,
+      "y1": 162816.4152,
+      "price": 162816.4152,
+      "color": "#22c55e",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    }
+  ],
+  "lot_cost": 136461.58,
+  "pip_value": 7.28,
+  "spread_multiplier": 75.0,
+  "spread": 546.0
+}

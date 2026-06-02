@@ -1,0 +1,32 @@
+{
+  "symbol": "zc.f",
+  "url": "https://stooq.pl/q/d/?s=zc.f&i=d",
+  "attempted_urls": [
+    {
+      "url": "https://stooq.pl/q/d/?s=zc.f&i=d",
+      "title": "",
+      "table_count": 0,
+      "fth1_count": 0,
+      "goto_error": null
+    }
+  ],
+  "debug_only": true,
+  "rows_count": 0,
+  "rows_preview": [],
+  "title": "",
+  "status": 200,
+  "final_url": "https://stooq.pl/q/d/?s=zc.f&i=d",
+  "html_path": "debug/stooq/zc_f.html",
+  "html_length": 39,
+  "html_head": "<html><head></head><body></body></html>",
+  "table_count": 0,
+  "fth1_count": 0,
+  "frames": [
+    "https://stooq.pl/q/d/?s=zc.f&i=d"
+  ],
+  "frame_rows": {
+    "https://stooq.pl/q/d/?s=zc.f&i=d": 0
+  },
+  "contains_fth1_text": false,
+  "rate_limited": false
+}
