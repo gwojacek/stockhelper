@@ -483,7 +483,9 @@ class ChartLevelSelectorUI:
             heartbeat["ts"] = time.time()
             return "ok"
 
-        is_stock = self.instrument_type == "stock"
+        original_is_stock = self.instrument_type == "stock"
+        stock_cfd_on = bool((self.values or {}).get("__stock_cfd_mode__", False))
+        is_stock = original_is_stock and not stock_cfd_on
         has_saved_levels = any((self.values or {}).get(field) is not None for field in SELECTION_SEQUENCE)
         initial_active_field = None if has_saved_levels else "high"
         is_commodity = self.instrument_type == "commodity"
@@ -491,7 +493,7 @@ class ChartLevelSelectorUI:
         source_ticker_upper = (self.source_ticker or "").upper()
         symbol_upper = (self.symbol or "").upper()
         is_index_like = is_commodity and any(token in source_ticker_upper or token in symbol_upper for token in index_like_tokens)
-        instrument_label = "COMMODITY/INDEX" if is_index_like else self.instrument_type.upper()
+        instrument_label = "STOCK CFD" if original_is_stock and stock_cfd_on else ("COMMODITY/INDEX" if is_index_like else self.instrument_type.upper())
         ichimoku_on = bool((self.values or {}).get("__show_ichimoku__", False))
         currency_fee_on = bool((self.values or {}).get("apply_currency_conversion_fee", False))
         currency_fee_eligible = bool((self.values or {}).get("__currency_fee_eligible__", False))
@@ -554,12 +556,30 @@ class ChartLevelSelectorUI:
                             + (f" ({self.source_ticker})" if self.source_ticker else ""),
                             style={"marginBottom": "8px", "fontWeight": "800", "fontSize": "20px", "color": "#f8fafc"},
                         ),
-                        html.H4(f"Instrument: {instrument_label}", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
+                        html.H4(f"Instrument: {instrument_label}", id="instrument-title", style={"marginTop": "0", "marginBottom": "6px", "color": "#cbd5e1"}),
+                        html.Button(
+                            f"CFD mode: {'ON' if stock_cfd_on else 'OFF'}",
+                            id="stock-cfd-toggle",
+                            n_clicks=0,
+                            title="Enable CFD/commodity options for this stock chart",
+                            style={
+                                "display": "block" if original_is_stock else "none",
+                                "width": "100%",
+                                "marginBottom": "8px",
+                                "padding": "8px",
+                                "background": "#2563eb" if stock_cfd_on else "#1f2937",
+                                "color": "white" if stock_cfd_on else "#e5e7eb",
+                                "border": "1px solid #334155",
+                                "borderRadius": "6px",
+                                "fontWeight": "700",
+                            },
+                        ),
                         html.Div(f"SOURCE: {self.source_provider}", style={"marginBottom": "12px", "fontWeight": "700", "color": "#93c5fd", "fontSize": "16px"}),
                         html.H4("Selected values", style={"marginTop": 0}),
-                        html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "14px"}),
+                        html.Div(id="values-panel", style={"fontFamily": "monospace", "marginBottom": "8px"}),
+                        html.Button("Clear active value", id="clear-active-level", n_clicks=0, title="Clear the currently active HIGH/LOW/ENTRY/etc. value", style={"width": "100%", "marginBottom": "14px"}),
                         html.H4("Manual inputs"),
-                        html.Label("Position type"),
+                        html.Label("Position type", id="position-type-label"),
                         dcc.Dropdown(
                             id="position-type",
                             options=[{"label": "LONG", "value": "long"}, {"label": "SHORT", "value": "short"}],
@@ -583,11 +603,11 @@ class ChartLevelSelectorUI:
                                 "border": "1px solid #334155",
                             },
                         ),
-                        html.Label("Lot cost", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        html.Label("Lot cost", id="lot-cost-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost") if self.values.get("lot_cost") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
-                        html.Label("Pip value", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        html.Label("Pip value", id="pip-value-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value") if self.values.get("pip_value") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
-                        html.Label("Spread multiplier (spread = Multiplier * pip_value)", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        html.Label("Spread multiplier (spread = Multiplier * pip_value)", id="spread-mult-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="spread-mult", type="number", value=self.values.get("spread_multiplier") if self.values.get("spread_multiplier") not in (0, None) else None, placeholder="e.g. 9", style=self._input_style(), disabled=is_stock),
                         html.H4("Drawn objects", style={"marginTop": "14px"}),
                         dcc.Dropdown(id="object-picker", options=[], value=None, clearable=True),
@@ -667,6 +687,7 @@ class ChartLevelSelectorUI:
             Output("object-picker", "value"),
             Input("candle-chart", "clickData"),
             Input("reset-all", "n_clicks"),
+            Input("clear-active-level", "n_clicks"),
             State("levels-store", "data"),
             State("level-points-store", "data"),
             State("objects-store", "data"),
@@ -678,7 +699,7 @@ class ChartLevelSelectorUI:
             State("half-anchor", "data"),
             prevent_initial_call=True,
         )
-        def apply_click(click_data, reset_clicks, levels_store, level_points, objects_store, active_field, active_tool, color, line_anchor, fib_anchor, half_anchor):
+        def apply_click(click_data, reset_clicks, clear_clicks, levels_store, level_points, objects_store, active_field, active_tool, color, line_anchor, fib_anchor, half_anchor):
             levels_store = levels_store or {}
             level_points = level_points or {}
             objects_store = objects_store or []
@@ -686,6 +707,16 @@ class ChartLevelSelectorUI:
             if ctx.triggered_id == "reset-all":
                 self.values = {}
                 return {}, {}, [], None, None, None, None
+
+            if ctx.triggered_id == "clear-active-level" and active_tool == "level" and active_field in SELECTION_SEQUENCE:
+                levels_store.pop(active_field, None)
+                level_points.pop(active_field, None)
+                if active_field == "stop_loss":
+                    levels_store["__half_points__"] = []
+                self.values = dict(levels_store)
+                self.values["drawn_objects"] = objects_store
+                self.values["level_points"] = level_points
+                return levels_store, level_points, objects_store, line_anchor, fib_anchor, half_anchor, None
 
             point = (click_data or {}).get("points", [{}])[0]
             clicked_object_id = point.get("customdata")
@@ -904,6 +935,51 @@ class ChartLevelSelectorUI:
             new_value = not current
             levels_store["__show_ichimoku__"] = new_value
             return f"Ichimoku: {'ON' if new_value else 'OFF'}", levels_store
+
+        @app.callback(
+            Output("stock-cfd-toggle", "children"),
+            Output("stock-cfd-toggle", "style"),
+            Output("instrument-title", "children"),
+            Output("position-type", "disabled"),
+            Output("lot-cost", "disabled"),
+            Output("pip-value", "disabled"),
+            Output("spread-mult", "disabled"),
+            Output("position-type-label", "style"),
+            Output("lot-cost-label", "style"),
+            Output("pip-value-label", "style"),
+            Output("spread-mult-label", "style"),
+            Output("levels-store", "data", allow_duplicate=True),
+            Input("stock-cfd-toggle", "n_clicks"),
+            State("stock-cfd-toggle", "style"),
+            State("levels-store", "data"),
+            prevent_initial_call=True,
+        )
+        def toggle_stock_cfd(_, current_style, levels_store):
+            levels_store = levels_store or {}
+            current = bool(levels_store.get("__stock_cfd_mode__", False))
+            new_value = not current
+            levels_store["__stock_cfd_mode__"] = new_value
+            disabled = original_is_stock and not new_value
+            active_label_style = {"marginTop": "8px", "display": "block", "opacity": 0.5 if disabled else 1}
+            pos_label_style = {"opacity": 0.5 if disabled else 1}
+            style = dict(current_style or {})
+            style["background"] = "#2563eb" if new_value else "#1f2937"
+            style["color"] = "white" if new_value else "#e5e7eb"
+            instrument_text = f"Instrument: {'STOCK CFD' if new_value else instrument_label}"
+            return (
+                f"CFD mode: {'ON' if new_value else 'OFF'}",
+                style,
+                instrument_text,
+                disabled,
+                disabled,
+                disabled,
+                disabled,
+                pos_label_style,
+                active_label_style,
+                active_label_style,
+                active_label_style,
+                levels_store,
+            )
 
         @app.callback(
             Output("currency-fee-toggle", "children"),

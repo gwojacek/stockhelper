@@ -29,6 +29,16 @@ def _build_template(instrument_type: str, values: dict) -> str:
         symbol = (values.get("symbol") or "").upper()
         include_fee_fields = not (symbol.endswith(".WA") or symbol.endswith(".PL"))
         fee_lines = ""
+        cfd_lines = ""
+        if values.get("stock_cfd_mode"):
+            cfd_lines = (
+                f'    stock_cfd_mode: bool = True\n'
+                f'    position_type: str = "{values.get("position_type", "long")}"\n'
+                f'    lot_cost: float = {values.get("lot_cost", 0.0)}\n'
+                f'    pip_value: float = {values.get("pip_value", 0.0)}\n'
+                f'    spread: float = {values.get("spread", 0.0)}\n'
+                f'    spread_multiplier: float = {values.get("spread_multiplier", 0.0)}\n'
+            )
         if include_fee_fields:
             fee_lines = (
                 f'    apply_currency_conversion_fee: bool = {values.get("apply_currency_conversion_fee", False)}\n'
@@ -50,7 +60,7 @@ class TradingConfig:
     stop_loss: float = {values["stop_loss"]}
     high: float = {values["high"]}
     low: float = {values["low"]}
-    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
+{cfd_lines}    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
     line_cross_value: float = {values.get("line_cross_value", values["entry"])}
     risk_levels: tuple = {risk_levels}
 '''

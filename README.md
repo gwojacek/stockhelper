@@ -245,7 +245,8 @@ python run -c ena
 
 - Opens the Dash/Plotly chart UI in your browser.
 - Loads cached data first, with data provider fallback support.
-- Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects.
+- Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects; the active level can be cleared from the sidebar.
+- Stock charts include a CFD mode toggle; `python run -c AAPL.US cfd` opens the same symbol directly with commodity/CFD sizing inputs enabled.
 - Saves a config and chart snapshot when you click **Finish**.
 
 **When to use it:**
@@ -263,6 +264,7 @@ python run -c ena
 
 ```bash
 python run -c AAPL.US
+python run -c AAPL.US cfd
 python run -c EUR/USD --ichimoku-mode on
 python run -c TRN --fibo-lines 5 --fibo-anchor-start 2026-01-30 --fibo-anchor-end 2026-05-21 --fibo-right
 python -m chart_program jsw --instrument stock --data-source stooq --no-run-after-save

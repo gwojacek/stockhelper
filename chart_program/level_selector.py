@@ -729,8 +729,11 @@ def run_level_selector(raw_args=None):
             "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
+    stock_cfd_selected = instrument_type == "stock" and bool(selected.get("__stock_cfd_mode__"))
+    save_instrument_type = "commodity" if stock_cfd_selected else instrument_type
+
     values = {
-        "instrument_type": instrument_type,
+        "instrument_type": save_instrument_type,
         "high": selected.get("high"),
         "low": selected.get("low"),
         "entry": selected.get("entry"),
@@ -740,7 +743,7 @@ def run_level_selector(raw_args=None):
         "capital": selected.get("capital", args.capital),
     }
 
-    if instrument_type == "stock":
+    if save_instrument_type == "stock":
         values.update(
             {
                 "name": _resolve_stock_name(symbol, base_target),
@@ -755,12 +758,13 @@ def run_level_selector(raw_args=None):
                     "currency_conversion_fee_pct": float(selected.get("currency_conversion_fee_pct", existing.get("currency_conversion_fee_pct", 0.01))),
                 }
             )
-    elif instrument_type == "commodity":
+    elif save_instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
         values.update(
             {
                 "name": symbol,
+                "stock_cfd_mode": bool(stock_cfd_selected),
                 "position_type": chosen_pos,
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
                 "pip_value": selected.get("pip_value", args.pip_value),
@@ -788,7 +792,13 @@ def run_level_selector(raw_args=None):
         )
 
     final_config_path = config_path
-    if not maybe_config_path and instrument_type in ("commodity", "forex") and target_base_slug:
+    if stock_cfd_selected:
+        final_position = values.get("position_type", inferred_position or "long")
+        cfd_slug = (target_base_slug or base_target or symbol).lower()
+        final_config_path = resolve_config_path("commodity", f"{cfd_slug}_{final_position}")
+        if final_config_path != config_path:
+            _save_session_state(final_config_path, selected)
+    elif not maybe_config_path and instrument_type in ("commodity", "forex") and target_base_slug:
         final_position = values.get("position_type", inferred_position or "long")
         final_config_path = resolve_config_path(instrument_type, f"{target_base_slug}_{final_position}")
         if final_config_path != config_path:
@@ -802,7 +812,7 @@ def run_level_selector(raw_args=None):
     data_existed, data_backup = _snapshot_file(data_path)
 
     try:
-        path = write_or_update_config(instrument_type=instrument_type, config_path=final_config_path, values=values)
+        path = write_or_update_config(instrument_type=save_instrument_type, config_path=final_config_path, values=values)
         ui.save_chart_snapshot(selected, chart_path)
 
         data_path.parent.mkdir(parents=True, exist_ok=True)
@@ -814,7 +824,7 @@ def run_level_selector(raw_args=None):
         raise
 
     return {
-        "instrument_type": instrument_type,
+        "instrument_type": save_instrument_type,
         "config_path": str(path),
         "data_path": str(data_path),
         "chart_path": str(chart_path),

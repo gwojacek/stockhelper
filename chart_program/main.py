@@ -8,6 +8,7 @@ from pathlib import Path
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="chart_program", description="Standalone chart-based level selection tool")
     parser.add_argument("target", nargs="?", help="Symbol, pair, or config slug (e.g. jsw, coffee_long, AUD/USD)")
+    parser.add_argument("chart_modifier", nargs="?", choices=["cfd", "CFD"], help="Use after a stock symbol to open it as CFD/commodity mode.")
     parser.add_argument("--config", help="Explicit config file path")
     parser.add_argument("--instrument", choices=["stock", "commodity", "forex"], help="Force instrument type")
     parser.add_argument("--position-type", choices=["long", "short"], help="Position type for commodity/forex")
@@ -51,6 +52,11 @@ def main() -> int:
     if not target:
         parser.error("Target is required.")
 
+    chart_modifier = (args.chart_modifier or "").strip().lower()
+    if chart_modifier == "cfd" and not target.lower().endswith(" cfd"):
+        target = f"{target} cfd"
+        if not args.instrument:
+            args.instrument = "commodity"
     forwarded = [target]
     if args.config:
         forwarded.extend(["--config", args.config])

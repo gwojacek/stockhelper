@@ -20,9 +20,10 @@ python -m chart_program mbr
 python -m chart_program algt.us
 python -m chart_program usdpln
 python -m chart_program "algt.us cfd"
+python -m chart_program algt.us cfd
 ```
 
-The quoted `"algt.us cfd"` form is supported and forces **commodity** behavior for that symbol.
+The `"algt.us cfd"` / `algt.us cfd` form is supported and forces **commodity** behavior for that symbol.
 
 ---
 
@@ -60,7 +61,7 @@ Each generated config includes:
 
 - Plain names: `gold`, `silver`, `coffee`, `wheat`, etc.
 - Futures-like aliases are supported (e.g. `.f`, `=f` forms in provider mapping).
-- Adding `cfd` suffix (e.g. `"algt.us cfd"`) forces instrument type to commodity.
+- Adding `cfd` suffix (e.g. `"algt.us cfd"` or `python run -c algt.us cfd`) forces instrument type to commodity/CFD mode.
 
 ---
 
@@ -127,6 +128,7 @@ python -m chart_program usdpln
 
 # Force commodity mode by adding CFD suffix
 python -m chart_program "algt.us cfd"
+python -m chart_program algt.us cfd
 
 # Explicit instrument override
 python -m chart_program algt.us --instrument stock
