@@ -7,8 +7,8 @@ It helps you:
 - calculate position size, engaged capital, potential loss, and risk/reward for configured setups;
 - work with stocks, forex pairs, commodities, and CFD/index-like instruments;
 - download/cache daily market data from Stooq, Yahoo Finance, and Stooq web/table fallbacks;
-- scan market groups for Ichimoku cloud and Fibonacci setups;
-- generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists from the latest allsearch data;
+- scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations;
+- generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists plus a dedicated Kliny tab from the latest allsearch data;
 - open an interactive chart tool, select price levels, save/update config files, and export chart snapshots;
 - generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, and chart images.
 
@@ -26,9 +26,10 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Run a forex/commodity setup | `python run eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
 | Open chart editor | `python run -c ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
 | Open chart with Ichimoku | `python run -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
+| Open stock as CFD | `python run -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
 | Run Ichimoku scan | `python run -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
 | Run Fibonacci scan | `python run -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
-| Build combined report | `python run -allsearch all` | Runs both scanners and creates combined Markdown/HTML reports plus embedded 3P tabs. |
+| Build combined report | `python run -allsearch all` | Runs scanners and creates combined Markdown/HTML reports plus embedded 3P and Kliny tabs. |
 | Reopen combined report | `python run --open-allsearch-report all` | Opens the latest existing HTML all-search report. |
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
@@ -50,9 +51,10 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - local CSV cache in `data/stocks/`, `data/forex/`, `data/commodities/`, and `data/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.
-- **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, Stooq/chart buttons in HTML, and PDF export from every report tab.
+- **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, touch/contact metrics, and chart commands that preload wedge lines.
+- **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
-- **Interactive chart tool** with manual level selection, optional Ichimoku overlay, optional Fibonacci lines, saved sessions, generated configs, and chart snapshots.
+- **Interactive chart tool** with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, and chart snapshots.
 - **Reports and artifacts**:
   - Markdown scanner reports in `chart_program/data/search/ichimoku/` and `chart_program/data/search/fibo/`;
   - Trójpolówki Markdown watchlists in `Trojpolowki/fibo.md` and `Trojpolowki/ichimoku.md`;
@@ -62,7 +64,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - Stooq debug JSON/HTML/screenshots in `debug/stooq/`.
 - **CAPTCHA/rate-limit support** for Stooq web fallback, including OCR attempts and optional Playwright inspector/manual mode.
 
-No triangle scanner was found in the current codebase, so it is not documented as an available feature.
+Falling wedges are first-class scanner/report items. A separate generic triangle scanner is not documented as an available feature.
 
 ## Repository layout
 
@@ -396,7 +398,7 @@ python run -allsearch all
 
 - `Trojpolowki/fibo.md` uses three compact columns: steep/early `WYNIKI FIBO #0` setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
 - `Trojpolowki/ichimoku.md` uses compact continuation/watch/cloud/retest columns and keeps risk/context details only where they are relevant.
-- The HTML report renders both 3P files as tabs, not as separate links, and keeps Stooq/chart controls next to instruments.
+- The HTML report renders both 3P files as tabs, not as separate links; every 3P column and top-choice block has a `📊` StockHelper chart-open control, plus compact Stooq and Google-Sheets copy icons next to instruments.
 - Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, deeper Fibo pullbacks, and the strongest falling-wedge setups are prioritized.
 - The `🔻 Kliny` tab groups falling wedges by market, keeps Stooq/StockHelper/Google-Sheets-copy controls next to each table, marks statuses as `⏳ unbroken` or `🚀 breakout`, and shows `Breakout date` plus `Breakout direction` (`long` for upper-line breakout, `short` for lower-line breakdown).
 - Falling-wedge scanner rows are written at the end of Fibo markdown under `WYNIKI KLINY OPADAJĄCE`; wedges must pass the same Avg10d liquidity threshold used by Fibonacci formations, and the wedge tables include `Avg10d PLN`. A wedge remains valid only while no candle closes outside its boundaries, except for an accepted breakout/breakdown on the latest candle or within the last 5 candles, which becomes the absolute top-choice wedge case. The report keeps wedge table columns compact (months, touches, slope, breakout, size, score) and does not show fit/proximity/compression columns.
@@ -652,7 +654,7 @@ STOCKHELPER_STOOQ_DEBUG=1 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --debug-s
 
 Check `debug/stooq/` for JSON, HTML, and screenshots. If visible rows are correct and you want to merge them into commodity CSV cache, add `--debug-stooq-fetch`.
 
-For `python run -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=2`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1`; if Stooq is stable, you can cautiously increase workers. Blank/no-table pages before consent are refreshed twice before the VPN prompt is shown.
+For `python run -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=2`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1`; if Stooq is stable, you can cautiously increase workers. Blank/no-table pages before consent are refreshed twice before the VPN prompt is shown. When the scanner pauses for a VPN/CAPTCHA change, press **Enter** to continue after fixing the issue; type `q`/`n` only when you want to stop the scan.
 
 ### No scanner Markdown is created
 
@@ -685,7 +687,7 @@ Or open the HTML file directly from:
 chart_program/data/all_insturments_search/allsearch/
 ```
 
-The combined HTML includes tabs for the allsearch report, 3P Fibo, and 3P Ichimoku. Use the `📄 Download PDF` button in the tab header to export the currently visible report view.
+The combined HTML includes tabs for the allsearch report, 3P Fibo, 3P Ichimoku, and `🔻 Kliny`. Use the `📄 Download PDF` button in the tab header to export the currently visible report view.
 
 ### Data history is too short
 
@@ -700,7 +702,7 @@ Commodities are excluded from `--fetch-older-data` by the current implementation
 
 ## Development notes
 
-- There is no `tests/` directory or configured test runner in the current repository.
-- Use `python -m py_compile ...` as a lightweight syntax check.
+- Automated tests live under `tests/`; run `pytest -q` for the suite or targeted files such as `pytest -q tests/test_trojpolowki.py tests/test_stock_cfd_config.py`.
+- Use `python -m py_compile ...` as a lightweight syntax check before/alongside tests.
 - Avoid editing generated cache/report files unless the task specifically requires it.
 - The executable launcher is named `run` and is intended to be called as `python run ...`.
