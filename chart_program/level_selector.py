@@ -458,6 +458,9 @@ def run_level_selector(raw_args=None):
     session_state = _load_session_state(config_path)
     if session_state:
         existing.update(session_state)
+    if cfd_forced:
+        existing["__stock_cfd_mode__"] = True
+        existing["__stock_cfd_forced__"] = True
 
     if instrument_type == "forex":
         symbol = existing.get("pair", base_target if "/" in base_target else f"{base_target[:3].upper()}/{base_target[3:6].upper()}")
@@ -701,6 +704,15 @@ def run_level_selector(raw_args=None):
             existing["spread_multiplier"] = round(index_defaults["spread_multiplier"], 4)
             existing["spread"] = round(existing["spread_multiplier"] * existing["pip_value"], 2)
 
+    if cfd_forced and not df.empty:
+        try:
+            last_close = float(df.iloc[-1]["Close"])
+            existing.setdefault("lot_cost", round(last_close / 5.0, 2))
+        except Exception:
+            pass
+        existing["pip_value"] = 1.0
+        existing.setdefault("spread_multiplier", 0.0)
+
     display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 
     ui = ChartLevelSelectorUI(
@@ -729,7 +741,7 @@ def run_level_selector(raw_args=None):
             "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
-    stock_cfd_selected = instrument_type == "stock" and bool(selected.get("__stock_cfd_mode__"))
+    stock_cfd_selected = bool(selected.get("__stock_cfd_mode__")) and (instrument_type == "stock" or cfd_forced)
     save_instrument_type = "commodity" if stock_cfd_selected else instrument_type
 
     values = {
@@ -761,17 +773,21 @@ def run_level_selector(raw_args=None):
     elif save_instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
+        spread_value = selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value))
         values.update(
             {
                 "name": symbol,
                 "stock_cfd_mode": bool(stock_cfd_selected),
                 "position_type": chosen_pos,
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
-                "pip_value": selected.get("pip_value", args.pip_value),
-                "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
+                "spread": spread_value,
                 "spread_multiplier": selected.get("spread_multiplier", args.spread),
             }
         )
+        if stock_cfd_selected:
+            values["spread_pips"] = round(float(spread_value or 0) / 0.01, 2)
+        else:
+            values["pip_value"] = selected.get("pip_value", args.pip_value)
     else:
         pair = symbol
         auto_pip_size = _infer_forex_pip_size(pair)

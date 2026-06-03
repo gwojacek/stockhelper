@@ -61,7 +61,7 @@ Each generated config includes:
 
 - Plain names: `gold`, `silver`, `coffee`, `wheat`, etc.
 - Futures-like aliases are supported (e.g. `.f`, `=f` forms in provider mapping).
-- Adding `cfd` suffix (e.g. `"algt.us cfd"` or `python run -c algt.us cfd`) forces instrument type to commodity/CFD mode.
+- Adding `cfd` suffix (e.g. `"algt.us cfd"` or `python run -c algt.us cfd`) forces instrument type to commodity/CFD mode. Stock CFD mode uses lot/deposit cost and spread in price units; pips are displayed from that spread, without a separate pip-value input.
 
 ---
 
@@ -76,7 +76,7 @@ Each generated config includes:
   - instrument type
   - `Name/Ticker` display
   - selected values
-  - manual fields (`capital`, `lot_cost`, `pip_value`, `spread`)
+  - manual fields (`capital`, `lot_cost`, `pip_value`, `spread`; stock CFD hides `pip_value` and uses spread as price units)
   - `FX conversion fee 1%` toggle (default ON for foreign stocks and forex pairs without PLN)
   - drawn object management
 

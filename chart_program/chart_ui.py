@@ -483,9 +483,10 @@ class ChartLevelSelectorUI:
             heartbeat["ts"] = time.time()
             return "ok"
 
-        original_is_stock = self.instrument_type == "stock"
         stock_cfd_on = bool((self.values or {}).get("__stock_cfd_mode__", False))
+        original_is_stock = self.instrument_type == "stock" or stock_cfd_on
         is_stock = original_is_stock and not stock_cfd_on
+        stock_cfd_spread_label = "Spread (price units; pips = spread / 0.01)" if stock_cfd_on else "Spread multiplier (spread = Multiplier * pip_value)"
         has_saved_levels = any((self.values or {}).get(field) is not None for field in SELECTION_SEQUENCE)
         initial_active_field = None if has_saved_levels else "high"
         is_commodity = self.instrument_type == "commodity"
@@ -605,10 +606,10 @@ class ChartLevelSelectorUI:
                         ),
                         html.Label("Lot cost", id="lot-cost-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
                         dcc.Input(id="lot-cost", type="number", value=self.values.get("lot_cost") if self.values.get("lot_cost") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
-                        html.Label("Pip value", id="pip-value-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
-                        dcc.Input(id="pip-value", type="number", value=self.values.get("pip_value") if self.values.get("pip_value") not in (0, None) else None, style=self._input_style(), disabled=is_stock),
-                        html.Label("Spread multiplier (spread = Multiplier * pip_value)", id="spread-mult-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
-                        dcc.Input(id="spread-mult", type="number", value=self.values.get("spread_multiplier") if self.values.get("spread_multiplier") not in (0, None) else None, placeholder="e.g. 9", style=self._input_style(), disabled=is_stock),
+                        html.Label("Pip value", id="pip-value-label", style={"marginTop": "8px", "display": "none" if stock_cfd_on else "block", "opacity": 0.5 if is_stock else 1}),
+                        dcc.Input(id="pip-value", type="number", value=1.0 if stock_cfd_on else (self.values.get("pip_value") if self.values.get("pip_value") not in (0, None) else None), style={**self._input_style(), "display": "none" if stock_cfd_on else "block"}, disabled=is_stock or stock_cfd_on),
+                        html.Label(stock_cfd_spread_label, id="spread-mult-label", style={"marginTop": "8px", "display": "block", "opacity": 0.5 if is_stock else 1}),
+                        dcc.Input(id="spread-mult", type="number", value=self.values.get("spread_multiplier") if self.values.get("spread_multiplier") not in (0, None) else None, placeholder="e.g. 0.76" if stock_cfd_on else "e.g. 9", style=self._input_style(), disabled=is_stock),
                         html.H4("Drawn objects", style={"marginTop": "14px"}),
                         dcc.Dropdown(id="object-picker", options=[], value=None, clearable=True),
                         html.Button("Delete selected object", id="delete-object", n_clicks=0, style={"marginTop": "8px", "width": "100%"}),
@@ -944,6 +945,10 @@ class ChartLevelSelectorUI:
             Output("lot-cost", "disabled"),
             Output("pip-value", "disabled"),
             Output("spread-mult", "disabled"),
+            Output("pip-value", "value"),
+            Output("pip-value", "style"),
+            Output("spread-mult", "placeholder"),
+            Output("spread-mult-label", "children"),
             Output("position-type-label", "style"),
             Output("lot-cost-label", "style"),
             Output("pip-value-label", "style"),
@@ -960,23 +965,31 @@ class ChartLevelSelectorUI:
             new_value = not current
             levels_store["__stock_cfd_mode__"] = new_value
             disabled = original_is_stock and not new_value
+            pip_disabled = disabled or new_value
             active_label_style = {"marginTop": "8px", "display": "block", "opacity": 0.5 if disabled else 1}
+            pip_label_style = {"marginTop": "8px", "display": "none" if new_value else "block", "opacity": 0.5 if disabled else 1}
+            pip_input_style = {**self._input_style(), "display": "none" if new_value else "block"}
             pos_label_style = {"opacity": 0.5 if disabled else 1}
+            spread_label = "Spread (price units; pips = spread / 0.01)" if new_value else "Spread multiplier (spread = Multiplier * pip_value)"
             style = dict(current_style or {})
             style["background"] = "#2563eb" if new_value else "#1f2937"
             style["color"] = "white" if new_value else "#e5e7eb"
-            instrument_text = f"Instrument: {'STOCK CFD' if new_value else instrument_label}"
+            instrument_text = f"Instrument: {'STOCK CFD' if new_value else ('STOCK' if self.instrument_type == 'stock' else self.instrument_type.upper())}"
             return (
                 f"CFD mode: {'ON' if new_value else 'OFF'}",
                 style,
                 instrument_text,
                 disabled,
                 disabled,
+                pip_disabled,
                 disabled,
-                disabled,
+                1.0 if new_value else None,
+                pip_input_style,
+                "e.g. 0.76" if new_value else "e.g. 9",
+                spread_label,
                 pos_label_style,
                 active_label_style,
-                active_label_style,
+                pip_label_style,
                 active_label_style,
                 levels_store,
             )
@@ -1218,14 +1231,18 @@ class ChartLevelSelectorUI:
         def finalize(n_clicks, levels_store, position_type, capital, lot_cost, pip_value, spread_mult, objects_store, level_points):
             if n_clicks > 0:
                 levels_store = levels_store or {}
+                stock_cfd_mode = bool(levels_store.get("__stock_cfd_mode__", False))
+                effective_pip_value = 1.0 if stock_cfd_mode else (pip_value or 0)
+                effective_spread = (spread_mult or 0) if stock_cfd_mode else (spread_mult or 0) * effective_pip_value
                 levels_store.update(
                     {
                         "position_type": position_type,
                         "capital": round((capital or 255000), 2),
                         "lot_cost": round((lot_cost or 0), 2),
-                        "pip_value": round((pip_value or 0), 2),
-                        "spread_multiplier": round((spread_mult or 0), 2),
-                        "spread": round((spread_mult or 0) * (pip_value or 0), 2),
+                        "pip_value": round(effective_pip_value, 4),
+                        "spread_multiplier": round((spread_mult or 0), 4),
+                        "spread": round(effective_spread, 4),
+                        "spread_pips": round(((spread_mult or 0) / 0.01), 2) if stock_cfd_mode else None,
                         "drawn_objects": objects_store or [],
                         "level_points": level_points or {},
                         "__finished__": True,

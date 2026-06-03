@@ -246,7 +246,7 @@ python run -c ena
 - Opens the Dash/Plotly chart UI in your browser.
 - Loads cached data first, with data provider fallback support.
 - Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects; the active level can be cleared from the sidebar.
-- Stock charts include a CFD mode toggle; `python run -c AAPL.US cfd` opens the same symbol directly with commodity/CFD sizing inputs enabled.
+- Stock charts include a CFD mode toggle; `python run -c AAPL.US cfd` opens the same symbol directly with CFD sizing inputs enabled. Stock CFDs use lot/deposit cost plus spread entered as price units with pips shown as `spread / 0.01`, so no separate pip-value field is required.
 - Saves a config and chart snapshot when you click **Finish**.
 
 **When to use it:**
