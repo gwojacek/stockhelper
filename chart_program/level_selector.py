@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -84,6 +85,12 @@ def _parse_args(raw_args=None):
     parser.add_argument("--fibo-anchor-start")
     parser.add_argument("--fibo-anchor-end")
     parser.add_argument("--fibo-right", action="store_true")
+    parser.add_argument("--wedge-lines", action="store_true")
+    parser.add_argument("--wedge-upper-start")
+    parser.add_argument("--wedge-upper-end")
+    parser.add_argument("--wedge-lower-start")
+    parser.add_argument("--wedge-lower-end")
+    parser.add_argument("--wedge-right", action="store_true")
     return parser.parse_args(raw_args)
 
 
@@ -451,6 +458,9 @@ def run_level_selector(raw_args=None):
     session_state = _load_session_state(config_path)
     if session_state:
         existing.update(session_state)
+    if cfd_forced:
+        existing["__stock_cfd_mode__"] = True
+        existing["__stock_cfd_forced__"] = True
 
     if instrument_type == "forex":
         symbol = existing.get("pair", base_target if "/" in base_target else f"{base_target[:3].upper()}/{base_target[3:6].upper()}")
@@ -566,6 +576,113 @@ def run_level_selector(raw_args=None):
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
 
+    if args.wedge_lines:
+        try:
+            def _parse_wedge_point(raw: str | None) -> tuple[pd.Timestamp, float] | None:
+                if not raw or "," not in raw:
+                    return None
+                d_txt, p_txt = raw.split(",", 1)
+                ts = pd.to_datetime(d_txt.strip(), errors="coerce")
+                if pd.isna(ts):
+                    return None
+                return ts, float(p_txt.strip())
+
+            up0 = _parse_wedge_point(args.wedge_upper_start)
+            up1 = _parse_wedge_point(args.wedge_upper_end)
+            lo0 = _parse_wedge_point(args.wedge_lower_start)
+            lo1 = _parse_wedge_point(args.wedge_lower_end)
+            if up0 and up1 and lo0 and lo1:
+                chart_dates = pd.to_datetime(df["Date"], errors="coerce").reset_index(drop=True) if not df.empty else pd.Series(dtype="datetime64[ns]")
+                has_weekend_data = bool((chart_dates.dt.weekday >= 5).any()) if not chart_dates.empty else False
+
+                def _nearest_idx(ts: pd.Timestamp) -> int | None:
+                    if chart_dates.empty:
+                        return None
+                    return int((chart_dates - ts).abs().idxmin())
+
+                def _date_for_index(idx: int) -> pd.Timestamp:
+                    if chart_dates.empty:
+                        return pd.Timestamp.today().normalize()
+                    if 0 <= idx < len(chart_dates):
+                        return pd.to_datetime(chart_dates.iloc[idx])
+                    last = pd.to_datetime(chart_dates.iloc[-1])
+                    extra = idx - (len(chart_dates) - 1)
+                    if extra <= 0:
+                        return pd.to_datetime(chart_dates.iloc[max(0, idx)])
+                    if has_weekend_data:
+                        return last + pd.Timedelta(days=extra)
+                    return last + pd.tseries.offsets.BDay(extra)
+
+                def _line_price_at_index(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float], idx: int) -> float:
+                    i0 = _nearest_idx(p0[0])
+                    i1 = _nearest_idx(p1[0])
+                    if i0 is None or i1 is None:
+                        return float(p0[1])
+                    span = i1 - i0
+                    if span == 0:
+                        span = 1
+                    return float(p0[1]) + (float(p1[1]) - float(p0[1])) * ((idx - i0) / span)
+
+                def _slope_intercept(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[float, float] | None:
+                    i0 = _nearest_idx(p0[0])
+                    i1 = _nearest_idx(p1[0])
+                    if i0 is None or i1 is None or i0 == i1:
+                        return None
+                    slope = (float(p1[1]) - float(p0[1])) / (i1 - i0)
+                    return slope, float(p0[1]) - slope * i0
+
+                def _wedge_cross_index() -> int | None:
+                    upper_line = _slope_intercept(up0, up1)
+                    lower_line = _slope_intercept(lo0, lo1)
+                    if upper_line is None or lower_line is None:
+                        return None
+                    upper_slope, upper_intercept = upper_line
+                    lower_slope, lower_intercept = lower_line
+                    denom = upper_slope - lower_slope
+                    if abs(denom) < 1e-9:
+                        return None
+                    cross_idx = int(math.ceil((lower_intercept - upper_intercept) / denom))
+                    last_idx = len(chart_dates) - 1
+                    if cross_idx <= last_idx:
+                        return None
+                    # Keep the line long enough to show the wedge ending/cross, but
+                    # cap pathological projections so the chart remains usable.
+                    max_projection = last_idx + max(len(chart_dates), 80)
+                    return min(cross_idx + 5, max_projection)
+
+                common_wedge_end_idx = _wedge_cross_index() if args.wedge_right else None
+
+                def _line_object_points(p0: tuple[pd.Timestamp, float], p1: tuple[pd.Timestamp, float]) -> tuple[list[str], list[float]]:
+                    i0 = _nearest_idx(p0[0])
+                    i1 = _nearest_idx(p1[0])
+                    if i0 is None or i1 is None:
+                        return [str(p0[0].date()), str(p1[0].date())], [round(float(p0[1]), 5), round(float(p1[1]), 5)]
+                    first_idx = min(i0, i1)
+                    second_idx = max(i0, i1)
+                    if args.wedge_right:
+                        extension = max(abs(i1 - i0) * 2, 80)
+                        fallback_end_idx = (len(chart_dates) - 1) + extension
+                        end_idx = max(common_wedge_end_idx or fallback_end_idx, fallback_end_idx)
+                    else:
+                        end_idx = second_idx
+                    # Build a polyline on every trading/index step. With Plotly
+                    # rangebreaks this avoids calendar-time interpolation drift and
+                    # keeps the auto line glued to the same candles at every zoom.
+                    indexes = list(range(first_idx, end_idx + 1))
+                    x_vals = [str(pd.to_datetime(_date_for_index(i)).date()) for i in indexes]
+                    y_vals = [round(_line_price_at_index(p0, p1, i), 5) for i in indexes]
+                    return x_vals, y_vals
+
+                upper_x, upper_y = _line_object_points(up0, up1)
+                lower_x, lower_y = _line_object_points(lo0, lo1)
+                existing["drawn_objects"] = [
+                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x": upper_x, "y": upper_y, "x0": upper_x[0], "x1": upper_x[-1], "y0": upper_y[0], "y1": upper_y[-1], "anchor_x": [str(up0[0].date()), str(up1[0].date())], "anchor_y": [round(float(up0[1]), 5), round(float(up1[1]), 5)], "price": upper_y[-1], "color": "#dc2626", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge"},
+                ]
+                print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
+        except Exception as exc:
+            print(f"[chart] auto-wedge preload failed: {exc}")
+
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
         lot_cost_auto, pip_value_auto = _compute_margin_defaults(
@@ -586,6 +703,15 @@ def run_level_selector(raw_args=None):
             existing["pip_value"] = round(index_defaults["pip_value"], 2)
             existing["spread_multiplier"] = round(index_defaults["spread_multiplier"], 4)
             existing["spread"] = round(existing["spread_multiplier"] * existing["pip_value"], 2)
+
+    if cfd_forced and not df.empty:
+        try:
+            last_close = float(df.iloc[-1]["Close"])
+            existing.setdefault("lot_cost", round(last_close / 5.0, 2))
+        except Exception:
+            pass
+        existing["pip_value"] = 1.0
+        existing.setdefault("spread_multiplier", 0.0)
 
     display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 
@@ -615,8 +741,11 @@ def run_level_selector(raw_args=None):
             "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
         }
 
+    stock_cfd_selected = bool(selected.get("__stock_cfd_mode__")) and (instrument_type == "stock" or cfd_forced)
+    save_instrument_type = "commodity" if stock_cfd_selected else instrument_type
+
     values = {
-        "instrument_type": instrument_type,
+        "instrument_type": save_instrument_type,
         "high": selected.get("high"),
         "low": selected.get("low"),
         "entry": selected.get("entry"),
@@ -626,7 +755,7 @@ def run_level_selector(raw_args=None):
         "capital": selected.get("capital", args.capital),
     }
 
-    if instrument_type == "stock":
+    if save_instrument_type == "stock":
         values.update(
             {
                 "name": _resolve_stock_name(symbol, base_target),
@@ -641,19 +770,24 @@ def run_level_selector(raw_args=None):
                     "currency_conversion_fee_pct": float(selected.get("currency_conversion_fee_pct", existing.get("currency_conversion_fee_pct", 0.01))),
                 }
             )
-    elif instrument_type == "commodity":
+    elif save_instrument_type == "commodity":
         chosen_pos = selected.get("position_type", args.position_type or inferred_position or "long")
         chosen_pos = "short" if str(chosen_pos).lower() == "short" else "long"
+        spread_value = selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value))
         values.update(
             {
                 "name": symbol,
+                "stock_cfd_mode": bool(stock_cfd_selected),
                 "position_type": chosen_pos,
                 "lot_cost": selected.get("lot_cost", args.lot_cost),
-                "pip_value": selected.get("pip_value", args.pip_value),
-                "spread": selected.get("spread", selected.get("spread_multiplier", args.spread) * selected.get("pip_value", args.pip_value)),
+                "spread": spread_value,
                 "spread_multiplier": selected.get("spread_multiplier", args.spread),
             }
         )
+        if stock_cfd_selected:
+            values["spread_pips"] = round(float(spread_value or 0) / 0.01, 2)
+        else:
+            values["pip_value"] = selected.get("pip_value", args.pip_value)
     else:
         pair = symbol
         auto_pip_size = _infer_forex_pip_size(pair)
@@ -674,7 +808,13 @@ def run_level_selector(raw_args=None):
         )
 
     final_config_path = config_path
-    if not maybe_config_path and instrument_type in ("commodity", "forex") and target_base_slug:
+    if stock_cfd_selected:
+        final_position = values.get("position_type", inferred_position or "long")
+        cfd_slug = (target_base_slug or base_target or symbol).lower()
+        final_config_path = resolve_config_path("commodity", f"{cfd_slug}_{final_position}")
+        if final_config_path != config_path:
+            _save_session_state(final_config_path, selected)
+    elif not maybe_config_path and instrument_type in ("commodity", "forex") and target_base_slug:
         final_position = values.get("position_type", inferred_position or "long")
         final_config_path = resolve_config_path(instrument_type, f"{target_base_slug}_{final_position}")
         if final_config_path != config_path:
@@ -688,7 +828,7 @@ def run_level_selector(raw_args=None):
     data_existed, data_backup = _snapshot_file(data_path)
 
     try:
-        path = write_or_update_config(instrument_type=instrument_type, config_path=final_config_path, values=values)
+        path = write_or_update_config(instrument_type=save_instrument_type, config_path=final_config_path, values=values)
         ui.save_chart_snapshot(selected, chart_path)
 
         data_path.parent.mkdir(parents=True, exist_ok=True)
@@ -700,7 +840,7 @@ def run_level_selector(raw_args=None):
         raise
 
     return {
-        "instrument_type": instrument_type,
+        "instrument_type": save_instrument_type,
         "config_path": str(path),
         "data_path": str(data_path),
         "chart_path": str(chart_path),

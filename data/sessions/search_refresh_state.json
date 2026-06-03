@@ -28,8 +28,20 @@
     "checked_at": "2026-06-01T16:37:51.504768+00:00",
     "result": "stale"
   },
+  "commodities:2026-06-02:post1945": {
+    "checked_at": "2026-06-02T21:45:20.299717+00:00",
+    "result": "stale"
+  },
   "commodities:2026-06-02:pre1945": {
     "checked_at": "2026-06-02T15:15:14.656238+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-03:pre1945": {
+    "checked_at": "2026-06-03T16:21:30.796562+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-04:pre1945": {
+    "checked_at": "2026-06-03T22:03:53.019095+00:00",
     "result": "stale"
   },
   "dax40": {

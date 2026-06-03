@@ -93,7 +93,7 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
     assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
     assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
-    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" not in text
+    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
     assert text.count("**🇵🇱 TRN ↗️") == 1
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
     assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
@@ -189,12 +189,20 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
     fibo_md.write_text(
-        "# WYNIKI FIBO #1\n\n"
+        "# WYNIKI FIBO #0 (3P steep incline)\n\n"
+        "| Ticker | Dir | Status | Incline | Ratio(d) | Near61.8 | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| SBUX.US | long | 🚀 3p_steep_incline | 2026-03-27->2026-05-30 | 44/1 (44.00:1) | 98.5% | 1000 | https://stooq.pl/sbux | python run -c SBUX.US | yes | 2026-05-30 | 2026-05-30 |\n"
+        "\n# WYNIKI FIBO #1\n\n"
         "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n",
+        "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "\n# WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)\n\n"
+        "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| WDG | 🚀 breakout | 2026-01-02->2026-05-30 | 105 | 5.0 | 2026-01-02@100.0->2026-03-01@80.0 | 2026-02-01@60.0->2026-04-01@55.0 | 3 | 3 | 40.00% | 12.00% | strong | 2026-05-30 | long | 9999.00 | 1000000 | https://stooq.pl/wdg | python run -c WDG --wedge-lines | yes | 2026-05-30 | 2026-05-30 |\n",
         encoding="utf-8",
     )
     def latest_md(kind: str, scope: str):
@@ -218,8 +226,13 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='trojpolowki-ichimoku'" in text
     assert "troj-name-actions" in text
     assert "copySheetsCell" in text
-    assert "📋 Cell" in text
+    assert "📋 Cell" not in text
     assert "href='https://stooq.pl/rwe-ichi' target='_blank' title='Open stooq chart'>📈</a><button class='btn sheets-cell-btn'" in text
+    assert "aria-label='Copy Google Sheets HYPERLINK formula'>📋</button>" in text
+    assert "aria-label='Open stockhelper chart'>📊</button>" in text
+    assert ".chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}" in text
+    assert "<td class='latest-data-cell'>✅</td>" in text
+    assert ">Open</button>" not in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/rwe-ichi&quot;; &quot;RWE.DE&quot;)'" in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/aep&quot;; &quot;AEP.US&quot;)'" in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/gpp&quot;; &quot;GPP&quot;)'" in text
@@ -227,14 +240,22 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "border:none" in text
     assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
     assert "Open stooq links from top choices" in text
+    assert "Open stockhelper charts from this top-choice column" in text
+    assert "Open stockhelper charts from this column" in text
     assert "Open stooq links from this column" in text
+    assert "event.stopPropagation();openTrojColumnStockhelperCharts" in text
     assert "event.stopPropagation();openTrojColumnStooqLinks" in text
     for col_idx in range(4):
+        assert f"openTrojColumnStockhelperCharts(this,{col_idx})" in text
         assert f"openTrojColumnStooqLinks(this,{col_idx})" in text
         assert f"copyTrojColumnSheetsCells(this,{col_idx})" in text
     assert "copyTrojColumnSheetsCells" in text
-    assert "📋 Column" in text
-    assert "formulas.join('\\n')" in text
+    assert "📋 Column" not in text
+    assert 'copyTrojColumnSheetsCells(this,0)">📋</button>' in text
+    assert "Open stockhelper charts from top choices" in text
+    assert "Open all stockhelper charts from this table" in text
+    assert "String.fromCharCode(10)" in text
+    assert "formulas.join('\n')" not in text
     assert "toggleTrojExtra" in text
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
@@ -251,6 +272,21 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='clear-q'" in text
     assert "data-scanner='FIBO'" in text
     assert "data-scanner='ICHIMOKU'" in text
+    assert "🔻 Kliny" in text
+    assert "🚀 breakout" in text
+    assert ".today-signal td{background:#dcfce7!important}" in text
+    assert "data-scanner='WEDGE' data-status='🚀 breakout' class='today-signal'" in text
+    assert "falling_wedge_breakout" not in text
+    assert "wybicie long 2026-05-30" not in text
+    assert "<th>Fit</th>" not in text
+    assert "<th>Proximity</th>" not in text
+    assert "<th>Compression</th>" not in text
+    assert "<th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th>" in text
+    assert "<th>Score</th><th>Avg10d PLN</th>" in text
+    assert "1.000.000" in text
+    assert "copyNextTableSheetsCells" in text
+    assert "Copy Google Sheets links from this table" in text
+    assert "data-cmd='python run -c WDG.WA --wedge-upper-start 2026-01-02,100.0 --wedge-upper-end 2026-03-01,80.0 --wedge-lower-start 2026-02-01,60.0 --wedge-lower-end 2026-04-01,55.0 --wedge-lines --wedge-right'" in text
     assert "breakout / recent breakout (2026-05-29)" in text
     assert "Ichimoku continuation</td><td><strong>🇩🇪 ENR.DE</strong></td><td>breakout / recent breakout" not in text
     assert "Unsuccessful breakout to the other side" in text
@@ -258,6 +294,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Mies. respektu przed wybiciem" in text
     assert "pattern/retest: bullish_harami" not in text
     assert "near 61.8: 90.0%" in text
+    assert "WYNIKI FIBO #0 (3P steep incline)" in text
+    assert "Fibo 3P</td><td><strong>🇺🇸 SBUX.US" in text
+    assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text

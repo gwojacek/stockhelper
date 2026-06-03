@@ -20,9 +20,10 @@ python -m chart_program mbr
 python -m chart_program algt.us
 python -m chart_program usdpln
 python -m chart_program "algt.us cfd"
+python -m chart_program algt.us cfd
 ```
 
-The quoted `"algt.us cfd"` form is supported and forces **commodity** behavior for that symbol.
+The `"algt.us cfd"` / `algt.us cfd` form is supported and forces **commodity/CFD** behavior for that symbol while preserving stock-style symbol lookup.
 
 ---
 
@@ -60,7 +61,7 @@ Each generated config includes:
 
 - Plain names: `gold`, `silver`, `coffee`, `wheat`, etc.
 - Futures-like aliases are supported (e.g. `.f`, `=f` forms in provider mapping).
-- Adding `cfd` suffix (e.g. `"algt.us cfd"`) forces instrument type to commodity.
+- Adding `cfd` suffix (e.g. `"algt.us cfd"` or `python run -c algt.us cfd`) forces instrument type to commodity/CFD mode. Stock CFD mode uses lot/deposit cost and spread in price units; pips are displayed from that spread, without a separate pip-value input, and generated configs keep `stock_cfd_mode` metadata.
 
 ---
 
@@ -70,12 +71,14 @@ Each generated config includes:
   - candlestick chart
   - level selection buttons: `HIGH`, `LOW`, `ENTRY`, `STOP LOSS`, `CHECK_ZR`, `LINE_CROSS`
   - drawing tools: `Line`, `Fib 61.8`, `Half→SL`
+  - scanner-preloaded Fibonacci/wedge lines when opened from reports
   - Ichimoku cloud toggle
 - Right panel:
   - instrument type
   - `Name/Ticker` display
-  - selected values
-  - manual fields (`capital`, `lot_cost`, `pip_value`, `spread`)
+  - selected values and a clear-active-value control for removing an already-clicked level
+  - CFD mode toggle for stock charts
+  - manual fields (`capital`, `lot_cost`, `pip_value`, `spread`; stock CFD hides `pip_value` and uses spread as price units)
   - `FX conversion fee 1%` toggle (default ON for foreign stocks and forex pairs without PLN)
   - drawn object management
 
@@ -127,6 +130,7 @@ python -m chart_program usdpln
 
 # Force commodity mode by adding CFD suffix
 python -m chart_program "algt.us cfd"
+python -m chart_program algt.us cfd
 
 # Explicit instrument override
 python -m chart_program algt.us --instrument stock

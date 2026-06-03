@@ -5,13 +5,14 @@ from colorama import Fore, Style
 
 class CommodityStrategy(BaseStrategy):
     def calculate(self):
+        pip_value = getattr(self.config, "pip_value", 1.0)
         for risk in self.config.risk_levels:
             self.results[risk] = calculator.calculate_position_size(
                 entry=self.config.entry,
                 stop_loss=self.config.stop_loss,
                 capital=self.config.capital,
                 risk_percent=risk,
-                pip_value=self.config.pip_value,
+                pip_value=pip_value,
                 lot_cost=self.config.lot_cost,
                 spread=self.config.spread,
                 position_type=self.config.position_type,
@@ -40,7 +41,7 @@ class CommodityStrategy(BaseStrategy):
             self.profit = (
                 abs(self.take_profit - self.config.entry)
                 * max_lots
-                * self.config.pip_value
+                * getattr(self.config, "pip_value", 1.0)
             )
             self.profit_pct = (self.profit / self.config.capital) * 100
 

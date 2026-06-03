@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import webbrowser
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
@@ -291,6 +292,39 @@ class FlipResult:
     tenkan_in_cloud: str | None = None
     previous_respect_months: float | None = None
 
+
+
+
+@dataclass
+class WedgeScanResult:
+    ticker: str
+    start_date: str
+    end_date: str
+    duration_days: int
+    upper_start_date: str
+    upper_start_price: float
+    upper_end_date: str
+    upper_end_price: float
+    lower_start_date: str
+    lower_start_price: float
+    lower_end_date: str
+    lower_end_price: float
+    upper_touches: int
+    lower_touches: int
+    width_start_pct: float
+    width_end_pct: float
+    slope_pct_per_day: float
+    slope_strength: str
+    fit_quality: float
+    recent_proximity_pct: float
+    compression_pct: float
+    score: float
+    current_close: float
+    breakout_date: str = "-"
+    breakout_direction: str = "-"
+    avg_turnover_10d_pln: float | None = None
+    latest_candle_date: date | None = None
+    expected_latest_session_date: date | None = None
 
 @dataclass
 class FiboScanResult:
@@ -828,7 +862,13 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
 
-    probes = members[:1] if group_l == "single" else members[:min(5, len(members))]
+    if group_l == "single":
+        probes = members[:1]
+    else:
+        probe_count = min(5, len(members))
+        probes = random.sample(list(members), k=probe_count) if probe_count else []
+        if probes:
+            print(f"[refresh-check] {group_name}: random freshness probes: {', '.join(probes)}")
     checked = 0
     for ticker in probes:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
@@ -1165,11 +1205,10 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
 def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
     """Refresh newest data first, then run calculations on full cached CSV history.
 
-    Stock scans also do bounded older backfills, but that request is anchored at
-    the oldest local row.  If we only do the older-backfill request after a
-    freshness probe reports new current data, the newest Stooq candle is never
-    written.  Always perform the current-window refresh first; then optionally
-    extend older history for non-commodities.
+    Scanners must not perform older-history backfills implicitly. Older backfill
+    requests are network-heavy, easy to rate-limit, and can stall a bounded scan
+    worker queue. Use the explicit launcher command `python run --fetch-older-data`
+    when older cache extension is needed.
     """
     _runtime_df, csv_path, meta = _load_daily_data_with_retries(
         symbol=symbol,
@@ -1177,20 +1216,6 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
         persist=True,
         fetch_older_data=False,
     )
-    if instrument_type != "commodity" and os.environ.get("STOCKHELPER_CACHE_ONLY") != "1":
-        try:
-            _older_df, csv_path, older_meta = _load_daily_data_with_retries(
-                symbol=symbol,
-                instrument_type=instrument_type,
-                persist=True,
-                fetch_older_data=True,
-            )
-            if str((meta or {}).get("source", "")).lower() == "cache" and older_meta:
-                meta = older_meta
-        except Exception as exc:
-            # Current data is the correctness-critical part for searches.  Older
-            # backfill failures should not hide a freshly updated current CSV.
-            print(f"[search] older-history backfill skipped for {symbol}: {_retry_error_brief(exc)}", flush=True)
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -1336,10 +1361,13 @@ def _prompt_vpn_continue_or_stop() -> bool:
             return not STOP_SCAN_EVENT.is_set()
         print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.", flush=True)
         try:
-            answer = input("[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/429). Change VPN/solve captcha and continue? [y/N]: ").strip().lower()
+            answer = input(
+                "[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/429). "
+                "Change VPN/solve captcha, then press Enter to continue (type q to stop): "
+            ).strip().lower()
         except EOFError:
-            answer = "n"
-        if answer != "y":
+            answer = "q"
+        if answer in {"q", "quit", "stop", "n", "no"}:
             STOP_SCAN_EVENT.set()
             PAUSE_SCAN_EVENT.clear()
             return False
@@ -1349,7 +1377,7 @@ def _prompt_vpn_continue_or_stop() -> bool:
 
 
 
-def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None):
+def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None, *, allow_prompt: bool = True):
     while True:
         if STOP_SCAN_EVENT.is_set() or not _wait_if_scan_paused():
             return ticker, None, None, "scan stopped", "unknown", True
@@ -1357,6 +1385,9 @@ def _scan_one_with_retry_on_rate_limit(ticker: str, group_name: str, exchange_su
         if err and _rate_limit_detected(err):
             if not _should_prompt_rate_limit(group_name):
                 PAUSE_SCAN_EVENT.clear()
+                return display_symbol, result, flip, err, src, False
+            PAUSE_SCAN_EVENT.set()
+            if not allow_prompt:
                 return display_symbol, result, flip, err, src, False
             if _prompt_vpn_continue_or_stop():
                 print("[search] Retrying same instrument after VPN change...", flush=True)
@@ -1405,7 +1436,7 @@ def _scan_source_label(src: str) -> str:
 
 
 
-def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "") -> str:
+def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "", wedge: WedgeScanResult | None = None) -> str:
     t = (ticker or "").strip()
     if "." not in t and len(t) <= 5:
         cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
@@ -1416,6 +1447,15 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"
         return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+    if mode == "wedge" and wedge is not None:
+        return (
+            f"{base} --wedge-lines "
+            f"--wedge-upper-start {wedge.upper_start_date},{wedge.upper_start_price} "
+            f"--wedge-upper-end {wedge.upper_end_date},{wedge.upper_end_price} "
+            f"--wedge-lower-start {wedge.lower_start_date},{wedge.lower_start_price} "
+            f"--wedge-lower-end {wedge.lower_end_date},{wedge.lower_end_price} "
+            f"--wedge-right"
+        )
     return base + " --ichimoku-mode on"
 
 
@@ -2117,24 +2157,108 @@ def run_ichimoku_search(target: str) -> int:
             max_workers = min(max(2, commodity_workers), len(rest))
         else:
             max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
-        print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers).")
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            fut_map = {ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime): (idx, ticker) for idx, ticker in enumerate(rest, start=2)}
-            for fut in as_completed(fut_map):
-                idx, ticker = fut_map[fut]
-                display_symbol, result, flip, err, src, stopped = fut.result()
-                print(f"[{idx}/{len(members)}] {ticker}", flush=True)
-                processed_count += 1
-                if stopped:
-                    return 1
-                if err:
-                    error_count += 1
-                    print(f"  pominięto ({_compact_error(err)})", flush=True)
-                elif result:
-                    results.append(result)
-                if flip:
-                    flip = _ensure_flip_ticker(flip, ticker)
-                    flip_results.append(flip)
+        print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers, bounded queue).")
+        try:
+            stall_seconds = max(10.0, float(os.getenv("STOCKHELPER_SCAN_STALL_SECONDS", "45")))
+        except ValueError:
+            stall_seconds = 45.0
+        indexed_rest = list(enumerate(rest, start=2))
+        next_pos = 0
+        pending: dict = {}
+        queue_limit = max_workers * 2
+        last_stall_log = 0.0
+        last_vpn_continue_at = 0.0
+        ex = ThreadPoolExecutor(max_workers=max_workers)
+
+        def _submit_more() -> None:
+            nonlocal next_pos
+            while (
+                next_pos < len(indexed_rest)
+                and len(pending) < queue_limit
+                and not STOP_SCAN_EVENT.is_set()
+                and not PAUSE_SCAN_EVENT.is_set()
+            ):
+                idx, ticker = indexed_rest[next_pos]
+                fut = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime, allow_prompt=False)
+                pending[fut] = (idx, ticker, time.monotonic())
+                next_pos += 1
+
+        try:
+            _submit_more()
+            while pending:
+                done, _not_done = wait(list(pending.keys()), timeout=1.0, return_when=FIRST_COMPLETED)
+                now = time.monotonic()
+                if not done:
+                    if STOP_SCAN_EVENT.is_set():
+                        break
+                    stalled = [
+                        f"{idx}/{len(members)} {ticker} ({int(now - started)}s)"
+                        for _f, (idx, ticker, started) in pending.items()
+                        if now - started >= stall_seconds
+                    ]
+                    if stalled and not PAUSE_SCAN_EVENT.is_set() and now - last_stall_log >= 30.0:
+                        shown = ", ".join(stalled[:3])
+                        extra = f" (+{len(stalled) - 3})" if len(stalled) > 3 else ""
+                        print(f"[search] slow workers: {shown}{extra}. Ctrl+C cancels; STOCKHELPER_SCAN_STALL_SECONDS tunes this.", flush=True)
+                        last_stall_log = now
+                    if not PAUSE_SCAN_EVENT.is_set():
+                        _submit_more()
+                    continue
+                for fut in done:
+                    idx, ticker, _started = pending.pop(fut)
+                    try:
+                        display_symbol, result, flip, err, src, stopped = fut.result()
+                    except Exception as exc:
+                        display_symbol, result, flip, err, src, stopped = ticker, None, None, _compact_error(str(exc)), "unknown", False
+                    if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
+                        print(f"[{idx}/{len(members)}] {ticker}", flush=True)
+                        print(f"  pauza VPN/rate-limit ({_compact_error(err)})", flush=True)
+                        if _started < last_vpn_continue_at:
+                            print(f"[search] stale pre-VPN rate-limit result for {ticker}; retrying without another prompt...", flush=True)
+                            fut_retry = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime, allow_prompt=False)
+                            pending[fut_retry] = (idx, ticker, time.monotonic())
+                            continue
+                        PAUSE_SCAN_EVENT.set()
+                        if _prompt_vpn_continue_or_stop():
+                            last_vpn_continue_at = time.monotonic()
+                            print(f"[search] VPN continue confirmed; retrying {ticker}...", flush=True)
+                            fut_retry = ex.submit(_scan_one_with_retry_on_rate_limit, ticker, group_name, exchange_suffix, current_datetime, allow_prompt=False)
+                            pending[fut_retry] = (idx, ticker, time.monotonic())
+                            continue
+                        print("[search] Scan stopped by user after rate-limit detection.", flush=True)
+                        STOP_SCAN_EVENT.set()
+                        break
+                    print(f"[{idx}/{len(members)}] {ticker}", flush=True)
+                    processed_count += 1
+                    if stopped:
+                        STOP_SCAN_EVENT.set()
+                        break
+                    if err:
+                        error_count += 1
+                        print(f"  pominięto ({_compact_error(err)})", flush=True)
+                    elif result:
+                        results.append(result)
+                    if flip:
+                        flip = _ensure_flip_ticker(flip, ticker)
+                        flip_results.append(flip)
+                if STOP_SCAN_EVENT.is_set():
+                    break
+                _submit_more()
+        except KeyboardInterrupt:
+            STOP_SCAN_EVENT.set()
+            for fut in pending:
+                fut.cancel()
+            print(
+                "\n[search] Ctrl+C received: cancelling pending Ichimoku workers. "
+                "Running downloads will stop after their current network timeout.",
+                flush=True,
+            )
+            ex.shutdown(wait=False, cancel_futures=True)
+            return 130
+        finally:
+            ex.shutdown(wait=not STOP_SCAN_EVENT.is_set(), cancel_futures=True)
+        if STOP_SCAN_EVENT.is_set():
+            return 1
 
     flip_results = [f for f in flip_results if _flip_still_actionable(f)]
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
@@ -2186,6 +2310,370 @@ def run_ichimoku_search(target: str) -> int:
     return 0
 
 
+
+
+
+def _wedge_line_value(idx: int, anchor_a: tuple[int, float], anchor_b: tuple[int, float]) -> float:
+    ia, ya = anchor_a
+    ib, yb = anchor_b
+    if ib == ia:
+        return float(ya)
+    return float(ya) + (float(yb) - float(ya)) * ((idx - ia) / (ib - ia))
+
+
+def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
+    # Touches separated only by glued/adjacent candles count as one contact;
+    # a new contact requires at least one full non-touching candle between them.
+    if not indices:
+        return 0
+    ordered = sorted(set(indices))
+    groups = 1
+    prev = ordered[0]
+    for idx in ordered[1:]:
+        if idx - prev > max_gap:
+            groups += 1
+        prev = idx
+    return groups
+
+
+def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
+    """Detect an unbroken descending wedge ending at the latest candle.
+
+    The first two touches on each side are exact OHLC extremes (line anchors).
+    Later touches may be wick/body probes as long as the candle does not close
+    outside the line. Adjacent candles touching a line are counted as one touch.
+    """
+    required = {"Date", "Open", "High", "Low", "Close"}
+    if df is None or df.empty or not required.issubset(df.columns) or len(df) < 55:
+        return None
+    w = df.copy()
+    w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
+    for col in ["Open", "High", "Low", "Close"]:
+        w[col] = pd.to_numeric(w[col], errors="coerce")
+    w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
+    if len(w) < 55:
+        return None
+    if len(w) > 240:
+        w = w.tail(240).reset_index(drop=True)
+
+    best: WedgeScanResult | None = None
+    highs = w["High"].astype(float).to_numpy()
+    lows = w["Low"].astype(float).to_numpy()
+    opens = w["Open"].astype(float).to_numpy()
+    closes = w["Close"].astype(float).to_numpy()
+    dates = w["Date"]
+    n = len(w)
+
+    def _fmt_date(i: int) -> str:
+        return str(pd.to_datetime(dates.iloc[i]).date())
+
+    def _touch_tolerance(start: int, end: int) -> float:
+        avg_range = float(pd.Series(highs[start : end + 1] - lows[start : end + 1]).dropna().tail(30).mean())
+        last_close = max(abs(float(closes[end])), 1e-9)
+        return max(avg_range * 0.18 if pd.notna(avg_range) else 0.0, last_close * 0.004)
+
+    for length in range(min(180, n), 44, -5):
+        start = n - length
+        end = n - 1
+        seg_high = highs[start : end + 1]
+        seg_low = lows[start : end + 1]
+        if len(seg_high) < 45:
+            continue
+        high_abs = start + int(seg_high.argmax())
+        low_abs = start + int(seg_low.argmin())
+        # A falling wedge should be a currently active formation, not a random
+        # old channel. Its highest point normally starts the formation.
+        if high_abs > start + int(length * 0.45):
+            continue
+
+        upper_anchor2_candidates: list[int] = []
+        for j in range(high_abs + 5, end - 4):
+            if highs[j] >= highs[high_abs]:
+                continue
+            if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
+                upper_anchor2_candidates.append(j)
+        if not upper_anchor2_candidates:
+            continue
+
+        lower_anchor2_candidates: list[int] = []
+        for j in range(start + 2, end - 2):
+            if j == low_abs:
+                continue
+            if abs(j - low_abs) < 5:
+                continue
+            if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1] and lows[j] > lows[low_abs]:
+                lower_anchor2_candidates.append(j)
+        if not lower_anchor2_candidates:
+            continue
+        # Prefer active lower anchors near current price action over distant
+        # historical lows; the absolute lowest low is still always one anchor.
+        lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
+
+        for uh2 in upper_anchor2_candidates[:14]:
+            upper_a = (high_abs, float(highs[high_abs]))
+            upper_b = (uh2, float(highs[uh2]))
+            upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
+            if upper_slope >= 0:
+                continue
+            for lh2 in lower_anchor2_candidates[:40]:
+                # Use the lowest low as one exact lower anchor, as requested.
+                lower_a = (low_abs, float(lows[low_abs]))
+                lower_b = (lh2, float(lows[lh2]))
+                lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
+                if lower_b[0] < lower_a[0]:
+                    lower_slope = (lower_a[1] - lower_b[1]) / (lower_a[0] - lower_b[0])
+                # Falling wedges must converge. The lower boundary is allowed to
+                # be flat or slightly rising when that best describes current
+                # price compression; reject only aggressively rising lower lines.
+                if lower_slope > abs(upper_slope) * 0.35:
+                    continue
+                # Upper line must fall faster than lower line so the wedge narrows.
+                if upper_slope >= lower_slope:
+                    continue
+
+                tol = _touch_tolerance(start, end)
+
+                def _anchors_uninterrupted(anchor_a: tuple[int, float], anchor_b: tuple[int, float], side: str) -> bool:
+                    # The first two anchor points must define a clean extreme-to-extreme
+                    # segment. No intermediate candle shadow may break beyond that
+                    # segment before the second anchor is reached.
+                    left, right = sorted((anchor_a[0], anchor_b[0]))
+                    if right - left <= 1:
+                        return True
+                    eps = max(tol * 0.05, max(abs(anchor_a[1]), abs(anchor_b[1]), 1e-9) * 1e-6)
+                    for k in range(left + 1, right):
+                        line_value = _wedge_line_value(k, anchor_a, anchor_b)
+                        if side == "upper" and highs[k] > line_value + eps:
+                            return False
+                        if side == "lower" and lows[k] < line_value - eps:
+                            return False
+                    return True
+
+                if not _anchors_uninterrupted(upper_a, upper_b, "upper"):
+                    continue
+                if not _anchors_uninterrupted(lower_a, lower_b, "lower"):
+                    continue
+
+                first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
+                upper_anchor_indices = {high_abs, uh2}
+                lower_anchor_indices = {low_abs, lh2}
+                upper_exact_contacts = [high_abs, uh2]
+                lower_exact_contacts = [low_abs, lh2]
+                upper_contacts = [high_abs, uh2]
+                lower_contacts = [low_abs, lh2]
+                breakout_idx: int | None = None
+                breakout_direction = "-"
+                invalid = False
+                width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
+                width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
+                if width_start <= 0 or width_end <= 0 or width_end >= width_start * 0.92:
+                    continue
+                close_eps = max(tol * 0.02, max(abs(float(closes[end])), 1e-9) * 1e-6)
+                exact_tol = max(tol * 0.12, max(abs(float(closes[end])), 1e-9) * 1e-6)
+
+                def _is_local_extreme(i: int, side: str) -> bool:
+                    if i <= 0 or i >= n - 1:
+                        return True
+                    if side == "upper":
+                        return highs[i] >= highs[i - 1] and highs[i] >= highs[i + 1]
+                    return lows[i] <= lows[i - 1] and lows[i] <= lows[i + 1]
+
+                def _accept_or_reject_breakout(i: int, direction: str) -> bool:
+                    nonlocal breakout_idx, breakout_direction
+                    if i < end - 5:
+                        return False
+                    if breakout_idx is None:
+                        breakout_idx = i
+                        breakout_direction = direction
+                        return True
+                    return breakout_direction == direction
+
+                # Each boundary must remain valid from its own first anchor. If
+                # price closed beyond an anchor line earlier than the latest
+                # five candles, this candidate was already broken and another
+                # anchor set must be found instead.
+                for i in range(min(high_abs, uh2), end + 1):
+                    if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
+                        if i < end - 5:
+                            invalid = True
+                            break
+                if invalid:
+                    continue
+                for i in range(min(low_abs, lh2), end + 1):
+                    if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
+                        if i < end - 5:
+                            invalid = True
+                            break
+                if invalid:
+                    continue
+
+                for i in range(first_validation, end + 1):
+                    up = _wedge_line_value(i, upper_a, upper_b)
+                    lo = _wedge_line_value(i, lower_a, lower_b)
+                    if lo >= up:
+                        invalid = True
+                        break
+                    # No candle may close on the other side of a still-valid wedge.
+                    # The only accepted outside close is the first breakout/breakdown
+                    # candle, and it must be very recent (latest candle or up to the
+                    # previous 5 candles) to be treated as an absolute top-choice setup.
+                    if closes[i] > up + close_eps or closes[i] < lo - close_eps:
+                        direction = "long" if closes[i] > up + close_eps else "short"
+                        if _accept_or_reject_breakout(i, direction):
+                            continue
+                        if breakout_idx is not None:
+                            if breakout_direction == "long" and closes[i] >= lo - close_eps:
+                                continue
+                            if breakout_direction == "short" and closes[i] <= up + close_eps:
+                                continue
+                        invalid = True
+                        break
+                    if breakout_idx is not None:
+                        continue
+                    if i not in upper_anchor_indices and closes[i] <= up + close_eps:
+                        if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= exact_tol:
+                            upper_exact_contacts.append(i)
+                            upper_contacts.append(i)
+                        elif lows[i] <= up <= highs[i] or abs(highs[i] - up) <= tol or abs(opens[i] - up) <= tol:
+                            upper_contacts.append(i)
+                    if i not in lower_anchor_indices and closes[i] >= lo - close_eps:
+                        if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= exact_tol:
+                            lower_exact_contacts.append(i)
+                            lower_contacts.append(i)
+                        elif lows[i] <= lo <= highs[i] or abs(lows[i] - lo) <= tol or abs(opens[i] - lo) <= tol:
+                            lower_contacts.append(i)
+                if invalid:
+                    continue
+
+                def _drop_pre_breakout_touch_cluster(indices: list[int]) -> list[int]:
+                    # A candle or glued group of candles that the line passes
+                    # through immediately before breakout is breakout noise, not
+                    # an independent touchpoint confirming the wedge.
+                    if breakout_idx is None:
+                        return indices
+                    ordered = [idx for idx in sorted(set(indices)) if idx < breakout_idx]
+                    if not ordered or breakout_idx - ordered[-1] > 1:
+                        return ordered
+                    cut = len(ordered) - 1
+                    while cut > 0 and ordered[cut] - ordered[cut - 1] <= 1:
+                        cut -= 1
+                    return ordered[:cut]
+
+                upper_contacts = _drop_pre_breakout_touch_cluster(upper_contacts)
+                lower_contacts = _drop_pre_breakout_touch_cluster(lower_contacts)
+                upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
+                lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
+
+                up_count = _clustered_contact_count(upper_contacts)
+                lo_count = _clustered_contact_count(lower_contacts)
+                lower_exact_count = _clustered_contact_count(lower_exact_contacts)
+                upper_exact_count = _clustered_contact_count(upper_exact_contacts)
+                if lower_exact_count < 2:
+                    continue
+                if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
+                    continue
+                last_close = float(closes[end])
+                width_start_pct = width_start / max(abs(last_close), 1e-9) * 100.0
+                width_end_pct = width_end / max(abs(last_close), 1e-9) * 100.0
+                slope_pct = abs(upper_slope - lower_slope) / max(abs(last_close), 1e-9) * 100.0
+                duration = end - first_validation + 1
+                duration_months = duration / 21.0
+                compression_pct = max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0))
+
+                recent_from = max(first_validation, end - 35)
+                recent_widths: list[float] = []
+                recent_upper_gaps: list[float] = []
+                recent_lower_gaps: list[float] = []
+                recent_min_gaps: list[float] = []
+                for k in range(recent_from, end + 1):
+                    up_k = _wedge_line_value(k, upper_a, upper_b)
+                    lo_k = _wedge_line_value(k, lower_a, lower_b)
+                    width_k = max(up_k - lo_k, 1e-9)
+                    recent_widths.append(width_k)
+                    upper_gap = max(0.0, up_k - highs[k]) / width_k
+                    lower_gap = max(0.0, lows[k] - lo_k) / width_k
+                    recent_upper_gaps.append(upper_gap)
+                    recent_lower_gaps.append(lower_gap)
+                    recent_min_gaps.append(min(upper_gap, lower_gap))
+                median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
+                median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
+                median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
+                breakout_recent_bonus = 0.0
+                breakout_age = None
+                if breakout_idx is not None:
+                    breakout_age = end - breakout_idx
+                    breakout_recent_bonus = max(0.0, 6.0 - float(breakout_age)) / 6.0
+                last_upper_contact_age = (breakout_idx if breakout_idx is not None else end) - max(upper_contacts)
+                last_lower_contact_age = (breakout_idx if breakout_idx is not None else end) - max(lower_contacts)
+                # Reject theoretical oversized wedges whose upper boundary no longer
+                # follows the active structure. A useful wedge has recent price
+                # compression near both trendlines, especially the upper line.
+                if (
+                    median_upper_gap > 0.62
+                    or median_lower_gap > 0.50
+                    or median_min_gap > 0.42
+                    or last_upper_contact_age > 75
+                    or last_lower_contact_age > 55
+                    or width_end_pct > 28.0
+                ):
+                    continue
+
+                touch_quality = min(1.0, (up_count + lo_count) / 7.0) * (0.75 + 0.25 * min(up_count, lo_count) / max(up_count, lo_count))
+                exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
+                proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
+                compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
+                fit_quality = max(0.0, min(100.0, touch_quality * exact_anchor_bonus * proximity_quality * 100.0))
+                if fit_quality < 35.0 or compression_quality < 0.12:
+                    continue
+                if slope_pct >= 0.40:
+                    slope_strength = "very strong"
+                elif slope_pct >= 0.20:
+                    slope_strength = "strong"
+                elif slope_pct >= 0.08:
+                    slope_strength = "moderate"
+                else:
+                    slope_strength = "mild"
+                slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
+                breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus
+                recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
+                # The first two anchors for each line are exact candle extremes,
+                # not tolerance contacts. For display/export, keep the upper line
+                # anchored from the highest high, and start the lower line from its
+                # first chronological anchor so the bottom boundary is drawn from
+                # the first visible contact rather than the second.
+                upper_start, upper_end = upper_a, upper_b
+                lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
+                cand = WedgeScanResult(
+                    ticker="",
+                    start_date=_fmt_date(first_validation),
+                    end_date=_fmt_date(end),
+                    duration_days=duration,
+                    upper_start_date=_fmt_date(upper_start[0]),
+                    upper_start_price=round(float(upper_start[1]), 5),
+                    upper_end_date=_fmt_date(upper_end[0]),
+                    upper_end_price=round(float(upper_end[1]), 5),
+                    lower_start_date=_fmt_date(lower_start[0]),
+                    lower_start_price=round(float(lower_start[1]), 5),
+                    lower_end_date=_fmt_date(lower_end[0]),
+                    lower_end_price=round(float(lower_end[1]), 5),
+                    upper_touches=up_count,
+                    lower_touches=lo_count,
+                    width_start_pct=round(width_start_pct, 2),
+                    width_end_pct=round(width_end_pct, 2),
+                    slope_pct_per_day=round(slope_pct, 4),
+                    slope_strength=slope_strength,
+                    fit_quality=round(fit_quality, 1),
+                    recent_proximity_pct=round(recent_proximity_pct, 1),
+                    compression_pct=round(compression_pct, 1),
+                    score=round(score, 2),
+                    current_close=last_close,
+                    breakout_date=_fmt_date(breakout_idx) if breakout_idx is not None else "-",
+                    breakout_direction=breakout_direction,
+                )
+                if best is None or cand.score > best.score:
+                    best = cand
+    return best
 
 
 def _select_fibo_long_impulse_base(
@@ -2871,6 +3359,7 @@ def run_fibo_search(target: str) -> int:
     current_datetime = datetime.now(UTC)
     rows: list[FiboScanResult] = []
     rows3p_steep: list[FiboScanResult] = []
+    wedge_rows: list[WedgeScanResult] = []
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
             return False
@@ -2925,6 +3414,14 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
+            wedge = _find_falling_wedge_setup(df)
+            if wedge:
+                wedge.ticker = ticker
+                wedge.latest_candle_date = latest_candle_date
+                wedge.expected_latest_session_date = expected_latest_session_date
+                if pd.notna(latest_close):
+                    wedge.current_close = latest_close
+                out_rows.append(wedge)
             steep_3p = _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
@@ -3054,7 +3551,9 @@ def run_fibo_search(target: str) -> int:
                             print("[fibo] Scan stopped by user after rate-limit detection.", flush=True)
                             return 1
                 for item in found:
-                    if item.status.startswith("3p_steep"):
+                    if isinstance(item, WedgeScanResult):
+                        wedge_rows.append(item)
+                    elif item.status.startswith("3p_steep"):
                         rows3p_steep.append(item)
                     else:
                         rows.append(item)
@@ -3102,28 +3601,46 @@ def run_fibo_search(target: str) -> int:
         except Exception:
             return 1.0
 
+    def _avg10d_turnover_pln_for_symbol(symbol: str, instrument_type: str) -> float | None:
+        try:
+            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
+        except Exception:
+            return None
+        if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
+            return None
+        turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
+        turnover_native = turnover_native.dropna()
+        if len(turnover_native) < 10:
+            return None
+        fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
+        return float((turnover_native.tail(10) * fx_to_pln).mean())
+
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))
         if row is None:
             return False
-        symbol = row[0]
-        try:
-            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=row[1], persist=True)
-        except Exception:
+        symbol, instrument_type = row
+        avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
+        if avg_10d_pln is None:
             return False
-        if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
-            return False
-        turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
-        turnover_native = turnover_native.dropna()
-        if len(turnover_native) < 10:
-            return False
-        fx_to_pln = _fx_to_pln_for_turnover(symbol, row[1])
-        avg_10d_pln = float((turnover_native.tail(10) * fx_to_pln).mean())
         avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
         return avg_10d_pln >= min_avg
 
+    def _passes_wedge_liquidity(r: WedgeScanResult) -> bool:
+        row = wedge_source_by_ticker.get(r.ticker)
+        if row is None:
+            return False
+        symbol, instrument_type = row
+        avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
+        if avg_10d_pln is None:
+            return False
+        r.avg_turnover_10d_pln = avg_10d_pln
+        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
+        return avg_10d_pln >= min_avg
+
     rows_by_key: dict[tuple[str, str, str, str], tuple[str, str]] = {}
+    wedge_source_by_ticker: dict[str, tuple[str, str]] = {}
     # Build lookup using the same symbol normalization as scanner.
     for ticker in members:
         instrument = "stock"
@@ -3139,6 +3656,8 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
+        if any(w.ticker == ticker for w in wedge_rows):
+            wedge_source_by_ticker[ticker] = (fetch_symbol, instrument)
         for r in rows + rows0:
             if r.ticker == ticker:
                 rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
@@ -3153,16 +3672,14 @@ def run_fibo_search(target: str) -> int:
             continue
         symbol, instrument_type = row
         try:
-            df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
-            turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
-            turnover_native = turnover_native.dropna()
-            if len(turnover_native) < 10:
+            avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
+            if avg_10d_pln is None:
                 continue
-            fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
-            avg_turnover_10d_by_key[k] = float((turnover_native.tail(10) * fx_to_pln).mean())
+            avg_turnover_10d_by_key[k] = avg_10d_pln
         except Exception:
             continue
 
+    wedge_rows = [r for r in wedge_rows if _passes_wedge_liquidity(r)]
     rows0_liquid = [r for r in rows0 if _passes_fibo_liquidity(r)]
     rows1_liquid = [r for r in rows1 if _passes_fibo_liquidity(r)]
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
@@ -3233,12 +3750,15 @@ def run_fibo_search(target: str) -> int:
     rows0_md=[[r.ticker,r.direction,("⚠️ 3p_steep_23_6_zone" if r.status == "3p_steep_23_6_zone" else "🚀 3p_steep_incline"),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)",(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%"),(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(f"{max(0.0, 1.0 - (abs(float(r.current_close) - float(r.fib_61_8)) / max(abs(float(r.fib_23_6) - float(r.fib_61_8)), 1e-9))) * 100:5.1f}%" if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
+    wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
+    rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
     _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
     _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
+    _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
-    print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}")
+    print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
     print(f"[fibo] md: {out_md}")
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:

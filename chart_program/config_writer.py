@@ -29,6 +29,16 @@ def _build_template(instrument_type: str, values: dict) -> str:
         symbol = (values.get("symbol") or "").upper()
         include_fee_fields = not (symbol.endswith(".WA") or symbol.endswith(".PL"))
         fee_lines = ""
+        cfd_lines = ""
+        if values.get("stock_cfd_mode"):
+            cfd_lines = (
+                f'    stock_cfd_mode: bool = True\n'
+                f'    position_type: str = "{values.get("position_type", "long")}"\n'
+                f'    lot_cost: float = {values.get("lot_cost", 0.0)}\n'
+                f'    pip_value: float = {values.get("pip_value", 0.0)}\n'
+                f'    spread: float = {values.get("spread", 0.0)}\n'
+                f'    spread_multiplier: float = {values.get("spread_multiplier", 0.0)}\n'
+            )
         if include_fee_fields:
             fee_lines = (
                 f'    apply_currency_conversion_fee: bool = {values.get("apply_currency_conversion_fee", False)}\n'
@@ -50,12 +60,20 @@ class TradingConfig:
     stop_loss: float = {values["stop_loss"]}
     high: float = {values["high"]}
     low: float = {values["low"]}
-    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
+{cfd_lines}    check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
     line_cross_value: float = {values.get("line_cross_value", values["entry"])}
     risk_levels: tuple = {risk_levels}
 '''
 
     if instrument_type == "commodity":
+        stock_cfd_lines = ""
+        pip_value_line = f'    pip_value: float = {values.get("pip_value", 0.0)}\n'
+        if values.get("stock_cfd_mode"):
+            stock_cfd_lines = (
+                f'    stock_cfd_mode: bool = True\n'
+                f'    spread_pips: float = {values.get("spread_pips", 0.0)}\n'
+            )
+            pip_value_line = ""
         return f'''from dataclasses import dataclass
 
 filename = "{filename}"
@@ -64,7 +82,7 @@ filename = "{filename}"
 @dataclass
 class TradingConfig:
     instrument_type: str = "commodity"
-    position_type: str = "{values.get("position_type", "long")}"
+{stock_cfd_lines}    position_type: str = "{values.get("position_type", "long")}"
     name: str = "{values["name"]}"
 
     capital: float = {values.get("capital", 0)}
@@ -75,8 +93,7 @@ class TradingConfig:
     low: float = {values["low"]}
 
     lot_cost: float = {values.get("lot_cost", 0.0)}
-    pip_value: float = {values.get("pip_value", 0.0)}
-    spread: float = {values.get("spread_expression", values.get("spread", 0.0))}
+{pip_value_line}    spread: float = {values.get("spread_expression", values.get("spread", 0.0))}
     check_zr_value_fibo_or_elevation: float = {values.get("check_zr_value_fibo_or_elevation", values["entry"])}
     line_cross_value: float = {values.get("line_cross_value", values["entry"])}
     risk_levels: tuple = {risk_levels}

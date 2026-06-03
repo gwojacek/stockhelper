@@ -8,6 +8,7 @@ from pathlib import Path
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="chart_program", description="Standalone chart-based level selection tool")
     parser.add_argument("target", nargs="?", help="Symbol, pair, or config slug (e.g. jsw, coffee_long, AUD/USD)")
+    parser.add_argument("chart_modifier", nargs="?", choices=["cfd", "CFD"], help="Use after a stock symbol to open it as CFD/commodity mode.")
     parser.add_argument("--config", help="Explicit config file path")
     parser.add_argument("--instrument", choices=["stock", "commodity", "forex"], help="Force instrument type")
     parser.add_argument("--position-type", choices=["long", "short"], help="Position type for commodity/forex")
@@ -19,6 +20,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", help="Optional API key passed to data provider")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--no-run-after-save", action="store_true", help="Do not run analysis script after saving config")
+    parser.add_argument("--wedge-lines", action="store_true")
+    parser.add_argument("--wedge-upper-start")
+    parser.add_argument("--wedge-upper-end")
+    parser.add_argument("--wedge-lower-start")
+    parser.add_argument("--wedge-lower-end")
+    parser.add_argument("--wedge-right", action="store_true")
     return parser
 
 
@@ -45,6 +52,11 @@ def main() -> int:
     if not target:
         parser.error("Target is required.")
 
+    chart_modifier = (args.chart_modifier or "").strip().lower()
+    if chart_modifier == "cfd" and not target.lower().endswith(" cfd"):
+        target = f"{target} cfd"
+        if not args.instrument:
+            args.instrument = "commodity"
     forwarded = [target]
     if args.config:
         forwarded.extend(["--config", args.config])
@@ -60,6 +72,18 @@ def main() -> int:
     if args.api_key:
         forwarded.extend(["--api-key", args.api_key])
     forwarded.extend(["--data-source", args.data_source])
+    if args.wedge_lines:
+        forwarded.append("--wedge-lines")
+    for flag, value in [
+        ("--wedge-upper-start", args.wedge_upper_start),
+        ("--wedge-upper-end", args.wedge_upper_end),
+        ("--wedge-lower-start", args.wedge_lower_start),
+        ("--wedge-lower-end", args.wedge_lower_end),
+    ]:
+        if value:
+            forwarded.extend([flag, value])
+    if args.wedge_right:
+        forwarded.append("--wedge-right")
     forwarded.extend(unknown)
 
     from chart_program.level_selector import run_level_selector
