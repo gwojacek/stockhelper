@@ -1583,7 +1583,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _stockhelper_chart_button(cmd: str) -> str:
         return (
             f"<button class='btn stockhelper-chart-btn' onclick='openStockhelperChart(this)' data-cmd='{cmd}' "
-            "title='Open stockhelper chart' aria-label='Open stockhelper chart'>Open</button>"
+            "title='Open stockhelper chart' aria-label='Open stockhelper chart'>📊</button>"
         )
 
     def _google_sheets_hyperlink_formula(stooq_url: str, ticker: str) -> str:
@@ -1598,7 +1598,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         return (
             "<button class='btn sheets-cell-btn' type='button' onclick='copySheetsCell(this)' "
             f"data-formula='{html.escape(formula, quote=True)}' "
-            "title='Copy Google Sheets HYPERLINK formula' aria-label='Copy Google Sheets HYPERLINK formula'>📋 Cell</button>"
+            "title='Copy Google Sheets HYPERLINK formula' aria-label='Copy Google Sheets HYPERLINK formula'>📋</button>"
         )
 
     def _stooq_link_with_cell_button(stooq_url: str | None, ticker: str | None, extra_class: str = "") -> str:

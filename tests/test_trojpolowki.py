@@ -226,8 +226,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='trojpolowki-ichimoku'" in text
     assert "troj-name-actions" in text
     assert "copySheetsCell" in text
-    assert "📋 Cell" in text
+    assert "📋 Cell" not in text
     assert "href='https://stooq.pl/rwe-ichi' target='_blank' title='Open stooq chart'>📈</a><button class='btn sheets-cell-btn'" in text
+    assert "aria-label='Copy Google Sheets HYPERLINK formula'>📋</button>" in text
+    assert "aria-label='Open stockhelper chart'>📊</button>" in text
+    assert ">Open</button>" not in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/rwe-ichi&quot;; &quot;RWE.DE&quot;)'" in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/aep&quot;; &quot;AEP.US&quot;)'" in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/gpp&quot;; &quot;GPP&quot;)'" in text
