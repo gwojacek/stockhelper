@@ -240,9 +240,13 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "border:none" in text
     assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
     assert "Open stooq links from top choices" in text
+    assert "Open stockhelper charts from this top-choice column" in text
+    assert "Open stockhelper charts from this column" in text
     assert "Open stooq links from this column" in text
+    assert "event.stopPropagation();openTrojColumnStockhelperCharts" in text
     assert "event.stopPropagation();openTrojColumnStooqLinks" in text
     for col_idx in range(4):
+        assert f"openTrojColumnStockhelperCharts(this,{col_idx})" in text
         assert f"openTrojColumnStooqLinks(this,{col_idx})" in text
         assert f"copyTrojColumnSheetsCells(this,{col_idx})" in text
     assert "copyTrojColumnSheetsCells" in text
