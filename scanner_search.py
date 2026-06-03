@@ -2490,6 +2490,35 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         return highs[i] >= highs[i - 1] and highs[i] >= highs[i + 1]
                     return lows[i] <= lows[i - 1] and lows[i] <= lows[i + 1]
 
+                def _accept_or_reject_breakout(i: int, direction: str) -> bool:
+                    nonlocal breakout_idx, breakout_direction
+                    if i < end - 5:
+                        return False
+                    if breakout_idx is None:
+                        breakout_idx = i
+                        breakout_direction = direction
+                        return True
+                    return breakout_direction == direction
+
+                # Each boundary must remain valid from its own first anchor. If
+                # price closed beyond an anchor line earlier than the latest
+                # five candles, this candidate was already broken and another
+                # anchor set must be found instead.
+                for i in range(min(high_abs, uh2), end + 1):
+                    if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
+                        if not _accept_or_reject_breakout(i, "long"):
+                            invalid = True
+                            break
+                if invalid:
+                    continue
+                for i in range(min(low_abs, lh2), end + 1):
+                    if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
+                        if not _accept_or_reject_breakout(i, "short"):
+                            invalid = True
+                            break
+                if invalid:
+                    continue
+
                 for i in range(first_validation, end + 1):
                     up = _wedge_line_value(i, upper_a, upper_b)
                     lo = _wedge_line_value(i, lower_a, lower_b)
@@ -2501,9 +2530,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # candle, and it must be very recent (latest candle or up to the
                     # previous 5 candles) to be treated as an absolute top-choice setup.
                     if closes[i] > up + close_eps or closes[i] < lo - close_eps:
-                        if breakout_idx is None and i >= end - 5:
-                            breakout_idx = i
-                            breakout_direction = "long" if closes[i] > up + close_eps else "short"
+                        direction = "long" if closes[i] > up + close_eps else "short"
+                        if _accept_or_reject_breakout(i, direction):
                             continue
                         if breakout_idx is not None:
                             if breakout_direction == "long" and closes[i] >= lo - close_eps:

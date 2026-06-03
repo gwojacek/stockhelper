@@ -270,6 +270,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-scanner='ICHIMOKU'" in text
     assert "🔻 Kliny" in text
     assert "🚀 breakout" in text
+    assert ".today-signal td{background:#dcfce7!important}" in text
+    assert "data-scanner='WEDGE' data-status='🚀 breakout' class='today-signal'" in text
     assert "falling_wedge_breakout" not in text
     assert "wybicie long 2026-05-30" not in text
     assert "<th>Fit</th>" not in text
