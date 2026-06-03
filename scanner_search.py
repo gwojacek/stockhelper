@@ -2334,6 +2334,8 @@ def _wedge_line_value(idx: int, anchor_a: tuple[int, float], anchor_b: tuple[int
 
 
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
+    # Touches separated only by glued/adjacent candles count as one contact;
+    # a new contact requires at least one full non-touching candle between them.
     if not indices:
         return 0
     ordered = sorted(set(indices))
@@ -2415,6 +2417,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_anchor2_candidates.append(j)
         if not lower_anchor2_candidates:
             continue
+        # Prefer active lower anchors near current price action over distant
+        # historical lows; the absolute lowest low is still always one anchor.
+        lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
 
         for uh2 in upper_anchor2_candidates[:14]:
             upper_a = (high_abs, float(highs[high_abs]))
@@ -2429,7 +2434,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
                 if lower_b[0] < lower_a[0]:
                     lower_slope = (lower_a[1] - lower_b[1]) / (lower_a[0] - lower_b[0])
-                if lower_slope >= 0:
+                # Falling wedges must converge. The lower boundary is allowed to
+                # be flat or slightly rising when that best describes current
+                # price compression; reject only aggressively rising lower lines.
+                if lower_slope > abs(upper_slope) * 0.35:
                     continue
                 # Upper line must fall faster than lower line so the wedge narrows.
                 if upper_slope >= lower_slope:
@@ -2520,6 +2528,26 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             lower_contacts.append(i)
                 if invalid:
                     continue
+
+                def _drop_pre_breakout_touch_cluster(indices: list[int]) -> list[int]:
+                    # A candle or glued group of candles that the line passes
+                    # through immediately before breakout is breakout noise, not
+                    # an independent touchpoint confirming the wedge.
+                    if breakout_idx is None:
+                        return indices
+                    ordered = [idx for idx in sorted(set(indices)) if idx < breakout_idx]
+                    if not ordered or breakout_idx - ordered[-1] > 1:
+                        return ordered
+                    cut = len(ordered) - 1
+                    while cut > 0 and ordered[cut] - ordered[cut - 1] <= 1:
+                        cut -= 1
+                    return ordered[:cut]
+
+                upper_contacts = _drop_pre_breakout_touch_cluster(upper_contacts)
+                lower_contacts = _drop_pre_breakout_touch_cluster(lower_contacts)
+                upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
+                lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
+
                 up_count = _clustered_contact_count(upper_contacts)
                 lo_count = _clustered_contact_count(lower_contacts)
                 lower_exact_count = _clustered_contact_count(lower_exact_contacts)
@@ -2564,7 +2592,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # Reject theoretical oversized wedges whose upper boundary no longer
                 # follows the active structure. A useful wedge has recent price
                 # compression near both trendlines, especially the upper line.
-                if median_upper_gap > 0.62 or median_lower_gap > 0.70 or last_upper_contact_age > 75:
+                if (
+                    median_upper_gap > 0.62
+                    or median_lower_gap > 0.50
+                    or median_min_gap > 0.42
+                    or last_upper_contact_age > 75
+                    or last_lower_contact_age > 55
+                    or width_end_pct > 28.0
+                ):
                     continue
 
                 touch_quality = min(1.0, (up_count + lo_count) / 7.0) * (0.75 + 0.25 * min(up_count, lo_count) / max(up_count, lo_count))
