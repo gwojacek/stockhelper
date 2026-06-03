@@ -1,0 +1,32 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "line",
+      "label": "Falling wedge upper",
+      "x0": "2026-02-27",
+      "x1": "2026-10-03",
+      "y0": 34.36,
+      "y1": 22.6425,
+      "price": 22.6425,
+      "color": "#dc2626",
+      "group_id": "auto-wedge"
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "line",
+      "label": "Falling wedge lower",
+      "x0": "2026-01-28",
+      "x1": "2026-10-03",
+      "y0": 26.54,
+      "y1": 26.42978,
+      "price": 26.42978,
+      "color": "#2563eb",
+      "group_id": "auto-wedge"
+    }
+  ]
+}
