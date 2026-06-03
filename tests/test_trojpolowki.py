@@ -230,6 +230,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "href='https://stooq.pl/rwe-ichi' target='_blank' title='Open stooq chart'>📈</a><button class='btn sheets-cell-btn'" in text
     assert "aria-label='Copy Google Sheets HYPERLINK formula'>📋</button>" in text
     assert "aria-label='Open stockhelper chart'>📊</button>" in text
+    assert ".chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}" in text
+    assert "<td class='latest-data-cell'>✅</td>" in text
     assert ">Open</button>" not in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/rwe-ichi&quot;; &quot;RWE.DE&quot;)'" in text
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/aep&quot;; &quot;AEP.US&quot;)'" in text
