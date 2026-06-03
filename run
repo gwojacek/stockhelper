@@ -885,7 +885,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
             ))
         for r in f_w0:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
@@ -989,7 +989,7 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
     def _fibo_steep_23_6_zone(row: ScannerRow) -> bool:
         return row.category == "steep" and "23_6_zone" in str(row.status or "").lower()
     col1 = [r for r in fibo if r.category == "steep" and _fibo_steep(r) and "invalidated" not in r.status.lower() and not _fibo_has_23_6_warning(r) and not _fibo_steep_23_6_zone(r) and (_fibo_near(r) < 0 or _fibo_near(r) < 15.0)]
-    col2 = [r for r in fibo if (r.category == "waiting" and 0.0 <= _fibo_near(r) < 15.0) or (_fibo_steep_23_6_zone(r) and 0.0 <= _fibo_near(r) < 15.0)]
+    col2 = [r for r in fibo if (r.category == "waiting" and 0.0 <= _fibo_near(r) < 75.0) or (_fibo_steep_23_6_zone(r) and 0.0 <= _fibo_near(r) < 75.0)]
     col3 = [r for r in fibo if _fibo_near(r) >= 75.0]
     col1.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("ratio_raw", "-1"), -1), _fibo_start(r), _market_sort_key(r)[1]))
     col2.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))
@@ -997,7 +997,7 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "fibo.md"
     max_len = max(len(col1), len(col2), len(col3), 1)
-    lines = ["# Trójpolówki — Fibo", "", f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}", "", "| 🚀 Steep incline / no major bearish signal | ⚠️ Bearish close around 23.6 | 🎯 Near 61.8 > 75% / deeper pullback |", "|---|---|---|"]
+    lines = ["# Trójpolówki — Fibo", "", f"Updated from allsearch: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}", "", "| 🚀 Steep incline / no major bearish signal | ⚠️ Waiting 23.6→61.8 / bearish close | 🎯 Near 61.8 > 75% / deeper pullback |", "|---|---|---|"]
     for idx in range(max_len):
         cells = [
             _fibo_item(col1[idx], include_near=False) if idx < len(col1) else "",
@@ -1447,7 +1447,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             ))
         for r in f_w0:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
@@ -1942,7 +1942,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         groups = [
             ("Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
             ("Ichimoku continuation", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "position"]),
-            ("Fibo waiting", [r for r in rows if r.scanner == "FIBO" and r.category == "waiting"]),
+            ("Fibo 3P", [r for r in rows if r.scanner == "FIBO" and r.category in {"waiting", "steep"}]),
         ]
 
         def _must_include_top_choice(rank: tuple[int, int, float, str], reason: str) -> bool:
@@ -1990,16 +1990,20 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
                   ("WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
+                  ("WYNIKI FIBO #0 (3P steep incline)", [x for x in mrows if x.scanner == "FIBO" and x.category == "steep"]),
                   ("WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
                   ("WYNIKI FIBO #2 (valid formation, last 4 months)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
         for gname, grows in groups:
             is_i1 = gname.startswith("WYNIKI 1 ICHIMOKU")
             is_i2 = gname.startswith("WYNIKI 2 ICHIMOKU")
+            is_f0 = gname.startswith("WYNIKI FIBO #0")
             is_f1 = gname.startswith("WYNIKI FIBO #1")
             if is_i1:
                 thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Ichimoku status</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_i2:
                 thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Avg10d PLN</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+            elif is_f0:
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Near61.8</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f1:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Near61.8</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             else:
@@ -2021,6 +2025,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
                     html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd)}</td><td>{html.escape(r.metrics.get('latest_data',''))}</td><td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                elif is_f0:
+                    ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
+                    if str(r.metrics.get("ratio_top", "")) == "1":
+                        ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
+                    near_value = r.metrics.get('near61') or (f"{_parse_float_text(r.metrics.get('near61_raw', '-1'), -1.0):.1f}%" if _parse_float_text(r.metrics.get('near61_raw', '-1'), -1.0) >= 0 else "-")
+                    html_parts.append(f"<tr data-market='{html.escape(r.market)}' data-scanner='{r.scanner}' data-status='{html.escape(r.status)}'><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{_color_fibo_metric(r.status)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{_color_fibo_metric(near_value)}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd)}</td><td>{html.escape(r.metrics.get('latest_data',''))}</td><td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f1:
                     s = str(r.status)
                     color_status = ("touched_61_8" in s) or ("valid_reversal" in s)

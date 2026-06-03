@@ -93,7 +93,7 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
     assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
     assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
-    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" not in text
+    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
     assert text.count("**🇵🇱 TRN ↗️") == 1
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
     assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
@@ -189,7 +189,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
     fibo_md.write_text(
-        "# WYNIKI FIBO #1\n\n"
+        "# WYNIKI FIBO #0 (3P steep incline)\n\n"
+        "| Ticker | Dir | Status | Incline | Ratio(d) | Near61.8 | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| SBUX.US | long | 🚀 3p_steep_incline | 2026-03-27->2026-05-30 | 44/1 (44.00:1) | 98.5% | 1000 | https://stooq.pl/sbux | python run -c SBUX.US | yes | 2026-05-30 | 2026-05-30 |\n"
+        "\n# WYNIKI FIBO #1\n\n"
         "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
@@ -279,6 +283,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Mies. respektu przed wybiciem" in text
     assert "pattern/retest: bullish_harami" not in text
     assert "near 61.8: 90.0%" in text
+    assert "WYNIKI FIBO #0 (3P steep incline)" in text
+    assert "Fibo 3P</td><td><strong>🇺🇸 SBUX.US" in text
+    assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text
