@@ -1361,10 +1361,13 @@ def _prompt_vpn_continue_or_stop() -> bool:
             return not STOP_SCAN_EVENT.is_set()
         print("[search] Network/rate-limit issue detected. Pausing scan for VPN change.", flush=True)
         try:
-            answer = input("[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/429). Change VPN/solve captcha and continue? [y/N]: ").strip().lower()
+            answer = input(
+                "[search] Network/rate-limit issue detected (e.g. captcha/rate-limit/429). "
+                "Change VPN/solve captcha, then press Enter to continue (type q to stop): "
+            ).strip().lower()
         except EOFError:
-            answer = "n"
-        if answer != "y":
+            answer = "q"
+        if answer in {"q", "quit", "stop", "n", "no"}:
             STOP_SCAN_EVENT.set()
             PAUSE_SCAN_EVENT.clear()
             return False
