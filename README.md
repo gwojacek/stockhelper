@@ -480,7 +480,7 @@ python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4
 
 **When to use it:**
 
-- Scanners need more history than currently cached.
+- Scanners need more history than currently cached. Broad scans do **not** perform older-history backfills automatically; this command is the explicit backfill path.
 - You want a longer local history before running broad scans.
 
 **Output files updated:**
@@ -562,7 +562,7 @@ Use this after editing Python files. It compiles files but does not run imports/
   - commodities: `data/commodities/<SYMBOL>.csv`
   - indices/memberships: `data/indices/`
 - Chart mode deliberately loads cached data first (`STOCKHELPER_CACHE_ONLY=1` is set internally for the chart load) so the UI opens quickly.
-- Scanner mode usually probes remote freshness first, then decides whether to refresh or use local cache.
+- Scanner mode usually probes remote freshness first, then decides whether to refresh or use local cache; it refreshes the current window only and does not run older-history backfill implicitly.
 - `--data-source auto|yahoo|stooq` is available in `chart_program` flows.
 
 ## Troubleshooting
