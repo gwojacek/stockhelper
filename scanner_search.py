@@ -2506,14 +2506,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # anchor set must be found instead.
                 for i in range(min(high_abs, uh2), end + 1):
                     if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
-                        if not _accept_or_reject_breakout(i, "long"):
+                        if i < end - 5:
                             invalid = True
                             break
                 if invalid:
                     continue
                 for i in range(min(low_abs, lh2), end + 1):
                     if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
-                        if not _accept_or_reject_breakout(i, "short"):
+                        if i < end - 5:
                             invalid = True
                             break
                 if invalid:

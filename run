@@ -2150,7 +2150,7 @@ def _retry_missing_scope_csvs_once(scope: str) -> bool:
     print(f"[batch] {scope}: missing CSV retry completed.")
     return True
 
-def _run_allsearch_combo(scopes: list[str]) -> int:
+def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False) -> int:
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)
     for old in report_dir.glob("*.txt"):
@@ -2173,14 +2173,14 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     all_links: set[str] = set()
     # Phase 1: run all Ichimoku scans first across all scopes.
     print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
-    code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False)
+    code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False, force_cache_only=force_cache_only, strict_cache_only=force_cache_only)
     if code_i != 0:
         print("[allsearch] Ichimoku phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1
 
     # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
     print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
-    code_f = _run_batch_search("fibo", scopes, ask_open_links=False, force_cache_only=True)
+    code_f = _run_batch_search("fibo", scopes, ask_open_links=False, force_cache_only=True, strict_cache_only=force_cache_only)
     if code_f != 0:
         print("[allsearch] FIBO phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1
@@ -2226,7 +2226,7 @@ def _run_allsearch_combo(scopes: list[str]) -> int:
     print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
     return 1 if failures else 0
 
-def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, force_cache_only: bool = False) -> int:
+def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, force_cache_only: bool = False, strict_cache_only: bool = False) -> int:
     from scanner_search import run_ichimoku_search, run_fibo_search
     runner = run_ichimoku_search if mode=='ichimoku' else run_fibo_search
     os.environ['STOCKHELPER_BATCH_MODE']='1'; os.environ['STOCKHELPER_DEFER_OPEN_LINKS']='1'
@@ -2243,15 +2243,14 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     for idx,scope in enumerate(batch,1):
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         if force_cache_only:
-            # Keep forced cache-only for phases like FIBO, but still honor
-            # scope completeness rules (especially commodities) so we do not
-            # skip required UI refresh when local cache is incomplete/stale.
-            if _scope_has_complete_cache(scope):
+            if strict_cache_only or _scope_has_complete_cache(scope):
                 os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-                print(f"[cache-rule] {scope}: forced cache-only mode ON for {mode} phase.")
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                label = "strict cache-only" if strict_cache_only else "cache-only"
+                print(f"[cache-rule] {scope}: {label} mode ON for {mode} phase.")
             else:
                 os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-                print(f"[cache-rule] {scope}: forced cache-only overridden -> refresh mode ON (incomplete cache).")
+                print(f"[cache-rule] {scope}: cache-only overridden -> refresh mode ON (incomplete cache).")
         else:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
@@ -2302,6 +2301,7 @@ def main()->int:
     parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
+    parser.add_argument('-onlycache', '--onlycache', action='store_true', help='Use local CSV cache only; skip remote freshness probes/updates (works for commodities too).')
     parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
     parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?')
@@ -2323,6 +2323,10 @@ def main()->int:
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
     args=parser.parse_args()
+    if args.onlycache:
+        os.environ['STOCKHELPER_CACHE_ONLY'] = '1'
+        os.environ.pop('STOCKHELPER_FORCE_REMOTE_REFRESH', None)
+        print('[cache-rule] onlycache requested -> cache-only mode ON; skipping refresh probes.')
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data
         import pandas as pd
@@ -2578,8 +2582,9 @@ def main()->int:
             print("Stooq debug mode does not update CSV files. Add --debug-stooq-fetch to merge visible rows into the commodity CSV.")
         return 0
     if args.search_target:
-        if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku', DEFAULT_ALLSEARCH_SCOPES)
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        if args.search_target.strip().lower()=='all': return _run_batch_search('ichimoku', DEFAULT_ALLSEARCH_SCOPES, force_cache_only=args.onlycache, strict_cache_only=args.onlycache)
+        if not args.onlycache:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
     if args.checkavg_target:
@@ -2587,13 +2592,14 @@ def main()->int:
     if args.allsearch_target:
         normalized = args.allsearch_target.strip().lower()
         if normalized == "all":
-            return _run_allsearch_combo(DEFAULT_ALLSEARCH_SCOPES)
-        return _run_allsearch_combo([normalized])
+            return _run_allsearch_combo(DEFAULT_ALLSEARCH_SCOPES, force_cache_only=args.onlycache)
+        return _run_allsearch_combo([normalized], force_cache_only=args.onlycache)
     if args.fibo_explain_target:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:
-        if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo', DEFAULT_ALLSEARCH_SCOPES)
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        if args.fibo_search_target.strip().lower()=='all': return _run_batch_search('fibo', DEFAULT_ALLSEARCH_SCOPES, force_cache_only=args.onlycache, strict_cache_only=args.onlycache)
+        if not args.onlycache:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         from scanner_search import run_fibo_search; return run_fibo_search(args.fibo_search_target)
     target=(args.target or '').strip()

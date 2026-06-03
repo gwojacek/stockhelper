@@ -33,7 +33,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
 | Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Use cache only | `STOCKHELPER_CACHE_ONLY=1 python run -ichimoku_search wig` | Avoids remote refresh when you want to rely on local CSVs. |
+| Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
 | Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
 | Syntax check | `python -m py_compile main.py main_stock.py scanner_search.py chart_program/main.py chart_program/level_selector.py` | Fast Python syntax check without running scanners. |
@@ -510,10 +510,12 @@ If these fail with `ModuleNotFoundError`, install dependencies first.
 ### Force cache-only mode
 
 ```bash
-STOCKHELPER_CACHE_ONLY=1 python run -ichimoku_search wig
+python run -onlycache -ichimoku_search wig
+python run -onlycache -fibo_search commodities
+python run -onlycache -allsearch all
 ```
 
-Use this when remote data providers are slow, rate-limited, or unavailable and you trust local CSV files.
+Use this when remote data providers are slow, rate-limited, or unavailable and you trust local CSV files. `-onlycache` sets `STOCKHELPER_CACHE_ONLY=1` internally and skips the normal freshness probes, including the commodities freshness check.
 
 ### Force verbose Stooq logs
 
