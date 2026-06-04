@@ -446,7 +446,6 @@ class LightweightChartLevelSelectorUI:
       <div class="source" id="source"></div>
       <h4>Selected values</h4>
       <div id="values-panel" class="values"></div>
-      <button id="clear-active-level" style="width:100%;margin-bottom:14px">Clear active value</button>
       <h4>Manual inputs</h4>
       <label id="position-type-label">Position type</label>
       <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
@@ -795,6 +794,21 @@ class LightweightChartLevelSelectorUI:
     requestAnimationFrame(() => {{ try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('restore viewport failed', e); }} requestAnimationFrame(drawCloud); }});
   }}
 
+  function deleteSelectedLevel(field) {{
+    return () => {{
+      delete levels[field];
+      delete levelPoints[field];
+      hiddenLegendKeys.delete(`level:${{field}}`);
+      if (field === 'entry') hiddenLegendKeys.delete('level:entry-point');
+      if (field === 'stop_loss') levels.__half_points__ = [];
+    }};
+  }}
+
+  function fibPercentLabel(obj) {{
+    const match = String(obj.label || '').match(/([0-9]+(?:\\.[0-9]+)?%)/);
+    return match ? match[1] : '';
+  }}
+
   function render() {{
     const viewport = captureViewport();
     removeDynamic();
@@ -809,10 +823,11 @@ class LightweightChartLevelSelectorUI:
     const levelColors = {{high:'#d946ef', low:'#14b8a6', entry:'#22c55e', stop_loss:'#ef4444', check_zr_value_fibo_or_elevation:'#f59e0b', line_cross_value:'#3b82f6'}};
     seq.forEach(field => {{
       const pt = levelPoints[field]; if (!pt) return;
-      if (field === 'line_cross_value') {{ addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`); return; }}
+      const deleteFn = deleteSelectedLevel(field);
+      if (field === 'line_cross_value') {{ addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`, deleteFn); return; }}
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
-      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`);
-      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, 'ENTRY point', true, false, false, 'level:entry-point');
+      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn);
+      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point');
     }});
     (levels.__half_points__ || []).forEach((pt, i) => addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`));
     const seenFibLegend = new Set();
@@ -838,11 +853,12 @@ class LightweightChartLevelSelectorUI:
         objectLegend = obj.label || 'LINE';
         showLegend = true;
       }}
+      const seriesTitle = isFib ? (fibPercentLabel(obj) || objectLegend) : objectLegend;
       if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
-        addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, objectLegend, showLegend && !isFib, false, false, objKey, deleteFn);
+        addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }} else {{
         const x1 = isFib ? extendFuture(obj.x1, 365) : String(obj.x1).slice(0,10);
-        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, objectLegend, showLegend && !isFib, false, isFib, objKey, deleteFn);
+        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }}
     }});
     updatePanel();
@@ -910,7 +926,6 @@ class LightweightChartLevelSelectorUI:
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
-  $('clear-active-level').onclick = () => {{ if (activeTool === 'level' && activeField) {{ delete levels[activeField]; delete levelPoints[activeField]; if (activeField === 'stop_loss') levels.__half_points__ = []; render(); }} }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};

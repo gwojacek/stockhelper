@@ -178,9 +178,18 @@ def _match_in_dir(directory: Path, target: str) -> list[Path]:
     key=_normalize_key(target.replace('.py','')); exact=[p for p in directory.glob('*.py') if _normalize_key(p.stem)==key]
     return exact or [p for p in directory.glob('*.py') if _normalize_key(p.stem).startswith(key)]
 def _resolve_existing_config_path(target: str) -> Path | None:
+    raw = (target or '').strip()
+    if not raw:
+        return None
+    direct = Path(raw).expanduser()
+    if direct.is_file():
+        return direct.resolve()
+    project_direct = (PROJECT_ROOT / raw).resolve()
+    if project_direct.is_file():
+        return project_direct
     groups=[PROJECT_ROOT/'configs'/'stocks',PROJECT_ROOT/'configs'/'forex',PROJECT_ROOT/'configs'/'commodities']; found=[]
     for d in groups:
-        m=_match_in_dir(d,target)
+        m=_match_in_dir(d,raw)
         if m: found.append(m[0])
     return found[0] if len(found)==1 else None
 def _instrument_type_from_path(path: Path | None) -> str | None:
