@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -20,6 +21,26 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     project_root = Path(args.project_root).resolve()
+
+
+    def _canonicalize_chart_command(command: str) -> str:
+        # Reports often store WSE tickers as CIG.WA while the normal
+        # `python run -c cig` flow stores sessions/configs under `cig.py`.
+        # Canonicalize report-launched WSE chart commands so both entrypoints
+        # share exactly the same chart session and TradingConfig path.
+        return re.sub(
+            r"(\bpython(?:3)?\s+run\s+-c\s+)([A-Za-z0-9_-]+)\.(WA|PL)\b",
+            lambda m: f"{m.group(1)}{m.group(2)}",
+            command,
+            flags=re.IGNORECASE,
+        )
+
+    def _run_chart_command(command: str) -> int:
+        command = _canonicalize_chart_command(command)
+        # Run synchronously in this server thread. The report page fetch stays
+        # pending until the chart is finished, which keeps the post-save
+        # `python run <config>` calculation attached to the same visible console.
+        return subprocess.call(command, shell=True, cwd=str(project_root))
 
     class _Handler(SimpleHTTPRequestHandler):
         def __init__(self, *h_args, **h_kwargs):
@@ -46,8 +67,8 @@ def main() -> int:
                 if not command:
                     self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
                 try:
-                    subprocess.Popen(command, shell=True, cwd=str(project_root))
-                    self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+                    rc = _run_chart_command(command)
+                    self.send_response(200 if rc == 0 else 500); self.end_headers(); self.wfile.write(("ok" if rc == 0 else f"exit {rc}").encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
@@ -61,8 +82,8 @@ def main() -> int:
                 if not command:
                     self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
                 try:
-                    subprocess.Popen(command, shell=True, cwd=str(project_root))
-                    self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+                    rc = _run_chart_command(command)
+                    self.send_response(200 if rc == 0 else 500); self.end_headers(); self.wfile.write(("ok" if rc == 0 else f"exit {rc}").encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return

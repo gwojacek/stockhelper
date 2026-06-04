@@ -452,6 +452,8 @@ def run_level_selector(raw_args=None):
             target_base_slug = base_slug
             inferred_position = pos
             target_slug = f"{base_slug}_{pos}"
+        if instrument_type == "stock":
+            target_slug = re.sub(r"\.(WA|PL)$", "", target_slug, flags=re.IGNORECASE)
         config_path = resolve_config_path(instrument_type, target_slug)
 
     existing = _load_existing_config_values(config_path)
