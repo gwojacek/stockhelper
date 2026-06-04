@@ -496,7 +496,8 @@ class LightweightChartLevelSelectorUI:
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
   const fibRatios = [0, 0.382, 0.5, 0.618, 1];
   const fibLineColor = '#64748b';
-  const fibColor = () => fibLineColor;
+  const fibGoldenColor = '#facc15';
+  const fibColor = (ratio) => Math.abs(Number(ratio) - 0.618) < 0.0001 ? fibGoldenColor : fibLineColor;
   const normalizeLineData = (data) => {{
     const seen = new Set();
     return data
@@ -632,7 +633,7 @@ class LightweightChartLevelSelectorUI:
     const isShort = secondMid < firstMid;
     const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(1440, Math.abs(row2.idx-row1.idx)*20));
+    const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
     const needed = fibRatios.length + 1;
     while (fibPreviewSeries.length < needed) {{
       fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
@@ -1020,7 +1021,7 @@ class LightweightChartLevelSelectorUI:
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
-      const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(1440, Math.abs(row2.idx-row1.idx)*20));
+      const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
       fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
       drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibLineColor, group_id:gid}});
       fibAnchor=null; clearPreviews(); render(); return;

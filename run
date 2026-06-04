@@ -645,7 +645,11 @@ def _serve_report_locally(path: Path) -> str | None:
     for port in candidate_ports:
         base = f"http://{host}:{port}/"
         if _healthy(base):
-            return f"http://{host}:{port}/{report_url_path}"
+            # Do not reuse an existing report server here: it may have been
+            # started by an older/detached run, so chart calculations launched
+            # from HTML would not be visible in the current PyCharm terminal.
+            # Prefer a fresh server on the next free port with inherited stdout.
+            continue
         try:
             subprocess.Popen(
                 [
