@@ -12,7 +12,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 from chart_program.chart_loader import load_or_update_daily_data
-from chart_program.chart_ui import ChartLevelSelectorUI
+from chart_program.lightweight_chart_ui import LightweightChartLevelSelectorUI
 from chart_program.config_writer import resolve_config_path, write_or_update_config
 from chart_program.instrument_detector import detect_instrument_type
 
@@ -715,7 +715,7 @@ def run_level_selector(raw_args=None):
 
     display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 
-    ui = ChartLevelSelectorUI(
+    ui = LightweightChartLevelSelectorUI(
         symbol=symbol,
         dataframe=df,
         instrument_type=instrument_type,
