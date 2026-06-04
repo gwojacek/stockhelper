@@ -455,9 +455,8 @@ class LightweightChartLevelSelectorUI:
       <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
       <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
-      <h4 style="margin-top:14px">Drawn objects</h4>
-      <select id="object-picker"><option value="">-- select --</option></select>
-      <button id="delete-object" style="margin-top:8px;width:100%">Delete selected object</button>
+      <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
+      <button id="delete-object" style="display:none">Delete selected object</button>
       <button id="finish-btn" style="margin-top:16px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Finish</button>
       <div id="result-box" style="margin-top:10px"></div>
     </aside>
@@ -656,6 +655,69 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function lineValueForDate(obj, time) {{
+    if (!obj) return null;
+    if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
+      const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
+      if (idx >= 0) return Number(obj.y[idx]);
+    }}
+    const x0 = String(obj.x0 || '').slice(0, 10), x1 = String(obj.x1 || '').slice(0, 10);
+    const y0 = Number(obj.y0), y1 = Number(obj.y1);
+    if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return null;
+    const t0 = new Date(x0 + 'T00:00:00Z').getTime();
+    const t1 = new Date(x1 + 'T00:00:00Z').getTime();
+    const t = new Date(String(time).slice(0, 10) + 'T00:00:00Z').getTime();
+    const span = t1 - t0;
+    if (!Number.isFinite(t) || span === 0) return y0;
+    return y0 + (y1 - y0) * ((t - t0) / span);
+  }}
+
+  function firstAnchorPoint(obj) {{
+    const ax = Array.isArray(obj.anchor_x) && obj.anchor_x.length ? obj.anchor_x[0] : (Array.isArray(obj.x) && obj.x.length ? obj.x[0] : obj.x0);
+    const ay = Array.isArray(obj.anchor_y) && obj.anchor_y.length ? obj.anchor_y[0] : (Array.isArray(obj.y) && obj.y.length ? obj.y[0] : obj.y0);
+    if (!ax || !Number.isFinite(Number(ay))) return null;
+    return {{date:String(ax).slice(0, 10), price:roundPrice(Number(ay))}};
+  }}
+
+  function applyWedgeDerivedLevels() {{
+    const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+    if (!wedges.length) return;
+    const upper = wedges.find(obj => String(obj.label || '').toLowerCase().includes('upper'));
+    const lower = wedges.find(obj => String(obj.label || '').toLowerCase().includes('lower'));
+    const upperAnchor = firstAnchorPoint(upper || wedges[0]);
+    const lowerAnchor = firstAnchorPoint(lower || wedges[1]);
+    if (upperAnchor && levels.high == null) {{
+      levels.high = upperAnchor.price;
+      levelPoints.high = {{price:upperAnchor.price, plot_price:upperAnchor.price, date:upperAnchor.date}};
+    }}
+    if (lowerAnchor && levels.low == null) {{
+      levels.low = lowerAnchor.price;
+      levelPoints.low = {{price:lowerAnchor.price, plot_price:lowerAnchor.price, date:lowerAnchor.date}};
+    }}
+    if (levels.line_cross_value != null || levelPoints.line_cross_value) return;
+    const candidates = [];
+    wedges.forEach(obj => {{
+      const label = String(obj.label || '').toLowerCase();
+      const isUpper = label.includes('upper');
+      const isLower = label.includes('lower');
+      let seenInside = false;
+      P.ohlc.forEach(row => {{
+        const line = lineValueForDate(obj, row.time);
+        if (!Number.isFinite(line)) return;
+        const inside = isUpper ? row.close <= line : (isLower ? row.close >= line : true);
+        if (inside) {{ seenInside = true; return; }}
+        if (!seenInside) return;
+        if ((isUpper && row.close > line) || (isLower && row.close < line)) candidates.push({{time:row.time, value:roundPrice(line)}});
+      }});
+    }});
+    candidates.sort((a, b) => compareTime(a.time, b.time));
+    if (candidates.length) {{
+      const cross = candidates[0];
+      levels.line_cross_value = cross.value;
+      levelPoints.line_cross_value = {{price:cross.value, plot_price:cross.value, date:cross.time}};
+    }}
+  }}
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const wrap = $('chart-wrap');
@@ -723,8 +785,8 @@ class LightweightChartLevelSelectorUI:
       const isFib = obj.type === 'fib';
       const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
       const fibKey = isFib ? `fib-group:${{obj.group_id || obj.id}}` : null;
-      const objKey = isWedge ? 'wedge:auto' : (isFib ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
-      const deleteFn = isFib ? (() => {{ drawnObjects = drawnObjects.filter(o => o.group_id !== obj.group_id); hiddenLegendKeys.delete(fibKey); }}) : (isWedge ? (() => {{ drawnObjects = drawnObjects.filter(o => o.group_id !== 'auto-wedge' && o.type !== 'wedge'); hiddenLegendKeys.delete('wedge:auto'); }}) : (() => {{ drawnObjects = drawnObjects.filter(o => o.id !== obj.id); hiddenLegendKeys.delete(objKey); }}));
+      const objKey = isWedge ? `wedge:${{obj.id || obj.label || Math.random()}}` : (isFib ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
+      const deleteFn = isFib ? (() => {{ drawnObjects = drawnObjects.filter(o => o.group_id !== obj.group_id); hiddenLegendKeys.delete(fibKey); }}) : (isWedge ? (() => {{ drawnObjects = drawnObjects.filter(o => o !== obj); hiddenLegendKeys.delete(objKey); }}) : (() => {{ drawnObjects = drawnObjects.filter(o => o.id !== obj.id); hiddenLegendKeys.delete(objKey); }}));
       let objectLegend = '';
       let showLegend = false;
       if (isFib) {{
@@ -733,9 +795,8 @@ class LightweightChartLevelSelectorUI:
         seenFibLegend.add(fibKey);
         if (showLegend) addLegend(objectLegend, color, fibKey, deleteFn);
       }} else if (isWedge) {{
-        objectLegend = 'Falling wedge';
-        showLegend = !wedgeLegendAdded;
-        wedgeLegendAdded = true;
+        objectLegend = obj.label || 'Falling wedge';
+        showLegend = true;
       }} else {{
         objectLegend = obj.label || 'LINE';
         showLegend = true;
@@ -792,10 +853,10 @@ class LightweightChartLevelSelectorUI:
     // 1) plain stock: sizing inputs disabled;
     // 2) commodity/forex/index: all sizing inputs enabled;
     // 3) stock CFD-as-commodity: commodity inputs enabled, pip value fixed/hidden.
-    setFieldState('position-type', disabled, true);
-    setFieldState('lot-cost', disabled, true);
-    setFieldState('spread-mult', disabled, true);
-    setFieldState('pip-value', disabled || stockCfdOn, !stockCfdOn);
+    setFieldState('position-type', disabled, !disabled);
+    setFieldState('lot-cost', disabled, !disabled);
+    setFieldState('spread-mult', disabled, !disabled);
+    setFieldState('pip-value', disabled || stockCfdOn, !disabled && !stockCfdOn);
     $('spread-mult-label').textContent = stockCfdOn ? 'Spread (price units; pips = spread / 0.01)' : 'Spread multiplier (spread = Multiplier * pip_value)';
     $('currency-fee-toggle').style.display = levels.__currency_fee_eligible__ ? 'block' : 'none';
     $('currency-fee-toggle').textContent = `FX conversion fee 1%: ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
@@ -859,7 +920,7 @@ class LightweightChartLevelSelectorUI:
 
   setInterval(() => fetch('/heartbeat', {{method:'POST', keepalive:true}}).catch(()=>{{}}), 1000);
   window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown'));
-  applyInstrumentControls(); render();
+  applyWedgeDerivedLevels(); applyInstrumentControls(); render();
 }})();
   </script>
 </body>

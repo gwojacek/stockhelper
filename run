@@ -644,8 +644,6 @@ def _serve_report_locally(path: Path) -> str | None:
                     str(port),
                 ],
                 cwd=str(PROJECT_ROOT),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
         except Exception:
