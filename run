@@ -622,6 +622,7 @@ def _open_html_report(path: Path) -> None:
     subprocess.call(["xdg-open", file_url])
 
 def _serve_report_locally(path: Path) -> str | None:
+    report_server_protocol = "stockhelper-report-server-v2"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
@@ -629,8 +630,15 @@ def _serve_report_locally(path: Path) -> str | None:
 
     def _healthy(base_url: str) -> bool:
         try:
-            with urlopen(base_url, timeout=0.6) as resp:
-                return 200 <= int(getattr(resp, "status", 200)) < 500
+            info_url = base_url.rstrip("/") + "/__stockhelper_report_server_info"
+            with urlopen(info_url, timeout=0.6) as resp:
+                if not (200 <= int(getattr(resp, "status", 200)) < 500):
+                    return False
+                payload = json.loads(resp.read().decode("utf-8") or "{}")
+            return (
+                payload.get("protocol") == report_server_protocol
+                and Path(str(payload.get("project_root", ""))).resolve() == PROJECT_ROOT.resolve()
+            )
         except Exception:
             return False
 

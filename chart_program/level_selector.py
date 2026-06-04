@@ -550,15 +550,17 @@ def run_level_selector(raw_args=None):
                     span = pd.Timedelta(days=7)
                 extension = max(span * 4, pd.Timedelta(days=720))
                 x_common_end = x_right + extension if args.fibo_right else x_right
-                levels = [1.0, 0.0, 0.236, 0.382, 0.618][: max(1, min(args.fibo_lines, 5))]
-                fib_colors = {1.0: '#1d4ed8', 0.0: '#7c3aed', 0.236: '#0f766e', 0.382: '#be123c', 0.618: '#15803d'}
+                levels = [0.0, 0.382, 0.5, 0.618, 1.0][: max(1, min(args.fibo_lines, 5))]
+                fib_colors = {0.0: '#1d4ed8', 0.382: '#be123c', 0.5: '#7c3aed', 0.618: '#15803d', 1.0: '#475569'}
                 objs = []
                 gid = "auto-fibo"
                 delta = high_price - low_price
                 for idx, r in enumerate(levels):
                     pct_label = f"FIB {r*100:.1f}%".replace(".0%", "%")
                     y_val = round(low_price + delta * r, 5) if is_short else round(high_price - delta * r, 5)
-                    x_level_start = x_start if idx == 0 else x_end
+                    interp_idx = int(round(s_idx + (e_idx - s_idx) * (1.0 - r)))
+                    interp_idx = max(0, min(len(df) - 1, interp_idx))
+                    x_level_start = pd.to_datetime(df.iloc[interp_idx]["Date"], errors="coerce")
                     x0_txt = str(pd.to_datetime(x_level_start, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_level_start, errors="coerce")) else str(s_row["Date"])
                     x1_txt = str(pd.to_datetime(x_common_end, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_common_end, errors="coerce")) else str(df.iloc[-1]["Date"])
                     objs.append({
@@ -574,8 +576,19 @@ def run_level_selector(raw_args=None):
                         "group_id": gid,
                         "direction": "short" if is_short else "long",
                     })
+                objs.append({
+                    "id": "auto-fibo-boundary",
+                    "type": "fib-boundary",
+                    "label": "FIB anchor",
+                    "x0": str(pd.to_datetime(x_start, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_start, errors="coerce")) else str(s_row["Date"]),
+                    "x1": str(pd.to_datetime(x_end_raw, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_end_raw, errors="coerce")) else str(e_row["Date"]),
+                    "y0": round(high_price if is_short else low_price, 5),
+                    "y1": round(low_price if is_short else high_price, 5),
+                    "color": "rgba(148,163,184,.65)",
+                    "group_id": gid,
+                })
                 existing["drawn_objects"] = objs
-                print(f"[chart] auto-fibo preloaded: {len(objs)} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}, direction={'short' if is_short else 'long'}")
+                print(f"[chart] auto-fibo preloaded: {len(objs) - 1} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}, direction={'short' if is_short else 'long'}")
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
 

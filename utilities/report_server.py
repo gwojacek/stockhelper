@@ -13,6 +13,8 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v2"
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -73,6 +75,9 @@ def main() -> int:
 
         def do_GET(self):
             parsed = urlparse(self.path)
+            if parsed.path == "/__stockhelper_report_server_info":
+                payload = {"protocol": REPORT_SERVER_PROTOCOL, "project_root": str(project_root), "root": str(root)}
+                self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
