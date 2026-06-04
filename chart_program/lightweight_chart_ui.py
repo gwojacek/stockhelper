@@ -655,6 +655,33 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function drawValuePointers(ctx) {{
+    const pointerFields = ['line_cross_value'];
+    pointerFields.forEach(field => {{
+      const pt = levelPoints[field];
+      if (!pt || hiddenLegendKeys.has(`level:${{field}}`)) return;
+      const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pt.date) : null;
+      const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pt.price ?? pt.plot_price) : null;
+      if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      ctx.save();
+      ctx.fillStyle = '#3b82f6';
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y - 15);
+      ctx.lineTo(x - 5, y - 6);
+      ctx.lineTo(x + 5, y - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }});
+  }}
+
   function lineValueForDate(obj, time) {{
     if (!obj) return null;
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
@@ -707,7 +734,7 @@ class LightweightChartLevelSelectorUI:
         const inside = isUpper ? row.close <= line : (isLower ? row.close >= line : true);
         if (inside) {{ seenInside = true; return; }}
         if (!seenInside) return;
-        if ((isUpper && row.close > line) || (isLower && row.close < line)) candidates.push({{time:row.time, value:roundPrice(line)}});
+        if ((isUpper && row.close > line) || (isLower && row.close < line)) candidates.push({{time:row.time, value:roundPrice(line), source:obj, isUpper, isLower}});
       }});
     }});
     candidates.sort((a, b) => compareTime(a.time, b.time));
@@ -715,6 +742,14 @@ class LightweightChartLevelSelectorUI:
       const cross = candidates[0];
       levels.line_cross_value = cross.value;
       levelPoints.line_cross_value = {{price:cross.value, plot_price:cross.value, date:cross.time}};
+      const counterpart = cross.isUpper ? lower : (cross.isLower ? upper : null);
+      const otherLine = lineValueForDate(counterpart, cross.time);
+      if (Number.isFinite(otherLine) && levels.stop_loss == null) {{
+        const stop = roundPrice((cross.value + otherLine) / 2.0);
+        levels.stop_loss = stop;
+        levelPoints.stop_loss = {{price:stop, plot_price:stop, date:cross.time}};
+        levels.__half_points__ = [{{date:cross.time, price:cross.value}}, {{date:cross.time, price:roundPrice(otherLine)}}];
+      }}
     }}
   }}
 
@@ -731,7 +766,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); return; }}
+    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -747,6 +782,7 @@ class LightweightChartLevelSelectorUI:
       ctx.fill();
     }}
     drawWedgeTouchPoints(ctx);
+    drawValuePointers(ctx);
   }}
 
   function captureViewport() {{
@@ -773,6 +809,7 @@ class LightweightChartLevelSelectorUI:
     const levelColors = {{high:'#d946ef', low:'#14b8a6', entry:'#22c55e', stop_loss:'#ef4444', check_zr_value_fibo_or_elevation:'#f59e0b', line_cross_value:'#3b82f6'}};
     seq.forEach(field => {{
       const pt = levelPoints[field]; if (!pt) return;
+      if (field === 'line_cross_value') {{ addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`); return; }}
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
       addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`);
       if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, 'ENTRY point', true, false, false, 'level:entry-point');
