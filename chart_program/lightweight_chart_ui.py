@@ -416,6 +416,7 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
+    .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
   </style>
 </head>
@@ -493,6 +494,7 @@ class LightweightChartLevelSelectorUI:
   const addDays = (date, days) => {{ const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }};
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
+  const fibColor = (ratio) => ({{1:'#1d4ed8', 0:'#7c3aed', 0.236:'#0f766e', 0.382:'#be123c', 0.618:'#15803d'}})[ratio] || '#2563eb';
   const normalizeLineData = (data) => {{
     const seen = new Set();
     return data
@@ -720,7 +722,6 @@ class LightweightChartLevelSelectorUI:
       levels.low = lowerAnchor.price;
       levelPoints.low = {{price:lowerAnchor.price, plot_price:lowerAnchor.price, date:lowerAnchor.date}};
     }}
-    if (levels.line_cross_value != null || levelPoints.line_cross_value) return;
     const candidates = [];
     wedges.forEach(obj => {{
       const label = String(obj.label || '').toLowerCase();
@@ -739,15 +740,21 @@ class LightweightChartLevelSelectorUI:
     candidates.sort((a, b) => compareTime(a.time, b.time));
     if (candidates.length) {{
       const cross = candidates[0];
-      levels.line_cross_value = cross.value;
-      levelPoints.line_cross_value = {{price:cross.value, plot_price:cross.value, date:cross.time}};
+      const lineCrossIsAuto = levels.line_cross_value == null || levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge;
+      if (lineCrossIsAuto) {{
+        levels.line_cross_value = cross.value;
+        levels.__wedge_auto_line_cross__ = true;
+        levelPoints.line_cross_value = {{price:cross.value, plot_price:cross.value, date:cross.time, auto_wedge:true}};
+      }}
       const counterpart = cross.isUpper ? lower : (cross.isLower ? upper : null);
       const otherLine = lineValueForDate(counterpart, cross.time);
-      if (Number.isFinite(otherLine) && levels.stop_loss == null) {{
+      const stopLossIsAuto = levels.stop_loss == null || levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge;
+      if (Number.isFinite(otherLine) && stopLossIsAuto) {{
         const stop = roundPrice((cross.value + otherLine) / 2.0);
         levels.stop_loss = stop;
-        levelPoints.stop_loss = {{price:stop, plot_price:stop, date:cross.time}};
-        levels.__half_points__ = [{{date:cross.time, price:cross.value}}, {{date:cross.time, price:roundPrice(otherLine)}}];
+        levels.__wedge_auto_stop_loss__ = true;
+        levelPoints.stop_loss = {{price:stop, plot_price:stop, date:cross.time, auto_wedge:true}};
+        levels.__half_points__ = [];
       }}
     }}
   }}
@@ -857,7 +864,7 @@ class LightweightChartLevelSelectorUI:
       if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
         addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }} else {{
-        const x1 = isFib ? extendFuture(obj.x1, 365) : String(obj.x1).slice(0,10);
+        const x1 = isFib ? extendFuture(obj.x1, 720) : String(obj.x1).slice(0,10);
         addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }}
     }});
@@ -941,8 +948,8 @@ class LightweightChartLevelSelectorUI:
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const delta = high - low; const gid = crypto.randomUUID();
-      const xStart = row1.time, xSecond = row2.time; const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(365, Math.abs(row2.idx-row1.idx)*10));
-      [1,0,.236,.382,.618].forEach((r, idx) => {{ const y = roundPrice(isShort ? low + delta*r : high - delta*r); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, x0:idx===0?xStart:xSecond, x1:xEnd, y0:y, y1:y, price:y, color:r===.618?'#22c55e':lineColor, group_id:gid, direction:isShort?'short':'long'}}); }});
+      const xStart = row1.time, xSecond = row2.time; const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(720, Math.abs(row2.idx-row1.idx)*14));
+      [1,0,.236,.382,.618].forEach((r, idx) => {{ const y = roundPrice(isShort ? low + delta*r : high - delta*r); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, x0:idx===0?xStart:xSecond, x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
       fibAnchor=null; render(); return;
     }}
     if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; render(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; render(); return; }}

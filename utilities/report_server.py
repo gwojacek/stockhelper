@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shlex
 import subprocess
+import sys
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -37,10 +40,19 @@ def main() -> int:
 
     def _run_chart_command(command: str) -> int:
         command = _canonicalize_chart_command(command)
+        argv = shlex.split(command)
+        if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
+            argv = [sys.executable, str(project_root / "run"), *argv[2:]]
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
+        print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}", flush=True)
         # Run synchronously in this server thread. The report page fetch stays
         # pending until the chart is finished, which keeps the post-save
         # `python run <config>` calculation attached to the same visible console.
-        return subprocess.call(command, shell=True, cwd=str(project_root))
+        rc = subprocess.call(argv, cwd=str(project_root), env=env)
+        print(f"[report] chart command exit: {rc}", flush=True)
+        return rc
 
     class _Handler(SimpleHTTPRequestHandler):
         def __init__(self, *h_args, **h_kwargs):

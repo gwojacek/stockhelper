@@ -548,9 +548,10 @@ def run_level_selector(raw_args=None):
                 span = abs(x_end - x_start)
                 if span == pd.Timedelta(0):
                     span = pd.Timedelta(days=7)
-                extension = span * 3
+                extension = max(span * 4, pd.Timedelta(days=720))
                 x_common_end = x_right + extension if args.fibo_right else x_right
                 levels = [1.0, 0.0, 0.236, 0.382, 0.618][: max(1, min(args.fibo_lines, 5))]
+                fib_colors = {1.0: '#1d4ed8', 0.0: '#7c3aed', 0.236: '#0f766e', 0.382: '#be123c', 0.618: '#15803d'}
                 objs = []
                 gid = "auto-fibo"
                 delta = high_price - low_price
@@ -569,7 +570,7 @@ def run_level_selector(raw_args=None):
                         "y0": y_val,
                         "y1": y_val,
                         "price": y_val,
-                        "color": "#22c55e" if r == 0.618 else "#f59e0b",
+                        "color": fib_colors.get(r, '#2563eb'),
                         "group_id": gid,
                         "direction": "short" if is_short else "long",
                     })
