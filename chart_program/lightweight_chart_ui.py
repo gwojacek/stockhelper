@@ -215,15 +215,180 @@ class LightweightChartLevelSelectorUI:
             "ichimoku": self._ichimoku_payload(),
         }
 
+
+    def _fallback_lightweight_charts_script(self) -> str:
+        return r"""
+  <script>
+  if (!window.LightweightCharts) {
+    window.LightweightCharts = (() => {
+      const LineStyle = {Solid: 0, Dotted: 1, Dashed: 2};
+      const CrosshairMode = {Normal: 0};
+      const CandlestickSeries = 'CandlestickSeries';
+      const LineSeries = 'LineSeries';
+      function createChart(container, options) {
+        const canvas = document.createElement('canvas');
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.display = 'block';
+        container.innerHTML = '';
+        container.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        const state = {series: [], candleSeries: null, clickHandlers: [], moveHandlers: [], yMin: 0, yMax: 1, width: 1, height: 1, dpr: 1};
+        const colors = {
+          bg: options?.layout?.background?.color || '#111827',
+          text: options?.layout?.textColor || '#e5e7eb',
+          grid: options?.grid?.vertLines?.color || '#1f2937',
+        };
+        function resize() {
+          const rect = container.getBoundingClientRect();
+          state.dpr = window.devicePixelRatio || 1;
+          state.width = Math.max(1, Math.floor(rect.width));
+          state.height = Math.max(1, Math.floor(rect.height));
+          canvas.width = Math.floor(state.width * state.dpr);
+          canvas.height = Math.floor(state.height * state.dpr);
+          ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+          draw();
+        }
+        function allPrices() {
+          const out = [];
+          state.series.forEach(s => (s.data || []).forEach(p => {
+            if (s.kind === 'candlestick') out.push(p.open, p.high, p.low, p.close);
+            else out.push(p.value);
+          }));
+          return out.filter(Number.isFinite);
+        }
+        function candleData() { return state.candleSeries?.data || []; }
+        function xForIndex(idx) {
+          const data = candleData();
+          const left = 54, right = 70;
+          const plotW = Math.max(1, state.width - left - right);
+          if (data.length <= 1) return left + plotW / 2;
+          return left + (idx / (data.length - 1)) * plotW;
+        }
+        function indexForTime(time) {
+          const data = candleData();
+          const key = typeof time === 'string' ? time : String(time || '').slice(0, 10);
+          const found = data.findIndex(p => p.time === key);
+          return found >= 0 ? found : 0;
+        }
+        function priceToY(price) {
+          const top = 18, bottom = 28;
+          const plotH = Math.max(1, state.height - top - bottom);
+          const span = state.yMax - state.yMin || 1;
+          return top + ((state.yMax - price) / span) * plotH;
+        }
+        function yToPrice(y) {
+          const top = 18, bottom = 28;
+          const plotH = Math.max(1, state.height - top - bottom);
+          const ratio = Math.max(0, Math.min(1, (y - top) / plotH));
+          return state.yMax - ratio * (state.yMax - state.yMin || 1);
+        }
+        function lineDash(style) {
+          if (style === LineStyle.Dotted) return [2, 4];
+          if (style === LineStyle.Dashed) return [6, 4];
+          return [];
+        }
+        function drawAxes() {
+          ctx.strokeStyle = colors.grid;
+          ctx.lineWidth = 1;
+          ctx.font = '11px ui-monospace, monospace';
+          ctx.fillStyle = colors.text;
+          for (let i = 0; i <= 4; i++) {
+            const y = 18 + i * (Math.max(1, state.height - 46) / 4);
+            ctx.beginPath(); ctx.moveTo(54, y); ctx.lineTo(state.width - 62, y); ctx.stroke();
+            const price = state.yMax - i * ((state.yMax - state.yMin) / 4);
+            ctx.fillText(price.toFixed(Math.abs(price) < 1 ? 4 : 2), state.width - 58, y + 4);
+          }
+        }
+        function draw() {
+          if (!ctx) return;
+          const prices = allPrices();
+          const min = prices.length ? Math.min(...prices) : 0;
+          const max = prices.length ? Math.max(...prices) : 1;
+          const pad = Math.max((max - min) * 0.08, Math.abs(max || 1) * 0.01, 0.01);
+          state.yMin = min - pad;
+          state.yMax = max + pad;
+          ctx.clearRect(0, 0, state.width, state.height);
+          ctx.fillStyle = colors.bg;
+          ctx.fillRect(0, 0, state.width, state.height);
+          drawAxes();
+          const candles = candleData();
+          const candleW = Math.max(2, Math.min(11, (state.width - 124) / Math.max(1, candles.length) * 0.65));
+          candles.forEach((p, idx) => {
+            const x = xForIndex(idx), yO = priceToY(p.open), yH = priceToY(p.high), yL = priceToY(p.low), yC = priceToY(p.close);
+            const up = p.close >= p.open;
+            ctx.strokeStyle = up ? '#22c55e' : '#ef4444';
+            ctx.fillStyle = up ? '#22c55e' : '#ef4444';
+            ctx.beginPath(); ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
+            const top = Math.min(yO, yC), h = Math.max(1, Math.abs(yC - yO));
+            ctx.fillRect(x - candleW / 2, top, candleW, h);
+          });
+          state.series.filter(s => s.kind === 'line').forEach(s => {
+            const pts = (s.data || []).filter(p => Number.isFinite(Number(p.value)));
+            if (!pts.length) return;
+            ctx.save();
+            ctx.strokeStyle = s.options?.color || '#facc15';
+            ctx.lineWidth = s.options?.lineWidth || 1.4;
+            ctx.setLineDash(lineDash(s.options?.lineStyle));
+            ctx.beginPath();
+            pts.forEach((p, i) => {
+              const x = xForIndex(indexForTime(p.time));
+              const y = priceToY(Number(p.value));
+              if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.restore();
+          });
+        }
+        function makeSeries(kind, options) {
+          const s = {
+            kind, options: options || {}, data: [],
+            setData(data) { this.data = Array.isArray(data) ? data : []; if (kind === 'candlestick') state.candleSeries = this; draw(); },
+            coordinateToPrice(y) { return yToPrice(y); },
+          };
+          state.series.push(s);
+          return s;
+        }
+        function mousePayload(ev) {
+          const rect = canvas.getBoundingClientRect();
+          const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+          const data = candleData();
+          const left = 54, plotW = Math.max(1, state.width - 124);
+          const idx = Math.max(0, Math.min(data.length - 1, Math.round(((x - left) / plotW) * Math.max(0, data.length - 1))));
+          return {point: {x, y}, time: data[idx]?.time};
+        }
+        canvas.addEventListener('click', ev => state.clickHandlers.forEach(h => h(mousePayload(ev))));
+        canvas.addEventListener('mousemove', ev => state.moveHandlers.forEach(h => h(mousePayload(ev))));
+        window.addEventListener('resize', resize);
+        setTimeout(resize, 0);
+        return {
+          addSeries(type, opts) { return makeSeries(type === CandlestickSeries ? 'candlestick' : 'line', opts); },
+          addCandlestickSeries(opts) { return makeSeries('candlestick', opts); },
+          addLineSeries(opts) { return makeSeries('line', opts); },
+          removeSeries(series) { state.series = state.series.filter(s => s !== series); if (state.candleSeries === series) state.candleSeries = null; draw(); },
+          timeScale() { return {fitContent(){ draw(); }, setVisibleLogicalRange(){}, getVisibleLogicalRange(){ return null; }}; },
+          subscribeClick(handler) { state.clickHandlers.push(handler); },
+          subscribeCrosshairMove(handler) { state.moveHandlers.push(handler); },
+          takeScreenshot() { draw(); return canvas; },
+        };
+      }
+      return {createChart, CandlestickSeries, LineSeries, CrosshairMode, LineStyle, __stockhelperFallback: true};
+    })();
+  }
+  </script>
+"""
+
     def _html(self) -> str:
         payload = json.dumps(self._payload(), ensure_ascii=False)
+        fallback_script = self._fallback_lightweight_charts_script()
         return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StockHelper Lightweight Chart - {self.symbol}</title>
-  <script src="https://unpkg.com/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  {fallback_script}
   <style>
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
@@ -381,7 +546,7 @@ class LightweightChartLevelSelectorUI:
     $('tool-half').classList.toggle('active', activeTool === 'half');
     $('ichimoku-toggle').classList.toggle('active', !!levels.__show_ichimoku__);
     $('ichimoku-toggle').textContent = `Ichimoku: ${{levels.__show_ichimoku__ ? 'ON' : 'OFF'}}`;
-    $('values-panel').textContent = seq.map(k => `${{labels[k]}}: ${{levels[k] == null ? '--' : fmt(levels[k])}}`).join('\n');
+    $('values-panel').textContent = seq.map(k => `${{labels[k]}}: ${{levels[k] == null ? '--' : fmt(levels[k])}}`).join('\\n');
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const seenFib = new Set();
     drawnObjects.forEach((obj, idx) => {{
