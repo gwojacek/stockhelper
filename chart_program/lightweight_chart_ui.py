@@ -495,7 +495,8 @@ class LightweightChartLevelSelectorUI:
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
   const fibRatios = [0, 0.382, 0.5, 0.618, 1];
-  const fibColor = (ratio) => ({{0:'#1d4ed8', 0.382:'#be123c', 0.5:'#7c3aed', 0.618:'#15803d', 1:'#475569'}})[ratio] || '#2563eb';
+  const fibLineColor = '#64748b';
+  const fibColor = () => fibLineColor;
   const normalizeLineData = (data) => {{
     const seen = new Set();
     return data
@@ -559,11 +560,13 @@ class LightweightChartLevelSelectorUI:
   let previewSeries = null;
   let fibPreviewSeries = [];
   let previewFrame = null;
+  let fibPreviewFrame = null;
   let pendingPreview = null;
+  let pendingFibPreviewTime = null;
   const hiddenLegendKeys = new Set();
   let suppressViewportCapture = false;
   const safeRemoveSeries = (series) => {{ try {{ if (series) chart.removeSeries(series); }} catch(e) {{ console.warn('removeSeries failed', e); }} }};
-  const clearPreviews = () => {{ safeRemoveSeries(previewSeries); previewSeries = null; while(fibPreviewSeries.length) safeRemoveSeries(fibPreviewSeries.pop()); if (previewFrame) cancelAnimationFrame(previewFrame); previewFrame = null; pendingPreview = null; }};
+  const clearPreviews = () => {{ safeRemoveSeries(previewSeries); previewSeries = null; while(fibPreviewSeries.length) safeRemoveSeries(fibPreviewSeries.pop()); if (previewFrame) cancelAnimationFrame(previewFrame); if (fibPreviewFrame) cancelAnimationFrame(fibPreviewFrame); previewFrame = null; fibPreviewFrame = null; pendingPreview = null; pendingFibPreviewTime = null; }};
   const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); clearPreviews(); }};
   const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false, rightLabel=false, legendKey=null, onDelete=null) => {{
     if (legend && title) addLegend(title, color, legendKey, onDelete);
@@ -621,7 +624,7 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
-  function updateFibPreview(time) {{
+  function drawFibPreview(time) {{
     if (!fibAnchor) return;
     const row1 = nearest(fibAnchor.x), row2 = nearest(time);
     if (!row1 || !row2 || row1.time === row2.time) return;
@@ -629,7 +632,7 @@ class LightweightChartLevelSelectorUI:
     const isShort = secondMid < firstMid;
     const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(720, Math.abs(row2.idx-row1.idx)*14));
+    const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(1440, Math.abs(row2.idx-row1.idx)*20));
     const needed = fibRatios.length + 1;
     while (fibPreviewSeries.length < needed) {{
       fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
@@ -643,7 +646,19 @@ class LightweightChartLevelSelectorUI:
     }});
     const boundary = fibPreviewSeries[fibRatios.length];
     const yA = fibPrice(low, high, 1, isShort), yB = fibPrice(low, high, 0, isShort);
-    try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:'rgba(148,163,184,.7)', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
+    try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibLineColor, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
+  }}
+
+  function updateFibPreview(time) {{
+    if (!fibAnchor || !time) return;
+    pendingFibPreviewTime = time;
+    if (fibPreviewFrame) return;
+    fibPreviewFrame = requestAnimationFrame(() => {{
+      fibPreviewFrame = null;
+      const nextTime = pendingFibPreviewTime;
+      pendingFibPreviewTime = null;
+      drawFibPreview(nextTime);
+    }});
   }}
 
   function cloudPairs() {{
@@ -745,6 +760,14 @@ class LightweightChartLevelSelectorUI:
     return {{date:String(ax).slice(0, 10), price:roundPrice(Number(ay))}};
   }}
 
+  function lastAnchorDate(obj) {{
+    const dates = (Array.isArray(obj?.anchor_x) && obj.anchor_x.length ? obj.anchor_x : [obj?.x0, obj?.x1])
+      .map(x => String(x || '').slice(0, 10))
+      .filter(Boolean)
+      .sort(compareTime);
+    return dates.length ? dates[dates.length - 1] : null;
+  }}
+
   function applyWedgeDerivedLevels() {{
     const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
     if (!wedges.length) return;
@@ -765,17 +788,24 @@ class LightweightChartLevelSelectorUI:
       const label = String(obj.label || '').toLowerCase();
       const isUpper = label.includes('upper');
       const isLower = label.includes('lower');
-      let seenInside = false;
+      const activeAfter = lastAnchorDate(obj);
+      let prevInside = null;
       P.ohlc.forEach(row => {{
+        if (activeAfter && compareTime(row.time, activeAfter) <= 0) return;
         const line = lineValueForDate(obj, row.time);
         if (!Number.isFinite(line)) return;
         const inside = isUpper ? row.close <= line : (isLower ? row.close >= line : true);
-        if (inside) {{ seenInside = true; return; }}
-        if (!seenInside) return;
-        if ((isUpper && row.close > line) || (isLower && row.close < line)) candidates.push({{time:row.time, value:roundPrice(line), source:obj, isUpper, isLower}});
+        const outsideBreak = (isUpper && row.close > line) || (isLower && row.close < line);
+        if (prevInside === true && outsideBreak) candidates.push({{time:row.time, value:roundPrice(line), source:obj, isUpper, isLower}});
+        prevInside = inside;
       }});
     }});
     candidates.sort((a, b) => compareTime(a.time, b.time));
+    if (!candidates.length) {{
+      if (levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge) {{ delete levels.line_cross_value; delete levelPoints.line_cross_value; delete levels.__wedge_auto_line_cross__; }}
+      if (levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge) {{ delete levels.stop_loss; delete levelPoints.stop_loss; delete levels.__wedge_auto_stop_loss__; }}
+      return;
+    }}
     if (candidates.length) {{
       const cross = candidates[0];
       const lineCrossIsAuto = levels.line_cross_value == null || levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge;
@@ -990,9 +1020,9 @@ class LightweightChartLevelSelectorUI:
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
-      const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(720, Math.abs(row2.idx-row1.idx)*14));
+      const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(1440, Math.abs(row2.idx-row1.idx)*20));
       fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
-      drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:'rgba(148,163,184,.65)', group_id:gid}});
+      drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibLineColor, group_id:gid}});
       fibAnchor=null; clearPreviews(); render(); return;
     }}
     if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; render(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; render(); return; }}

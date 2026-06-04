@@ -548,10 +548,10 @@ def run_level_selector(raw_args=None):
                 span = abs(x_end - x_start)
                 if span == pd.Timedelta(0):
                     span = pd.Timedelta(days=7)
-                extension = max(span * 4, pd.Timedelta(days=720))
+                extension = max(span * 5, pd.Timedelta(days=1440))
                 x_common_end = x_right + extension if args.fibo_right else x_right
                 levels = [0.0, 0.382, 0.5, 0.618, 1.0][: max(1, min(args.fibo_lines, 5))]
-                fib_colors = {0.0: '#1d4ed8', 0.382: '#be123c', 0.5: '#7c3aed', 0.618: '#15803d', 1.0: '#475569'}
+                fib_color = '#64748b'
                 objs = []
                 gid = "auto-fibo"
                 delta = high_price - low_price
@@ -572,7 +572,7 @@ def run_level_selector(raw_args=None):
                         "y0": y_val,
                         "y1": y_val,
                         "price": y_val,
-                        "color": fib_colors.get(r, '#2563eb'),
+                        "color": fib_color,
                         "group_id": gid,
                         "direction": "short" if is_short else "long",
                     })
@@ -584,7 +584,7 @@ def run_level_selector(raw_args=None):
                     "x1": str(pd.to_datetime(x_end_raw, errors="coerce").date()) if not pd.isna(pd.to_datetime(x_end_raw, errors="coerce")) else str(e_row["Date"]),
                     "y0": round(high_price if is_short else low_price, 5),
                     "y1": round(low_price if is_short else high_price, 5),
-                    "color": "rgba(148,163,184,.65)",
+                    "color": fib_color,
                     "group_id": gid,
                 })
                 existing["drawn_objects"] = objs
