@@ -407,12 +407,15 @@ class LightweightChartLevelSelectorUI:
     .side {{ border-left: 1px solid #1f2937; padding: 16px; background: #0b1220; overflow-y: auto; }}
     label {{ display: block; margin-top: 8px; }}
     input, select {{ width: 100%; color: black; background: white; font-size: 16px; padding: 6px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }}
+    input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
     .values {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 8px; white-space: pre-wrap; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
-    #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; }}
+    #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
+    #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
+    #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
   </style>
 </head>
@@ -505,14 +508,29 @@ class LightweightChartLevelSelectorUI:
         return {{...p, time}};
       }});
   }};
-  const addLegend = (label, color) => {{
+  const addLegend = (label, color, key=null, onDelete=null) => {{
     if (!label) return;
     const legend = $('chart-legend');
-    const key = `${{label}}|${{color}}`;
-    if ([...legend.children].some(el => el.dataset.key === key)) return;
+    const legendKey = key || `${{label}}|${{color}}`;
+    if ([...legend.children].some(el => el.dataset.key === legendKey)) return;
     const item = document.createElement('span');
-    item.dataset.key = key;
-    item.innerHTML = `<i style="background:${{color}}"></i>${{label}}`;
+    item.dataset.key = legendKey;
+    item.classList.toggle('hidden', hiddenLegendKeys.has(legendKey));
+    item.innerHTML = `<i style="background:${{color}}"></i><b>${{label}}</b>`;
+    item.onclick = (ev) => {{
+      if (ev.target && ev.target.dataset && ev.target.dataset.delete === '1') return;
+      hiddenLegendKeys.has(legendKey) ? hiddenLegendKeys.delete(legendKey) : hiddenLegendKeys.add(legendKey);
+      render();
+    }};
+    if (onDelete) {{
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.dataset.delete = '1';
+      del.textContent = '×';
+      del.title = 'Delete this drawing';
+      del.onclick = (ev) => {{ ev.stopPropagation(); onDelete(); render(); }};
+      item.appendChild(del);
+    }}
     legend.appendChild(item);
   }};
   const resetLegend = () => {{ $('chart-legend').innerHTML = ''; }};
@@ -532,6 +550,7 @@ class LightweightChartLevelSelectorUI:
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
   const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
   candleSeries.setData(P.ohlc);
+  if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
   window.addEventListener('resize', () => requestAnimationFrame(drawCloud));
@@ -539,9 +558,13 @@ class LightweightChartLevelSelectorUI:
   let previewSeries = null;
   let previewFrame = null;
   let pendingPreview = null;
+  const hiddenLegendKeys = new Set();
+  let suppressViewportCapture = false;
   const safeRemoveSeries = (series) => {{ try {{ if (series) chart.removeSeries(series); }} catch(e) {{ console.warn('removeSeries failed', e); }} }};
   const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); safeRemoveSeries(previewSeries); previewSeries = null; if (previewFrame) cancelAnimationFrame(previewFrame); previewFrame = null; pendingPreview = null; }};
-  const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false, rightLabel=false) => {{
+  const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false, rightLabel=false, legendKey=null, onDelete=null) => {{
+    if (legend && title) addLegend(title, color, legendKey, onDelete);
+    if (legendKey && hiddenLegendKeys.has(legendKey)) return null;
     const normalized = normalizeLineData(data || []);
     if (normalized.length === 0) return null;
     const options = {{
@@ -564,7 +587,6 @@ class LightweightChartLevelSelectorUI:
       return null;
     }}
     dynamicSeries.push(s);
-    if (legend) addLegend(title, color);
     return s;
   }};
 
@@ -600,12 +622,16 @@ class LightweightChartLevelSelectorUI:
     const isUpper = String(obj.label || '').toLowerCase().includes('upper');
     const isLower = String(obj.label || '').toLowerCase().includes('lower');
     const out = [];
-    P.ohlc.forEach(row => {{
+    let lastTouchIdx = -999;
+    P.ohlc.forEach((row, idx) => {{
       if (!byTime.has(row.time)) return;
       const y = byTime.get(row.time);
       const touchPrice = isUpper ? row.high : (isLower ? row.low : row.close);
       const tolerance = Math.max(Math.abs(row.high - row.low) * 0.28, Math.abs(y || 1) * 0.004);
-      if (Math.abs(touchPrice - y) <= tolerance) out.push({{time: row.time, value: y, upper: isUpper, lower: isLower}});
+      if (Math.abs(touchPrice - y) <= tolerance) {{
+        if (idx > lastTouchIdx + 1) out.push({{time: row.time, value: y, upper: isUpper, lower:isLower}});
+        lastTouchIdx = idx;
+      }}
     }});
     (obj.anchor_x || []).forEach((x, i) => out.push({{time:String(x).slice(0, 10), value:Number((obj.anchor_y || [])[i]), anchor:true, upper:isUpper, lower:isLower}}));
     return out.filter(p => p.time && Number.isFinite(p.value));
@@ -661,37 +687,69 @@ class LightweightChartLevelSelectorUI:
     drawWedgeTouchPoints(ctx);
   }}
 
+  function captureViewport() {{
+    if (suppressViewportCapture) return null;
+    try {{ return chart.timeScale().getVisibleLogicalRange ? chart.timeScale().getVisibleLogicalRange() : null; }} catch(e) {{ return null; }}
+  }}
+
+  function restoreViewport(viewport) {{
+    if (!viewport || !chart.timeScale().setVisibleLogicalRange) return;
+    requestAnimationFrame(() => {{ try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('restore viewport failed', e); }} requestAnimationFrame(drawCloud); }});
+  }}
+
   function render() {{
+    const viewport = captureViewport();
     removeDynamic();
     resetLegend();
     if (levels.__show_ichimoku__) {{
-      addLine(P.ichimoku.tenkan, '#ef4444', 1, LightweightCharts.LineStyle.Solid, 'Tenkan-sen');
-      addLine(P.ichimoku.kijun, '#3b82f6', 2, LightweightCharts.LineStyle.Solid, 'Kijun-sen');
-      addLine(P.ichimoku.spanA, '#22c55e', 1, LightweightCharts.LineStyle.Solid, 'Senkou Span A');
-      addLine(P.ichimoku.spanB, '#ef4444', 1, LightweightCharts.LineStyle.Solid, 'Senkou Span B');
-      addLine(P.ichimoku.chikou, 'rgba(250,204,21,.8)', 1, LightweightCharts.LineStyle.Dotted, 'Chikou Span');
+      addLine(P.ichimoku.tenkan, '#ef4444', 1, LightweightCharts.LineStyle.Solid, 'Tenkan-sen', true, false, false, 'ichi:tenkan');
+      addLine(P.ichimoku.kijun, '#3b82f6', 2, LightweightCharts.LineStyle.Solid, 'Kijun-sen', true, false, false, 'ichi:kijun');
+      addLine(P.ichimoku.spanA, '#22c55e', 1, LightweightCharts.LineStyle.Solid, 'Senkou Span A', true, false, false, 'ichi:spanA');
+      addLine(P.ichimoku.spanB, '#ef4444', 1, LightweightCharts.LineStyle.Solid, 'Senkou Span B', true, false, false, 'ichi:spanB');
+      addLine(P.ichimoku.chikou, 'rgba(250,204,21,.8)', 1, LightweightCharts.LineStyle.Dotted, 'Chikou Span', true, false, false, 'ichi:chikou');
     }}
     const levelColors = {{high:'#d946ef', low:'#14b8a6', entry:'#22c55e', stop_loss:'#ef4444', check_zr_value_fibo_or_elevation:'#f59e0b', line_cross_value:'#3b82f6'}};
     seq.forEach(field => {{
       const pt = levelPoints[field]; if (!pt) return;
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
-      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`);
-      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, 'ENTRY point');
+      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`);
+      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, 'ENTRY point', true, false, false, 'level:entry-point');
     }});
-    (levels.__half_points__ || []).forEach(pt => addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point'));
+    (levels.__half_points__ || []).forEach((pt, i) => addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`));
+    const seenFibLegend = new Set();
     let wedgeLegendAdded = false;
     drawnObjects.forEach(obj => {{
       const color = obj.color || P.lineColors.gold;
-      const objectLegend = obj.group_id === 'auto-wedge' ? (!wedgeLegendAdded && (wedgeLegendAdded = true) ? 'Falling wedge' : '') : (obj.label || 'OBJECT');
-      if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
-        addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, obj.type === 'wedge' ? 3 : (obj.type === 'fib' ? 1.2 : 2), LightweightCharts.LineStyle.Solid, objectLegend);
+      const isFib = obj.type === 'fib';
+      const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
+      const fibKey = isFib ? `fib-group:${{obj.group_id || obj.id}}` : null;
+      const objKey = isWedge ? 'wedge:auto' : (isFib ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
+      const deleteFn = isFib ? (() => {{ drawnObjects = drawnObjects.filter(o => o.group_id !== obj.group_id); hiddenLegendKeys.delete(fibKey); }}) : (isWedge ? (() => {{ drawnObjects = drawnObjects.filter(o => o.group_id !== 'auto-wedge' && o.type !== 'wedge'); hiddenLegendKeys.delete('wedge:auto'); }}) : (() => {{ drawnObjects = drawnObjects.filter(o => o.id !== obj.id); hiddenLegendKeys.delete(objKey); }}));
+      let objectLegend = '';
+      let showLegend = false;
+      if (isFib) {{
+        objectLegend = 'Fibonacci';
+        showLegend = !seenFibLegend.has(fibKey);
+        seenFibLegend.add(fibKey);
+        if (showLegend) addLegend(objectLegend, color, fibKey, deleteFn);
+      }} else if (isWedge) {{
+        objectLegend = 'Falling wedge';
+        showLegend = !wedgeLegendAdded;
+        wedgeLegendAdded = true;
       }} else {{
-        const x1 = obj.type === 'fib' ? extendFuture(obj.x1, 365) : String(obj.x1).slice(0,10);
-        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, obj.type === 'fib' && String(obj.label || '').includes('61.8%') ? 1.4 : (obj.type === 'fib' ? 1.0 : 2), LightweightCharts.LineStyle.Solid, objectLegend, obj.type !== 'fib', false, obj.type === 'fib');
+        objectLegend = obj.label || 'LINE';
+        showLegend = true;
+      }}
+      if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
+        addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, objectLegend, showLegend && !isFib, false, false, objKey, deleteFn);
+      }} else {{
+        const x1 = isFib ? extendFuture(obj.x1, 365) : String(obj.x1).slice(0,10);
+        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, objectLegend, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }}
     }});
     updatePanel();
     requestAnimationFrame(drawCloud);
+    restoreViewport(viewport);
   }}
 
   function updatePanel() {{
