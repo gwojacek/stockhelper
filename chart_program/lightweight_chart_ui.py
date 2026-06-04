@@ -530,22 +530,34 @@ class LightweightChartLevelSelectorUI:
   }});
   const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
-  const candleSeries = addCandles({{ upColor:'#22c55e', downColor:'#ef4444', borderUpColor:'#22c55e', borderDownColor:'#ef4444', wickUpColor:'#22c55e', wickDownColor:'#ef4444' }});
+  const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
   candleSeries.setData(P.ohlc);
   chart.timeScale().fitContent();
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
   window.addEventListener('resize', () => requestAnimationFrame(drawCloud));
   const dynamicSeries = [];
   let previewSeries = null;
+  let previewFrame = null;
+  let pendingPreview = null;
   const safeRemoveSeries = (series) => {{ try {{ if (series) chart.removeSeries(series); }} catch(e) {{ console.warn('removeSeries failed', e); }} }};
-  const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); safeRemoveSeries(previewSeries); previewSeries = null; }};
-  const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false) => {{
+  const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); safeRemoveSeries(previewSeries); previewSeries = null; if (previewFrame) cancelAnimationFrame(previewFrame); previewFrame = null; pendingPreview = null; }};
+  const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false, rightLabel=false) => {{
     const normalized = normalizeLineData(data || []);
     if (normalized.length === 0) return null;
-    const s = addLineSeries({{ color, lineWidth: width, lineStyle: style, priceLineVisible: false, lastValueVisible: false, title: '', pointMarkersVisible: pointMarkers, crosshairMarkerVisible: pointMarkers }});
+    const options = {{
+      color,
+      lineWidth: width,
+      lineStyle: style,
+      priceLineVisible: false,
+      lastValueVisible: !!rightLabel,
+      title: rightLabel ? title : '',
+      pointMarkersVisible: pointMarkers,
+      crosshairMarkerVisible: pointMarkers,
+    }};
+    const s = addLineSeries(options);
     try {{
       s.setData(normalized);
-      if (typeof s.applyOptions === 'function') s.applyOptions({{priceLineVisible:false, lastValueVisible:false, title:''}});
+      if (typeof s.applyOptions === 'function') s.applyOptions(options);
     }} catch(e) {{
       console.warn('Skipping invalid line data', title, e);
       safeRemoveSeries(s);
@@ -557,11 +569,65 @@ class LightweightChartLevelSelectorUI:
   }};
 
 
+  function updateLinePreview(time, value) {{
+    if (!lineAnchor || !Number.isFinite(value)) return;
+    pendingPreview = {{time, value}};
+    if (previewFrame) return;
+    previewFrame = requestAnimationFrame(() => {{
+      previewFrame = null;
+      const pt = pendingPreview;
+      pendingPreview = null;
+      if (!pt || !lineAnchor) return;
+      if (!previewSeries) previewSeries = addLineSeries({{color:'#94a3b8', lineWidth:1.2, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}});
+      try {{
+        previewSeries.setData(normalizeLineData([{{time:lineAnchor.x, value:lineAnchor.y}}, {{time:pt.time, value:pt.value}}]));
+        if (typeof previewSeries.applyOptions === 'function') previewSeries.applyOptions({{priceLineVisible:false,lastValueVisible:false,title:''}});
+      }} catch(e) {{ console.warn('line preview failed', e); }}
+    }});
+  }}
+
   function cloudPairs() {{
     const map = new Map();
     (P.ichimoku.spanA || []).forEach(p => map.set(p.time, {{time:p.time, a:Number(p.value)}}));
     (P.ichimoku.spanB || []).forEach(p => {{ const row = map.get(p.time) || {{time:p.time}}; row.b = Number(p.value); map.set(p.time, row); }});
     return [...map.values()].filter(p => p.time && Number.isFinite(p.a) && Number.isFinite(p.b)).sort((x, y) => compareTime(x.time, y.time));
+  }}
+
+  function wedgeTouchPoints(obj) {{
+    const xs = Array.isArray(obj.x) ? obj.x.map(x => String(x).slice(0, 10)) : [];
+    const ys = Array.isArray(obj.y) ? obj.y.map(Number) : [];
+    const byTime = new Map(xs.map((x, i) => [x, ys[i]]));
+    const isUpper = String(obj.label || '').toLowerCase().includes('upper');
+    const isLower = String(obj.label || '').toLowerCase().includes('lower');
+    const out = [];
+    P.ohlc.forEach(row => {{
+      if (!byTime.has(row.time)) return;
+      const y = byTime.get(row.time);
+      const touchPrice = isUpper ? row.high : (isLower ? row.low : row.close);
+      const tolerance = Math.max(Math.abs(row.high - row.low) * 0.28, Math.abs(y || 1) * 0.004);
+      if (Math.abs(touchPrice - y) <= tolerance) out.push({{time: row.time, value: y, upper: isUpper, lower: isLower}});
+    }});
+    (obj.anchor_x || []).forEach((x, i) => out.push({{time:String(x).slice(0, 10), value:Number((obj.anchor_y || [])[i]), anchor:true, upper:isUpper, lower:isLower}}));
+    return out.filter(p => p.time && Number.isFinite(p.value));
+  }}
+
+  function drawWedgeTouchPoints(ctx) {{
+    drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge').forEach(obj => {{
+      const points = wedgeTouchPoints(obj);
+      const fill = String(obj.label || '').toLowerCase().includes('upper') ? '#fbbf24' : '#e879f9';
+      points.forEach(pt => {{
+        const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pt.time) : null;
+        const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pt.value) : null;
+        if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+        ctx.beginPath();
+        ctx.arc(x, y, pt.anchor ? 5.2 : 4.4, 0, Math.PI * 2);
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.2;
+        ctx.fill();
+        ctx.stroke();
+      }});
+    }});
   }}
 
   function drawCloud() {{
@@ -577,7 +643,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) return;
+    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -592,6 +658,7 @@ class LightweightChartLevelSelectorUI:
       ctx.fillStyle = p1.bull ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
       ctx.fill();
     }}
+    drawWedgeTouchPoints(ctx);
   }}
 
   function render() {{
@@ -608,8 +675,8 @@ class LightweightChartLevelSelectorUI:
     seq.forEach(field => {{
       const pt = levelPoints[field]; if (!pt) return;
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
-      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 3, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`);
-      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 3, LightweightCharts.LineStyle.Solid, 'ENTRY point');
+      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`);
+      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, 'ENTRY point');
     }});
     (levels.__half_points__ || []).forEach(pt => addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point'));
     let wedgeLegendAdded = false;
@@ -618,10 +685,9 @@ class LightweightChartLevelSelectorUI:
       const objectLegend = obj.group_id === 'auto-wedge' ? (!wedgeLegendAdded && (wedgeLegendAdded = true) ? 'Falling wedge' : '') : (obj.label || 'OBJECT');
       if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
         addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, obj.type === 'wedge' ? 3 : (obj.type === 'fib' ? 1.2 : 2), LightweightCharts.LineStyle.Solid, objectLegend);
-        if (Array.isArray(obj.anchor_x) && Array.isArray(obj.anchor_y)) obj.anchor_x.forEach((x, i) => addLine([{{time:String(x).slice(0,10), value:Number(obj.anchor_y[i])}}], color, 0, LightweightCharts.LineStyle.Solid, '', false, true));
       }} else {{
-        const x1 = obj.type === 'fib' ? extendFuture(obj.x1, 180) : String(obj.x1).slice(0,10);
-        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, obj.type === 'fib' && String(obj.label || '').includes('61.8%') ? 1.8 : (obj.type === 'fib' ? 1.2 : 2), LightweightCharts.LineStyle.Solid, objectLegend);
+        const x1 = obj.type === 'fib' ? extendFuture(obj.x1, 365) : String(obj.x1).slice(0,10);
+        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, obj.type === 'fib' && String(obj.label || '').includes('61.8%') ? 1.4 : (obj.type === 'fib' ? 1.0 : 2), LightweightCharts.LineStyle.Solid, objectLegend, obj.type !== 'fib', false, obj.type === 'fib');
       }}
     }});
     updatePanel();
@@ -657,10 +723,21 @@ class LightweightChartLevelSelectorUI:
     $('stock-cfd-toggle').style.display = originalIsStock ? 'block' : 'none';
     $('stock-cfd-toggle').textContent = `CFD mode: ${{stockCfdOn ? 'ON' : 'OFF'}}`;
     $('stock-cfd-toggle').classList.toggle('active', stockCfdOn);
-    ['position-type','lot-cost','spread-mult'].forEach(id => $(id).disabled = disabled);
-    $('pip-value').disabled = disabled || stockCfdOn;
-    $('pip-value').style.display = stockCfdOn ? 'none' : 'block';
-    $('pip-value-label').style.display = stockCfdOn ? 'none' : 'block';
+    const setFieldState = (id, isDisabled, visible=true) => {{
+      const el = $(id), label = $(`${{id}}-label`);
+      if (!el) return;
+      el.disabled = !!isDisabled;
+      el.style.display = visible ? 'block' : 'none';
+      if (label) {{ label.style.display = visible ? 'block' : 'none'; label.style.opacity = isDisabled ? 0.55 : 1; }}
+    }};
+    // Three explicit sidebar states:
+    // 1) plain stock: sizing inputs disabled;
+    // 2) commodity/forex/index: all sizing inputs enabled;
+    // 3) stock CFD-as-commodity: commodity inputs enabled, pip value fixed/hidden.
+    setFieldState('position-type', disabled, true);
+    setFieldState('lot-cost', disabled, true);
+    setFieldState('spread-mult', disabled, true);
+    setFieldState('pip-value', disabled || stockCfdOn, !stockCfdOn);
     $('spread-mult-label').textContent = stockCfdOn ? 'Spread (price units; pips = spread / 0.01)' : 'Spread multiplier (spread = Multiplier * pip_value)';
     $('currency-fee-toggle').style.display = levels.__currency_fee_eligible__ ? 'block' : 'none';
     $('currency-fee-toggle').textContent = `FX conversion fee 1%: ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
@@ -687,13 +764,13 @@ class LightweightChartLevelSelectorUI:
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
     const time = typeof param.time === 'string' ? param.time : (param.time ? `${{param.time.year}}-${{String(param.time.month).padStart(2,'0')}}-${{String(param.time.day).padStart(2,'0')}}` : nearest(null).time);
     if (!Number.isFinite(price)) return;
-    if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; }} else {{ drawnObjects.push({{id:crypto.randomUUID(), type:'line', label:'LINE', x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, color:lineColor}}); lineAnchor=null; safeRemoveSeries(previewSeries); previewSeries=null; render(); }} updatePanel(); return; }}
+    if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); }} else {{ drawnObjects.push({{id:crypto.randomUUID(), type:'line', label:'LINE', x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, color:lineColor}}); lineAnchor=null; safeRemoveSeries(previewSeries); previewSeries=null; render(); }} updatePanel(); return; }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const delta = high - low; const gid = crypto.randomUUID();
-      const xStart = row1.time, xSecond = dateAtIndex(row2.idx - 2); const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(180, Math.abs(row2.idx-row1.idx)*6));
+      const xStart = row1.time, xSecond = row2.time; const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(365, Math.abs(row2.idx-row1.idx)*10));
       [1,0,.236,.382,.618].forEach((r, idx) => {{ const y = roundPrice(isShort ? low + delta*r : high - delta*r); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, x0:idx===0?xStart:xSecond, x1:xEnd, y0:y, y1:y, price:y, color:r===.618?'#22c55e':lineColor, group_id:gid, direction:isShort?'short':'long'}}); }});
       fibAnchor=null; render(); return;
     }}
@@ -709,10 +786,7 @@ class LightweightChartLevelSelectorUI:
     const dayText = day == null ? '--' : (day>=0?'+':'') + day.toFixed(2)+'%';
     const dayColor = day == null ? '#e5e7eb' : (day >= 0 ? '#22c55e' : '#ef4444');
     $('cursor-box').innerHTML = `D:${{row.time}}  O:${{fmt(row.open)}}  H:${{fmt(row.high)}}  L:${{fmt(row.low)}}  C:${{fmt(row.close)}}  <span style="color:${{dayColor}};font-weight:900">DAY:${{dayText}}</span>  CURSOR:${{Number.isFinite(cursor) ? fmt(cursor) : '--'}}`;
-    if (activeTool === 'line' && lineAnchor && Number.isFinite(cursor)) {{
-      if (!previewSeries) {{ previewSeries = addLineSeries({{color:'#94a3b8', lineWidth:1.2, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }}
-      try {{ previewSeries.setData(normalizeLineData([{{time:lineAnchor.x, value:lineAnchor.y}}, {{time, value:cursor}}])); if (typeof previewSeries.applyOptions === 'function') previewSeries.applyOptions({{priceLineVisible:false,lastValueVisible:false,title:''}}); }} catch(e) {{ console.warn('line preview failed', e); }}
-    }}
+    if (activeTool === 'line' && lineAnchor && Number.isFinite(cursor)) updateLinePreview(time, cursor);
   }});
 
   $('finish-btn').onclick = async () => {{
