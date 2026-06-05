@@ -35,9 +35,8 @@ def _run_analysis_script(result: dict) -> None:
     if not config_path or instrument_type not in {"stock", "commodity", "forex"}:
         return
 
-    script = "main_stock.py" if instrument_type == "stock" else "main.py"
-    script_path = Path(__file__).resolve().parent.parent / script
-    cmd = [sys.executable, str(script_path), "--config", config_path]
+    project_root = Path(__file__).resolve().parent.parent
+    cmd = [sys.executable, str(project_root / "run"), config_path]
     subprocess.run(cmd, check=True)
 
 
