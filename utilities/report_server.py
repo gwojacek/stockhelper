@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v2"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v3"
 
 
 def main() -> int:
@@ -40,8 +40,7 @@ def main() -> int:
             flags=re.IGNORECASE,
         )
 
-    def _open_console_target(name: str, fallback):
-        path = os.environ.get(name, "")
+    def _open_console_path(path: str, fallback):
         if not path:
             return fallback, None
         try:
@@ -50,13 +49,35 @@ def main() -> int:
         except Exception:
             return fallback, None
 
+    console_out, close_console_out = sys.stdout, None
+    console_err, close_console_err = sys.stderr, None
+
+    def _set_console_targets(stdout_path: str = "", stderr_path: str = "") -> bool:
+        nonlocal console_out, close_console_out, console_err, close_console_err
+        new_out, new_close_out = _open_console_path(stdout_path, sys.stdout)
+        new_err, new_close_err = _open_console_path(stderr_path, sys.stderr)
+        if stdout_path and new_close_out is None:
+            return False
+        if stderr_path and new_close_err is None:
+            if new_close_out is not None:
+                new_close_out.close()
+            return False
+        old_close_out, old_close_err = close_console_out, close_console_err
+        console_out, close_console_out = new_out, new_close_out
+        console_err, close_console_err = new_err, new_close_err
+        if old_close_out is not None:
+            old_close_out.close()
+        if old_close_err is not None and old_close_err is not old_close_out:
+            old_close_err.close()
+        return True
+
     # Open the launcher console once while the parent `run` process is still
-    # alive. If we only opened /proc/<parent>/fd/* later, Chrome/PyCharm may
-    # have already let the short-lived launcher exit, making the fd path invalid
-    # and hiding report-launched chart calculations. Keeping this handle open
-    # preserves the same terminal target for all later /run-command calls.
-    console_out, close_console_out = _open_console_target("STOCKHELPER_REPORT_CONSOLE_STDOUT", sys.stdout)
-    console_err, close_console_err = _open_console_target("STOCKHELPER_REPORT_CONSOLE_STDERR", sys.stderr)
+    # alive. If this server is reused by a later report open, /attach-console
+    # refreshes these handles to that newer launcher terminal.
+    _set_console_targets(
+        os.environ.get("STOCKHELPER_REPORT_CONSOLE_STDOUT", ""),
+        os.environ.get("STOCKHELPER_REPORT_CONSOLE_STDERR", ""),
+    )
 
     def _run_chart_command(command: str) -> int:
         command = _canonicalize_chart_command(command)
@@ -111,6 +132,16 @@ def main() -> int:
 
         def do_POST(self):
             parsed = urlparse(self.path)
+            if parsed.path == "/attach-console":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    ok = _set_console_targets(str(payload.get("stdout", "")), str(payload.get("stderr", "")))
+                    self.send_response(200 if ok else 500); self.end_headers(); self.wfile.write(json.dumps({"ok": ok}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
