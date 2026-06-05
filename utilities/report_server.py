@@ -8,6 +8,8 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
+import time
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -79,7 +81,10 @@ def main() -> int:
         os.environ.get("STOCKHELPER_REPORT_CONSOLE_STDERR", ""),
     )
 
-    def _run_chart_command(command: str) -> int:
+    def _is_report_chart_command(argv: list[str]) -> bool:
+        return len(argv) >= 3 and Path(argv[1]).name == "run" and argv[2] in {"-c", "--chart"}
+
+    def _run_chart_command(command: str) -> tuple[int, dict]:
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
         if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
@@ -88,12 +93,47 @@ def main() -> int:
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
         print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}", file=console_out, flush=True)
-        # Run synchronously in this server thread. The report page fetch stays
-        # pending until the chart is finished, which keeps the post-save
-        # `python run <config>` calculation attached to the same visible console.
+
+        if _is_report_chart_command(argv):
+            fd, url_path = tempfile.mkstemp(prefix="stockhelper_chart_url_", suffix=".txt")
+            os.close(fd)
+            try:
+                env["STOCKHELPER_CHART_URL_FILE"] = url_path
+                env["STOCKHELPER_CHART_NO_AUTO_OPEN"] = "1"
+                proc = subprocess.Popen(argv, cwd=str(project_root), env=env, stdout=console_out, stderr=console_err)
+                chart_url = ""
+                for _ in range(80):
+                    try:
+                        chart_url = Path(url_path).read_text(encoding="utf-8").strip()
+                    except Exception:
+                        chart_url = ""
+                    if chart_url:
+                        break
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.1)
+                if chart_url:
+                    try:
+                        webbrowser.open_new_tab(chart_url)
+                    except Exception:
+                        pass
+                    print(f"[report] chart ui url: {chart_url} pid={proc.pid}", file=console_out, flush=True)
+                    return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
+                rc = proc.poll()
+                if rc is None:
+                    rc = proc.wait(timeout=5)
+                print(f"[report] chart command exited before UI url, exit={rc}", file=console_out, flush=True)
+                return int(rc or 1), {"ok": False, "error": f"chart command exited before UI url (exit {rc})"}
+            finally:
+                try:
+                    Path(url_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+        # Non-chart commands are rare here; keep them synchronous and status-backed.
         rc = subprocess.call(argv, cwd=str(project_root), env=env, stdout=console_out, stderr=console_err)
         print(f"[report] chart command exit: {rc}", file=console_out, flush=True)
-        return rc
+        return rc, {"ok": rc == 0, "exit": rc}
 
     class _Handler(SimpleHTTPRequestHandler):
         def __init__(self, *h_args, **h_kwargs):
@@ -123,8 +163,8 @@ def main() -> int:
                 if not command:
                     self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
                 try:
-                    rc = _run_chart_command(command)
-                    self.send_response(200 if rc == 0 else 500); self.end_headers(); self.wfile.write(("ok" if rc == 0 else f"exit {rc}").encode("utf-8"))
+                    rc, payload = _run_chart_command(command)
+                    self.send_response(200 if rc == 0 else 500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
@@ -148,8 +188,8 @@ def main() -> int:
                 if not command:
                     self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
                 try:
-                    rc = _run_chart_command(command)
-                    self.send_response(200 if rc == 0 else 500); self.end_headers(); self.wfile.write(("ok" if rc == 0 else f"exit {rc}").encode("utf-8"))
+                    rc, payload = _run_chart_command(command)
+                    self.send_response(200 if rc == 0 else 500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
