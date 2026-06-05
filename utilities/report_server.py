@@ -40,7 +40,7 @@ def main() -> int:
             flags=re.IGNORECASE,
         )
 
-    def _console_target(name: str, fallback):
+    def _open_console_target(name: str, fallback):
         path = os.environ.get(name, "")
         if not path:
             return fallback, None
@@ -50,6 +50,14 @@ def main() -> int:
         except Exception:
             return fallback, None
 
+    # Open the launcher console once while the parent `run` process is still
+    # alive. If we only opened /proc/<parent>/fd/* later, Chrome/PyCharm may
+    # have already let the short-lived launcher exit, making the fd path invalid
+    # and hiding report-launched chart calculations. Keeping this handle open
+    # preserves the same terminal target for all later /run-command calls.
+    console_out, close_console_out = _open_console_target("STOCKHELPER_REPORT_CONSOLE_STDOUT", sys.stdout)
+    console_err, close_console_err = _open_console_target("STOCKHELPER_REPORT_CONSOLE_STDERR", sys.stderr)
+
     def _run_chart_command(command: str) -> int:
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
@@ -58,21 +66,13 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
-        out, close_out = _console_target("STOCKHELPER_REPORT_CONSOLE_STDOUT", sys.stdout)
-        err, close_err = _console_target("STOCKHELPER_REPORT_CONSOLE_STDERR", sys.stderr)
-        try:
-            print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}", file=out, flush=True)
-            # Run synchronously in this server thread. The report page fetch stays
-            # pending until the chart is finished, which keeps the post-save
-            # `python run <config>` calculation attached to the same visible console.
-            rc = subprocess.call(argv, cwd=str(project_root), env=env, stdout=out, stderr=err)
-            print(f"[report] chart command exit: {rc}", file=out, flush=True)
-            return rc
-        finally:
-            if close_out is not None:
-                close_out.close()
-            if close_err is not None and close_err is not close_out:
-                close_err.close()
+        print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}", file=console_out, flush=True)
+        # Run synchronously in this server thread. The report page fetch stays
+        # pending until the chart is finished, which keeps the post-save
+        # `python run <config>` calculation attached to the same visible console.
+        rc = subprocess.call(argv, cwd=str(project_root), env=env, stdout=console_out, stderr=console_err)
+        print(f"[report] chart command exit: {rc}", file=console_out, flush=True)
+        return rc
 
     class _Handler(SimpleHTTPRequestHandler):
         def __init__(self, *h_args, **h_kwargs):
@@ -140,7 +140,13 @@ def main() -> int:
             self.send_response(404); self.end_headers()
 
     server = ThreadingHTTPServer((args.host, args.port), _Handler)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        if close_console_out is not None:
+            close_console_out.close()
+        if close_console_err is not None and close_console_err is not close_console_out:
+            close_console_err.close()
     return 0
 
 
