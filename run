@@ -651,6 +651,13 @@ def _serve_report_locally(path: Path) -> str | None:
             # Prefer a fresh server on the next free port with inherited stdout.
             continue
         try:
+            env = os.environ.copy()
+            # Keep report-launched chart calculations visible in the terminal
+            # that opened the report. In IDEs (PyCharm) inherited stdout can be
+            # a pipe; passing the parent's live fd gives report_server a stable
+            # target for subprocess output even after browser focus changes.
+            env["STOCKHELPER_REPORT_CONSOLE_STDOUT"] = f"/proc/{os.getpid()}/fd/1"
+            env["STOCKHELPER_REPORT_CONSOLE_STDERR"] = f"/proc/{os.getpid()}/fd/2"
             subprocess.Popen(
                 [
                     sys.executable,
@@ -665,6 +672,7 @@ def _serve_report_locally(path: Path) -> str | None:
                     str(port),
                 ],
                 cwd=str(PROJECT_ROOT),
+                env=env,
             )
         except Exception:
             continue
