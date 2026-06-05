@@ -206,6 +206,7 @@ class LightweightChartLevelSelectorUI:
             "sourceTicker": self.source_ticker,
             "sourceName": self.source_name,
             "sourceProvider": self.source_provider,
+            "reportLaunched": os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1",
             "pricePrecision": self._precision_for_price(),
             "basePrecision": self.price_precision,
             "selectionSequence": SELECTION_SEQUENCE,
@@ -1054,7 +1055,7 @@ class LightweightChartLevelSelectorUI:
   }};
 
   setInterval(() => fetch('/heartbeat', {{method:'POST', keepalive:true}}).catch(()=>{{}}), 1000);
-  window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown'));
+  if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   applyWedgeDerivedLevels(); applyInstrumentControls(); render();
 }})();
   </script>
@@ -1064,7 +1065,8 @@ class LightweightChartLevelSelectorUI:
     def run(self):
         app = Flask(__name__)
         server_holder: dict[str, object] = {}
-        heartbeat = {"ts": time.time()}
+        heartbeat = {"ts": time.time(), "seen": False}
+        first_heartbeat_grace = 45 if os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1" else 4
 
         class QuietRequestHandler(WSGIRequestHandler):
             def log(self, type, message, *args):  # noqa: A003
@@ -1095,6 +1097,7 @@ class LightweightChartLevelSelectorUI:
         @app.route("/heartbeat", methods=["POST"])
         def _heartbeat():
             heartbeat["ts"] = time.time()
+            heartbeat["seen"] = True
             return "ok"
 
         chart_url = f"http://127.0.0.1:{self.server_port}/"
@@ -1115,7 +1118,8 @@ class LightweightChartLevelSelectorUI:
                 if self._finished:
                     server.shutdown()
                     break
-                if time.time() - heartbeat["ts"] > 4:
+                heartbeat_timeout = 4 if heartbeat.get("seen") else first_heartbeat_grace
+                if time.time() - heartbeat["ts"] > heartbeat_timeout:
                     server.shutdown()
                     break
                 server_thread.join(0.1)

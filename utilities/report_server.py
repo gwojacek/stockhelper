@@ -113,10 +113,10 @@ def main() -> int:
                         break
                     time.sleep(0.1)
                 if chart_url:
-                    try:
-                        webbrowser.open_new_tab(chart_url)
-                    except Exception:
-                        pass
+                    # The report page opens a tab synchronously on the user click and
+                    # navigates it to this URL from the JSON response. Do not open a
+                    # second server-side browser tab here; duplicate chart tabs can
+                    # unload one another and trigger the chart shutdown handler.
                     print(f"[report] chart ui url: {chart_url} pid={proc.pid}", file=console_out, flush=True)
                     return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
                 rc = proc.poll()
