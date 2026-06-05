@@ -15,7 +15,7 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v3"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v4"
 
 
 def main() -> int:
@@ -161,12 +161,14 @@ def main() -> int:
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
                 if not command:
-                    self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
+                    self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing command"}).encode("utf-8")); return
                 try:
                     rc, payload = _run_chart_command(command)
                     self.send_response(200 if rc == 0 else 500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 except Exception as exc:
-                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                    payload = {"ok": False, "error": str(exc), "command": command}
+                    print(f"[report] chart command failed: {exc}", file=console_err, flush=True)
+                    self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
             super().do_GET()
 
@@ -186,12 +188,14 @@ def main() -> int:
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
                 if not command:
-                    self.send_response(400); self.end_headers(); self.wfile.write(b"missing command"); return
+                    self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing command"}).encode("utf-8")); return
                 try:
                     rc, payload = _run_chart_command(command)
                     self.send_response(200 if rc == 0 else 500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 except Exception as exc:
-                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                    payload = {"ok": False, "error": str(exc), "command": command}
+                    print(f"[report] chart command failed: {exc}", file=console_err, flush=True)
+                    self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
             if parsed.path == "/open-links":
                 try:

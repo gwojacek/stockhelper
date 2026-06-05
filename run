@@ -647,7 +647,7 @@ def _open_html_report(path: Path) -> None:
     subprocess.call(["xdg-open", file_url])
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v3"
+    report_server_protocol = "stockhelper-report-server-v4"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
