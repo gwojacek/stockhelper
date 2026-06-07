@@ -647,7 +647,7 @@ def _open_html_report(path: Path) -> None:
     subprocess.Popen(["xdg-open", file_url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v7"
+    report_server_protocol = "stockhelper-report-server-v8"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
@@ -727,8 +727,12 @@ def _serve_report_locally(path: Path) -> str | None:
                 cwd=str(PROJECT_ROOT),
                 env=env,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                # Keep stdout/stderr inherited by the long-lived report server.
+                # That keeps the PyCharm/terminal console attached after this
+                # short report-opener process exits, so chart-finish position
+                # calculations opened from the HTML report remain visible there.
+                stdout=None,
+                stderr=None,
                 start_new_session=True,
             )
         except Exception:
