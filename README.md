@@ -54,7 +54,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
 - **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, touch/contact metrics, and chart commands that preload wedge lines.
 - **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
-- **Interactive chart tool** with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, and chart snapshots.
+- **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, and chart snapshots.
 - **Reports and artifacts**:
   - Markdown scanner reports in `chart_program/data/search/ichimoku/` and `chart_program/data/search/fibo/`;
   - Trójpolówki Markdown watchlists in `Trojpolowki/fibo.md` and `Trojpolowki/ichimoku.md`;
@@ -128,7 +128,7 @@ These packages are used by specific workflows:
 - `opencv-python`: CAPTCHA image preprocessing.
 - `easyocr`: CAPTCHA OCR attempts.
 - `yfinance`: Yahoo fallback data source.
-- `plotly`/`dash`/`flask`: interactive chart UI and chart snapshots.
+- `flask`: local interactive chart UI powered by TradingView Lightweight Charts; `dash`/`plotly` remain available for legacy chart tooling and historical snapshot compatibility.
 - `pyinstaller`: dev-only dependency for building an executable.
 
 If chart snapshot export fails, install Plotly's image backend in your environment:
@@ -245,7 +245,7 @@ python run -c ena
 
 **Description:**
 
-- Opens the Dash/Plotly chart UI in your browser.
+- Opens the TradingView Lightweight Charts UI in your browser.
 - Loads cached data first, with data provider fallback support.
 - Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects; the active level can be cleared from the sidebar.
 - Stock charts include a CFD mode toggle; `python run -c AAPL.US cfd` opens the same symbol directly with CFD sizing inputs enabled. Stock CFDs use lot/deposit cost plus spread entered as price units with pips shown as `spread / 0.01`, so no separate pip-value field is required.
