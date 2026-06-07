@@ -630,21 +630,21 @@ def _open_html_report(path: Path) -> None:
     chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
     if chrome:
         try:
-            print(f"[allsearch] opening report (blocking window): {path}")
-            subprocess.call([chrome, "--new-window", "--app=" + file_url])
+            print(f"[allsearch] opening report: {path}")
+            subprocess.Popen([chrome, "--new-window", "--app=" + file_url])
             return
         except Exception:
             pass
     firefox = shutil.which("firefox")
     if firefox:
         try:
-            print(f"[allsearch] opening report (blocking window): {path}")
-            subprocess.call([firefox, "--new-window", file_url])
+            print(f"[allsearch] opening report: {path}")
+            subprocess.Popen([firefox, "--new-window", file_url])
             return
         except Exception:
             pass
     print(f"[allsearch] opening report via xdg-open: {file_url}")
-    subprocess.call(["xdg-open", file_url])
+    subprocess.Popen(["xdg-open", file_url])
 
 def _serve_report_locally(path: Path) -> str | None:
     report_server_protocol = "stockhelper-report-server-v5"
