@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v6"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v7"
 
 
 def main() -> int:
@@ -45,14 +45,29 @@ def main() -> int:
             flags=re.IGNORECASE,
         )
 
+    def _durable_console_path(path: str) -> str:
+        if not path:
+            return ""
+        try:
+            target = os.readlink(path)
+        except Exception:
+            return path
+        # `/proc/<launcher-pid>/fd/<n>` disappears when the short-lived report
+        # opener exits. When it points at a real terminal, keep the terminal path
+        # itself so chart-finish calculations can still print in PyCharm/terminal.
+        if target.startswith("/dev/") and Path(target).exists():
+            return target
+        return path
+
     def _open_console_path(path: str, fallback):
         if not path:
-            return fallback, None
+            return fallback, None, ""
+        resolved_path = _durable_console_path(path)
         try:
-            handle = open(path, "a", buffering=1, encoding="utf-8", errors="replace")
-            return handle, handle
+            handle = open(resolved_path, "a", buffering=1, encoding="utf-8", errors="replace")
+            return handle, handle, resolved_path
         except Exception:
-            return fallback, None
+            return fallback, None, ""
 
     console_out, close_console_out = sys.stdout, None
     console_err, close_console_err = sys.stderr, None
@@ -61,8 +76,8 @@ def main() -> int:
 
     def _set_console_targets(stdout_path: str = "", stderr_path: str = "") -> bool:
         nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
-        new_out, new_close_out = _open_console_path(stdout_path, sys.stdout)
-        new_err, new_close_err = _open_console_path(stderr_path, sys.stderr)
+        new_out, new_close_out, resolved_stdout_path = _open_console_path(stdout_path, sys.stdout)
+        new_err, new_close_err, resolved_stderr_path = _open_console_path(stderr_path, sys.stderr)
         if stdout_path and new_close_out is None:
             return False
         if stderr_path and new_close_err is None:
@@ -72,24 +87,28 @@ def main() -> int:
         old_close_out, old_close_err = close_console_out, close_console_err
         console_out, close_console_out = new_out, new_close_out
         console_err, close_console_err = new_err, new_close_err
-        console_stdout_path = stdout_path if new_close_out is not None else ""
-        console_stderr_path = stderr_path if new_close_err is not None else ""
+        console_stdout_path = resolved_stdout_path if new_close_out is not None else ""
+        console_stderr_path = resolved_stderr_path if new_close_err is not None else ""
         if old_close_out is not None:
             old_close_out.close()
         if old_close_err is not None and old_close_err is not old_close_out:
             old_close_err.close()
         return True
 
-    def _proc_fd_target_is_alive(path: str) -> bool:
+    def _console_target_is_alive(path: str) -> bool:
         if not path:
             return True
-        match = re.match(r"^/proc/(\d+)/fd/\d+$", path)
-        return not match or Path(f"/proc/{match.group(1)}").exists()
+        # If we successfully opened `/proc/<pid>/fd/<n>`, we now own a duplicate
+        # handle. It may remain writable after the short-lived opener process exits,
+        # and `_safe_print` will drop it if an actual write fails.
+        if re.match(r"^/proc/(\d+)/fd/\d+$", path):
+            return True
+        return Path(path).exists()
 
     def _drop_stale_console_targets() -> None:
         nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
-        stale_out = console_stdout_path and not _proc_fd_target_is_alive(console_stdout_path)
-        stale_err = console_stderr_path and not _proc_fd_target_is_alive(console_stderr_path)
+        stale_out = console_stdout_path and not _console_target_is_alive(console_stdout_path)
+        stale_err = console_stderr_path and not _console_target_is_alive(console_stderr_path)
         if stale_out:
             if close_console_out is not None:
                 close_console_out.close()
