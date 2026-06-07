@@ -55,9 +55,11 @@ def main() -> int:
 
     console_out, close_console_out = sys.stdout, None
     console_err, close_console_err = sys.stderr, None
+    console_stdout_path = ""
+    console_stderr_path = ""
 
     def _set_console_targets(stdout_path: str = "", stderr_path: str = "") -> bool:
-        nonlocal console_out, close_console_out, console_err, close_console_err
+        nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
         new_out, new_close_out = _open_console_path(stdout_path, sys.stdout)
         new_err, new_close_err = _open_console_path(stderr_path, sys.stderr)
         if stdout_path and new_close_out is None:
@@ -69,11 +71,52 @@ def main() -> int:
         old_close_out, old_close_err = close_console_out, close_console_err
         console_out, close_console_out = new_out, new_close_out
         console_err, close_console_err = new_err, new_close_err
+        console_stdout_path = stdout_path if new_close_out is not None else ""
+        console_stderr_path = stderr_path if new_close_err is not None else ""
         if old_close_out is not None:
             old_close_out.close()
         if old_close_err is not None and old_close_err is not old_close_out:
             old_close_err.close()
         return True
+
+    def _proc_fd_target_is_alive(path: str) -> bool:
+        if not path:
+            return True
+        match = re.match(r"^/proc/(\d+)/fd/\d+$", path)
+        return not match or Path(f"/proc/{match.group(1)}").exists()
+
+    def _drop_stale_console_targets() -> None:
+        nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
+        stale_out = console_stdout_path and not _proc_fd_target_is_alive(console_stdout_path)
+        stale_err = console_stderr_path and not _proc_fd_target_is_alive(console_stderr_path)
+        if stale_out:
+            if close_console_out is not None:
+                close_console_out.close()
+            console_out, close_console_out, console_stdout_path = sys.stdout, None, ""
+        if stale_err:
+            if close_console_err is not None and close_console_err is not close_console_out:
+                close_console_err.close()
+            console_err, close_console_err, console_stderr_path = sys.stderr, None, ""
+
+    def _safe_print(message: str, *, err: bool = False) -> None:
+        nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
+        _drop_stale_console_targets()
+        stream = console_err if err else console_out
+        try:
+            print(message, file=stream, flush=True)
+        except Exception:
+            if err:
+                if close_console_err is not None:
+                    close_console_err.close()
+                console_err, close_console_err, console_stderr_path = sys.stderr, None, ""
+            else:
+                if close_console_out is not None:
+                    close_console_out.close()
+                console_out, close_console_out, console_stdout_path = sys.stdout, None, ""
+
+    def _child_console_streams():
+        _drop_stale_console_targets()
+        return console_out, console_err
 
     # Open the launcher console once while the parent `run` process is still
     # alive. If this server is reused by a later report open, /attach-console
@@ -94,7 +137,7 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
-        print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}", file=console_out, flush=True)
+        _safe_print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}")
 
         if _is_report_chart_command(argv):
             fd, url_path = tempfile.mkstemp(prefix="stockhelper_chart_url_", suffix=".txt")
@@ -102,7 +145,8 @@ def main() -> int:
             try:
                 env["STOCKHELPER_CHART_URL_FILE"] = url_path
                 env["STOCKHELPER_CHART_NO_AUTO_OPEN"] = "1"
-                proc = subprocess.Popen(argv, cwd=str(project_root), env=env, stdout=console_out, stderr=console_err)
+                child_out, child_err = _child_console_streams()
+                proc = subprocess.Popen(argv, cwd=str(project_root), env=env, stdout=child_out, stderr=child_err)
                 chart_url = ""
                 for _ in range(80):
                     try:
@@ -133,14 +177,14 @@ def main() -> int:
                         time.sleep(0.1)
                     if not chart_ready:
                         rc = proc.poll()
-                        print(f"[report] chart ui url did not respond, exit={rc}", file=console_out, flush=True)
+                        _safe_print(f"[report] chart ui url did not respond, exit={rc}")
                         return int(rc or 1), {"ok": False, "error": "chart UI URL did not respond", "url": chart_url, "pid": proc.pid}
-                    print(f"[report] chart ui url: {chart_url} pid={proc.pid}", file=console_out, flush=True)
+                    _safe_print(f"[report] chart ui url: {chart_url} pid={proc.pid}")
                     return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
                 rc = proc.poll()
                 if rc is None:
                     rc = proc.wait(timeout=5)
-                print(f"[report] chart command exited before UI url, exit={rc}", file=console_out, flush=True)
+                _safe_print(f"[report] chart command exited before UI url, exit={rc}")
                 return int(rc or 1), {"ok": False, "error": f"chart command exited before UI url (exit {rc})"}
             finally:
                 try:
@@ -149,8 +193,9 @@ def main() -> int:
                     pass
 
         # Non-chart commands are rare here; keep them synchronous and status-backed.
-        rc = subprocess.call(argv, cwd=str(project_root), env=env, stdout=console_out, stderr=console_err)
-        print(f"[report] chart command exit: {rc}", file=console_out, flush=True)
+        child_out, child_err = _child_console_streams()
+        rc = subprocess.call(argv, cwd=str(project_root), env=env, stdout=child_out, stderr=child_err)
+        _safe_print(f"[report] chart command exit: {rc}")
         return rc, {"ok": rc == 0, "exit": rc}
 
 
@@ -204,7 +249,7 @@ def main() -> int:
                     self.send_response(200 if rc == 0 else 500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 except Exception as exc:
                     payload = {"ok": False, "error": str(exc), "command": command}
-                    print(f"[report] chart command failed: {exc}", file=console_err, flush=True)
+                    _safe_print(f"[report] chart command failed: {exc}", err=True)
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
             if parsed.path == "/open-chart":
@@ -224,7 +269,7 @@ def main() -> int:
                     _send_html(self, "StockHelper chart failed", str(payload.get("error") or f"exit {rc}"), debug, 500); return
                 except Exception as exc:
                     debug["error"] = str(exc)
-                    print(f"[report] chart command failed: {exc}", file=console_err, flush=True)
+                    _safe_print(f"[report] chart command failed: {exc}", err=True)
                     _send_html(self, "StockHelper chart failed", str(exc), debug, 500); return
             super().do_GET()
 
@@ -250,7 +295,7 @@ def main() -> int:
                     self.send_response(200 if rc == 0 else 500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 except Exception as exc:
                     payload = {"ok": False, "error": str(exc), "command": command}
-                    print(f"[report] chart command failed: {exc}", file=console_err, flush=True)
+                    _safe_print(f"[report] chart command failed: {exc}", err=True)
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
             if parsed.path == "/open-links":
