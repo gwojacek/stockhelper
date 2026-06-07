@@ -15,6 +15,7 @@ import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from urllib.request import urlopen
 
 REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v5"
 
@@ -114,10 +115,26 @@ def main() -> int:
                         break
                     time.sleep(0.1)
                 if chart_url:
-                    # The report page opens a tab synchronously on the user click and
-                    # navigates it to this URL from the JSON response. Do not open a
-                    # second server-side browser tab here; duplicate chart tabs can
-                    # unload one another and trigger the chart shutdown handler.
+                    # Do not hand the browser a URL until the chart HTTP server is
+                    # actually accepting requests. The chart process writes the URL
+                    # as soon as it knows the port; this guard prevents a redirect
+                    # race that can show ERR_EMPTY_RESPONSE in the report-opened tab.
+                    chart_ready = False
+                    for _ in range(30):
+                        try:
+                            with urlopen(chart_url, timeout=0.25) as resp:
+                                chart_ready = 200 <= int(getattr(resp, "status", 200)) < 500
+                        except Exception:
+                            chart_ready = False
+                        if chart_ready:
+                            break
+                        if proc.poll() is not None:
+                            break
+                        time.sleep(0.1)
+                    if not chart_ready:
+                        rc = proc.poll()
+                        print(f"[report] chart ui url did not respond, exit={rc}", file=console_out, flush=True)
+                        return int(rc or 1), {"ok": False, "error": "chart UI URL did not respond", "url": chart_url, "pid": proc.pid}
                     print(f"[report] chart ui url: {chart_url} pid={proc.pid}", file=console_out, flush=True)
                     return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
                 rc = proc.poll()

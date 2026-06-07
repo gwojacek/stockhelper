@@ -1102,6 +1102,10 @@ class LightweightChartLevelSelectorUI:
 
         chart_url = f"http://127.0.0.1:{self.server_port}/"
         url_file = os.environ.get("STOCKHELPER_CHART_URL_FILE")
+        server = make_server("127.0.0.1", self.server_port, app, threaded=True, request_handler=QuietRequestHandler)
+        server_holder["server"] = server
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
         if url_file:
             try:
                 Path(url_file).write_text(chart_url, encoding="utf-8")
@@ -1109,10 +1113,6 @@ class LightweightChartLevelSelectorUI:
                 pass
         if os.environ.get("STOCKHELPER_CHART_NO_AUTO_OPEN") != "1":
             threading.Timer(0.8, lambda: webbrowser.open(chart_url)).start()
-        server = make_server("127.0.0.1", self.server_port, app, threaded=True, request_handler=QuietRequestHandler)
-        server_holder["server"] = server
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
         try:
             while server_thread.is_alive():
                 if self._finished:
