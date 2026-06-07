@@ -10,6 +10,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -17,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v5"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v6"
 
 
 def main() -> int:
@@ -114,9 +115,36 @@ def main() -> int:
                     close_console_out.close()
                 console_out, close_console_out, console_stdout_path = sys.stdout, None, ""
 
-    def _child_console_streams():
-        _drop_stale_console_targets()
-        return console_out, console_err
+    def _forward_process_output(pipe, *, err: bool = False) -> None:
+        try:
+            for line in pipe:
+                _safe_print(line.rstrip("\n"), err=err)
+        except Exception as exc:
+            _safe_print(f"[report] failed to forward process output: {exc}", err=True)
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
+    def _start_process(argv: list[str], env: dict[str, str]) -> subprocess.Popen:
+        proc = subprocess.Popen(
+            argv,
+            cwd=str(project_root),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+        if proc.stdout is not None:
+            threading.Thread(target=_forward_process_output, args=(proc.stdout,), daemon=True).start()
+        if proc.stderr is not None:
+            threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True}, daemon=True).start()
+        return proc
 
     # Open the launcher console once while the parent `run` process is still
     # alive. If this server is reused by a later report open, /attach-console
@@ -145,8 +173,7 @@ def main() -> int:
             try:
                 env["STOCKHELPER_CHART_URL_FILE"] = url_path
                 env["STOCKHELPER_CHART_NO_AUTO_OPEN"] = "1"
-                child_out, child_err = _child_console_streams()
-                proc = subprocess.Popen(argv, cwd=str(project_root), env=env, stdout=child_out, stderr=child_err)
+                proc = _start_process(argv, env)
                 chart_url = ""
                 for _ in range(80):
                     try:
@@ -193,8 +220,8 @@ def main() -> int:
                     pass
 
         # Non-chart commands are rare here; keep them synchronous and status-backed.
-        child_out, child_err = _child_console_streams()
-        rc = subprocess.call(argv, cwd=str(project_root), env=env, stdout=child_out, stderr=child_err)
+        proc = _start_process(argv, env)
+        rc = proc.wait()
         _safe_print(f"[report] chart command exit: {rc}")
         return rc, {"ok": rc == 0, "exit": rc}
 
