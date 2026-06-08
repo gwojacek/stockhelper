@@ -239,7 +239,7 @@ class LightweightChartLevelSelectorUI:
         container.innerHTML = '';
         container.appendChild(canvas);
         const ctx = canvas.getContext('2d');
-        const state = {series: [], candleSeries: null, clickHandlers: [], moveHandlers: [], yMin: 0, yMax: 1, width: 1, height: 1, dpr: 1};
+        const state = {series: [], candleSeries: null, clickHandlers: [], moveHandlers: [], yMin: 0, yMax: 1, width: 1, height: 1, dpr: 1, scaleMargins: options?.rightPriceScale?.scaleMargins || {top:0.08,bottom:0.12}};
         const colors = {
           bg: options?.layout?.background?.color || '#111827',
           text: options?.layout?.textColor || '#e5e7eb',
@@ -278,13 +278,15 @@ class LightweightChartLevelSelectorUI:
           return found >= 0 ? found : 0;
         }
         function priceToY(price) {
-          const top = 18, bottom = 28;
+          const top = Math.max(18, state.height * (state.scaleMargins?.top ?? 0.08));
+          const bottom = Math.max(28, state.height * (state.scaleMargins?.bottom ?? 0.12));
           const plotH = Math.max(1, state.height - top - bottom);
           const span = state.yMax - state.yMin || 1;
           return top + ((state.yMax - price) / span) * plotH;
         }
         function yToPrice(y) {
-          const top = 18, bottom = 28;
+          const top = Math.max(18, state.height * (state.scaleMargins?.top ?? 0.08));
+          const bottom = Math.max(28, state.height * (state.scaleMargins?.bottom ?? 0.12));
           const plotH = Math.max(1, state.height - top - bottom);
           const ratio = Math.max(0, Math.min(1, (y - top) / plotH));
           return state.yMax - ratio * (state.yMax - state.yMin || 1);
@@ -369,6 +371,8 @@ class LightweightChartLevelSelectorUI:
         window.addEventListener('resize', resize);
         setTimeout(resize, 0);
         return {
+          applyOptions(opts) { if (opts?.rightPriceScale?.scaleMargins) state.scaleMargins = opts.rightPriceScale.scaleMargins; draw(); },
+          priceScale() { return {applyOptions(opts) { if (opts?.scaleMargins) state.scaleMargins = opts.scaleMargins; draw(); }}; },
           addSeries(type, opts) { return makeSeries(type === CandlestickSeries ? 'candlestick' : 'line', opts); },
           addCandlestickSeries(opts) { return makeSeries('candlestick', opts); },
           addLineSeries(opts) { return makeSeries('line', opts); },
@@ -424,7 +428,8 @@ class LightweightChartLevelSelectorUI:
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
-    .main.calc-open #chart-wrap {{ height: calc(100vh - 132px - var(--calc-drawer-height, 260px)); min-height: 260px; }}
+    .main.calc-open #chart-wrap {{ height: calc(100vh - 132px - var(--calc-drawer-height, 260px)); min-height: 260px; cursor: grab; }}
+    .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
     #calc-drawer {{ display:none; margin-top:10px; max-height:32vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
     #calc-drawer.open {{ display:block; }}
     #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
@@ -565,7 +570,7 @@ class LightweightChartLevelSelectorUI:
   const chart = LightweightCharts.createChart($('chart'), {{
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
     grid: {{ vertLines: {{ color: '#1f2937' }}, horzLines: {{ color: '#1f2937' }} }},
-    rightPriceScale: {{ borderColor: '#334155' }},
+    rightPriceScale: {{ borderColor: '#334155', scaleMargins: {{top:0.08, bottom:0.12}} }},
     timeScale: {{ borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
       const d = typeof time === 'string' ? new Date(time + 'T00:00:00Z') : new Date(Date.UTC(time.year, time.month - 1, time.day));
       return d.getUTCMonth() === 0 ? String(d.getUTCFullYear()) : d.toLocaleString('en-US', {{month:'short', timeZone:'UTC'}});
@@ -573,6 +578,45 @@ class LightweightChartLevelSelectorUI:
     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
     localization: {{ priceFormatter: p => fmt(p) }},
   }});
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  let verticalPan = 0;
+  let chartDrag = null;
+  let suppressChartClickUntil = 0;
+  function applyVerticalPan() {{
+    verticalPan = clamp(verticalPan, -0.30, 0.30);
+    const margins = {{top:clamp(0.08 + verticalPan, 0.01, 0.50), bottom:clamp(0.12 - verticalPan, 0.01, 0.50)}};
+    try {{ chart.priceScale?.('right')?.applyOptions({{scaleMargins:margins}}); }} catch(e) {{}}
+    try {{ chart.applyOptions?.({{rightPriceScale:{{scaleMargins:margins}}}}); }} catch(e) {{}}
+    requestAnimationFrame(drawCloud);
+  }}
+  $('chart-wrap').addEventListener('pointerdown', (ev) => {{
+    if (!$('calc-drawer')?.classList.contains('open') || ev.button !== 0) return;
+    chartDrag = {{id:ev.pointerId, y:ev.clientY, moved:false}};
+    $('chart-wrap').classList.add('dragging');
+    $('chart-wrap').setPointerCapture?.(ev.pointerId);
+  }});
+  $('chart-wrap').addEventListener('pointermove', (ev) => {{
+    if (!chartDrag || chartDrag.id !== ev.pointerId || !$('calc-drawer')?.classList.contains('open')) return;
+    const dy = ev.clientY - chartDrag.y;
+    if (Math.abs(dy) < 2) return;
+    chartDrag.moved = chartDrag.moved || Math.abs(dy) > 4;
+    if (chartDrag.moved) {{
+      ev.preventDefault();
+      verticalPan += dy / Math.max(260, $('chart-wrap').getBoundingClientRect().height);
+      chartDrag.y = ev.clientY;
+      applyVerticalPan();
+    }}
+  }});
+  const endChartDrag = (ev) => {{
+    if (!chartDrag || chartDrag.id !== ev.pointerId) return;
+    if (chartDrag.moved) suppressChartClickUntil = Date.now() + 300;
+    $('chart-wrap').releasePointerCapture?.(ev.pointerId);
+    $('chart-wrap').classList.remove('dragging');
+    chartDrag = null;
+  }};
+  $('chart-wrap').addEventListener('pointerup', endChartDrag);
+  $('chart-wrap').addEventListener('pointercancel', endChartDrag);
+  $('chart-wrap').addEventListener('click', (ev) => {{ if (Date.now() < suppressChartClickUntil) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, true);
   const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
   const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
@@ -1035,6 +1079,7 @@ class LightweightChartLevelSelectorUI:
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
   chart.subscribeClick(param => {{
+    if (Date.now() < suppressChartClickUntil) return;
     if (!param || !param.point) return;
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
     const time = typeof param.time === 'string' ? param.time : (param.time ? `${{param.time.year}}-${{String(param.time.month).padStart(2,'0')}}-${{String(param.time.day).padStart(2,'0')}}` : nearest(null).time);
@@ -1119,6 +1164,7 @@ class LightweightChartLevelSelectorUI:
     requestAnimationFrame(() => {{
       document.documentElement.style.setProperty('--calc-drawer-height', `${{Math.ceil(drawer.getBoundingClientRect().height + 10)}}px`);
       window.dispatchEvent(new Event('resize'));
+      applyVerticalPan();
     }});
   }}
   async function calculatePosition(show=true) {{
