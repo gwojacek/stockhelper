@@ -5,8 +5,10 @@ from pathlib import Path
 import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import urlopen
+import importlib
+import importlib.util
 import os
 
 import pandas as pd
@@ -372,9 +374,50 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
-def _download_text(url: str) -> str:
+def _is_stooq_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return host == "stooq.pl" or host.endswith(".stooq.pl")
+
+
+def _curl_cffi_requests_module():
+    if importlib.util.find_spec("curl_cffi") is None:
+        return None
+    return importlib.import_module("curl_cffi.requests")
+
+
+def _download_text_with_curl_cffi(url: str) -> str | None:
+    requests = _curl_cffi_requests_module()
+    if requests is None:
+        return None
+
+    response = requests.get(
+        url,
+        timeout=20,
+        impersonate=os.getenv("STOCKHELPER_CURL_CFFI_IMPERSONATE", "chrome"),
+        headers={
+            "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
+            "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://stooq.pl/",
+        },
+    )
+    response.raise_for_status()
+    return response.text
+
+
+def _download_text_with_urlopen(url: str) -> str:
     with urlopen(url, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
+
+
+def _download_text(url: str) -> str:
+    if _is_stooq_url(url) and os.getenv("STOCKHELPER_DISABLE_CURL_CFFI", "0") != "1":
+        try:
+            text = _download_text_with_curl_cffi(url)
+        except Exception:
+            text = None
+        if text is not None:
+            return text
+    return _download_text_with_urlopen(url)
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
