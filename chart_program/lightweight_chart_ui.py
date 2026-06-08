@@ -433,12 +433,12 @@ class LightweightChartLevelSelectorUI:
     #calc-drawer {{ display:none; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; }}
     #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 7px 0; }}
-    #calc-table {{ max-width: 980px; }}
+    #calc-table {{ max-width: 980px; margin: 0 auto; }}
     #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:12px; }}
     #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-summary {{ display:flex; flex-wrap:wrap; gap:5px 12px; margin-bottom:7px; color:#cbd5e1; font-size:12px; }}
+    #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:center; gap:5px 12px; margin:0 auto 7px auto; max-width:980px; color:#cbd5e1; font-size:12px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
   </style>
@@ -487,7 +487,7 @@ class LightweightChartLevelSelectorUI:
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
-      <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Finish</button>
+      <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="result-box" style="margin-top:10px"></div>
     </aside>
   </div>
