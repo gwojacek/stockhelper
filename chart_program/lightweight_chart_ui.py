@@ -428,9 +428,9 @@ class LightweightChartLevelSelectorUI:
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
-    .main.calc-open #chart-wrap {{ height: calc(100vh - 132px - var(--calc-drawer-height, 260px)); min-height: 260px; cursor: grab; }}
+    .main.calc-open #chart-wrap {{ height: calc(100vh - 132px - var(--calc-drawer-height, 340px)); min-height: 220px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
-    #calc-drawer {{ display:none; margin-top:10px; max-height:32vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
+    #calc-drawer {{ display:none; margin-top:10px; max-height:42vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
     #calc-drawer.open {{ display:block; }}
     #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
     #calc-drawer table {{ width:100%; border-collapse:collapse; font-size:13px; }}
