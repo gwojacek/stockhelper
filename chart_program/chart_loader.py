@@ -5,6 +5,9 @@ from pathlib import Path
 import importlib
 import importlib.util
 import tempfile
+import threading
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
@@ -30,6 +33,27 @@ STOOQ_HTTP_HEADERS = {
     "Referer": "https://stooq.pl/",
     "Connection": "keep-alive",
 }
+STOOQ_MAX_CONCURRENCY_ENV = "STOCKHELPER_STOOQ_MAX_CONCURRENCY"
+STOOQ_MIN_INTERVAL_ENV = "STOCKHELPER_STOOQ_MIN_INTERVAL_SECONDS"
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+_STOOQ_HTTP_SEMAPHORE = threading.BoundedSemaphore(max(1, _env_int(STOOQ_MAX_CONCURRENCY_ENV, 2)))
+_STOOQ_HTTP_SPACING_LOCK = threading.Lock()
+_STOOQ_HTTP_LAST_REQUEST_AT = 0.0
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -463,7 +487,21 @@ def _download_text_with_playwright(url: str) -> str:
                 browser.close()
 
 
-def _download_text(url: str) -> str:
+@contextmanager
+def _stooq_http_slot():
+    global _STOOQ_HTTP_LAST_REQUEST_AT
+    with _STOOQ_HTTP_SEMAPHORE:
+        min_interval = max(0.0, _env_float(STOOQ_MIN_INTERVAL_ENV, 0.35))
+        with _STOOQ_HTTP_SPACING_LOCK:
+            now = time.monotonic()
+            wait_s = (_STOOQ_HTTP_LAST_REQUEST_AT + min_interval) - now
+            if wait_s > 0:
+                time.sleep(wait_s)
+            _STOOQ_HTTP_LAST_REQUEST_AT = time.monotonic()
+        yield
+
+
+def _download_text_unthrottled(url: str) -> str:
     request = Request(url, headers=STOOQ_HTTP_HEADERS)
     try:
         with urlopen(request, timeout=20) as response:
@@ -498,6 +536,11 @@ def _download_text(url: str) -> str:
             fallback_errors.append(f"Playwright browser verification fallback failed: {browser_exc}")
             raise ValueError("Stooq browser verification fallbacks failed: " + "; ".join(fallback_errors)) from browser_exc
     return text
+
+
+def _download_text(url: str) -> str:
+    with _stooq_http_slot():
+        return _download_text_unthrottled(url)
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
