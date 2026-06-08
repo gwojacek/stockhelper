@@ -432,13 +432,15 @@ class LightweightChartLevelSelectorUI:
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
     #calc-drawer {{ display:none; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; }}
-    #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 7px 0; }}
+    #calc-head {{ display:grid; grid-template-columns:minmax(120px,1fr) minmax(760px,980px) minmax(80px,1fr); align-items:start; gap:12px; margin:0 0 4px 0; }}
+    #calc-title {{ grid-column:1; margin:0; padding-top:2px; text-align:center; font-size:18px; }}
+    #calc-close {{ grid-column:3; justify-self:end; }}
     #calc-table {{ max-width: 980px; margin: 0 auto; }}
     #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:12px; }}
     #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:center; gap:5px 12px; margin:0 auto 7px auto; max-width:980px; color:#cbd5e1; font-size:12px; }}
+    #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:center; gap:5px 12px; margin:0 auto 3px auto; max-width:980px; color:#cbd5e1; font-size:12px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
   </style>
@@ -463,8 +465,11 @@ class LightweightChartLevelSelectorUI:
       <div id="chart-legend"></div>
       <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas></div>
       <section id="calc-drawer" aria-live="polite">
-        <h3>Position calculation <button id="calc-close" type="button">Close</button></h3>
-        <div id="calc-summary"></div>
+        <div id="calc-head">
+          <h3 id="calc-title">Position calculation</h3>
+          <div id="calc-summary"></div>
+          <button id="calc-close" type="button">Close</button>
+        </div>
         <div id="calc-table"></div>
         <div id="calc-warnings"></div>
       </section>
