@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 import os
 
 import pandas as pd
+from playwright.sync_api import sync_playwright
 
 from utilities.stooq_playwright import update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
@@ -384,10 +385,71 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
+def _is_stooq_browser_verification_response(text: str) -> bool:
+    lowered = (text or "").lower()
+    return (
+        "requires javascript to verify your browser" in lowered
+        or ("verify your browser" in lowered and "noindex,nofollow" in lowered)
+    )
+
+
+def _playwright_page_text(page) -> str:
+    try:
+        return page.locator("body").inner_text(timeout=5000)
+    except Exception:
+        return page.content()
+
+
+def _download_text_with_playwright(url: str) -> str:
+    browser = None
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent=STOOQ_HTTP_HEADERS["User-Agent"],
+            locale="pl-PL",
+            extra_http_headers={
+                "Accept": STOOQ_HTTP_HEADERS["Accept"],
+                "Accept-Language": STOOQ_HTTP_HEADERS["Accept-Language"],
+                "Referer": STOOQ_HTTP_HEADERS["Referer"],
+            },
+        )
+        try:
+            page = context.new_page()
+            # Visit the main site first so Stooq's JavaScript verifier can set
+            # any browser/session cookies before the CSV endpoint is requested.
+            page.goto("https://stooq.pl/", wait_until="domcontentloaded", timeout=30000)
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            text = _playwright_page_text(page)
+            for _ in range(3):
+                if not _is_stooq_browser_verification_response(text):
+                    return text
+                page.wait_for_timeout(2500)
+                page.reload(wait_until="domcontentloaded", timeout=30000)
+                text = _playwright_page_text(page)
+            return text
+        finally:
+            context.close()
+            if browser is not None:
+                browser.close()
+
+
 def _download_text(url: str) -> str:
     request = Request(url, headers=STOOQ_HTTP_HEADERS)
-    with urlopen(request, timeout=20) as response:
-        return response.read().decode("utf-8", errors="replace")
+    try:
+        with urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8", errors="replace")
+    except URLError as direct_exc:
+        try:
+            return _download_text_with_playwright(url)
+        except Exception as browser_exc:
+            raise URLError(f"{direct_exc}; Playwright browser fallback failed: {browser_exc}") from browser_exc
+
+    if _is_stooq_browser_verification_response(text):
+        try:
+            return _download_text_with_playwright(url)
+        except Exception as browser_exc:
+            raise ValueError(f"Stooq Playwright browser verification fallback failed: {browser_exc}") from browser_exc
+    return text
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:

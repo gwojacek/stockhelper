@@ -116,3 +116,45 @@ def test_download_text_sends_browser_like_headers(monkeypatch):
     assert "Mozilla/5.0" in captured["headers"]["User-agent"]
     assert captured["headers"]["Referer"] == "https://stooq.pl/"
     assert "pl-PL" in captured["headers"]["Accept-language"]
+
+
+def test_download_text_uses_playwright_when_stooq_returns_js_challenge(monkeypatch):
+    browser_urls: list[str] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return STOOQ_HTML_CHALLENGE.encode("utf-8")
+
+    def fake_playwright_download(url: str) -> str:
+        browser_urls.append(url)
+        return STOOQ_CSV
+
+    monkeypatch.setattr(chart_loader, "urlopen", lambda request, timeout: FakeResponse())
+    monkeypatch.setattr(chart_loader, "_download_text_with_playwright", fake_playwright_download)
+
+    text = chart_loader._download_text("https://stooq.pl/q/d/l/?s=peo.wa&i=d")
+
+    assert text == STOOQ_CSV
+    assert browser_urls == ["https://stooq.pl/q/d/l/?s=peo.wa&i=d"]
+
+
+def test_download_text_uses_playwright_when_direct_request_is_blocked(monkeypatch):
+    browser_urls: list[str] = []
+
+    def fake_playwright_download(url: str) -> str:
+        browser_urls.append(url)
+        return STOOQ_CSV
+
+    monkeypatch.setattr(chart_loader, "urlopen", lambda request, timeout: (_ for _ in ()).throw(chart_loader.URLError("blocked")))
+    monkeypatch.setattr(chart_loader, "_download_text_with_playwright", fake_playwright_download)
+
+    text = chart_loader._download_text("https://stooq.pl/q/d/l/?s=peo.wa&i=d")
+
+    assert text == STOOQ_CSV
+    assert browser_urls == ["https://stooq.pl/q/d/l/?s=peo.wa&i=d"]
