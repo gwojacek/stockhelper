@@ -3728,7 +3728,19 @@ def run_fibo_search(target: str) -> int:
         tk = (r.ticker, side)
         if tk not in ichimoku_retest_by_ticker:
             try:
-                _, _, flip, _, _ = _scan_one(r.ticker, group_name, exchange_suffix, current_datetime)
+                # This is a post-scan enrichment step for rows whose OHLC data was
+                # already loaded during the FIBO scan. Do not trigger another
+                # remote Stooq refresh here; blocked browser fallbacks can stall
+                # report finalization and hide the actual scan results.
+                prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+                os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+                try:
+                    _, _, flip, _, _ = _scan_one(r.ticker, group_name, exchange_suffix, current_datetime)
+                finally:
+                    if prev_cache_only is None:
+                        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    else:
+                        os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
                 target_side = 'above' if side == 'long' else 'below'
                 if flip and flip.current_side == target_side:
                     if flip.valid_retests_count > 0:
