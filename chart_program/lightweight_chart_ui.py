@@ -424,7 +424,8 @@ class LightweightChartLevelSelectorUI:
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
-    #calc-drawer {{ display:none; position:fixed; left:14px; right:394px; bottom:14px; max-height:42vh; overflow:auto; z-index:20; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
+    .main.calc-open #chart-wrap {{ height: calc(100vh - 132px - var(--calc-drawer-height, 260px)); min-height: 260px; }}
+    #calc-drawer {{ display:none; margin-top:10px; max-height:32vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
     #calc-drawer.open {{ display:block; }}
     #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
     #calc-drawer table {{ width:100%; border-collapse:collapse; font-size:13px; }}
@@ -1030,7 +1031,7 @@ class LightweightChartLevelSelectorUI:
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
-  $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); }};
+  $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
   chart.subscribeClick(param => {{
@@ -1093,6 +1094,7 @@ class LightweightChartLevelSelectorUI:
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
     drawer.classList.add('open');
+    $('calc-drawer').closest('.main')?.classList.add('calc-open');
     if (!data || !data.ok) {{
       summary.innerHTML = `<b>Unable to calculate:</b> ${{(data && data.error) ? data.error : 'unknown error'}}`;
       table.innerHTML = ''; warnings.innerHTML = ''; return;
@@ -1114,6 +1116,10 @@ class LightweightChartLevelSelectorUI:
     summary.innerHTML = chips.join('');
     table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
     warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');
+    requestAnimationFrame(() => {{
+      document.documentElement.style.setProperty('--calc-drawer-height', `${{Math.ceil(drawer.getBoundingClientRect().height + 10)}}px`);
+      window.dispatchEvent(new Event('resize'));
+    }});
   }}
   async function calculatePosition(show=true) {{
     const current = collectLevelsForSave(false);
@@ -1130,7 +1136,7 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
   $('calculate-btn').onclick = () => calculatePosition(true);
-  $('calc-close').onclick = () => $('calc-drawer').classList.remove('open');
+  $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); window.dispatchEvent(new Event('resize')); }};
 
   $('finish-btn').onclick = async () => {{
     const calc = await calculatePosition(false);
@@ -1167,7 +1173,7 @@ class LightweightChartLevelSelectorUI:
         position_type = "short" if position_type == "short" else "long"
         stock_cfd_mode = bool(levels.get("__stock_cfd_mode__"))
         effective_instrument = "commodity" if stock_cfd_mode else self.instrument_type
-        risk_levels = list(DEFAULT_RISK_LEVELS)
+        risk_levels = sorted(DEFAULT_RISK_LEVELS)
         rows = []
         warnings = []
         currency = "PLN"
