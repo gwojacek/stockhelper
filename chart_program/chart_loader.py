@@ -35,6 +35,7 @@ STOOQ_HTTP_HEADERS = {
 }
 STOOQ_MAX_CONCURRENCY_ENV = "STOCKHELPER_STOOQ_MAX_CONCURRENCY"
 STOOQ_MIN_INTERVAL_ENV = "STOCKHELPER_STOOQ_MIN_INTERVAL_SECONDS"
+SCHEDULED_REFRESH_ENV = "STOCKHELPER_SCHEDULED_REFRESH_DUE"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -1078,6 +1079,23 @@ def load_or_update_daily_data(
             "symbol": symbol,
             "name": symbol.title(),
             "fallback_reason": "Cache-only mode enabled.",
+        }
+
+    scheduled_refresh_due = os.environ.get(SCHEDULED_REFRESH_ENV) == "1"
+    if (
+        not cache_only
+        and not fetch_older_data
+        and not _force_remote_refresh_enabled()
+        and not scheduled_refresh_due
+        and local is not None
+        and not local.empty
+    ):
+        cached_df = _last_year_only(local)
+        return cached_df, csv_path, {
+            "source": "cache",
+            "symbol": symbol,
+            "name": symbol.title(),
+            "fallback_reason": "Scheduled refresh is not due; using local cache.",
         }
 
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):

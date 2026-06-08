@@ -107,6 +107,7 @@ Optional:
 - Stooq history downloads use the direct `stooq.pl` CSV API first, then fall back to `pandas-datareader` only if the CSV API cannot return valid OHLC rows.
 - Stooq CSV API requests include browser-like HTTP headers (`User-Agent`, `Accept-Language`, `Referer`) to avoid bare-script rejections.
 - If Stooq still returns a JavaScript browser-verification page, the loader tries `cloudscraper` first when it is installed, then retries the same CSV URL in headless Playwright so the verifier can run in a real browser session.
+- Search runs refresh local CSVs automatically once per scheduled market window: WIG/DAX after 17:30 Warsaw time, all other groups after 23:30 Warsaw time. Outside that window, existing CSVs are reused and missing CSVs are downloaded; `-onlycache` remains the only strict cache-only mode.
 - Stooq HTTP requests are throttled across scanner threads to avoid `Connection refused` bursts; tune with `STOCKHELPER_STOOQ_MAX_CONCURRENCY` (default `2`) and `STOCKHELPER_STOOQ_MIN_INTERVAL_SECONDS` (default `0.35`).
 
 ---

@@ -793,6 +793,29 @@ def _warsaw_phase_now() -> tuple[str, str]:
     return now.strftime("%Y-%m-%d"), phase
 
 
+def _scheduled_refresh_rule(group_name: str) -> tuple[str, dt_time]:
+    group_u = (group_name or "").strip().upper()
+    if group_u.startswith("WIG") or group_u in {"DAX", "DAX40"}:
+        return "market1730", dt_time(17, 30)
+    return "global2330", dt_time(23, 30)
+
+
+def _scheduled_refresh_bucket(group_name: str) -> tuple[str, bool, str]:
+    now = _warsaw_now()
+    bucket_name, cutoff = _scheduled_refresh_rule(group_name)
+    day = now.date()
+    due = now.time() >= cutoff
+    if not due:
+        day = day - timedelta(days=1)
+    return day.strftime("%Y-%m-%d"), due, bucket_name
+
+
+def _scheduled_refresh_key(group_name: str) -> tuple[str, bool]:
+    day, due, bucket_name = _scheduled_refresh_bucket(group_name)
+    normalized = (group_name or "").strip().lower()
+    return f"scheduled:{bucket_name}:{normalized}:{day}", due
+
+
 def _is_ui_commodity_ticker(ticker: str) -> bool:
     raw = (ticker or "").strip().upper()
     if raw in API_METAL_COMMODITIES:
@@ -829,66 +852,28 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
 
 def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
     if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
-        print(f"[refresh-check] {group_name}: cache-only already requested; skipping remote probe.")
+        print(f"[refresh-check] {group_name}: -onlycache requested; skipping remote probe/update.")
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        os.environ.pop("STOCKHELPER_SCHEDULED_REFRESH_DUE", None)
         return False
     STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
-    group_l = (group_name or "").lower()
-    if group_l == "commodities":
-        day, phase = _warsaw_phase_now()
-        state = _read_refresh_state()
-        bucket = f"commodities:{day}:{phase}"
-        stale: list[str] = []
-        for t in members:
-            missing = _commodity_missing_days_vs_yahoo(t)
-            if missing > 0:
-                stale.append(f"{t}({missing}d)")
-        if stale:
-            print(f"[refresh-check] commodities stale vs Yahoo: {', '.join(stale[:8])}{' ...' if len(stale)>8 else ''} -> refresh whole group")
-            state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "stale"}
-            _write_refresh_state(state)
-            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
-            return True
-        if state.get(bucket):
-            print(f"[refresh-check] commodities {phase}: already checked today -> cache-only mode ON")
-            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
-            return False
-        print(f"[refresh-check] commodities {phase}: no Yahoo-stale UI commodities; marking bucket checked")
-        state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "fresh"}
+    state = _read_refresh_state()
+    scheduled_key, scheduled_due = _scheduled_refresh_key(group_name)
+    if scheduled_due and not state.get(scheduled_key):
+        print(f"[refresh-check] {group_name}: scheduled daily refresh due -> refresh mode ON")
+        state[scheduled_key] = {"started_at": datetime.now(UTC).isoformat(), "result": "scheduled"}
         _write_refresh_state(state)
-        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
-        return False
-
-    if group_l == "single":
-        probes = members[:1]
-    else:
-        probe_count = min(5, len(members))
-        probes = random.sample(list(members), k=probe_count) if probe_count else []
-        if probes:
-            print(f"[refresh-check] {group_name}: random freshness probes: {', '.join(probes)}")
-    checked = 0
-    for ticker in probes:
-        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
-        try:
-            newer = has_new_remote_data(fetch_symbol, instrument)
-            checked += 1
-            print(f"[refresh-check] {ticker}: remote {'newer' if newer else 'not newer'}")
-            if newer:
-                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-                os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
-                return True
-        except Exception as exc:
-            print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); remote unavailable -> cache-only mode ON")
-            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
-            return False
-    print(f"[refresh-check] {group_name}: checked {checked} probe(s), no newer remote data -> cache-only mode ON")
-    os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        os.environ["STOCKHELPER_SCHEDULED_REFRESH_DUE"] = "1"
+        return True
     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+    os.environ.pop("STOCKHELPER_SCHEDULED_REFRESH_DUE", None)
+    status = "not due yet" if not scheduled_due else "already refreshed for this schedule"
+    print(f"[refresh-check] {group_name}: scheduled refresh {status}; using cache for existing CSVs and downloading missing CSVs only")
     return False
+
 
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
