@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+import importlib
+import importlib.util
 import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import os
 
 import pandas as pd
@@ -15,6 +17,16 @@ from utilities.stooq_playwright import update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
+STOOQ_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/csv,application/csv,text/plain,*/*;q=0.8",
+    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://stooq.pl/",
+}
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -372,18 +384,63 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
+def _is_stooq_browser_verification_response(text: str) -> bool:
+    lowered = (text or "").lower()
+    return (
+        "requires javascript to verify your browser" in lowered
+        or "wymaga javascriptu do weryfikacji przeglądarki" in lowered
+        or "wymaga javascriptu do weryfikacji przegladarki" in lowered
+        or ("noindex,nofollow" in lowered and "textencoder" in lowered)
+    )
+
+
+def _validate_downloaded_text(text: str, raw_len: int, response=None) -> str:
+    if not text.strip():
+        status = getattr(response, "status", "unknown")
+        content_type = response.headers.get("Content-Type", "unknown") if getattr(response, "headers", None) is not None else "unknown"
+        raise ValueError(
+            f"Stooq returned an empty response body "
+            f"(status={status}, content_type={content_type}, bytes={raw_len})"
+        )
+    return text
+
+
+def _download_text_with_cloudscraper(url: str) -> str:
+    if importlib.util.find_spec("cloudscraper") is None:
+        raise ValueError("cloudscraper is not installed; install dependencies or run `pip install cloudscraper`")
+    cloudscraper = importlib.import_module("cloudscraper")
+    scraper = cloudscraper.create_scraper(
+        browser={
+            "browser": "chrome",
+            "platform": "windows",
+            "desktop": True,
+        }
+    )
+    response = scraper.get(url, headers=STOOQ_HTTP_HEADERS, timeout=30)
+    response.raise_for_status()
+    text = _validate_downloaded_text(response.text, len(response.content), response)
+    if _is_stooq_browser_verification_response(text):
+        raise ValueError("cloudscraper returned Stooq browser verification page")
+    return text
+
+
 def _download_text(url: str) -> str:
-    with urlopen(url, timeout=20) as response:
-        raw = response.read()
-        text = raw.decode("utf-8", errors="replace")
-        if not text.strip():
-            status = getattr(response, "status", "unknown")
-            content_type = response.headers.get("Content-Type", "unknown") if getattr(response, "headers", None) is not None else "unknown"
-            raise ValueError(
-                f"Stooq returned an empty response body "
-                f"(status={status}, content_type={content_type}, bytes={len(raw)})"
-            )
-        return text
+    request = Request(url, headers=STOOQ_HTTP_HEADERS)
+    direct_error: Exception | None = None
+    try:
+        with urlopen(request, timeout=20) as response:
+            raw = response.read()
+            text = _validate_downloaded_text(raw.decode("utf-8", errors="replace"), len(raw), response)
+            if not _is_stooq_browser_verification_response(text):
+                return text
+            direct_error = ValueError("direct Stooq request returned browser verification page")
+    except Exception as exc:
+        direct_error = exc
+
+    try:
+        return _download_text_with_cloudscraper(url)
+    except Exception as cloud_exc:
+        raise ValueError(f"Stooq direct download failed ({direct_error}); cloudscraper failed ({cloud_exc})") from cloud_exc
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
