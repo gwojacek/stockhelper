@@ -436,11 +436,11 @@ class LightweightChartLevelSelectorUI:
     #calc-title {{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:max(120px, calc((100% - 980px) / 2 - 24px)); margin:0; text-align:center; font-size:18px; }}
     #calc-close {{ grid-column:3; justify-self:end; }}
     #calc-table {{ max-width: 980px; margin: 0 auto; }}
-    #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:12px; }}
+    #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:13px; }}
     #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-start; gap:5px 12px; margin:0 auto 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:12px; }}
+    #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-start; gap:5px 12px; margin:0 auto 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
   </style>
