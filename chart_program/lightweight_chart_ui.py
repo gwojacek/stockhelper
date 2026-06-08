@@ -13,6 +13,10 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, request
+
+from core.calculator import calculate_position_size, calculate_stock_position
+from core.risk_manager import calculate_distance_ratio, calculate_take_profit
+from chart_program.config_writer import DEFAULT_RISK_LEVELS
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 SELECTION_SEQUENCE = [
@@ -420,6 +424,16 @@ class LightweightChartLevelSelectorUI:
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
+    #calc-drawer {{ display:none; position:fixed; left:14px; right:394px; bottom:14px; max-height:42vh; overflow:auto; z-index:20; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
+    #calc-drawer.open {{ display:block; }}
+    #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
+    #calc-drawer table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:6px 8px; text-align:right; }}
+    #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
+    #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
+    #calc-summary {{ display:flex; flex-wrap:wrap; gap:8px 14px; margin-bottom:10px; color:#cbd5e1; font-size:13px; }}
+    #calc-summary b {{ color:#f8fafc; }}
+    #calc-warnings {{ margin-top:8px; color:#facc15; font-size:13px; }}
   </style>
 </head>
 <body>
@@ -441,6 +455,12 @@ class LightweightChartLevelSelectorUI:
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="chart-legend"></div>
       <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas></div>
+      <section id="calc-drawer" aria-live="polite">
+        <h3>Position calculation <button id="calc-close" type="button">Close</button></h3>
+        <div id="calc-summary"></div>
+        <div id="calc-table"></div>
+        <div id="calc-warnings"></div>
+      </section>
     </main>
     <aside class="side">
       <div style="margin-bottom:8px;font-weight:800;font-size:20px;color:#f8fafc" id="identity"></div>
@@ -459,7 +479,8 @@ class LightweightChartLevelSelectorUI:
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="finish-btn" style="margin-top:16px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Finish</button>
+      <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
+      <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Finish</button>
       <div id="result-box" style="margin-top:10px"></div>
     </aside>
   </div>
@@ -1044,11 +1065,77 @@ class LightweightChartLevelSelectorUI:
     if (activeTool === 'fib' && fibAnchor && time) updateFibPreview(time);
   }});
 
-  $('finish-btn').onclick = async () => {{
+  function collectLevelsForSave(finished=false) {{
     const stockCfdMode = !!levels.__stock_cfd_mode__;
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
-    levels = {{...levels, position_type:$('position-type').value, capital:roundPrice(Number($('capital').value || 255000)), lot_cost:roundPrice(Number($('lot-cost').value || 0)), pip_value:Number(pipValue.toFixed(4)), spread_multiplier:Number(spreadMult.toFixed(4)), spread:Number((stockCfdMode ? spreadMult : spreadMult*pipValue).toFixed(4)), spread_pips: stockCfdMode ? Number((spreadMult/0.01).toFixed(2)) : null, drawn_objects:drawnObjects, level_points:levelPoints, __finished__:true}};
+    return {{...levels,
+      position_type:$('position-type').value,
+      capital:roundPrice(Number($('capital').value || 255000)),
+      lot_cost:roundPrice(Number($('lot-cost').value || 0)),
+      pip_value:Number(pipValue.toFixed(4)),
+      spread_multiplier:Number(spreadMult.toFixed(4)),
+      spread:Number((stockCfdMode ? spreadMult : spreadMult*pipValue).toFixed(4)),
+      spread_pips: stockCfdMode ? Number((spreadMult/0.01).toFixed(2)) : null,
+      drawn_objects:drawnObjects,
+      level_points:levelPoints,
+      __finished__:!!finished}};
+  }}
+
+  function money(v, currency='PLN') {{
+    const n = Number(v || 0);
+    return n.toLocaleString(undefined, {{minimumFractionDigits:2, maximumFractionDigits:2}}) + ' ' + currency;
+  }}
+  function numText(v, digits=2) {{
+    const n = Number(v || 0);
+    return n.toLocaleString(undefined, {{minimumFractionDigits:digits, maximumFractionDigits:digits}});
+  }}
+  function renderCalculation(data) {{
+    const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
+    drawer.classList.add('open');
+    if (!data || !data.ok) {{
+      summary.innerHTML = `<b>Unable to calculate:</b> ${{(data && data.error) ? data.error : 'unknown error'}}`;
+      table.innerHTML = ''; warnings.innerHTML = ''; return;
+    }}
+    const currency = data.currency || 'PLN';
+    const b = data.basics || {{}};
+    const chips = [];
+    chips.push(`<span><b>Instrument:</b> ${{data.instrument_type || P.instrumentType}}</span>`);
+    chips.push(`<span><b>Position:</b> ${{(data.position_type || $('position-type').value || 'long').toUpperCase()}}</span>`);
+    if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
+    if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
+    if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>Max capital:</b> ${{money(b.max_capital, currency)}}</span>`);
+    if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
+    if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
+    if (data.take_profit != null) chips.push(`<span><b>Take profit:</b> ${{fmt(Number(data.take_profit))}}</span>`);
+    if (data.risk_reward != null) chips.push(`<span><b>Risk/reward:</b> ${{numText(data.risk_reward, 2)}}:1</span>`);
+    if (data.profit != null) chips.push(`<span><b>Profit:</b> ${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)</span>`);
+    if (data.zr_ratio != null) chips.push(`<span><b>Additional Z/R:</b> ${{numText(data.zr_ratio, 2)}}:1</span>`);
+    summary.innerHTML = chips.join('');
+    table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
+    warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');
+  }}
+  async function calculatePosition(show=true) {{
+    const current = collectLevelsForSave(false);
+    try {{
+      const resp = await fetch('/calculate', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:current}})}});
+      const data = await resp.json();
+      if (data && data.ok) levels = {{...levels, position_calculations:data}};
+      if (show) renderCalculation(data);
+      return data;
+    }} catch(e) {{
+      const data = {{ok:false, error:String(e)}};
+      if (show) renderCalculation(data);
+      return data;
+    }}
+  }}
+  $('calculate-btn').onclick = () => calculatePosition(true);
+  $('calc-close').onclick = () => $('calc-drawer').classList.remove('open');
+
+  $('finish-btn').onclick = async () => {{
+    const calc = await calculatePosition(false);
+    levels = collectLevelsForSave(true);
+    if (calc && calc.ok) levels.position_calculations = calc;
     let screenshot = null; try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{}}
     const resp = await fetch('/finish', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels, screenshot}})}});
     if (resp.ok) {{ $('result-box').textContent = 'Saved. Closing app...'; setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250); }}
@@ -1061,6 +1148,138 @@ class LightweightChartLevelSelectorUI:
   </script>
 </body>
 </html>"""
+
+
+    def _position_calculation_payload(self, levels: dict) -> dict:
+        def _num(key: str, default: float = 0.0) -> float:
+            try:
+                value = levels.get(key, default)
+                return float(default if value in (None, "") else value)
+            except (TypeError, ValueError):
+                return float(default)
+
+        entry = _num("entry")
+        stop_loss = _num("stop_loss")
+        high = _num("high")
+        low = _num("low")
+        capital = _num("capital", 255000.0)
+        position_type = str(levels.get("position_type") or "long").lower()
+        position_type = "short" if position_type == "short" else "long"
+        stock_cfd_mode = bool(levels.get("__stock_cfd_mode__"))
+        effective_instrument = "commodity" if stock_cfd_mode else self.instrument_type
+        risk_levels = list(DEFAULT_RISK_LEVELS)
+        rows = []
+        warnings = []
+        currency = "PLN"
+
+        if entry <= 0 or capital <= 0 or stop_loss <= 0:
+            return {"ok": False, "error": "Select entry, stop loss, and capital before calculating."}
+
+        try:
+            if effective_instrument == "stock":
+                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                max_capital = capital
+                try:
+                    if "Volume" in self.df.columns:
+                        turnover = (pd.to_numeric(self.df["Close"], errors="coerce") * pd.to_numeric(self.df["Volume"], errors="coerce")).dropna()
+                        if len(turnover) >= 10:
+                            max_capital = float(turnover.tail(10).mean()) * 0.01
+                        else:
+                            warnings.append("Turnover history is short; max capital uses available capital.")
+                    else:
+                        warnings.append("Volume data is unavailable; max capital uses available capital.")
+                except Exception as exc:
+                    warnings.append(f"Could not derive turnover max capital: {exc}")
+                for risk in risk_levels:
+                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=conversion_fee_pct)
+                    rows.append({
+                        "risk": risk,
+                        "risk_label": f"{risk * 100:.1f}%",
+                        "position_size": result.get("shares", 0),
+                        "position_unit": "Shares",
+                        "capital_used": round(float(result.get("capital_used", 0.0)), 2),
+                        "potential_loss": round(float(result.get("potential_loss", 0.0)), 2),
+                        "loss_percent": round(float(result.get("risk_percent", 0.0)), 2),
+                    })
+                basics = {"entry": entry, "stop_loss": stop_loss, "max_capital": round(max_capital, 2)}
+            else:
+                lot_cost = _num("lot_cost")
+                pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
+                spread = _num("spread")
+                pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
+                if lot_cost <= 0:
+                    return {"ok": False, "error": "Lot cost must be greater than zero before calculating."}
+                if pip_value <= 0:
+                    return {"ok": False, "error": "Pip value must be greater than zero before calculating."}
+                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                for risk in risk_levels:
+                    result = calculate_position_size(
+                        entry=entry,
+                        stop_loss=stop_loss,
+                        capital=capital,
+                        risk_percent=risk,
+                        pip_value=pip_value,
+                        lot_cost=lot_cost,
+                        spread=spread,
+                        pip_size=pip_size,
+                        position_type=position_type,
+                        instrument_type=effective_instrument,
+                        conversion_fee_pct=conversion_fee_pct,
+                    )
+                    rows.append({
+                        "risk": risk,
+                        "risk_label": f"{risk * 100:.1f}%",
+                        "position_size": result.get("lots", 0),
+                        "position_unit": "Lots",
+                        "capital_used": round(float(result.get("capital_used", 0.0)), 2),
+                        "potential_loss": round(float(result.get("potential_loss", 0.0)), 2),
+                        "loss_percent": round(float(result.get("risk_percent", 0.0)), 2),
+                    })
+                basics = {"entry": entry, "stop_loss": stop_loss, "lot_cost": lot_cost, "pip_value": pip_value, "spread": spread}
+
+            take_profit = None
+            risk_reward = None
+            profit = None
+            profit_percent = None
+            if high and low and levels.get("line_cross_value") not in (None, ""):
+                try:
+                    take_profit = calculate_take_profit(entry, high, low, position_type if effective_instrument != "stock" else "long", start_value=_num("line_cross_value"))
+                    base = next((r for r in rows if float(r.get("position_size", 0) or 0) > 0), None)
+                    if base and float(base.get("potential_loss", 0) or 0) > 0:
+                        if base["position_unit"] == "Shares":
+                            profit = float(base["position_size"]) * (take_profit - entry)
+                        else:
+                            pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
+                            pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
+                            profit = abs(take_profit - entry) / pip_size * float(base["position_size"]) * pip_value
+                        profit_percent = (profit / capital) * 100 if capital else None
+                        risk_reward = profit / float(base["potential_loss"])
+                except Exception as exc:
+                    warnings.append(f"Take-profit preview unavailable: {exc}")
+
+            zr_ratio = None
+            if levels.get("check_zr_value_fibo_or_elevation") not in (None, ""):
+                try:
+                    zr_ratio = calculate_distance_ratio(entry, stop_loss, _num("check_zr_value_fibo_or_elevation"))
+                except Exception as exc:
+                    warnings.append(f"Additional Z/R preview unavailable: {exc}")
+
+            return {
+                "ok": True,
+                "instrument_type": effective_instrument,
+                "position_type": position_type,
+                "currency": currency,
+                "rows": rows,
+                "basics": basics,
+                "take_profit": None if take_profit is None else round(float(take_profit), self._precision_for_price(take_profit)),
+                "risk_reward": None if risk_reward is None else round(float(risk_reward), 2),
+                "profit": None if profit is None else round(float(profit), 2),
+                "profit_percent": None if profit_percent is None else round(float(profit_percent), 2),
+                "zr_ratio": None if zr_ratio is None else round(float(zr_ratio), 2),
+                "warnings": warnings,
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def run(self):
         app = Flask(__name__)
@@ -1075,6 +1294,12 @@ class LightweightChartLevelSelectorUI:
         @app.route("/")
         def _index():
             return self._html()
+
+        @app.route("/calculate", methods=["POST"])
+        def _calculate():
+            payload = request.get_json(silent=True) or {}
+            levels = payload.get("levels") or {}
+            return jsonify(self._position_calculation_payload(levels))
 
         @app.route("/finish", methods=["POST"])
         def _finish():

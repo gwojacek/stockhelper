@@ -839,20 +839,28 @@ def run_level_selector(raw_args=None):
 
     snapshot_name = f"{final_config_path.stem}_levels.png"
     chart_path = Path("charts") / snapshot_name
+    calculation_path = PROJECT_ROOT / "chart_program" / "data" / "calculations" / f"{final_config_path.stem}_position_calculations.json"
 
     config_existed, config_backup = _snapshot_file(final_config_path)
     chart_existed, chart_backup = _snapshot_file(chart_path)
+    calculation_existed, calculation_backup = _snapshot_file(calculation_path)
     data_existed, data_backup = _snapshot_file(data_path)
 
     try:
         path = write_or_update_config(instrument_type=save_instrument_type, config_path=final_config_path, values=values)
         ui.save_chart_snapshot(selected, chart_path)
 
+        calculation = selected.get("position_calculations")
+        if calculation:
+            calculation_path.parent.mkdir(parents=True, exist_ok=True)
+            calculation_path.write_text(json.dumps(calculation, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
         data_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(data_path, index=False)
     except Exception:
         _restore_file(final_config_path, config_existed, config_backup)
         _restore_file(chart_path, chart_existed, chart_backup)
+        _restore_file(calculation_path, calculation_existed, calculation_backup)
         _restore_file(data_path, data_existed, data_backup)
         raise
 
@@ -861,6 +869,7 @@ def run_level_selector(raw_args=None):
         "config_path": str(path),
         "data_path": str(data_path),
         "chart_path": str(chart_path),
+        "calculation_path": str(calculation_path) if selected.get("position_calculations") else None,
         "data_source": fetch_info.get("source"),
         "data_symbol": fetch_info.get("symbol"),
         "data_name": fetch_info.get("name"),
