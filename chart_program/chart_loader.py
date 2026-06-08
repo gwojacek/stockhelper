@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+import hashlib
 import importlib
 import importlib.util
+import json
 import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 import os
 
@@ -30,6 +32,8 @@ STOOQ_HTTP_HEADERS = {
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
+STOOQ_HTTP_DEBUG_ENV = "STOCKHELPER_STOOQ_DEBUG_HTTP"
+STOOQ_HTTP_DEBUG_DIR = UNIFIED_DATA_DIR / "debug" / "stooq_http"
 
 DATA_DIR_BY_INSTRUMENT = {
     "stock": UNIFIED_DATA_DIR / "stocks",
@@ -394,6 +398,79 @@ def _is_stooq_browser_verification_response(text: str) -> bool:
     )
 
 
+def _redact_stooq_url(url: str) -> str:
+    try:
+        parts = urlsplit(url)
+        query = []
+        for key, value in parse_qsl(parts.query, keep_blank_values=True):
+            query.append((key, "***" if key.lower() in {"apikey", "api_key"} else value))
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    except Exception:
+        return url
+
+
+def _stooq_preview(text: str, limit: int = 700) -> str:
+    preview = " | ".join(line.strip() for line in (text or "").splitlines()[:8] if line.strip())
+    if not preview:
+        preview = f"<empty/whitespace response; chars={len(text or '')}>"
+    return preview[:limit]
+
+
+def _response_status(response) -> str:
+    return str(getattr(response, "status", getattr(response, "status_code", "unknown")))
+
+
+def _response_headers(response) -> dict[str, str]:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return {}
+    try:
+        return {str(k): str(v) for k, v in headers.items()}
+    except Exception:
+        return {}
+
+
+def _describe_stooq_response(source: str, response, text: str) -> str:
+    headers = _response_headers(response)
+    interesting = []
+    for key in ("Content-Type", "Server", "CF-Ray", "Set-Cookie"):
+        if key in headers:
+            interesting.append(f"{key}={headers[key][:120]}")
+    return (
+        f"source={source}, status={_response_status(response)}, chars={len(text or '')}, "
+        f"challenge={_is_stooq_browser_verification_response(text)}, "
+        f"headers=[{'; '.join(interesting) or 'none'}], preview={_stooq_preview(text)}"
+    )
+
+
+def _write_stooq_http_debug(source: str, url: str, response=None, text: str = "", error: BaseException | str | None = None) -> str:
+    if os.environ.get(STOOQ_HTTP_DEBUG_ENV) != "1":
+        return ""
+    try:
+        STOOQ_HTTP_DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        digest = hashlib.sha1(f"{source}:{url}:{stamp}".encode("utf-8", errors="ignore")).hexdigest()[:10]
+        path = STOOQ_HTTP_DEBUG_DIR / f"{stamp}_{source}_{digest}.json"
+        payload = {
+            "source": source,
+            "url": _redact_stooq_url(url),
+            "status": _response_status(response) if response is not None else "unknown",
+            "headers": _response_headers(response),
+            "challenge_detected": _is_stooq_browser_verification_response(text),
+            "preview": _stooq_preview(text, limit=2000),
+            "body_first_12000_chars": (text or "")[:12000],
+            "error": str(error) if error is not None else None,
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return str(path)
+    except Exception:
+        return ""
+
+
+def _debug_suffix(path: str) -> str:
+    return f"; debug={path}" if path else ""
+
+
 def _validate_downloaded_text(text: str, raw_len: int, response=None) -> str:
     if not text.strip():
         status = getattr(response, "status", "unknown")
@@ -416,12 +493,26 @@ def _download_text_with_cloudscraper(url: str) -> str:
             "desktop": True,
         }
     )
-    response = scraper.get(url, headers=STOOQ_HTTP_HEADERS, timeout=30)
-    response.raise_for_status()
-    text = _validate_downloaded_text(response.text, len(response.content), response)
-    if _is_stooq_browser_verification_response(text):
-        raise ValueError("cloudscraper returned Stooq browser verification page")
-    return text
+    response = None
+    text = ""
+    try:
+        response = scraper.get(url, headers=STOOQ_HTTP_HEADERS, timeout=30)
+        text = response.text
+        response.raise_for_status()
+        text = _validate_downloaded_text(text, len(response.content), response)
+        debug_path = _write_stooq_http_debug("cloudscraper", url, response, text)
+        if _is_stooq_browser_verification_response(text):
+            raise ValueError(
+                "cloudscraper returned Stooq browser verification page "
+                f"({_describe_stooq_response('cloudscraper', response, text)})"
+                f"{_debug_suffix(debug_path)}"
+            )
+        return text
+    except Exception as exc:
+        debug_path = _write_stooq_http_debug("cloudscraper", url, response, text, exc)
+        if debug_path and "debug=" not in str(exc):
+            raise ValueError(f"{exc}{_debug_suffix(debug_path)}") from exc
+        raise
 
 
 def _download_text(url: str) -> str:
@@ -431,11 +522,17 @@ def _download_text(url: str) -> str:
         with urlopen(request, timeout=20) as response:
             raw = response.read()
             text = _validate_downloaded_text(raw.decode("utf-8", errors="replace"), len(raw), response)
+            debug_path = _write_stooq_http_debug("direct", url, response, text)
             if not _is_stooq_browser_verification_response(text):
                 return text
-            direct_error = ValueError("direct Stooq request returned browser verification page")
+            direct_error = ValueError(
+                "direct Stooq request returned browser verification page "
+                f"({_describe_stooq_response('direct', response, text)})"
+                f"{_debug_suffix(debug_path)}"
+            )
     except Exception as exc:
         direct_error = exc
+        _write_stooq_http_debug("direct", url, None, "", exc)
 
     try:
         return _download_text_with_cloudscraper(url)

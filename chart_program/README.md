@@ -103,6 +103,7 @@ Each generated config includes:
 Optional:
 
 - `--api-key <key>` for Stooq variants (`apikey`, `api_key` on `stooq.pl` and `stooq.com`).
+- `STOCKHELPER_STOOQ_DEBUG_HTTP=1` saves direct/cloudscraper Stooq response diagnostics under `data/debug/stooq_http/` (URL with API key redacted, status, headers, anti-bot detection flag, preview, and response body excerpt).
 
 ---
 
