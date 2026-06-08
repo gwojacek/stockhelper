@@ -762,6 +762,17 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
     return fetch_symbol, instrument
 
 
+def _has_local_daily_cache(fetch_symbol: str, instrument: str) -> bool:
+    try:
+        path = local_csv_path_for_symbol(fetch_symbol, instrument)
+        if not path.exists():
+            return False
+        df = pd.read_csv(path, nrows=5)
+        return not df.empty and "Date" in df.columns
+    except Exception:
+        return False
+
+
 def _read_refresh_state() -> dict:
     try:
         if REFRESH_STATE_FILE.exists():
@@ -881,7 +892,15 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                 return True
         except Exception as exc:
-            print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); refreshing to avoid stale cache")
+            if _has_local_daily_cache(fetch_symbol, instrument):
+                print(
+                    f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); "
+                    "local CSV exists -> refresh mode without force (will fall back to cache if Stooq is still blocked)"
+                )
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                return False
+            print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); no local CSV -> refreshing to populate cache")
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             return True
