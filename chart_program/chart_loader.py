@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+import importlib
+import importlib.util
 import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
@@ -405,6 +407,22 @@ def _playwright_page_text(page) -> str:
         return page.content()
 
 
+def _download_text_with_cloudscraper(url: str) -> str:
+    if importlib.util.find_spec("cloudscraper") is None:
+        raise ValueError("cloudscraper is not installed")
+    cloudscraper = importlib.import_module("cloudscraper")
+    scraper = cloudscraper.create_scraper(
+        browser={
+            "browser": "chrome",
+            "platform": "windows",
+            "desktop": True,
+        }
+    )
+    response = scraper.get(url, headers=STOOQ_HTTP_HEADERS, timeout=30)
+    response.raise_for_status()
+    return response.text
+
+
 def _download_text_with_playwright(url: str) -> str:
     browser = None
     with sync_playwright() as p:
@@ -451,16 +469,34 @@ def _download_text(url: str) -> str:
         with urlopen(request, timeout=20) as response:
             text = response.read().decode("utf-8", errors="replace")
     except URLError as direct_exc:
+        fallback_errors: list[str] = []
+        try:
+            text = _download_text_with_cloudscraper(url)
+            if not _is_stooq_browser_verification_response(text):
+                return text
+            fallback_errors.append("cloudscraper returned Stooq browser verification page")
+        except Exception as cloud_exc:
+            fallback_errors.append(f"cloudscraper failed: {cloud_exc}")
         try:
             return _download_text_with_playwright(url)
         except Exception as browser_exc:
-            raise URLError(f"{direct_exc}; Playwright browser fallback failed: {browser_exc}") from browser_exc
+            fallback_errors.append(f"Playwright browser fallback failed: {browser_exc}")
+            raise URLError(f"{direct_exc}; {'; '.join(fallback_errors)}") from browser_exc
 
     if _is_stooq_browser_verification_response(text):
+        fallback_errors: list[str] = []
+        try:
+            cloud_text = _download_text_with_cloudscraper(url)
+            if not _is_stooq_browser_verification_response(cloud_text):
+                return cloud_text
+            fallback_errors.append("cloudscraper returned Stooq browser verification page")
+        except Exception as cloud_exc:
+            fallback_errors.append(f"cloudscraper failed: {cloud_exc}")
         try:
             return _download_text_with_playwright(url)
         except Exception as browser_exc:
-            raise ValueError(f"Stooq Playwright browser verification fallback failed: {browser_exc}") from browser_exc
+            fallback_errors.append(f"Playwright browser verification fallback failed: {browser_exc}")
+            raise ValueError("Stooq browser verification fallbacks failed: " + "; ".join(fallback_errors)) from browser_exc
     return text
 
 
@@ -580,10 +616,9 @@ def _stooq_download_with_pandas_datareader(
     lookback_days: int = 364,
     end_date: datetime | None = None,
 ) -> pd.DataFrame:
-    try:
-        import pandas_datareader.data as web
-    except ImportError as exc:
-        raise ValueError("pandas-datareader is not installed") from exc
+    if importlib.util.find_spec("pandas_datareader") is None:
+        raise ValueError("pandas-datareader is not installed")
+    web = importlib.import_module("pandas_datareader.data")
 
     end = end_date if isinstance(end_date, datetime) else datetime.now(timezone.utc)
     start = end - timedelta(days=lookback_days)
@@ -616,18 +651,6 @@ def _stooq_download(
     errors: list[str] = []
     effective_api_key = _effective_stooq_api_key(api_key)
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
-        try:
-            df = _stooq_download_with_pandas_datareader(candidate, lookback_days=lookback_days, end_date=end_date)
-            if not df.empty:
-                try:
-                    df = _merge_stooq_current_quote(df, candidate)
-                except Exception:
-                    pass
-                return df, candidate
-            errors.append(f"{candidate} (pandas-datareader): empty data")
-        except ValueError as exc:
-            errors.append(f"{candidate} (pandas-datareader): {exc}")
-
         urls = [
             (
                 "date-range",
@@ -666,6 +689,18 @@ def _stooq_download(
                 errors.append(f"{candidate} ({mode}): empty data from {url}")
             except (URLError, ValueError, pd.errors.ParserError) as exc:
                 errors.append(f"{candidate} ({mode}): {exc} | url={url}")
+
+        try:
+            df = _stooq_download_with_pandas_datareader(candidate, lookback_days=lookback_days, end_date=end_date)
+            if not df.empty:
+                try:
+                    df = _merge_stooq_current_quote(df, candidate)
+                except Exception:
+                    pass
+                return df, candidate
+            errors.append(f"{candidate} (pandas-datareader): empty data")
+        except Exception as exc:
+            errors.append(f"{candidate} (pandas-datareader): {exc}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 

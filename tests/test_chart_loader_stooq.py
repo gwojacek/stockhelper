@@ -49,11 +49,12 @@ def test_stooq_download_retries_without_date_range_when_bounded_query_returns_ht
     assert second_query["apikey"] == ["test-api-key"]
 
 
-def test_stooq_download_prefers_pandas_datareader(monkeypatch):
+def test_stooq_download_uses_direct_csv_before_pandas_datareader(monkeypatch):
     requested_urls: list[str] = []
+    pdr_calls: list[str] = []
 
     def pdr_ok(symbol: str, lookback_days: int = 364, end_date=None):
-        assert symbol == "peo.wa"
+        pdr_calls.append(symbol)
         return pd.DataFrame(
             {
                 "Date": pd.to_datetime(["2026-06-04", "2026-06-05"]),
@@ -73,7 +74,8 @@ def test_stooq_download_prefers_pandas_datareader(monkeypatch):
 
     assert candidate == "peo.wa"
     assert df["Close"].iloc[-1] == 11.2
-    assert requested_urls == []
+    assert len(requested_urls) == 1
+    assert pdr_calls == []
 
 
 def test_stooq_download_uses_env_api_key(monkeypatch):
@@ -195,3 +197,32 @@ def test_download_text_uses_playwright_when_stooq_returns_polish_js_challenge(mo
 
     assert text == STOOQ_CSV
     assert browser_urls == ["https://stooq.pl/q/d/l/?s=rwe.de&i=d"]
+
+
+def test_download_text_tries_cloudscraper_before_playwright_for_js_challenge(monkeypatch):
+    cloud_urls: list[str] = []
+    browser_urls: list[str] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return STOOQ_POLISH_HTML_CHALLENGE.encode("utf-8")
+
+    def fake_cloudscraper_download(url: str) -> str:
+        cloud_urls.append(url)
+        return STOOQ_CSV
+
+    monkeypatch.setattr(chart_loader, "urlopen", lambda request, timeout: FakeResponse())
+    monkeypatch.setattr(chart_loader, "_download_text_with_cloudscraper", fake_cloudscraper_download)
+    monkeypatch.setattr(chart_loader, "_download_text_with_playwright", lambda url: browser_urls.append(url) or STOOQ_CSV)
+
+    text = chart_loader._download_text("https://stooq.pl/q/d/l/?s=rwe.de&i=d")
+
+    assert text == STOOQ_CSV
+    assert cloud_urls == ["https://stooq.pl/q/d/l/?s=rwe.de&i=d"]
+    assert browser_urls == []

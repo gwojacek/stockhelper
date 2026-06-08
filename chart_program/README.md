@@ -104,9 +104,9 @@ Optional:
 
 - `--api-key <key>` for Stooq `apikey` query parameters.
 - `STOCKHELPER_STOOQ_API_KEY=<key>` to set the default Stooq API key for commands that do not pass `--api-key`.
-- Stooq history downloads first try the dedicated `pandas-datareader` Stooq reader when it is installed, then fall back to the direct CSV API.
-- Stooq CSV API fallback requests include browser-like HTTP headers (`User-Agent`, `Accept-Language`, `Referer`) to avoid bare-script rejections.
-- If Stooq still returns a JavaScript browser-verification page, the loader retries the same CSV URL in headless Playwright so the verifier can run in a real browser session.
+- Stooq history downloads use the direct `stooq.pl` CSV API first, then fall back to `pandas-datareader` only if the CSV API cannot return valid OHLC rows.
+- Stooq CSV API requests include browser-like HTTP headers (`User-Agent`, `Accept-Language`, `Referer`) to avoid bare-script rejections.
+- If Stooq still returns a JavaScript browser-verification page, the loader tries `cloudscraper` first when it is installed, then retries the same CSV URL in headless Playwright so the verifier can run in a real browser session.
 
 ---
 
