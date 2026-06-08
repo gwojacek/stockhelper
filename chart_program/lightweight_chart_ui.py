@@ -433,8 +433,9 @@ class LightweightChartLevelSelectorUI:
     #calc-drawer {{ display:none; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; }}
     #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 7px 0; }}
-    #calc-drawer table {{ width:100%; border-collapse:collapse; font-size:12px; }}
-    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; }}
+    #calc-table {{ max-width: 980px; }}
+    #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:12px; }}
+    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
     #calc-summary {{ display:flex; flex-wrap:wrap; gap:5px 12px; margin-bottom:7px; color:#cbd5e1; font-size:12px; }}
