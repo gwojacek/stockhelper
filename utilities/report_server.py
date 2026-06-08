@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v8"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v9"
 
 
 def main() -> int:
@@ -73,6 +73,14 @@ def main() -> int:
     console_err, close_console_err = sys.stderr, None
     console_stdout_path = ""
     console_stderr_path = ""
+    console_log_path = os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG", "")
+    console_log = None
+    if console_log_path:
+        try:
+            Path(console_log_path).parent.mkdir(parents=True, exist_ok=True)
+            console_log = open(console_log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+        except Exception:
+            console_log = None
 
     def _set_console_targets(stdout_path: str = "", stderr_path: str = "") -> bool:
         nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
@@ -121,6 +129,11 @@ def main() -> int:
     def _safe_print(message: str, *, err: bool = False) -> None:
         nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
         _drop_stale_console_targets()
+        if console_log is not None:
+            try:
+                print(message, file=console_log, flush=True)
+            except Exception:
+                pass
         stream = console_err if err else console_out
         try:
             print(message, file=stream, flush=True)
@@ -369,6 +382,8 @@ def main() -> int:
             close_console_out.close()
         if close_console_err is not None and close_console_err is not close_console_out:
             close_console_err.close()
+        if console_log is not None:
+            console_log.close()
     return 0
 
 
