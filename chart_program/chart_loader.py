@@ -2,59 +2,19 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
-import importlib
-import importlib.util
 import tempfile
-import threading
-import time
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 import os
 
 import pandas as pd
-from playwright.sync_api import sync_playwright
 
 from utilities.stooq_playwright import update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
-STOOQ_API_KEY_ENV = "STOCKHELPER_STOOQ_API_KEY"
-STOOQ_HTTP_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/csv,application/csv,text/plain,*/*;q=0.8",
-    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Referer": "https://stooq.pl/",
-    "Connection": "keep-alive",
-}
-STOOQ_MAX_CONCURRENCY_ENV = "STOCKHELPER_STOOQ_MAX_CONCURRENCY"
-STOOQ_MIN_INTERVAL_ENV = "STOCKHELPER_STOOQ_MIN_INTERVAL_SECONDS"
-SCHEDULED_REFRESH_ENV = "STOCKHELPER_SCHEDULED_REFRESH_DUE"
-
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.environ.get(name, str(default)))
-    except (TypeError, ValueError):
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name, str(default)))
-    except (TypeError, ValueError):
-        return default
-
-
-_STOOQ_HTTP_SEMAPHORE = threading.BoundedSemaphore(max(1, _env_int(STOOQ_MAX_CONCURRENCY_ENV, 2)))
-_STOOQ_HTTP_SPACING_LOCK = threading.Lock()
-_STOOQ_HTTP_LAST_REQUEST_AT = 0.0
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -412,136 +372,18 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
-def _is_stooq_browser_verification_response(text: str) -> bool:
-    lowered = (text or "").lower()
-    return (
-        "requires javascript to verify your browser" in lowered
-        or "wymaga javascriptu do weryfikacji przeglądarki" in lowered
-        or "wymaga javascriptu do weryfikacji przegladarki" in lowered
-        or ("verify your browser" in lowered and "noindex,nofollow" in lowered)
-        or ("weryfikacji przeglądarki" in lowered and "noindex,nofollow" in lowered)
-        or ("weryfikacji przegladarki" in lowered and "noindex,nofollow" in lowered)
-        or ("textencoder" in lowered and "crypto.subtle" in lowered and "noindex,nofollow" in lowered)
-    )
-
-
-def _playwright_page_text(page) -> str:
-    try:
-        return page.locator("body").inner_text(timeout=5000)
-    except Exception:
-        return page.content()
-
-
-def _download_text_with_cloudscraper(url: str) -> str:
-    if importlib.util.find_spec("cloudscraper") is None:
-        raise ValueError("cloudscraper is not installed")
-    cloudscraper = importlib.import_module("cloudscraper")
-    scraper = cloudscraper.create_scraper(
-        browser={
-            "browser": "chrome",
-            "platform": "windows",
-            "desktop": True,
-        }
-    )
-    response = scraper.get(url, headers=STOOQ_HTTP_HEADERS, timeout=30)
-    response.raise_for_status()
-    return response.text
-
-
-def _download_text_with_playwright(url: str) -> str:
-    browser = None
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent=STOOQ_HTTP_HEADERS["User-Agent"],
-            locale="pl-PL",
-            extra_http_headers={
-                "Accept": STOOQ_HTTP_HEADERS["Accept"],
-                "Accept-Language": STOOQ_HTTP_HEADERS["Accept-Language"],
-                "Referer": STOOQ_HTTP_HEADERS["Referer"],
-            },
-        )
-        try:
-            page = context.new_page()
-            # Visit the main site first so Stooq's JavaScript verifier can set
-            # any browser/session cookies before the CSV endpoint is requested.
-            page.goto("https://stooq.pl/", wait_until="domcontentloaded", timeout=30000)
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            text = _playwright_page_text(page)
-            for attempt in range(5):
-                if not _is_stooq_browser_verification_response(text):
-                    return text
-                # The verifier is an async proof-of-work script. Give it time to
-                # finish and redirect before forcing a reload with the browser
-                # session/cookies it may have just created.
-                page.wait_for_timeout(3000)
-                text = _playwright_page_text(page)
-                if not _is_stooq_browser_verification_response(text):
-                    return text
-                if attempt < 4:
-                    page.reload(wait_until="domcontentloaded", timeout=30000)
-                    text = _playwright_page_text(page)
-            return text
-        finally:
-            context.close()
-            if browser is not None:
-                browser.close()
-
-
-@contextmanager
-def _stooq_http_slot():
-    global _STOOQ_HTTP_LAST_REQUEST_AT
-    with _STOOQ_HTTP_SEMAPHORE:
-        min_interval = max(0.0, _env_float(STOOQ_MIN_INTERVAL_ENV, 0.35))
-        with _STOOQ_HTTP_SPACING_LOCK:
-            now = time.monotonic()
-            wait_s = (_STOOQ_HTTP_LAST_REQUEST_AT + min_interval) - now
-            if wait_s > 0:
-                time.sleep(wait_s)
-            _STOOQ_HTTP_LAST_REQUEST_AT = time.monotonic()
-        yield
-
-
-def _download_text_unthrottled(url: str) -> str:
-    request = Request(url, headers=STOOQ_HTTP_HEADERS)
-    try:
-        with urlopen(request, timeout=20) as response:
-            text = response.read().decode("utf-8", errors="replace")
-    except URLError as direct_exc:
-        fallback_errors: list[str] = []
-        try:
-            text = _download_text_with_cloudscraper(url)
-            if not _is_stooq_browser_verification_response(text):
-                return text
-            fallback_errors.append("cloudscraper returned Stooq browser verification page")
-        except Exception as cloud_exc:
-            fallback_errors.append(f"cloudscraper failed: {cloud_exc}")
-        try:
-            return _download_text_with_playwright(url)
-        except Exception as browser_exc:
-            fallback_errors.append(f"Playwright browser fallback failed: {browser_exc}")
-            raise URLError(f"{direct_exc}; {'; '.join(fallback_errors)}") from browser_exc
-
-    if _is_stooq_browser_verification_response(text):
-        fallback_errors: list[str] = []
-        try:
-            cloud_text = _download_text_with_cloudscraper(url)
-            if not _is_stooq_browser_verification_response(cloud_text):
-                return cloud_text
-            fallback_errors.append("cloudscraper returned Stooq browser verification page")
-        except Exception as cloud_exc:
-            fallback_errors.append(f"cloudscraper failed: {cloud_exc}")
-        try:
-            return _download_text_with_playwright(url)
-        except Exception as browser_exc:
-            fallback_errors.append(f"Playwright browser verification fallback failed: {browser_exc}")
-            raise ValueError("Stooq browser verification fallbacks failed: " + "; ".join(fallback_errors)) from browser_exc
-    return text
-
-
 def _download_text(url: str) -> str:
-    with _stooq_http_slot():
-        return _download_text_unthrottled(url)
+    with urlopen(url, timeout=20) as response:
+        raw = response.read()
+        text = raw.decode("utf-8", errors="replace")
+        if not text.strip():
+            status = getattr(response, "status", "unknown")
+            content_type = response.headers.get("Content-Type", "unknown") if getattr(response, "headers", None) is not None else "unknown"
+            raise ValueError(
+                f"Stooq returned an empty response body "
+                f"(status={status}, content_type={content_type}, bytes={len(raw)})"
+            )
+        return text
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
@@ -570,6 +412,8 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
 
     if header_index is None:
         preview = " | ".join(line.strip() for line in lines[:5])
+        if not preview:
+            preview = f"<empty/whitespace response; chars={len(csv_text or '')}, lines={len(lines)}>"
         raise ValueError(f"Stooq response does not contain expected CSV header. Preview: {preview[:400]}")
 
     normalized = "\n".join(lines[header_index:])
@@ -639,50 +483,13 @@ def _stooq_url(
     domain: str = "stooq.pl",
     lookback_days: int = 364,
     end_date: datetime | None = None,
-    include_date_range: bool = True,
 ) -> str:
-    query = {"s": symbol, "i": "d"}
-    if include_date_range:
-        end = (end_date.date() if isinstance(end_date, datetime) else datetime.now(timezone.utc).date())
-        start = end - timedelta(days=lookback_days)
-        query.update({"d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")})
+    end = (end_date.date() if isinstance(end_date, datetime) else datetime.now(timezone.utc).date())
+    start = end - timedelta(days=lookback_days)
+    query = {"s": symbol, "i": "d", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")}
     if api_key and param_name:
         query[param_name] = api_key
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
-
-
-def _effective_stooq_api_key(api_key: str | None) -> str | None:
-    return api_key or os.environ.get(STOOQ_API_KEY_ENV) or STOOQ_DEFAULT_API_KEY
-
-
-def _stooq_download_with_pandas_datareader(
-    symbol: str,
-    lookback_days: int = 364,
-    end_date: datetime | None = None,
-) -> pd.DataFrame:
-    if importlib.util.find_spec("pandas_datareader") is None:
-        raise ValueError("pandas-datareader is not installed")
-    web = importlib.import_module("pandas_datareader.data")
-
-    end = end_date if isinstance(end_date, datetime) else datetime.now(timezone.utc)
-    start = end - timedelta(days=lookback_days)
-    df = web.DataReader(symbol, "stooq", start, end)
-    if df is None or df.empty:
-        raise ValueError("pandas-datareader returned empty Stooq data")
-
-    df = df.reset_index()
-    if "Date" not in df.columns and len(df.columns) > 0:
-        df = df.rename(columns={df.columns[0]: "Date"})
-    df.columns = [str(c).strip().title() for c in df.columns]
-    required_columns = {"Date", "Open", "High", "Low", "Close"}
-    if not required_columns.issubset(df.columns):
-        raise ValueError("pandas-datareader Stooq data is missing required OHLC columns")
-
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
-    if df.empty:
-        raise ValueError("pandas-datareader returned no valid Stooq OHLC rows")
-    return _last_year_only(df.sort_values("Date").reset_index(drop=True))
 
 
 def _stooq_download(
@@ -693,58 +500,22 @@ def _stooq_download(
     end_date: datetime | None = None,
 ) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
-    effective_api_key = _effective_stooq_api_key(api_key)
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
-        urls = [
-            (
-                "date-range",
-                _stooq_url(
-                    candidate,
-                    api_key=effective_api_key,
-                    param_name="apikey",
-                    domain="stooq.pl",
-                    lookback_days=lookback_days,
-                    end_date=end_date,
-                    include_date_range=True,
-                ),
-            ),
-            (
-                "full-history",
-                _stooq_url(
-                    candidate,
-                    api_key=effective_api_key,
-                    param_name="apikey",
-                    domain="stooq.pl",
-                    include_date_range=False,
-                ),
-            ),
-        ]
-
-        for mode, url in urls:
-            try:
-                text = _download_text(url)
-                df = _parse_stooq_csv_text(text)
-                if not df.empty:
-                    try:
-                        df = _merge_stooq_current_quote(df, candidate)
-                    except Exception:
-                        pass
-                    return df, candidate
-                errors.append(f"{candidate} ({mode}): empty data from {url}")
-            except (URLError, ValueError, pd.errors.ParserError) as exc:
-                errors.append(f"{candidate} ({mode}): {exc} | url={url}")
+        effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
+        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl", lookback_days=lookback_days, end_date=end_date)
 
         try:
-            df = _stooq_download_with_pandas_datareader(candidate, lookback_days=lookback_days, end_date=end_date)
+            text = _download_text(url)
+            df = _parse_stooq_csv_text(text)
             if not df.empty:
                 try:
                     df = _merge_stooq_current_quote(df, candidate)
                 except Exception:
                     pass
                 return df, candidate
-            errors.append(f"{candidate} (pandas-datareader): empty data")
-        except Exception as exc:
-            errors.append(f"{candidate} (pandas-datareader): {exc}")
+            errors.append(f"{candidate}: empty data from {url}")
+        except (URLError, ValueError, pd.errors.ParserError) as exc:
+            errors.append(f"{candidate}: {exc} | url={url}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
@@ -1081,23 +852,6 @@ def load_or_update_daily_data(
             "fallback_reason": "Cache-only mode enabled.",
         }
 
-    scheduled_refresh_due = os.environ.get(SCHEDULED_REFRESH_ENV) == "1"
-    if (
-        not cache_only
-        and not fetch_older_data
-        and not _force_remote_refresh_enabled()
-        and not scheduled_refresh_due
-        and local is not None
-        and not local.empty
-    ):
-        cached_df = _last_year_only(local)
-        return cached_df, csv_path, {
-            "source": "cache",
-            "symbol": symbol,
-            "name": symbol.title(),
-            "fallback_reason": "Scheduled refresh is not due; using local cache.",
-        }
-
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
         return cached_df, csv_path, {
@@ -1111,14 +865,11 @@ def load_or_update_daily_data(
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
         _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
+        if _force_remote_refresh_enabled():
+            raise
         if local is not None and not local.empty:
             cached_df = local if fetch_older_data else _last_year_only(local)
-            reason = "Remote download failed, using local cache."
-            if _force_remote_refresh_enabled():
-                reason = "Forced remote refresh failed, using local cache to avoid skipping the instrument."
-            return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": reason}
-        if _force_remote_refresh_enabled() and os.environ.get("STOCKHELPER_STRICT_REMOTE_REFRESH") == "1":
-            raise
+            return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
         raise
 
     if local is not None and not local.empty:
