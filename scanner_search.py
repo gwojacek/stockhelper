@@ -671,6 +671,8 @@ def _wait_if_scan_paused() -> bool:
 
 def _retry_error_brief(exc: BaseException | str) -> str:
     text = str(exc)
+    debug_match = re.search(r"debug=([^;\s)]+)", text)
+    debug_suffix = f" | debug={debug_match.group(1)}" if debug_match else ""
     lowered = text.lower()
     markers = [
         ("connection reset by peer", "Connection reset by peer"),
@@ -687,8 +689,10 @@ def _retry_error_brief(exc: BaseException | str) -> str:
     for needle, label in markers:
         if needle in lowered:
             m = re.search(r"\[Errno\s+\d+\]", text)
-            return f"{label} {m.group(0)}" if m else label
-    return _compact_error(text)[:240] if "_compact_error" in globals() else text[:240]
+            base = f"{label} {m.group(0)}" if m else label
+            return base + debug_suffix
+    base = _compact_error(text)[:240] if "_compact_error" in globals() else text[:240]
+    return base + debug_suffix
 
 
 def _is_rate_limit_download_error(exc: BaseException | str) -> bool:

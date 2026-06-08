@@ -430,6 +430,18 @@ def _response_headers(response) -> dict[str, str]:
         return {}
 
 
+def _stooq_challenge_kind(response, text: str) -> str:
+    headers = {k.lower(): v.lower() for k, v in _response_headers(response).items()}
+    lowered = (text or "").lower()
+    if "cf-ray" in headers or "cloudflare" in headers.get("server", ""):
+        return "cloudflare"
+    if "noindex,nofollow" in lowered and "textencoder" in lowered:
+        return "stooq_js_proof_of_work"
+    if _is_stooq_browser_verification_response(text):
+        return "browser_verification"
+    return "none"
+
+
 def _describe_stooq_response(source: str, response, text: str) -> str:
     headers = _response_headers(response)
     interesting = []
@@ -439,6 +451,7 @@ def _describe_stooq_response(source: str, response, text: str) -> str:
     return (
         f"source={source}, status={_response_status(response)}, chars={len(text or '')}, "
         f"challenge={_is_stooq_browser_verification_response(text)}, "
+        f"kind={_stooq_challenge_kind(response, text)}, "
         f"headers=[{'; '.join(interesting) or 'none'}], preview={_stooq_preview(text)}"
     )
 
@@ -457,6 +470,7 @@ def _write_stooq_http_debug(source: str, url: str, response=None, text: str = ""
             "status": _response_status(response) if response is not None else "unknown",
             "headers": _response_headers(response),
             "challenge_detected": _is_stooq_browser_verification_response(text),
+            "challenge_kind": _stooq_challenge_kind(response, text),
             "preview": _stooq_preview(text, limit=2000),
             "body_first_12000_chars": (text or "")[:12000],
             "error": str(error) if error is not None else None,
@@ -509,8 +523,10 @@ def _download_text_with_cloudscraper(url: str) -> str:
             )
         return text
     except Exception as exc:
+        if "debug=" in str(exc):
+            raise
         debug_path = _write_stooq_http_debug("cloudscraper", url, response, text, exc)
-        if debug_path and "debug=" not in str(exc):
+        if debug_path:
             raise ValueError(f"{exc}{_debug_suffix(debug_path)}") from exc
         raise
 
@@ -532,7 +548,10 @@ def _download_text(url: str) -> str:
             )
     except Exception as exc:
         direct_error = exc
-        _write_stooq_http_debug("direct", url, None, "", exc)
+        if "debug=" not in str(exc):
+            debug_path = _write_stooq_http_debug("direct", url, None, "", exc)
+            if debug_path:
+                direct_error = ValueError(f"{exc}{_debug_suffix(debug_path)}")
 
     try:
         return _download_text_with_cloudscraper(url)
