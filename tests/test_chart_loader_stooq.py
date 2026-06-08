@@ -9,6 +9,13 @@ from chart_program import chart_loader
 
 STOOQ_CSV = "Date,Open,High,Low,Close,Volume\n2026-06-04,10,11,9,10.8,1000\n2026-06-05,10.5,11.5,10,11.2,1500\n"
 STOOQ_HTML_CHALLENGE = "<html><body><noscript>This site requires JavaScript to verify your browser.</noscript></body></html>"
+STOOQ_POLISH_HTML_CHALLENGE = (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"></head>'
+    '<body><noscript>Ta strona wymaga JavaScriptu do weryfikacji przeglądarki. '
+    'Włącz JavaScript i odśwież stronę.</noscript>'
+    '<script>(async()=>{const c="abc",d=4,t="0".repeat(d),e=new TextEncoder;let n=0;while(1){}})()</script>'
+    '</body></html>'
+)
 
 
 def test_stooq_download_retries_without_date_range_when_bounded_query_returns_html(monkeypatch):
@@ -158,3 +165,33 @@ def test_download_text_uses_playwright_when_direct_request_is_blocked(monkeypatc
 
     assert text == STOOQ_CSV
     assert browser_urls == ["https://stooq.pl/q/d/l/?s=peo.wa&i=d"]
+
+
+def test_polish_stooq_js_challenge_is_detected():
+    assert chart_loader._is_stooq_browser_verification_response(STOOQ_POLISH_HTML_CHALLENGE)
+
+
+def test_download_text_uses_playwright_when_stooq_returns_polish_js_challenge(monkeypatch):
+    browser_urls: list[str] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return STOOQ_POLISH_HTML_CHALLENGE.encode("utf-8")
+
+    def fake_playwright_download(url: str) -> str:
+        browser_urls.append(url)
+        return STOOQ_CSV
+
+    monkeypatch.setattr(chart_loader, "urlopen", lambda request, timeout: FakeResponse())
+    monkeypatch.setattr(chart_loader, "_download_text_with_playwright", fake_playwright_download)
+
+    text = chart_loader._download_text("https://stooq.pl/q/d/l/?s=rwe.de&i=d")
+
+    assert text == STOOQ_CSV
+    assert browser_urls == ["https://stooq.pl/q/d/l/?s=rwe.de&i=d"]

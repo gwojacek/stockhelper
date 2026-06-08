@@ -389,7 +389,12 @@ def _is_stooq_browser_verification_response(text: str) -> bool:
     lowered = (text or "").lower()
     return (
         "requires javascript to verify your browser" in lowered
+        or "wymaga javascriptu do weryfikacji przeglądarki" in lowered
+        or "wymaga javascriptu do weryfikacji przegladarki" in lowered
         or ("verify your browser" in lowered and "noindex,nofollow" in lowered)
+        or ("weryfikacji przeglądarki" in lowered and "noindex,nofollow" in lowered)
+        or ("weryfikacji przegladarki" in lowered and "noindex,nofollow" in lowered)
+        or ("textencoder" in lowered and "crypto.subtle" in lowered and "noindex,nofollow" in lowered)
     )
 
 
@@ -420,12 +425,19 @@ def _download_text_with_playwright(url: str) -> str:
             page.goto("https://stooq.pl/", wait_until="domcontentloaded", timeout=30000)
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
             text = _playwright_page_text(page)
-            for _ in range(3):
+            for attempt in range(5):
                 if not _is_stooq_browser_verification_response(text):
                     return text
-                page.wait_for_timeout(2500)
-                page.reload(wait_until="domcontentloaded", timeout=30000)
+                # The verifier is an async proof-of-work script. Give it time to
+                # finish and redirect before forcing a reload with the browser
+                # session/cookies it may have just created.
+                page.wait_for_timeout(3000)
                 text = _playwright_page_text(page)
+                if not _is_stooq_browser_verification_response(text):
+                    return text
+                if attempt < 4:
+                    page.reload(wait_until="domcontentloaded", timeout=30000)
+                    text = _playwright_page_text(page)
             return text
         finally:
             context.close()
