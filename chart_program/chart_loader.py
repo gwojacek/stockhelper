@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import os
 
 import pandas as pd
@@ -16,6 +16,17 @@ from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 STOOQ_API_KEY_ENV = "STOCKHELPER_STOOQ_API_KEY"
+STOOQ_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/csv,application/csv,text/plain,*/*;q=0.8",
+    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://stooq.pl/",
+    "Connection": "keep-alive",
+}
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -374,7 +385,8 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
 
 
 def _download_text(url: str) -> str:
-    with urlopen(url, timeout=20) as response:
+    request = Request(url, headers=STOOQ_HTTP_HEADERS)
+    with urlopen(request, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
 
 

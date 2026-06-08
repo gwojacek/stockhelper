@@ -56,3 +56,34 @@ def test_stooq_download_uses_env_api_key(monkeypatch):
 
     query = parse_qs(urlparse(requested_urls[0]).query)
     assert query["apikey"] == ["env-api-key"]
+
+
+def test_download_text_sends_browser_like_headers(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return STOOQ_CSV.encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        captured["headers"] = dict(request.header_items())
+        return FakeResponse()
+
+    monkeypatch.setattr(chart_loader, "urlopen", fake_urlopen)
+
+    text = chart_loader._download_text("https://stooq.pl/q/d/l/?s=peo.wa&i=d")
+
+    assert text == STOOQ_CSV
+    assert captured["url"] == "https://stooq.pl/q/d/l/?s=peo.wa&i=d"
+    assert captured["timeout"] == 20
+    assert "Mozilla/5.0" in captured["headers"]["User-agent"]
+    assert captured["headers"]["Referer"] == "https://stooq.pl/"
+    assert "pl-PL" in captured["headers"]["Accept-language"]
