@@ -531,6 +531,91 @@ def _download_text_with_cloudscraper(url: str) -> str:
         raise
 
 
+def _apply_playwright_stealth(page) -> None:
+    if importlib.util.find_spec("playwright_stealth") is None:
+        raise ValueError("playwright-stealth is not installed; install dependencies or run `pip install playwright-stealth`")
+    stealth_mod = importlib.import_module("playwright_stealth")
+    if hasattr(stealth_mod, "stealth_sync"):
+        stealth_mod.stealth_sync(page)
+        return
+    if hasattr(stealth_mod, "apply_stealth_sync"):
+        stealth_mod.apply_stealth_sync(page)
+        return
+    stealth_cls = getattr(stealth_mod, "Stealth", None)
+    if stealth_cls is not None:
+        stealth = stealth_cls()
+        if hasattr(stealth, "apply_stealth_sync"):
+            stealth.apply_stealth_sync(page)
+            return
+    raise ValueError("playwright-stealth is installed but no supported sync stealth API was found")
+
+
+def _playwright_page_text(page) -> str:
+    try:
+        return page.locator("body").inner_text(timeout=3000)
+    except Exception:
+        return page.content()
+
+
+def _download_text_with_playwright_stealth(url: str) -> str:
+    if importlib.util.find_spec("playwright") is None:
+        raise ValueError("playwright is not installed")
+    playwright_sync = importlib.import_module("playwright.sync_api")
+    browser = None
+    context = None
+    text = ""
+    try:
+        with playwright_sync.sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=STOOQ_HTTP_HEADERS["User-Agent"],
+                locale="pl-PL",
+                extra_http_headers={
+                    "Accept": STOOQ_HTTP_HEADERS["Accept"],
+                    "Accept-Language": STOOQ_HTTP_HEADERS["Accept-Language"],
+                    "Referer": STOOQ_HTTP_HEADERS["Referer"],
+                },
+            )
+            page = context.new_page()
+            page.set_default_timeout(8000)
+            _apply_playwright_stealth(page)
+            page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            text = _playwright_page_text(page)
+            for _ in range(4):
+                if not _is_stooq_browser_verification_response(text):
+                    text = _validate_downloaded_text(text, len(text.encode("utf-8", errors="replace")))
+                    _write_stooq_http_debug("playwright_stealth", url, None, text)
+                    return text
+                page.wait_for_timeout(2000)
+                text = _playwright_page_text(page)
+            debug_path = _write_stooq_http_debug("playwright_stealth", url, None, text)
+            raise ValueError(
+                "playwright-stealth returned Stooq browser verification page "
+                f"(source=playwright_stealth, status=unknown, chars={len(text or '')}, "
+                f"challenge={_is_stooq_browser_verification_response(text)}, "
+                f"kind={_stooq_challenge_kind(None, text)}, preview={_stooq_preview(text)})"
+                f"{_debug_suffix(debug_path)}"
+            )
+    except Exception as exc:
+        if "debug=" in str(exc):
+            raise
+        debug_path = _write_stooq_http_debug("playwright_stealth", url, None, text, exc)
+        if debug_path:
+            raise ValueError(f"{exc}{_debug_suffix(debug_path)}") from exc
+        raise
+    finally:
+        try:
+            if context is not None:
+                context.close()
+        except Exception:
+            pass
+        try:
+            if browser is not None:
+                browser.close()
+        except Exception:
+            pass
+
+
 def _download_text(url: str) -> str:
     request = Request(url, headers=STOOQ_HTTP_HEADERS)
     direct_error: Exception | None = None
@@ -556,7 +641,14 @@ def _download_text(url: str) -> str:
     try:
         return _download_text_with_cloudscraper(url)
     except Exception as cloud_exc:
-        raise ValueError(f"Stooq direct download failed ({direct_error}); cloudscraper failed ({cloud_exc})") from cloud_exc
+        try:
+            return _download_text_with_playwright_stealth(url)
+        except Exception as stealth_exc:
+            raise ValueError(
+                f"Stooq direct download failed ({direct_error}); "
+                f"cloudscraper failed ({cloud_exc}); "
+                f"playwright-stealth failed ({stealth_exc})"
+            ) from stealth_exc
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
