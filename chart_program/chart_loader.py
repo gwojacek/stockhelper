@@ -501,6 +501,37 @@ def _effective_stooq_api_key(api_key: str | None) -> str | None:
     return api_key or os.environ.get(STOOQ_API_KEY_ENV) or STOOQ_DEFAULT_API_KEY
 
 
+def _stooq_download_with_pandas_datareader(
+    symbol: str,
+    lookback_days: int = 364,
+    end_date: datetime | None = None,
+) -> pd.DataFrame:
+    try:
+        import pandas_datareader.data as web
+    except ImportError as exc:
+        raise ValueError("pandas-datareader is not installed") from exc
+
+    end = end_date if isinstance(end_date, datetime) else datetime.now(timezone.utc)
+    start = end - timedelta(days=lookback_days)
+    df = web.DataReader(symbol, "stooq", start, end)
+    if df is None or df.empty:
+        raise ValueError("pandas-datareader returned empty Stooq data")
+
+    df = df.reset_index()
+    if "Date" not in df.columns and len(df.columns) > 0:
+        df = df.rename(columns={df.columns[0]: "Date"})
+    df.columns = [str(c).strip().title() for c in df.columns]
+    required_columns = {"Date", "Open", "High", "Low", "Close"}
+    if not required_columns.issubset(df.columns):
+        raise ValueError("pandas-datareader Stooq data is missing required OHLC columns")
+
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    if df.empty:
+        raise ValueError("pandas-datareader returned no valid Stooq OHLC rows")
+    return _last_year_only(df.sort_values("Date").reset_index(drop=True))
+
+
 def _stooq_download(
     symbol: str,
     instrument_type: str,
@@ -511,6 +542,18 @@ def _stooq_download(
     errors: list[str] = []
     effective_api_key = _effective_stooq_api_key(api_key)
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
+        try:
+            df = _stooq_download_with_pandas_datareader(candidate, lookback_days=lookback_days, end_date=end_date)
+            if not df.empty:
+                try:
+                    df = _merge_stooq_current_quote(df, candidate)
+                except Exception:
+                    pass
+                return df, candidate
+            errors.append(f"{candidate} (pandas-datareader): empty data")
+        except ValueError as exc:
+            errors.append(f"{candidate} (pandas-datareader): {exc}")
+
         urls = [
             (
                 "date-range",

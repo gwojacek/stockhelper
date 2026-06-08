@@ -104,7 +104,8 @@ Optional:
 
 - `--api-key <key>` for Stooq `apikey` query parameters.
 - `STOCKHELPER_STOOQ_API_KEY=<key>` to set the default Stooq API key for commands that do not pass `--api-key`.
-- Stooq CSV requests include browser-like HTTP headers (`User-Agent`, `Accept-Language`, `Referer`) to avoid bare-script rejections.
+- Stooq history downloads first try the dedicated `pandas-datareader` Stooq reader when it is installed, then fall back to the direct CSV API.
+- Stooq CSV API fallback requests include browser-like HTTP headers (`User-Agent`, `Accept-Language`, `Referer`) to avoid bare-script rejections.
 
 ---
 

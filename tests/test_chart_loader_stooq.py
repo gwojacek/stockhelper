@@ -21,6 +21,7 @@ def test_stooq_download_retries_without_date_range_when_bounded_query_returns_ht
             return STOOQ_HTML_CHALLENGE
         return STOOQ_CSV
 
+    monkeypatch.setattr(chart_loader, "_stooq_download_with_pandas_datareader", lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("pdr unavailable")))
     monkeypatch.setattr(chart_loader, "_download_text", fake_download_text)
     monkeypatch.setattr(chart_loader, "_merge_stooq_current_quote", lambda df, symbol: df)
 
@@ -41,6 +42,33 @@ def test_stooq_download_retries_without_date_range_when_bounded_query_returns_ht
     assert second_query["apikey"] == ["test-api-key"]
 
 
+def test_stooq_download_prefers_pandas_datareader(monkeypatch):
+    requested_urls: list[str] = []
+
+    def pdr_ok(symbol: str, lookback_days: int = 364, end_date=None):
+        assert symbol == "peo.wa"
+        return pd.DataFrame(
+            {
+                "Date": pd.to_datetime(["2026-06-04", "2026-06-05"]),
+                "Open": [10.0, 10.5],
+                "High": [11.0, 11.5],
+                "Low": [9.0, 10.0],
+                "Close": [10.8, 11.2],
+                "Volume": [1000, 1500],
+            }
+        )
+
+    monkeypatch.setattr(chart_loader, "_stooq_download_with_pandas_datareader", pdr_ok)
+    monkeypatch.setattr(chart_loader, "_download_text", lambda url: requested_urls.append(url) or STOOQ_CSV)
+    monkeypatch.setattr(chart_loader, "_merge_stooq_current_quote", lambda df, symbol: df)
+
+    df, candidate = chart_loader._stooq_download("PEO.WA", "stock", api_key="test-api-key")
+
+    assert candidate == "peo.wa"
+    assert df["Close"].iloc[-1] == 11.2
+    assert requested_urls == []
+
+
 def test_stooq_download_uses_env_api_key(monkeypatch):
     requested_urls: list[str] = []
 
@@ -49,6 +77,7 @@ def test_stooq_download_uses_env_api_key(monkeypatch):
         return STOOQ_CSV
 
     monkeypatch.setenv(chart_loader.STOOQ_API_KEY_ENV, "env-api-key")
+    monkeypatch.setattr(chart_loader, "_stooq_download_with_pandas_datareader", lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("pdr unavailable")))
     monkeypatch.setattr(chart_loader, "_download_text", fake_download_text)
     monkeypatch.setattr(chart_loader, "_merge_stooq_current_quote", lambda df, symbol: df)
 
