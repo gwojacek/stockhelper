@@ -428,18 +428,18 @@ class LightweightChartLevelSelectorUI:
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
-    .main.calc-open #chart-wrap {{ height: calc(100vh - 132px - var(--calc-drawer-height, 340px)); min-height: 220px; cursor: grab; }}
+    .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
-    #calc-drawer {{ display:none; margin-top:10px; max-height:42vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:14px; }}
+    #calc-drawer {{ display:none; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; }}
-    #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
-    #calc-drawer table {{ width:100%; border-collapse:collapse; font-size:13px; }}
-    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:6px 8px; text-align:right; }}
+    #calc-drawer h3 {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 7px 0; }}
+    #calc-drawer table {{ width:100%; border-collapse:collapse; font-size:12px; }}
+    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-summary {{ display:flex; flex-wrap:wrap; gap:8px 14px; margin-bottom:10px; color:#cbd5e1; font-size:13px; }}
+    #calc-summary {{ display:flex; flex-wrap:wrap; gap:5px 12px; margin-bottom:7px; color:#cbd5e1; font-size:12px; }}
     #calc-summary b {{ color:#f8fafc; }}
-    #calc-warnings {{ margin-top:8px; color:#facc15; font-size:13px; }}
+    #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
   </style>
 </head>
 <body>
@@ -1152,6 +1152,7 @@ class LightweightChartLevelSelectorUI:
     if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
     if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
     if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>Max capital:</b> ${{money(b.max_capital, currency)}}</span>`);
+    if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion fee ${{numText(data.fx_conversion_fee_pct || 1, 0)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
     if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
     if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
     if (data.take_profit != null) chips.push(`<span><b>Take profit:</b> ${{fmt(Number(data.take_profit))}}</span>`);
@@ -1321,6 +1322,9 @@ class LightweightChartLevelSelectorUI:
                 "instrument_type": effective_instrument,
                 "position_type": position_type,
                 "currency": currency,
+                "fx_conversion_fee_applicable": bool(levels.get("__currency_fee_eligible__")),
+                "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")),
+                "fx_conversion_fee_pct": round(float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) * 100, 2),
                 "rows": rows,
                 "basics": basics,
                 "take_profit": None if take_profit is None else round(float(take_profit), self._precision_for_price(take_profit)),
