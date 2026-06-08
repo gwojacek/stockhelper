@@ -1093,11 +1093,14 @@ def load_or_update_daily_data(
         remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
         _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
-        if _force_remote_refresh_enabled():
-            raise
         if local is not None and not local.empty:
             cached_df = local if fetch_older_data else _last_year_only(local)
-            return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
+            reason = "Remote download failed, using local cache."
+            if _force_remote_refresh_enabled():
+                reason = "Forced remote refresh failed, using local cache to avoid skipping the instrument."
+            return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": reason}
+        if _force_remote_refresh_enabled() and os.environ.get("STOCKHELPER_STRICT_REMOTE_REFRESH") == "1":
+            raise
         raise
 
     if local is not None and not local.empty:

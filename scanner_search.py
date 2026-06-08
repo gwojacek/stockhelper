@@ -881,10 +881,10 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                 return True
         except Exception as exc:
-            print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); refreshing to avoid stale cache")
-            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
-            return True
+            print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); remote unavailable -> cache-only mode ON")
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            return False
     print(f"[refresh-check] {group_name}: checked {checked} probe(s), no newer remote data -> cache-only mode ON")
     os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
