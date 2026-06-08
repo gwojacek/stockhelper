@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 from datetime import UTC, date, datetime, timedelta
@@ -647,7 +647,7 @@ def _open_html_report(path: Path) -> None:
     subprocess.Popen(["xdg-open", file_url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v5"
+    report_server_protocol = "stockhelper-report-server-v9"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
@@ -655,6 +655,30 @@ def _serve_report_locally(path: Path) -> str | None:
 
     console_stdout = f"/proc/{os.getpid()}/fd/1"
     console_stderr = f"/proc/{os.getpid()}/fd/2"
+    console_key = hashlib.sha1(str(PROJECT_ROOT.resolve()).encode("utf-8")).hexdigest()[:10]
+
+    def _console_log_path(port: int) -> Path:
+        return Path(os.environ.get("TMPDIR", "/tmp")) / f"stockhelper_report_console_{console_key}_{port}.log"
+
+    def _start_console_sink(log_path: Path) -> None:
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.touch(exist_ok=True)
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    str(PROJECT_ROOT / "utilities" / "report_console_sink.py"),
+                    "--log",
+                    str(log_path),
+                ],
+                cwd=str(PROJECT_ROOT),
+                stdin=subprocess.DEVNULL,
+                stdout=None,
+                stderr=None,
+                start_new_session=True,
+            )
+        except Exception:
+            pass
 
     def _server_info(base_url: str) -> dict | None:
         try:
@@ -706,9 +730,13 @@ def _serve_report_locally(path: Path) -> str | None:
             continue
         try:
             env = os.environ.copy()
+            log_path = _console_log_path(port)
+            _start_console_sink(log_path)
             # Keep report-launched chart calculations visible in the terminal
-            # that opened the report. report_server opens these immediately at
-            # startup and refreshes them via /attach-console when reused.
+            # that opened the report. report_server writes to a console log that
+            # a tiny sink process follows from this terminal, and it also refreshes
+            # direct console handles via /attach-console when reused.
+            env["STOCKHELPER_REPORT_CONSOLE_LOG"] = str(log_path)
             env["STOCKHELPER_REPORT_CONSOLE_STDOUT"] = console_stdout
             env["STOCKHELPER_REPORT_CONSOLE_STDERR"] = console_stderr
             subprocess.Popen(

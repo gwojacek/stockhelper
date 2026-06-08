@@ -13,6 +13,10 @@ from urllib.request import Request, urlopen
 import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, request
+
+from core.calculator import calculate_position_size, calculate_stock_position
+from core.risk_manager import calculate_distance_ratio, calculate_take_profit
+from chart_program.config_writer import DEFAULT_RISK_LEVELS
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 SELECTION_SEQUENCE = [
@@ -235,7 +239,7 @@ class LightweightChartLevelSelectorUI:
         container.innerHTML = '';
         container.appendChild(canvas);
         const ctx = canvas.getContext('2d');
-        const state = {series: [], candleSeries: null, clickHandlers: [], moveHandlers: [], yMin: 0, yMax: 1, width: 1, height: 1, dpr: 1};
+        const state = {series: [], candleSeries: null, clickHandlers: [], moveHandlers: [], yMin: 0, yMax: 1, width: 1, height: 1, dpr: 1, scaleMargins: options?.rightPriceScale?.scaleMargins || {top:0.08,bottom:0.12}};
         const colors = {
           bg: options?.layout?.background?.color || '#111827',
           text: options?.layout?.textColor || '#e5e7eb',
@@ -274,13 +278,15 @@ class LightweightChartLevelSelectorUI:
           return found >= 0 ? found : 0;
         }
         function priceToY(price) {
-          const top = 18, bottom = 28;
+          const top = Math.max(18, state.height * (state.scaleMargins?.top ?? 0.08));
+          const bottom = Math.max(28, state.height * (state.scaleMargins?.bottom ?? 0.12));
           const plotH = Math.max(1, state.height - top - bottom);
           const span = state.yMax - state.yMin || 1;
           return top + ((state.yMax - price) / span) * plotH;
         }
         function yToPrice(y) {
-          const top = 18, bottom = 28;
+          const top = Math.max(18, state.height * (state.scaleMargins?.top ?? 0.08));
+          const bottom = Math.max(28, state.height * (state.scaleMargins?.bottom ?? 0.12));
           const plotH = Math.max(1, state.height - top - bottom);
           const ratio = Math.max(0, Math.min(1, (y - top) / plotH));
           return state.yMax - ratio * (state.yMax - state.yMin || 1);
@@ -365,6 +371,8 @@ class LightweightChartLevelSelectorUI:
         window.addEventListener('resize', resize);
         setTimeout(resize, 0);
         return {
+          applyOptions(opts) { if (opts?.rightPriceScale?.scaleMargins) state.scaleMargins = opts.rightPriceScale.scaleMargins; draw(); },
+          priceScale() { return {applyOptions(opts) { if (opts?.scaleMargins) state.scaleMargins = opts.scaleMargins; draw(); }}; },
           addSeries(type, opts) { return makeSeries(type === CandlestickSeries ? 'candlestick' : 'line', opts); },
           addCandlestickSeries(opts) { return makeSeries('candlestick', opts); },
           addLineSeries(opts) { return makeSeries('line', opts); },
@@ -420,6 +428,21 @@ class LightweightChartLevelSelectorUI:
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
+    .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
+    .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
+    #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
+    #calc-drawer.open {{ display:block; }}
+    #calc-head {{ display:grid; grid-template-columns:minmax(120px,1fr) minmax(760px,980px) minmax(80px,1fr); align-items:start; gap:12px; margin:0 0 4px 0; }}
+    #calc-title {{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:max(120px, calc((100% - 980px) / 2 - 24px)); margin:0; text-align:center; font-size:18px; }}
+    #calc-close {{ grid-column:3; justify-self:end; }}
+    #calc-table {{ max-width: 980px; margin: 0 auto; }}
+    #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:13px; }}
+    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
+    #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
+    #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
+    #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-start; gap:5px 12px; margin:0 auto 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
+    #calc-summary b {{ color:#f8fafc; }}
+    #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
   </style>
 </head>
 <body>
@@ -441,6 +464,15 @@ class LightweightChartLevelSelectorUI:
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="chart-legend"></div>
       <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas></div>
+      <section id="calc-drawer" aria-live="polite">
+        <div id="calc-head">
+          <h3 id="calc-title">Position calculation</h3>
+          <div id="calc-summary"></div>
+          <button id="calc-close" type="button">Close</button>
+        </div>
+        <div id="calc-table"></div>
+        <div id="calc-warnings"></div>
+      </section>
     </main>
     <aside class="side">
       <div style="margin-bottom:8px;font-weight:800;font-size:20px;color:#f8fafc" id="identity"></div>
@@ -459,7 +491,8 @@ class LightweightChartLevelSelectorUI:
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="finish-btn" style="margin-top:16px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Finish</button>
+      <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
+      <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="result-box" style="margin-top:10px"></div>
     </aside>
   </div>
@@ -543,7 +576,7 @@ class LightweightChartLevelSelectorUI:
   const chart = LightweightCharts.createChart($('chart'), {{
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
     grid: {{ vertLines: {{ color: '#1f2937' }}, horzLines: {{ color: '#1f2937' }} }},
-    rightPriceScale: {{ borderColor: '#334155' }},
+    rightPriceScale: {{ borderColor: '#334155', scaleMargins: {{top:0.08, bottom:0.12}} }},
     timeScale: {{ borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
       const d = typeof time === 'string' ? new Date(time + 'T00:00:00Z') : new Date(Date.UTC(time.year, time.month - 1, time.day));
       return d.getUTCMonth() === 0 ? String(d.getUTCFullYear()) : d.toLocaleString('en-US', {{month:'short', timeZone:'UTC'}});
@@ -551,6 +584,45 @@ class LightweightChartLevelSelectorUI:
     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
     localization: {{ priceFormatter: p => fmt(p) }},
   }});
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  let verticalPan = 0;
+  let chartDrag = null;
+  let suppressChartClickUntil = 0;
+  function applyVerticalPan() {{
+    verticalPan = clamp(verticalPan, -0.30, 0.30);
+    const margins = {{top:clamp(0.08 + verticalPan, 0.01, 0.50), bottom:clamp(0.12 - verticalPan, 0.01, 0.50)}};
+    try {{ chart.priceScale?.('right')?.applyOptions({{scaleMargins:margins}}); }} catch(e) {{}}
+    try {{ chart.applyOptions?.({{rightPriceScale:{{scaleMargins:margins}}}}); }} catch(e) {{}}
+    requestAnimationFrame(drawCloud);
+  }}
+  $('chart-wrap').addEventListener('pointerdown', (ev) => {{
+    if (!$('calc-drawer')?.classList.contains('open') || ev.button !== 0) return;
+    chartDrag = {{id:ev.pointerId, y:ev.clientY, moved:false}};
+    $('chart-wrap').classList.add('dragging');
+    $('chart-wrap').setPointerCapture?.(ev.pointerId);
+  }});
+  $('chart-wrap').addEventListener('pointermove', (ev) => {{
+    if (!chartDrag || chartDrag.id !== ev.pointerId || !$('calc-drawer')?.classList.contains('open')) return;
+    const dy = ev.clientY - chartDrag.y;
+    if (Math.abs(dy) < 2) return;
+    chartDrag.moved = chartDrag.moved || Math.abs(dy) > 4;
+    if (chartDrag.moved) {{
+      ev.preventDefault();
+      verticalPan += dy / Math.max(260, $('chart-wrap').getBoundingClientRect().height);
+      chartDrag.y = ev.clientY;
+      applyVerticalPan();
+    }}
+  }});
+  const endChartDrag = (ev) => {{
+    if (!chartDrag || chartDrag.id !== ev.pointerId) return;
+    if (chartDrag.moved) suppressChartClickUntil = Date.now() + 300;
+    $('chart-wrap').releasePointerCapture?.(ev.pointerId);
+    $('chart-wrap').classList.remove('dragging');
+    chartDrag = null;
+  }};
+  $('chart-wrap').addEventListener('pointerup', endChartDrag);
+  $('chart-wrap').addEventListener('pointercancel', endChartDrag);
+  $('chart-wrap').addEventListener('click', (ev) => {{ if (Date.now() < suppressChartClickUntil) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, true);
   const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
   const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
@@ -1009,10 +1081,11 @@ class LightweightChartLevelSelectorUI:
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
-  $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); }};
+  $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
   chart.subscribeClick(param => {{
+    if (Date.now() < suppressChartClickUntil) return;
     if (!param || !param.point) return;
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
     const time = typeof param.time === 'string' ? param.time : (param.time ? `${{param.time.year}}-${{String(param.time.month).padStart(2,'0')}}-${{String(param.time.day).padStart(2,'0')}}` : nearest(null).time);
@@ -1044,11 +1117,84 @@ class LightweightChartLevelSelectorUI:
     if (activeTool === 'fib' && fibAnchor && time) updateFibPreview(time);
   }});
 
-  $('finish-btn').onclick = async () => {{
+  function collectLevelsForSave(finished=false) {{
     const stockCfdMode = !!levels.__stock_cfd_mode__;
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
-    levels = {{...levels, position_type:$('position-type').value, capital:roundPrice(Number($('capital').value || 255000)), lot_cost:roundPrice(Number($('lot-cost').value || 0)), pip_value:Number(pipValue.toFixed(4)), spread_multiplier:Number(spreadMult.toFixed(4)), spread:Number((stockCfdMode ? spreadMult : spreadMult*pipValue).toFixed(4)), spread_pips: stockCfdMode ? Number((spreadMult/0.01).toFixed(2)) : null, drawn_objects:drawnObjects, level_points:levelPoints, __finished__:true}};
+    return {{...levels,
+      position_type:$('position-type').value,
+      capital:roundPrice(Number($('capital').value || 255000)),
+      lot_cost:roundPrice(Number($('lot-cost').value || 0)),
+      pip_value:Number(pipValue.toFixed(4)),
+      spread_multiplier:Number(spreadMult.toFixed(4)),
+      spread:Number((stockCfdMode ? spreadMult : spreadMult*pipValue).toFixed(4)),
+      spread_pips: stockCfdMode ? Number((spreadMult/0.01).toFixed(2)) : null,
+      drawn_objects:drawnObjects,
+      level_points:levelPoints,
+      __finished__:!!finished}};
+  }}
+
+  function money(v, currency='PLN') {{
+    const n = Number(v || 0);
+    return n.toLocaleString(undefined, {{minimumFractionDigits:2, maximumFractionDigits:2}}) + ' ' + currency;
+  }}
+  function numText(v, digits=2) {{
+    const n = Number(v || 0);
+    return n.toLocaleString(undefined, {{minimumFractionDigits:digits, maximumFractionDigits:digits}});
+  }}
+  function renderCalculation(data) {{
+    const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
+    drawer.classList.add('open');
+    $('calc-drawer').closest('.main')?.classList.add('calc-open');
+    if (!data || !data.ok) {{
+      summary.innerHTML = `<b>Unable to calculate:</b> ${{(data && data.error) ? data.error : 'unknown error'}}`;
+      table.innerHTML = ''; warnings.innerHTML = ''; return;
+    }}
+    const currency = data.currency || 'PLN';
+    const b = data.basics || {{}};
+    const chips = [];
+    chips.push(`<span><b>Instrument:</b> ${{data.instrument_type || P.instrumentType}}</span>`);
+    chips.push(`<span><b>Position:</b> ${{(data.position_type || $('position-type').value || 'long').toUpperCase()}}</span>`);
+    if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
+    if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
+    if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>Max capital:</b> ${{money(b.max_capital, currency)}}</span>`);
+    if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion fee ${{numText(data.fx_conversion_fee_pct || 1, 0)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
+    if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
+    if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
+    if (data.take_profit != null) chips.push(`<span><b>Take profit:</b> ${{fmt(Number(data.take_profit))}}</span>`);
+    if (data.risk_reward != null) chips.push(`<span><b>Risk/reward:</b> ${{numText(data.risk_reward, 2)}}:1</span>`);
+    if (data.profit != null) chips.push(`<span><b>Profit:</b> ${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)</span>`);
+    if (data.zr_ratio != null) chips.push(`<span><b>Additional Z/R:</b> ${{numText(data.zr_ratio, 2)}}:1</span>`);
+    summary.innerHTML = chips.join('');
+    table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
+    warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');
+    requestAnimationFrame(() => {{
+      document.documentElement.style.setProperty('--calc-drawer-height', `${{Math.ceil(drawer.getBoundingClientRect().height + 10)}}px`);
+      window.dispatchEvent(new Event('resize'));
+      applyVerticalPan();
+    }});
+  }}
+  async function calculatePosition(show=true) {{
+    const current = collectLevelsForSave(false);
+    try {{
+      const resp = await fetch('/calculate', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:current}})}});
+      const data = await resp.json();
+      if (data && data.ok) levels = {{...levels, position_calculations:data}};
+      if (show) renderCalculation(data);
+      return data;
+    }} catch(e) {{
+      const data = {{ok:false, error:String(e)}};
+      if (show) renderCalculation(data);
+      return data;
+    }}
+  }}
+  $('calculate-btn').onclick = () => calculatePosition(true);
+  $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); window.dispatchEvent(new Event('resize')); }};
+
+  $('finish-btn').onclick = async () => {{
+    const calc = await calculatePosition(false);
+    levels = collectLevelsForSave(true);
+    if (calc && calc.ok) levels.position_calculations = calc;
     let screenshot = null; try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{}}
     const resp = await fetch('/finish', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels, screenshot}})}});
     if (resp.ok) {{ $('result-box').textContent = 'Saved. Closing app...'; setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250); }}
@@ -1061,6 +1207,141 @@ class LightweightChartLevelSelectorUI:
   </script>
 </body>
 </html>"""
+
+
+    def _position_calculation_payload(self, levels: dict) -> dict:
+        def _num(key: str, default: float = 0.0) -> float:
+            try:
+                value = levels.get(key, default)
+                return float(default if value in (None, "") else value)
+            except (TypeError, ValueError):
+                return float(default)
+
+        entry = _num("entry")
+        stop_loss = _num("stop_loss")
+        high = _num("high")
+        low = _num("low")
+        capital = _num("capital", 255000.0)
+        position_type = str(levels.get("position_type") or "long").lower()
+        position_type = "short" if position_type == "short" else "long"
+        stock_cfd_mode = bool(levels.get("__stock_cfd_mode__"))
+        effective_instrument = "commodity" if stock_cfd_mode else self.instrument_type
+        risk_levels = sorted(DEFAULT_RISK_LEVELS)
+        rows = []
+        warnings = []
+        currency = "PLN"
+
+        if entry <= 0 or capital <= 0 or stop_loss <= 0:
+            return {"ok": False, "error": "Select entry, stop loss, and capital before calculating."}
+
+        try:
+            if effective_instrument == "stock":
+                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                max_capital = capital
+                try:
+                    if "Volume" in self.df.columns:
+                        turnover = (pd.to_numeric(self.df["Close"], errors="coerce") * pd.to_numeric(self.df["Volume"], errors="coerce")).dropna()
+                        if len(turnover) >= 10:
+                            max_capital = float(turnover.tail(10).mean()) * 0.01
+                        else:
+                            warnings.append("Turnover history is short; max capital uses available capital.")
+                    else:
+                        warnings.append("Volume data is unavailable; max capital uses available capital.")
+                except Exception as exc:
+                    warnings.append(f"Could not derive turnover max capital: {exc}")
+                for risk in risk_levels:
+                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=conversion_fee_pct)
+                    rows.append({
+                        "risk": risk,
+                        "risk_label": f"{risk * 100:.1f}%",
+                        "position_size": result.get("shares", 0),
+                        "position_unit": "Shares",
+                        "capital_used": round(float(result.get("capital_used", 0.0)), 2),
+                        "potential_loss": round(float(result.get("potential_loss", 0.0)), 2),
+                        "loss_percent": round(float(result.get("risk_percent", 0.0)), 2),
+                    })
+                basics = {"entry": entry, "stop_loss": stop_loss, "max_capital": round(max_capital, 2)}
+            else:
+                lot_cost = _num("lot_cost")
+                pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
+                spread = _num("spread")
+                pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
+                if lot_cost <= 0:
+                    return {"ok": False, "error": "Lot cost must be greater than zero before calculating."}
+                if pip_value <= 0:
+                    return {"ok": False, "error": "Pip value must be greater than zero before calculating."}
+                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                for risk in risk_levels:
+                    result = calculate_position_size(
+                        entry=entry,
+                        stop_loss=stop_loss,
+                        capital=capital,
+                        risk_percent=risk,
+                        pip_value=pip_value,
+                        lot_cost=lot_cost,
+                        spread=spread,
+                        pip_size=pip_size,
+                        position_type=position_type,
+                        instrument_type=effective_instrument,
+                        conversion_fee_pct=conversion_fee_pct,
+                    )
+                    rows.append({
+                        "risk": risk,
+                        "risk_label": f"{risk * 100:.1f}%",
+                        "position_size": result.get("lots", 0),
+                        "position_unit": "Lots",
+                        "capital_used": round(float(result.get("capital_used", 0.0)), 2),
+                        "potential_loss": round(float(result.get("potential_loss", 0.0)), 2),
+                        "loss_percent": round(float(result.get("risk_percent", 0.0)), 2),
+                    })
+                basics = {"entry": entry, "stop_loss": stop_loss, "lot_cost": lot_cost, "pip_value": pip_value, "spread": spread}
+
+            take_profit = None
+            risk_reward = None
+            profit = None
+            profit_percent = None
+            if high and low and levels.get("line_cross_value") not in (None, ""):
+                try:
+                    take_profit = calculate_take_profit(entry, high, low, position_type if effective_instrument != "stock" else "long", start_value=_num("line_cross_value"))
+                    base = next((r for r in rows if float(r.get("position_size", 0) or 0) > 0), None)
+                    if base and float(base.get("potential_loss", 0) or 0) > 0:
+                        if base["position_unit"] == "Shares":
+                            profit = float(base["position_size"]) * (take_profit - entry)
+                        else:
+                            pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
+                            pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
+                            profit = abs(take_profit - entry) / pip_size * float(base["position_size"]) * pip_value
+                        profit_percent = (profit / capital) * 100 if capital else None
+                        risk_reward = profit / float(base["potential_loss"])
+                except Exception as exc:
+                    warnings.append(f"Take-profit preview unavailable: {exc}")
+
+            zr_ratio = None
+            if levels.get("check_zr_value_fibo_or_elevation") not in (None, ""):
+                try:
+                    zr_ratio = calculate_distance_ratio(entry, stop_loss, _num("check_zr_value_fibo_or_elevation"))
+                except Exception as exc:
+                    warnings.append(f"Additional Z/R preview unavailable: {exc}")
+
+            return {
+                "ok": True,
+                "instrument_type": effective_instrument,
+                "position_type": position_type,
+                "currency": currency,
+                "fx_conversion_fee_applicable": bool(levels.get("__currency_fee_eligible__")),
+                "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")),
+                "fx_conversion_fee_pct": round(float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) * 100, 2),
+                "rows": rows,
+                "basics": basics,
+                "take_profit": None if take_profit is None else round(float(take_profit), self._precision_for_price(take_profit)),
+                "risk_reward": None if risk_reward is None else round(float(risk_reward), 2),
+                "profit": None if profit is None else round(float(profit), 2),
+                "profit_percent": None if profit_percent is None else round(float(profit_percent), 2),
+                "zr_ratio": None if zr_ratio is None else round(float(zr_ratio), 2),
+                "warnings": warnings,
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def run(self):
         app = Flask(__name__)
@@ -1075,6 +1356,12 @@ class LightweightChartLevelSelectorUI:
         @app.route("/")
         def _index():
             return self._html()
+
+        @app.route("/calculate", methods=["POST"])
+        def _calculate():
+            payload = request.get_json(silent=True) or {}
+            levels = payload.get("levels") or {}
+            return jsonify(self._position_calculation_payload(levels))
 
         @app.route("/finish", methods=["POST"])
         def _finish():
