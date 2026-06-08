@@ -95,14 +95,15 @@ Each generated config includes:
 ## 5) Data source options
 
 - `--data-source auto` (default)
-  - stock/forex: Yahoo then Stooq fallback
-  - commodity: Stooq then Yahoo fallback
+  - stock/forex: Stooq API data
+  - commodity: Stooq API data, with Stooq web scraping for selected literal commodities
 - `--data-source yahoo`
 - `--data-source stooq`
 
 Optional:
 
-- `--api-key <key>` for Stooq variants (`apikey`, `api_key` on `stooq.pl` and `stooq.com`).
+- `--api-key <key>` for Stooq `apikey` query parameters.
+- `STOCKHELPER_STOOQ_API_KEY=<key>` to set the default Stooq API key for commands that do not pass `--api-key`.
 
 ---
 

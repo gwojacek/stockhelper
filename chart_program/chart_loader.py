@@ -15,6 +15,7 @@ from utilities.stooq_playwright import update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
+STOOQ_API_KEY_ENV = "STOCKHELPER_STOOQ_API_KEY"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -472,13 +473,20 @@ def _stooq_url(
     domain: str = "stooq.pl",
     lookback_days: int = 364,
     end_date: datetime | None = None,
+    include_date_range: bool = True,
 ) -> str:
-    end = (end_date.date() if isinstance(end_date, datetime) else datetime.now(timezone.utc).date())
-    start = end - timedelta(days=lookback_days)
-    query = {"s": symbol, "i": "d", "d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")}
+    query = {"s": symbol, "i": "d"}
+    if include_date_range:
+        end = (end_date.date() if isinstance(end_date, datetime) else datetime.now(timezone.utc).date())
+        start = end - timedelta(days=lookback_days)
+        query.update({"d1": start.strftime("%Y%m%d"), "d2": end.strftime("%Y%m%d")})
     if api_key and param_name:
         query[param_name] = api_key
     return f"https://{domain}/q/d/l/?{urlencode(query)}"
+
+
+def _effective_stooq_api_key(api_key: str | None) -> str | None:
+    return api_key or os.environ.get(STOOQ_API_KEY_ENV) or STOOQ_DEFAULT_API_KEY
 
 
 def _stooq_download(
@@ -489,22 +497,46 @@ def _stooq_download(
     end_date: datetime | None = None,
 ) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
+    effective_api_key = _effective_stooq_api_key(api_key)
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
-        effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
-        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl", lookback_days=lookback_days, end_date=end_date)
+        urls = [
+            (
+                "date-range",
+                _stooq_url(
+                    candidate,
+                    api_key=effective_api_key,
+                    param_name="apikey",
+                    domain="stooq.pl",
+                    lookback_days=lookback_days,
+                    end_date=end_date,
+                    include_date_range=True,
+                ),
+            ),
+            (
+                "full-history",
+                _stooq_url(
+                    candidate,
+                    api_key=effective_api_key,
+                    param_name="apikey",
+                    domain="stooq.pl",
+                    include_date_range=False,
+                ),
+            ),
+        ]
 
-        try:
-            text = _download_text(url)
-            df = _parse_stooq_csv_text(text)
-            if not df.empty:
-                try:
-                    df = _merge_stooq_current_quote(df, candidate)
-                except Exception:
-                    pass
-                return df, candidate
-            errors.append(f"{candidate}: empty data from {url}")
-        except (URLError, ValueError, pd.errors.ParserError) as exc:
-            errors.append(f"{candidate}: {exc} | url={url}")
+        for mode, url in urls:
+            try:
+                text = _download_text(url)
+                df = _parse_stooq_csv_text(text)
+                if not df.empty:
+                    try:
+                        df = _merge_stooq_current_quote(df, candidate)
+                    except Exception:
+                        pass
+                    return df, candidate
+                errors.append(f"{candidate} ({mode}): empty data from {url}")
+            except (URLError, ValueError, pd.errors.ParserError) as exc:
+                errors.append(f"{candidate} ({mode}): {exc} | url={url}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
