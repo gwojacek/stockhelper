@@ -5,6 +5,7 @@ import hashlib
 import importlib
 import importlib.util
 import os
+from pathlib import Path
 import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
@@ -36,6 +37,7 @@ STOOQ_BROWSER_HEADERS = {
 }
 
 _CURL_SESSION = None
+_BROWSER_CLEARANCE_HEADERS: dict[str, str] | None = None
 
 
 def _debug_enabled() -> bool:
@@ -88,6 +90,84 @@ def _browser_headers_for_url(url: str) -> dict[str, str]:
         referer_query = urlencode({"s": symbol})
         headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/q/d/?{referer_query}"
     return headers
+
+
+def _headers_with_browser_clearance(headers: dict[str, str]) -> dict[str, str]:
+    if not _BROWSER_CLEARANCE_HEADERS:
+        return headers
+    merged = dict(headers)
+    if "User-Agent" in _BROWSER_CLEARANCE_HEADERS:
+        merged["User-Agent"] = _BROWSER_CLEARANCE_HEADERS["User-Agent"]
+    if "Cookie" in _BROWSER_CLEARANCE_HEADERS:
+        existing_cookie = merged.get("Cookie")
+        browser_cookie = _BROWSER_CLEARANCE_HEADERS["Cookie"]
+        merged["Cookie"] = f"{existing_cookie}; {browser_cookie}" if existing_cookie else browser_cookie
+    _debug(f"using browser clearance headers cookie={'Cookie' in _BROWSER_CLEARANCE_HEADERS}")
+    return merged
+
+
+def _remember_browser_clearance(context, url: str, user_agent: str) -> None:
+    global _BROWSER_CLEARANCE_HEADERS
+    try:
+        cookies = context.cookies([url])
+    except Exception as exc:
+        _debug(f"playwright cookie extraction failed: {type(exc).__name__}: {exc}")
+        return
+    cookie_header = "; ".join(
+        f"{cookie.get('name')}={cookie.get('value')}"
+        for cookie in cookies
+        if cookie.get("name") and cookie.get("value") is not None
+    )
+    if not cookie_header:
+        _debug("playwright cookie extraction found no cookies")
+        return
+    _BROWSER_CLEARANCE_HEADERS = {"User-Agent": user_agent, "Cookie": cookie_header}
+    _debug(f"stored browser clearance cookies count={len(cookies)}")
+
+
+def _playwright_storage_state_path() -> Path | None:
+    value = os.getenv("STOOQ_PLAYWRIGHT_STORAGE_STATE", "").strip()
+    if value.lower() in {"0", "false", "no", "off"}:
+        return None
+    if value:
+        return Path(value).expanduser()
+    return Path.home() / ".cache" / "stockhelper" / "stooq_playwright_storage.json"
+
+
+def _save_playwright_storage_state(context) -> None:
+    path = _playwright_storage_state_path()
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        context.storage_state(path=str(path))
+        _debug(f"playwright storage_state saved to {path}")
+    except Exception as exc:
+        _debug(f"playwright storage_state save failed: {type(exc).__name__}: {exc}")
+
+
+def _playwright_context_options(url: str, user_agent: str) -> dict[str, object]:
+    options: dict[str, object] = {
+        "locale": "pl-PL",
+        "user_agent": user_agent,
+        "extra_http_headers": {
+            "Accept-Language": STOOQ_BROWSER_HEADERS["Accept-Language"],
+        },
+    }
+    path = _playwright_storage_state_path()
+    if path is not None and path.exists():
+        options["storage_state"] = str(path)
+        _debug(f"playwright storage_state loaded from {path}")
+    return options
+
+
+def _playwright_launch_options() -> dict[str, object]:
+    mode = os.getenv("STOOQ_PLAYWRIGHT_HEADLESS", "1").lower()
+    headless = mode not in {"0", "false", "no", "off"}
+    options: dict[str, object] = {"headless": headless}
+    if mode == "new":
+        options["args"] = ["--headless=new"]
+    return options
 
 
 def _curl_cffi_requests_module():
@@ -206,24 +286,43 @@ def _download_with_playwright(url: str, timeout: int) -> str:
         raise RuntimeError("Playwright fallback unavailable: playwright.sync_api not installed")
 
     timeout_ms = max(1000, timeout * 1000)
-    _debug(f"playwright GET {_redact_url(url)} timeout={timeout}s headless=true")
+    user_agent = STOOQ_BROWSER_HEADERS["User-Agent"]
+    launch_options = _playwright_launch_options()
+    _debug(
+        f"playwright GET {_redact_url(url)} timeout={timeout}s "
+        f"headless={launch_options.get('headless')}"
+    )
     with sync_api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(**launch_options)
         try:
-            context = browser.new_context(
-                locale="pl-PL",
-                user_agent=STOOQ_BROWSER_HEADERS["User-Agent"],
-                extra_http_headers={"Accept-Language": STOOQ_BROWSER_HEADERS["Accept-Language"]},
-            )
+            context = browser.new_context(**_playwright_context_options(url, user_agent))
             page = context.new_page()
             _apply_playwright_stealth(page, context)
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            response_text = ""
+            if response is not None:
+                try:
+                    response_text = response.text()
+                except Exception as exc:
+                    _debug(f"playwright response.text failed: {type(exc).__name__}: {exc}")
+                status = getattr(response, "status", "unknown")
+                _debug(
+                    f"playwright response status={status} "
+                    f"kind={_text_kind(response_text)} chars={len(response_text)}"
+                )
+                _remember_browser_clearance(context, url, user_agent)
+                _save_playwright_storage_state(context)
+                if response_text and not _looks_like_stooq_challenge(response_text):
+                    return response_text
+
             text = ""
             for attempt in range(1, 11):
                 try:
                     page.wait_for_load_state("networkidle", timeout=1500)
                 except Exception:
                     pass
+                _remember_browser_clearance(context, url, user_agent)
+                _save_playwright_storage_state(context)
                 try:
                     text = page.locator("body").inner_text(timeout=1500)
                 except Exception:
@@ -232,7 +331,7 @@ def _download_with_playwright(url: str, timeout: int) -> str:
                 if text and not _looks_like_stooq_challenge(text):
                     return text
                 page.wait_for_timeout(500)
-            return text
+            return text or response_text
         finally:
             browser.close()
 
@@ -248,9 +347,27 @@ def _download_with_playwright_after_challenge(url: str, timeout: int, text: str)
     except Exception as exc:
         _debug(f"playwright fallback failed: {type(exc).__name__}: {exc}")
         return text
+    if fallback_text and not _looks_like_stooq_challenge(fallback_text):
+        return fallback_text
+
+    requests = _curl_cffi_requests_module()
+    if requests is not None and _BROWSER_CLEARANCE_HEADERS:
+        try:
+            _debug("retrying curl_cffi with Playwright clearance cookies")
+            retry_text = _download_with_curl(
+                requests,
+                url,
+                timeout,
+                _headers_with_browser_clearance(_browser_headers_for_url(url)),
+            )
+            if retry_text and not _looks_like_stooq_challenge(retry_text):
+                return retry_text
+        except Exception as exc:
+            _debug(f"curl_cffi retry with Playwright clearance failed: {type(exc).__name__}: {exc}")
+
     if _looks_like_stooq_challenge(fallback_text):
         _debug("playwright fallback still returned Stooq JS challenge")
-    return fallback_text
+    return fallback_text or text
 
 
 def _looks_like_stooq_challenge(text: str) -> bool:
@@ -394,7 +511,7 @@ def download_stooq_text(url: str, timeout: int = 20) -> str:
     downloader solves the SHA-256 nonce and retries with the generated auth
     cookie before handing the text to CSV parsing.
     """
-    base_headers = _browser_headers_for_url(url)
+    base_headers = _headers_with_browser_clearance(_browser_headers_for_url(url))
     requests = _curl_cffi_requests_module()
     _debug(
         f"start url={_redact_url(url)} timeout={timeout}s "

@@ -35,6 +35,7 @@ class _FakeRequests:
 
 def _install_fake_curl(monkeypatch, session: _FakeSession) -> _FakeSession:
     monkeypatch.setattr(stooq_http, "_CURL_SESSION", None)
+    monkeypatch.setattr(stooq_http, "_BROWSER_CLEARANCE_HEADERS", None)
     monkeypatch.setattr(stooq_http, "_curl_cffi_requests_module", lambda: _FakeRequests(session))
     return session
 
@@ -138,3 +139,16 @@ def test_apply_playwright_stealth_uses_stealth_sync(monkeypatch):
 
     assert stooq_http._apply_playwright_stealth("page", "context") is True
     assert calls == ["page"]
+
+
+def test_headers_with_browser_clearance_merges_cookie(monkeypatch):
+    monkeypatch.setattr(
+        stooq_http,
+        "_BROWSER_CLEARANCE_HEADERS",
+        {"User-Agent": "Browser UA", "Cookie": "cf_clearance=ok; uid=abc"},
+    )
+
+    headers = stooq_http._headers_with_browser_clearance({"User-Agent": "Old UA", "Cookie": "old=1"})
+
+    assert headers["User-Agent"] == "Browser UA"
+    assert headers["Cookie"] == "old=1; cf_clearance=ok; uid=abc"
