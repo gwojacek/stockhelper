@@ -692,9 +692,9 @@ def _stooq_download(
                     except Exception:
                         pass
                     return df, candidate
-                errors.append(f"{candidate}@{domain}: empty data from {url}")
+                errors.append(f"symbol={candidate} domain={domain}: empty data from {url}")
             except (URLError, ValueError, pd.errors.ParserError) as exc:
-                errors.append(f"{candidate}@{domain}: {exc} | url={url}")
+                errors.append(f"symbol={candidate} domain={domain}: {exc} | url={url}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
