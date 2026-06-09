@@ -281,33 +281,58 @@ def _switch_to_inspector_for_captcha(
 
 
 def _click_consent_text_fallback(ctx) -> bool:
-    """Click common CMP consent buttons by visible text inside a page/frame."""
+    """Click common CMP consent buttons by visible text inside a page/frame/shadow root."""
     script = """() => {
-        const needles = [
-            'zgadzam się', 'zgadzam sie', 'consent', 'i consent',
-            'i agree', 'agree', 'accept all', 'accept', 'allow all'
+        const positive = [
+            'zgadzam się', 'zgadzam sie', 'i consent', 'i agree',
+            'accept all', 'allow all', 'accept', 'agree'
         ];
+        const negative = ['zarządzaj', 'zarzadzaj', 'manage', 'options', 'więcej', 'wiecej', 'more'];
         const isVisible = (el) => {
-            const style = window.getComputedStyle(el);
-            const rect = el.getBoundingClientRect();
-            return style && style.visibility !== 'hidden' && style.display !== 'none'
-                && rect.width > 0 && rect.height > 0;
+            try {
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style && style.visibility !== 'hidden' && style.display !== 'none'
+                    && rect.width > 0 && rect.height > 0;
+            } catch (e) {
+                return false;
+            }
         };
-        const candidates = Array.from(document.querySelectorAll(
-            'button, [role=\"button\"], input[type=\"button\"], input[type=\"submit\"], a'
-        ));
+        const all = [];
+        const walk = (root) => {
+            if (!root) return;
+            const els = Array.from(root.querySelectorAll('*'));
+            for (const el of els) {
+                all.push(el);
+                if (el.shadowRoot) walk(el.shadowRoot);
+            }
+        };
+        walk(document);
+        const candidates = all.filter(el => {
+            const tag = (el.tagName || '').toLowerCase();
+            const role = (el.getAttribute('role') || '').toLowerCase();
+            const type = (el.getAttribute('type') || '').toLowerCase();
+            return tag === 'button' || tag === 'a' || role === 'button'
+                || (tag === 'input' && ['button', 'submit'].includes(type));
+        });
         for (const el of candidates) {
-            const text = ((el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '') + '').trim().toLowerCase();
+            const raw = ((el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '') + '').trim();
+            const text = raw.toLowerCase();
             if (!text || !isVisible(el)) continue;
-            if (needles.some(n => text.includes(n))) {
+            if (negative.some(n => text.includes(n))) continue;
+            if (positive.some(n => text.includes(n))) {
+                el.scrollIntoView({block: 'center', inline: 'center'});
                 el.click();
-                return true;
+                return raw || true;
             }
         }
         return false;
     }"""
     try:
-        return bool(ctx.evaluate(script))
+        result = ctx.evaluate(script)
+        if result:
+            print(f"[stooq-web] consent manager clicked with deep text fallback: {result}", flush=True)
+        return bool(result)
     except Exception:
         return False
 
@@ -404,45 +429,67 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
 def _accept_stooq_consent_for_bulk(page, phase: str) -> None:
     print(f"[stooq-bulk] checking consent manager ({phase})...", flush=True)
     try:
-        _accept_consent_if_present(page, first_page=True)
+        for round_idx in range(1, 4):
+            _accept_consent_if_present(page, first_page=True)
+            try:
+                page.wait_for_function(
+                    """() => {
+                        const text = (document.body && document.body.innerText) || '';
+                        return !/Stooq prosi|wykorzystanie Twoich danych|Zgadzam się|Zgadzam sie|Zarządzaj opcjami|Zarzadzaj opcjami/i.test(text);
+                    }""",
+                    timeout=2500,
+                )
+            except Exception:
+                pass
+            if not _consent_overlay_visible(page):
+                print(f"[stooq-bulk] consent manager not blocking page ({phase}, round={round_idx}).", flush=True)
+                return
+            print(f"[stooq-bulk] consent manager still visible ({phase}, round={round_idx}); retrying...", flush=True)
+        print(f"[stooq-bulk] consent manager still visible after click attempts ({phase}).", flush=True)
+        _debug_fail_screenshot("stooq_pl_bulk", page, suffix=f"_consent_still_visible_{phase}")
     except Exception as exc:
         print(f"[stooq-bulk] consent manager handling failed ({phase}): {exc}", flush=True)
-        return
-    try:
-        if _consent_overlay_visible(page):
-            print(f"[stooq-bulk] consent manager still visible after click attempts ({phase}).", flush=True)
-            _debug_fail_screenshot("stooq_pl_bulk", page, suffix=f"_consent_still_visible_{phase}")
-        else:
-            print(f"[stooq-bulk] consent manager not blocking page ({phase}).", flush=True)
-    except Exception:
-        pass
 
 
 def _consent_overlay_visible(page) -> bool:
-    probes = [
-        'Stooq prosi o zgodę',
-        'Stooq prosi o zgode',
-        'wykorzystanie Twoich danych osobowych',
-        'wykorzystanie Twoich danych',
-        'Zgadzam się',
-        'Zgadzam sie',
-        'Consent Manager',
-        'Consent',
-        'I agree',
-        'Accept all',
-    ]
+    script = """() => {
+        const probes = [
+            'stooq prosi o zgodę',
+            'stooq prosi o zgode',
+            'wykorzystanie twoich danych osobowych',
+            'wykorzystanie twoich danych',
+            'zarządzaj opcjami',
+            'zarzadzaj opcjami',
+            'zgadzam się',
+            'zgadzam sie'
+        ];
+        const chunks = [];
+        const walk = (root) => {
+            if (!root) return;
+            const bodyText = (root.body && root.body.innerText) || '';
+            if (bodyText) chunks.push(bodyText);
+            const els = Array.from(root.querySelectorAll ? root.querySelectorAll('*') : []);
+            for (const el of els) {
+                if (el.shadowRoot) {
+                    chunks.push(el.shadowRoot.textContent || '');
+                    walk(el.shadowRoot);
+                }
+            }
+        };
+        walk(document);
+        const text = chunks.join(' ').toLowerCase();
+        return probes.some(p => text.includes(p));
+    }"""
     try:
         contexts = [page] + list(page.frames)
     except Exception:
         contexts = [page]
     for ctx in contexts:
         try:
-            body = ctx.locator("body").inner_text(timeout=700)
+            if bool(ctx.evaluate(script)):
+                return True
         except Exception:
-            body = ""
-        lowered = body.lower()
-        if any(probe.lower() in lowered for probe in probes):
-            return True
+            continue
     return False
 
 
