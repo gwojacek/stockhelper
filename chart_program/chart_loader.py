@@ -385,6 +385,49 @@ def _stooq_csv_domains() -> list[str]:
     return domains or ["stooq.com"]
 
 
+def _stooq_verification_text(text: str) -> bool:
+    lowered = (text or "").lower()
+    markers = (
+        "requires javascript",
+        "wymaga javascriptu",
+        "weryfikacji przeglądarki",
+        "verify your browser",
+        "textencoder",
+        "noindex,nofollow",
+    )
+    return any(marker in lowered for marker in markers)
+
+
+def _tls_client_module():
+    if importlib.util.find_spec("tls_client") is None:
+        return None
+    return importlib.import_module("tls_client")
+
+
+def _download_text_with_tls_client(url: str) -> str | None:
+    tls_client = _tls_client_module()
+    if tls_client is None:
+        return None
+
+    session = tls_client.Session(
+        client_identifier=os.getenv("STOCKHELPER_TLS_CLIENT_IDENTIFIER", "chrome_120"),
+        random_tls_extension_order=True,
+    )
+    response = session.get(
+        url,
+        timeout_seconds=20,
+        headers={
+            "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
+            "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://stooq.com/",
+        },
+    )
+    status_code = int(getattr(response, "status_code", 0) or 0)
+    if status_code >= 400:
+        raise ValueError(f"tls-client returned HTTP {status_code}")
+    return response.text
+
+
 def _curl_cffi_requests_module():
     if importlib.util.find_spec("curl_cffi") is None:
         return None
@@ -416,14 +459,32 @@ def _download_text_with_urlopen(url: str) -> str:
 
 
 def _download_text(url: str) -> str:
-    if _is_stooq_url(url) and os.getenv("STOCKHELPER_DISABLE_CURL_CFFI", "0") != "1":
-        try:
-            text = _download_text_with_curl_cffi(url)
-        except Exception:
-            text = None
-        if text is not None:
-            return text
-    return _download_text_with_urlopen(url)
+    blocked_text: str | None = None
+    if _is_stooq_url(url):
+        if os.getenv("STOCKHELPER_DISABLE_TLS_CLIENT", "0") != "1":
+            try:
+                text = _download_text_with_tls_client(url)
+            except Exception:
+                text = None
+            if text is not None:
+                if not _stooq_verification_text(text):
+                    return text
+                blocked_text = text
+
+        if os.getenv("STOCKHELPER_DISABLE_CURL_CFFI", "0") != "1":
+            try:
+                text = _download_text_with_curl_cffi(url)
+            except Exception:
+                text = None
+            if text is not None:
+                if not _stooq_verification_text(text):
+                    return text
+                blocked_text = text
+
+    text = _download_text_with_urlopen(url)
+    if blocked_text is not None and _stooq_verification_text(text):
+        return blocked_text
+    return text
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
