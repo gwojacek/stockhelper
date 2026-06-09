@@ -57,41 +57,151 @@ def _capture_stooq_bulk_failure(page, reason: str) -> str:
     return ""
 
 
-def _accept_stooq_bulk_consent_if_present(page) -> None:
-    """Accept the Stooq consent dialog using Playwright auto-waiting only."""
+_STOOQ_BULK_CONSENT_ACCEPT_TEXTS = (
+    "zgadzam się",
+    "zgadzam sie",
+    "akceptuję",
+    "akceptuje",
+    "i consent",
+    "consent",
+    "i agree",
+    "agree",
+    "accept all",
+    "accept",
+)
+_STOOQ_BULK_CONSENT_MARKERS = (
+    "stooq prosi o zgodę",
+    "stooq prosi o zgode",
+    "wykorzystanie twoich danych osobowych",
+    "spersonalizowane reklamy",
+)
+
+
+def _stooq_bulk_contexts(page):
+    try:
+        return [page] + list(page.frames)
+    except Exception:
+        return [page]
+
+
+def _stooq_bulk_page_has_link_or_consent(page) -> bool:
+    try:
+        for ctx in _stooq_bulk_contexts(page):
+            try:
+                if ctx.locator("a[href*='d_pl_txt'], #t4 a").count() > 0:
+                    return True
+            except Exception:
+                pass
+        text = (page.locator("body").inner_text(timeout=1000) or "").lower()
+        return any(marker in text for marker in _STOOQ_BULK_CONSENT_MARKERS)
+    except Exception:
+        return False
+
+
+def _stooq_bulk_consent_visible(page) -> bool:
+    try:
+        text = (page.locator("body").inner_text(timeout=1000) or "").lower()
+        return any(marker in text for marker in _STOOQ_BULK_CONSENT_MARKERS)
+    except Exception:
+        return False
+
+
+def _click_stooq_bulk_consent_candidate(ctx) -> bool:
     selectors = [
+        '.fc-button.fc-cta-consent',
+        '.fc-cta-consent',
+        'button.fc-button.fc-cta-consent.fc-primary-button',
+        'button:has-text("Zgadzam się")',
+        'button:has-text("Zgadzam sie")',
+        'button:has-text("Akceptuję")',
+        'button:has-text("Akceptuje")',
         'button:has-text("Consent")',
         'button:has-text("I consent")',
         'button:has-text("Agree")',
         'button:has-text("I agree")',
         'button:has-text("Accept")',
         'button:has-text("Accept all")',
-        'button:has-text("Zgadzam się")',
-        'button:has-text("Zgadzam sie")',
-        'button.fc-button.fc-cta-consent.fc-primary-button',
-        'button[aria-label="Consent"]',
-        'button[aria-label="I consent"]',
-        'button[aria-label="Zgadzam się"]',
+        '[role="button"]:has-text("Zgadzam się")',
+        '[role="button"]:has-text("Zgadzam sie")',
+        '[role="button"]:has-text("Akceptuję")',
+        '[role="button"]:has-text("Akceptuje")',
+        '[role="button"]:has-text("Accept")',
+        '[aria-label="Zgadzam się"]',
+        '[aria-label="Zgadzam sie"]',
+        '[aria-label="I consent"]',
+        '[aria-label="Consent"]',
     ]
-    try:
-        contexts = [page] + list(page.frames)
-    except Exception:
-        contexts = [page]
-    for ctx in contexts:
-        for selector in selectors:
-            try:
-                button = ctx.locator(selector).first
-                if button.count() == 0:
-                    continue
-                button.click(timeout=5000)
-                try:
-                    button.wait_for(state="hidden", timeout=5000)
-                except Exception:
-                    pass
-                return
-            except Exception:
+    for selector in selectors:
+        try:
+            button = ctx.locator(selector).first
+            if button.count() == 0:
                 continue
+            button.click(timeout=5000, force=True)
+            return True
+        except Exception:
+            continue
 
+    try:
+        return bool(ctx.evaluate(
+            """(acceptTexts) => {
+                const norm = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+                const isVisible = (el) => {
+                    const style = window.getComputedStyle(el);
+                    const box = el.getBoundingClientRect();
+                    return style && style.visibility !== 'hidden' && style.display !== 'none' && box.width > 0 && box.height > 0;
+                };
+                const candidates = Array.from(document.querySelectorAll(
+                    'button,[role="button"],a,input[type="button"],input[type="submit"],.fc-button,.fc-cta-consent'
+                ));
+                for (const el of candidates) {
+                    if (!isVisible(el)) continue;
+                    const label = norm(el.innerText || el.textContent || el.value || el.getAttribute('aria-label'));
+                    if (acceptTexts.some((txt) => label.includes(txt))) {
+                        el.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""",
+            list(_STOOQ_BULK_CONSENT_ACCEPT_TEXTS),
+        ))
+    except Exception:
+        return False
+
+
+def _accept_stooq_bulk_consent_if_present(page) -> None:
+    """Accept the Stooq consent manager using Playwright auto-waiting only."""
+    try:
+        page.wait_for_function("() => document.readyState !== 'loading'", timeout=10000)
+    except Exception:
+        pass
+    try:
+        page.wait_for_function(
+            """() => {
+                const text = (document.body && document.body.innerText || '').toLowerCase();
+                return document.querySelector("a[href*='d_pl_txt'], #t4 a")
+                    || text.includes('stooq prosi o zgod')
+                    || text.includes('wykorzystanie twoich danych osobowych');
+            }""",
+            timeout=15000,
+        )
+    except Exception:
+        pass
+
+    for _attempt in range(3):
+        clicked = False
+        for ctx in _stooq_bulk_contexts(page):
+            if _click_stooq_bulk_consent_candidate(ctx):
+                clicked = True
+                break
+        if not clicked:
+            break
+        try:
+            page.locator("a[href*='d_pl_txt'], #t4 a").first.wait_for(state="visible", timeout=10000)
+            return
+        except Exception:
+            if not _stooq_bulk_consent_visible(page):
+                return
 
 def _bulk_download_link(page):
     """Find the WIG d_pl_txt link, preferring the required #t4 table/row."""
@@ -107,20 +217,30 @@ def _bulk_download_link(page):
         contexts = [page] + list(page.frames)
     except Exception:
         contexts = [page]
-    for ctx in contexts:
-        for selector in selectors:
-            link = ctx.locator(selector).first
-            try:
-                if link.count() == 0:
+    for consent_retry in range(2):
+        for ctx in contexts:
+            for selector in selectors:
+                link = ctx.locator(selector).first
+                try:
+                    if link.count() == 0:
+                        continue
+                    link.wait_for(state="visible", timeout=20000)
+                    href = (link.get_attribute("href") or "").lower()
+                    text = (link.inner_text(timeout=2000) or "").lower()
+                    if "d_pl_txt" in href or (selector == "#t4 a" and "mb" in text):
+                        return link
+                except Exception as exc:
+                    last_error = exc
                     continue
-                link.wait_for(state="visible", timeout=20000)
-                href = (link.get_attribute("href") or "").lower()
-                text = (link.inner_text(timeout=2000) or "").lower()
-                if "d_pl_txt" in href or (selector == "#t4 a" and "mb" in text):
-                    return link
-            except Exception as exc:
-                last_error = exc
-                continue
+        if consent_retry == 0 and _stooq_bulk_consent_visible(page):
+            print("[stooq-bulk] consent manager still visible while looking for bulk link; accepting again.", flush=True)
+            _accept_stooq_bulk_consent_if_present(page)
+            try:
+                contexts = [page] + list(page.frames)
+            except Exception:
+                contexts = [page]
+            continue
+        break
     shot = _capture_stooq_bulk_failure(page, "bulk_link_missing")
     body_preview = ""
     try:
