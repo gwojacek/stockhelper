@@ -1050,6 +1050,62 @@ def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_sele
     return _open_direct_stooq_download_or_gate(page, url)
 
 
+def _goto_stooq_download_url_for_expected_download(page, url: str) -> None:
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    except Exception as exc:
+        if "Download is starting" not in str(exc):
+            raise
+        print("[stooq-bulk] Playwright: direct URL raised 'Download is starting' inside watcher.", flush=True)
+
+
+def _expect_stooq_download_action(page, label: str, action, timeout: int = 30000):
+    print(f"[stooq-bulk] Playwright: attempting final download via {label}...", flush=True)
+    try:
+        with page.expect_download(timeout=timeout) as download_info:
+            action()
+        print(f"[stooq-bulk] Playwright: final download started via {label}.", flush=True)
+        return download_info.value
+    except Exception as exc:
+        print(f"[stooq-bulk] Playwright: final download via {label} failed ({exc}).", flush=True)
+        return None
+
+
+def _download_from_stooq_ready_gate(page, url: str, link, download_path: Path, expect_zip: bool, symbol: str) -> Path:
+    """Try all known Stooq post-captcha download actions and require a valid file."""
+    attempts = [
+        (
+            "#cpt_gh click",
+            lambda: link.click(timeout=5000, force=True),
+        ),
+        (
+            "#cpt_gh DOM click",
+            lambda: link.evaluate("el => el.click()"),
+        ),
+        (
+            "cpt_g(0,0,1)",
+            lambda: page.evaluate("() => { if (typeof cpt_g === 'function') return cpt_g(0,0,1); }")
+        ),
+        (
+            "direct URL after captcha gate",
+            lambda: _goto_stooq_download_url_for_expected_download(page, url),
+        ),
+    ]
+    for label, action in attempts:
+        download = _expect_stooq_download_action(page, label, action)
+        if download is None:
+            continue
+        if _save_playwright_download(download, download_path, expect_zip, label):
+            return download_path
+        try:
+            download_path.unlink()
+        except OSError:
+            pass
+        print(f"[stooq-bulk] Playwright: {label} produced invalid file; trying next method.", flush=True)
+    _debug_stooq_download_page(page, symbol, "final_download_timeout_or_invalid")
+    raise ValueError(f"Stooq final download did not produce a valid file: {download_path}")
+
+
 def download_stooq_file_with_playwright(
     url: str,
     download_path: Path,
@@ -1113,17 +1169,8 @@ def download_stooq_file_with_playwright(
             if link.count() == 0:
                 _debug_stooq_download_page(page, symbol, "download_link_missing_after_captcha")
                 raise ValueError("Stooq download link #cpt_gh not found after captcha approval")
-            print("[stooq-bulk] Playwright: clicking Stooq Download file link...", flush=True)
-            with page.expect_download(timeout=180000) as download_info:
-                try:
-                    link.click(timeout=5000, force=True)
-                except Exception:
-                    link.evaluate("el => el.click()")
-            download = download_info.value
-            if not _save_playwright_download(download, download_path, expect_zip, "captcha download"):
-                _debug_stooq_download_page(page, symbol, "invalid_captcha_download")
-                raise ValueError(f"Downloaded file did not match expected type: {download_path}")
-            return download_path
+            print("[stooq-bulk] Playwright: Stooq Download file link is ready; starting final download attempts...", flush=True)
+            return _download_from_stooq_ready_gate(page, url, link, download_path, expect_zip, symbol)
         finally:
             context.close()
             browser.close()
