@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from io import StringIO
+import asyncio
+import html
 from pathlib import Path
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -8,6 +10,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 import hashlib
+import inspect
 import importlib
 import importlib.util
 import os
@@ -491,6 +494,12 @@ def _curl_cffi_requests_module():
     return importlib.import_module("curl_cffi.requests")
 
 
+def _nodriver_module():
+    if importlib.util.find_spec("nodriver") is None:
+        return None
+    return importlib.import_module("nodriver")
+
+
 def _download_text_with_curl_cffi(url: str) -> str | None:
     requests = _curl_cffi_requests_module()
     if requests is None:
@@ -530,6 +539,56 @@ def _download_text_with_urlopen(url: str) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
+def _browser_content_to_text(content: str) -> str:
+    match = re.search(r"<pre[^>]*>(.*?)</pre>", content or "", flags=re.IGNORECASE | re.DOTALL)
+    if match is not None:
+        return html.unescape(match.group(1)).strip()
+    body = re.search(r"<body[^>]*>(.*?)</body>", content or "", flags=re.IGNORECASE | re.DOTALL)
+    if body is not None:
+        stripped = re.sub(r"<[^>]+>", "", body.group(1))
+        return html.unescape(stripped).strip()
+    return html.unescape(content or "")
+
+
+async def _download_text_with_nodriver_async(url: str) -> str | None:
+    nodriver = _nodriver_module()
+    if nodriver is None:
+        return None
+
+    browser = None
+    try:
+        browser_args = [arg for arg in os.getenv("STOCKHELPER_NODRIVER_BROWSER_ARGS", "").split() if arg]
+        browser = await nodriver.start(
+            headless=os.getenv("STOCKHELPER_NODRIVER_HEADLESS", "1") != "0",
+            browser_args=browser_args or None,
+            lang=os.getenv("STOCKHELPER_NODRIVER_LANG", "pl-PL"),
+        )
+        tab = await browser.get(url)
+        await tab
+        wait_seconds = float(os.getenv("STOCKHELPER_NODRIVER_WAIT_SECONDS", "4"))
+        if hasattr(tab, "sleep"):
+            await tab.sleep(wait_seconds)
+        else:
+            await asyncio.sleep(wait_seconds)
+        content = await tab.get_content()
+        return _browser_content_to_text(content)
+    finally:
+        if browser is not None:
+            stop_result = browser.stop()
+            if inspect.isawaitable(stop_result):
+                await stop_result
+
+
+def _download_text_with_nodriver(url: str) -> str | None:
+    if _nodriver_module() is None:
+        return None
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_download_text_with_nodriver_async(url))
+    raise RuntimeError("nodriver backend cannot run inside an active asyncio loop")
+
+
 def _download_text(url: str) -> str:
     blocked_text: str | None = None
     if _is_stooq_url(url):
@@ -554,6 +613,15 @@ def _download_text(url: str) -> str:
                 blocked_text = text
 
     text = _download_text_with_urlopen(url)
+    if _is_stooq_url(url) and _stooq_verification_text(text):
+        blocked_text = text
+        if os.getenv("STOCKHELPER_DISABLE_NODRIVER", "0") != "1":
+            try:
+                nodriver_text = _download_text_with_nodriver(url)
+            except Exception:
+                nodriver_text = None
+            if nodriver_text is not None and not _stooq_verification_text(nodriver_text):
+                return nodriver_text
     if blocked_text is not None and _stooq_verification_text(text):
         return blocked_text
     return text
