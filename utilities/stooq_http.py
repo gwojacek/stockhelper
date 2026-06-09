@@ -6,8 +6,9 @@ import importlib
 import importlib.util
 import os
 import re
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
+import sys
 
 # Browser-like headers used by Stooq CSV endpoints.  They are intentionally kept
 # cookie-free by default so the fetcher does not depend on a developer's personal
@@ -37,6 +38,48 @@ STOOQ_BROWSER_HEADERS = {
 _CURL_SESSION = None
 
 
+def _debug_enabled() -> bool:
+    value = os.getenv("STOOQ_HTTP_DEBUG", "")
+    return value.lower() not in {"", "0", "false", "no", "off"}
+
+
+def _redact_url(url: str) -> str:
+    parsed = urlparse(url)
+    query_pairs = parse_qs(parsed.query, keep_blank_values=True)
+    redacted_pairs: list[tuple[str, str]] = []
+    for name, values in query_pairs.items():
+        for value in values:
+            if name.lower() in {"apikey", "api_key", "key", "token"}:
+                value = "***"
+            redacted_pairs.append((name, value))
+    redacted_query = urlencode(redacted_pairs)
+    return urlunparse(parsed._replace(query=redacted_query))
+
+
+def _text_kind(text: str) -> str:
+    stripped = text.lstrip("\ufeff\r\n\t ")
+    lowered = stripped[:500].lower()
+    if not stripped:
+        return "empty"
+    if lowered.startswith(("date,open,high,low,close", "date;open;high;low;close")):
+        return "csv-en"
+    if lowered.startswith((
+        "data,otwarcie,najwyzszy,najnizszy,zamkniecie",
+        "data;otwarcie;najwyzszy;najnizszy;zamkniecie",
+    )):
+        return "csv-pl"
+    if _looks_like_stooq_challenge(text):
+        return "stooq-js-challenge"
+    if lowered.startswith("<!doctype html") or lowered.startswith("<html"):
+        return "html"
+    return "text"
+
+
+def _debug(message: str) -> None:
+    if _debug_enabled():
+        print(f"[stooq-http] {message}", file=sys.stderr)
+
+
 def _browser_headers_for_url(url: str) -> dict[str, str]:
     headers = dict(STOOQ_BROWSER_HEADERS)
     parsed = urlparse(url)
@@ -62,14 +105,26 @@ def _curl_session(requests):
     return _CURL_SESSION
 
 
-def _download_with_urllib(url: str, timeout: int, headers: dict[str, str] | None = None) -> str:
-    request = Request(url, headers=headers or _browser_headers_for_url(url))
+def _download_with_urllib(
+    url: str,
+    timeout: int,
+    headers: dict[str, str] | None = None,
+) -> str:
+    request_headers = headers or _browser_headers_for_url(url)
+    _debug(f"urllib GET {_redact_url(url)} timeout={timeout}s headers={len(request_headers)}")
+    request = Request(url, headers=request_headers)
     with urlopen(request, timeout=timeout) as response:
-        return response.read().decode("utf-8", errors="replace")
+        text = response.read().decode("utf-8", errors="replace")
+    _debug(f"urllib response kind={_text_kind(text)} bytes={len(text.encode('utf-8'))}")
+    return text
 
 
 def _download_with_curl(requests, url: str, timeout: int, headers: dict[str, str]) -> str:
     impersonate = os.getenv("STOOQ_CURL_IMPERSONATE", "chrome")
+    _debug(
+        f"curl_cffi GET {_redact_url(url)} timeout={timeout}s "
+        f"impersonate={impersonate} headers={len(headers)}"
+    )
     response = _curl_session(requests).get(
         url,
         headers=headers,
@@ -77,7 +132,13 @@ def _download_with_curl(requests, url: str, timeout: int, headers: dict[str, str
         timeout=timeout,
     )
     response.raise_for_status()
-    return response.content.decode(response.encoding or "utf-8", errors="replace")
+    text = response.content.decode(response.encoding or "utf-8", errors="replace")
+    status = getattr(response, "status_code", "unknown")
+    _debug(
+        f"curl_cffi response status={status} "
+        f"kind={_text_kind(text)} bytes={len(response.content)}"
+    )
+    return text
 
 
 def _looks_like_stooq_challenge(text: str) -> bool:
@@ -196,13 +257,19 @@ def _download_after_challenge(
     challenge_text: str,
     downloader: Callable[[dict[str, str]], str],
 ) -> str:
-    for cookie_pair in _challenge_cookie_pairs(challenge_text):
+    cookie_pairs = _challenge_cookie_pairs(challenge_text)
+    _debug(f"JS challenge detected; retry cookie candidates={len(cookie_pairs)}")
+    for index, cookie_pair in enumerate(cookie_pairs, start=1):
         headers = dict(base_headers)
         existing_cookie = headers.get("Cookie")
         headers["Cookie"] = f"{existing_cookie}; {cookie_pair}" if existing_cookie else cookie_pair
+        cookie_name = cookie_pair.split("=", 1)[0]
+        _debug(f"JS challenge retry {index}/{len(cookie_pairs)} cookie={cookie_name}=<redacted>")
         text = downloader(headers)
+        _debug(f"JS challenge retry {index} result kind={_text_kind(text)}")
         if not _looks_like_stooq_challenge(text):
             return text
+    _debug("JS challenge retries exhausted; returning original challenge page")
     return challenge_text
 
 
@@ -217,6 +284,10 @@ def download_stooq_text(url: str, timeout: int = 20) -> str:
     """
     base_headers = _browser_headers_for_url(url)
     requests = _curl_cffi_requests_module()
+    _debug(
+        f"start url={_redact_url(url)} timeout={timeout}s "
+        f"curl_cffi={'available' if requests is not None else 'unavailable'}"
+    )
     curl_error: Exception | None = None
     if requests is not None:
         try:
@@ -230,6 +301,12 @@ def download_stooq_text(url: str, timeout: int = 20) -> str:
             return text
         except Exception as exc:
             curl_error = exc
+            _debug(f"curl_cffi failed: {type(exc).__name__}: {exc}")
+
+    if requests is None:
+        _debug("curl_cffi unavailable; using urllib fallback")
+    else:
+        _debug("using urllib fallback after curl_cffi failure")
 
     try:
         text = _download_with_urllib(url, timeout, base_headers)
@@ -241,6 +318,7 @@ def download_stooq_text(url: str, timeout: int = 20) -> str:
             )
         return text
     except Exception as urllib_error:
+        _debug(f"urllib failed: {type(urllib_error).__name__}: {urllib_error}")
         if curl_error is None:
             raise
         message = (

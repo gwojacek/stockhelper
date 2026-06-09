@@ -92,3 +92,16 @@ def test_download_stooq_text_retries_after_js_challenge(monkeypatch):
 
     assert text.startswith("Date,Open,High,Low,Close")
     assert fake_session.calls[1]["headers"]["Cookie"] == f"auth={challenge}{nonce}"
+
+
+def test_debug_logging_shows_method_and_redacts_api_key(monkeypatch, capsys):
+    _install_fake_curl(monkeypatch, _FakeSession())
+    monkeypatch.setenv("STOOQ_HTTP_DEBUG", "1")
+
+    stooq_http.download_stooq_text("https://stooq.pl/q/d/l/?s=zal.de&i=d&apikey=SECRET")
+
+    captured = capsys.readouterr()
+    assert "curl_cffi=available" in captured.err
+    assert "curl_cffi GET" in captured.err
+    assert "apikey=" in captured.err
+    assert "SECRET" not in captured.err

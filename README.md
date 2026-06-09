@@ -138,6 +138,14 @@ If you use Poetry instead of an activated `venv`, refresh the environment with:
 poetry install
 ```
 
+To see which Stooq download path is used, enable HTTP debug logging for one run:
+
+```bash
+STOOQ_HTTP_DEBUG=1 python run -fibo_search zal.de
+```
+
+The debug output prints whether `curl_cffi` was available, the selected impersonation profile, redacted request URLs, response kind (`csv-*`, `html`, or `stooq-js-challenge`), JS-challenge retry attempts, and any fallback errors. API keys and challenge cookies are redacted.
+
 ### Optional/system dependencies
 
 These packages are used by specific workflows:
