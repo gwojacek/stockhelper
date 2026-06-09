@@ -748,20 +748,110 @@ def _ocr_stooq_captcha(cleaned_path: Path) -> tuple[str, str]:
     return "", ""
 
 
+def _stooq_page_contexts(page):
+    try:
+        return [("page", page)] + [(f"frame:{i}", frame) for i, frame in enumerate(page.frames)]
+    except Exception:
+        return [("page", page)]
+
+
 def _stooq_captcha_image_locator(page):
     selectors = (
         'img[src*="/q/l/s/i/"]',
+        'img[src^="//stooq.com/q/l/s/i/"]',
         '#t11 img',
         'tr#t11 img',
     )
-    for selector in selectors:
+    fallback = None
+    for label, ctx in _stooq_page_contexts(page):
+        for selector in selectors:
+            try:
+                locator = ctx.locator(selector).first
+                if locator.count() == 0:
+                    continue
+                if fallback is None:
+                    fallback = locator
+                try:
+                    if locator.is_visible(timeout=500):
+                        print(f"[stooq-bulk] captcha image found with {selector} ({label})", flush=True)
+                        return locator
+                except Exception:
+                    pass
+            except Exception:
+                continue
+    return fallback
+
+
+def _stooq_captcha_input_locator(page):
+    selectors = ('input[name="cpt_t"]', 'input#f15')
+    fallback = None
+    for label, ctx in _stooq_page_contexts(page):
+        for selector in selectors:
+            try:
+                locator = ctx.locator(selector).first
+                if locator.count() == 0:
+                    continue
+                if fallback is None:
+                    fallback = locator
+                try:
+                    if locator.is_visible(timeout=500):
+                        print(f"[stooq-bulk] captcha input found with {selector} ({label})", flush=True)
+                        return locator
+                except Exception:
+                    pass
+            except Exception:
+                continue
+    return fallback
+
+
+def _stooq_download_link_locator(page, require_visible: bool = False):
+    selectors = ('a#cpt_gh', 'a:has-text("Download file")', 'a:has-text("Download file...")')
+    fallback = None
+    for label, ctx in _stooq_page_contexts(page):
+        for selector in selectors:
+            try:
+                locator = ctx.locator(selector).first
+                if locator.count() == 0:
+                    continue
+                if fallback is None:
+                    fallback = locator
+                try:
+                    visible = locator.is_visible(timeout=500)
+                except Exception:
+                    visible = False
+                if not require_visible or visible:
+                    print(
+                        f"[stooq-bulk] download link found with {selector} ({label}) "
+                        f"visible={visible}",
+                        flush=True,
+                    )
+                    return locator
+            except Exception:
+                continue
+    return None if require_visible else fallback
+
+
+def _stooq_download_link_ready(page) -> bool:
+    return _stooq_download_link_locator(page, require_visible=True) is not None
+
+
+def _wait_for_stooq_download_gate_after_click(page, symbol: str, timeout_ms: int = 10000) -> None:
+    deadline = time.time() + timeout_ms / 1000
+    while time.time() < deadline:
+        if _stooq_captcha_image_locator(page) is not None:
+            print("[stooq-bulk] captcha image appeared after listing click.", flush=True)
+            return
+        if _stooq_download_link_ready(page):
+            print("[stooq-bulk] visible download link appeared after listing click.", flush=True)
+            return
+        if _stooq_captcha_input_locator(page) is not None:
+            print("[stooq-bulk] captcha input appeared after listing click.", flush=True)
+            return
         try:
-            locator = page.locator(selector).first
-            if locator.count() > 0:
-                return locator
+            page.wait_for_timeout(500)
         except Exception:
-            continue
-    return None
+            time.sleep(0.5)
+    _debug_stooq_download_page(page, symbol, "gate_after_listing_click_timeout")
 
 
 def _click_stooq_captcha_approve(page, symbol: str, attempt: int) -> bool:
@@ -770,29 +860,29 @@ def _click_stooq_captcha_approve(page, symbol: str, attempt: int) -> bool:
         'input[type="submit"][value="Approve"]',
         'input[type="submit"][value="Potwierdzam"]',
     )
-    for selector in selectors:
-        try:
-            button = page.locator(selector).first
-            if button.count() == 0:
-                continue
-            button.click(timeout=5000, force=True)
-            if _stooq_verbose_enabled():
+    for label, ctx in _stooq_page_contexts(page):
+        for selector in selectors:
+            try:
+                button = ctx.locator(selector).first
+                if button.count() == 0:
+                    continue
+                button.click(timeout=5000, force=True)
                 print(
-                    f"[stooq-web] captcha approve clicked for {symbol} "
-                    f"attempt {attempt} ({selector}).",
+                    f"[stooq-bulk] captcha approve clicked for {symbol} "
+                    f"attempt {attempt} ({selector}, {label}).",
                     flush=True,
                 )
-            try:
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:
+                    pass
+                try:
+                    page.wait_for_timeout(1000)
+                except Exception:
+                    pass
+                return True
             except Exception:
-                pass
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
-            return True
-        except Exception:
-            continue
+                continue
     try:
         button = page.get_by_role("button", name="Approve")
         button.click(timeout=5000)
@@ -811,8 +901,8 @@ def _solve_stooq_download_captcha(page, symbol: str) -> bool:
             print(f"[stooq-bulk] captcha attempt {attempt}/{max_attempts}: locating captcha image...", flush=True)
             img = _stooq_captcha_image_locator(page)
             if img is None:
-                link_ready = page.locator("a#cpt_gh").first.count() > 0
-                print(f"[stooq-bulk] captcha image not found; download link ready={link_ready}", flush=True)
+                link_ready = _stooq_download_link_ready(page)
+                print(f"[stooq-bulk] captcha image not found; visible download link ready={link_ready}", flush=True)
                 if not link_ready:
                     _debug_stooq_download_page(page, symbol, "captcha_image_missing")
                 return link_ready
@@ -836,7 +926,11 @@ def _solve_stooq_download_captcha(page, symbol: str) -> bool:
                 shot = _captcha_state_screenshot(page, symbol, "download_ocr_uncertain", attempt)
                 print(f"[stooq-web] download captcha OCR uncertain for {symbol}; screenshot={shot or '-'}", flush=True)
                 return False
-            page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            input_box = _stooq_captcha_input_locator(page)
+            if input_box is None:
+                _debug_stooq_download_page(page, symbol, "captcha_input_missing")
+                return False
+            input_box.fill(code)
             print("[stooq-bulk] captcha code filled; clicking approve...", flush=True)
             if _stooq_verbose_enabled():
                 print(
@@ -1046,6 +1140,7 @@ def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_sele
                 f"({click_exc}); checking captcha gate...",
                 flush=True,
             )
+            _wait_for_stooq_download_gate_after_click(page, "stooq_pl_bulk")
             return None
     return _open_direct_stooq_download_or_gate(page, url)
 
@@ -1165,8 +1260,8 @@ def download_stooq_file_with_playwright(
             if not _solve_stooq_download_captcha(page, symbol):
                 _debug_stooq_download_page(page, symbol, "captcha_not_solved")
                 raise ValueError("Stooq download captcha could not be solved")
-            link = page.locator("a#cpt_gh").first
-            if link.count() == 0:
+            link = _stooq_download_link_locator(page, require_visible=True)
+            if link is None:
                 _debug_stooq_download_page(page, symbol, "download_link_missing_after_captcha")
                 raise ValueError("Stooq download link #cpt_gh not found after captcha approval")
             print("[stooq-bulk] Playwright: Stooq Download file link is ready; starting final download attempts...", flush=True)
