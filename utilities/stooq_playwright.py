@@ -891,24 +891,101 @@ def _save_playwright_download(download, download_path: Path, expect_zip: bool, l
     return valid
 
 
+def _debug_stooq_download_links(page) -> None:
+    try:
+        rows = page.locator("a").evaluate_all(
+            """els => els.slice(0, 25).map((a, i) => ({
+                i,
+                text: (a.innerText || a.textContent || '').trim().slice(0, 60),
+                href: a.getAttribute('href') || '',
+                onclick: a.getAttribute('onclick') || ''
+            }))"""
+        )
+        print(f"[stooq-bulk] Playwright: visible link sample: {rows}", flush=True)
+    except Exception as exc:
+        print(f"[stooq-bulk] Playwright: could not inspect listing links: {exc}", flush=True)
+
+
+def _find_stooq_bulk_listing_link(page, preferred_selector: str | None):
+    selectors = [
+        preferred_selector,
+        'a[href*="d_pl_txt"]',
+        'a[href*="b=d_pl_txt"]',
+        'a[href*="db/d/?b=d_pl_txt"]',
+    ]
+    for selector in [s for s in selectors if s]:
+        try:
+            link = page.locator(selector).first
+            if link.count() > 0:
+                print(f"[stooq-bulk] Playwright: found listing link with selector: {selector}", flush=True)
+                return link
+        except Exception:
+            continue
+    try:
+        links = page.locator("a")
+        for index in range(min(links.count(), 200)):
+            link = links.nth(index)
+            href = link.get_attribute("href") or ""
+            onclick = link.get_attribute("onclick") or ""
+            text = (link.inner_text(timeout=500) or "").strip()
+            haystack = f"{href} {onclick} {text}".lower()
+            if "d_pl_txt" in haystack or "b=d_pl_txt" in haystack:
+                print(
+                    f"[stooq-bulk] Playwright: found listing link by scanning anchors: "
+                    f"index={index} text={text!r} href={href!r}",
+                    flush=True,
+                )
+                return link
+    except Exception as exc:
+        print(f"[stooq-bulk] Playwright: anchor scan failed: {exc}", flush=True)
+    return None
+
+
+def _open_direct_stooq_download_or_gate(page, url: str):
+    print("[stooq-bulk] Playwright: opening direct URL with download watcher...", flush=True)
+    try:
+        with page.expect_download(timeout=15000) as download_info:
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            except Exception as goto_exc:
+                if "Download is starting" not in str(goto_exc):
+                    raise
+                print("[stooq-bulk] Playwright: direct URL triggered browser download.", flush=True)
+        return download_info.value
+    except Exception as direct_exc:
+        print(
+            f"[stooq-bulk] Playwright: direct URL did not produce a usable download "
+            f"({direct_exc}); loading as captcha gate...",
+            flush=True,
+        )
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        except Exception as goto_exc:
+            if "Download is starting" in str(goto_exc):
+                raise ValueError(
+                    "Direct Stooq URL started a download but Playwright did not capture it"
+                ) from goto_exc
+            raise
+        return None
+
+
 def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_selector: str | None):
     """Open Stooq's download gate page and return a download if clicking starts one."""
     if listing_url:
         print(f"[stooq-bulk] Playwright: opening Stooq listing page: {listing_url}", flush=True)
         page.goto(listing_url, wait_until="domcontentloaded", timeout=30000)
-        selector = link_selector or f'a[href="{url}"]'
-        link = page.locator(selector).first
-        if link.count() == 0:
+        link = _find_stooq_bulk_listing_link(page, link_selector)
+        if link is None:
             print(
-                f"[stooq-bulk] Playwright: listing link not found ({selector}); "
-                "opening direct URL as a page...",
+                "[stooq-bulk] Playwright: listing link not found; "
+                "dumping link sample and trying direct URL...",
                 flush=True,
             )
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            return None
-        print(f"[stooq-bulk] Playwright: clicking listing download link: {selector}", flush=True)
+            _debug_stooq_download_links(page)
+            return _open_direct_stooq_download_or_gate(page, url)
+        print("[stooq-bulk] Playwright: clicking listing download link...", flush=True)
         try:
-            with page.expect_download(timeout=5000) as download_info:
+            with page.expect_download(timeout=10000) as download_info:
                 try:
                     link.click(timeout=5000, force=True)
                 except Exception:
@@ -922,9 +999,7 @@ def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_sele
                 flush=True,
             )
             return None
-    print("[stooq-bulk] Playwright: opening direct URL as a page for captcha gate...", flush=True)
-    page.goto(url, wait_until="domcontentloaded", timeout=30000)
-    return None
+    return _open_direct_stooq_download_or_gate(page, url)
 
 
 def download_stooq_file_with_playwright(
