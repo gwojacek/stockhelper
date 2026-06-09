@@ -146,17 +146,68 @@ def _playwright_fallback_enabled() -> bool:
     return value.lower() not in {"", "0", "false", "no", "off"}
 
 
+def _playwright_sync_api_module():
+    if importlib.util.find_spec("playwright") is None:
+        return None
+    if importlib.util.find_spec("playwright.sync_api") is None:
+        return None
+    return importlib.import_module("playwright.sync_api")
+
+
+def _playwright_stealth_module():
+    if importlib.util.find_spec("playwright_stealth") is None:
+        return None
+    return importlib.import_module("playwright_stealth")
+
+
+def _apply_playwright_stealth(page, context) -> bool:
+    stealth = _playwright_stealth_module()
+    if stealth is None:
+        _debug("playwright-stealth unavailable; continuing without stealth patches")
+        return False
+
+    if hasattr(stealth, "stealth_sync"):
+        stealth.stealth_sync(page)
+        _debug("playwright-stealth applied via stealth_sync(page)")
+        return True
+
+    if hasattr(stealth, "apply_stealth_sync"):
+        try:
+            stealth.apply_stealth_sync(context)
+            _debug("playwright-stealth applied via apply_stealth_sync(context)")
+            return True
+        except TypeError:
+            stealth.apply_stealth_sync(page)
+            _debug("playwright-stealth applied via apply_stealth_sync(page)")
+            return True
+
+    stealth_class = getattr(stealth, "Stealth", None)
+    if stealth_class is not None:
+        stealth_instance = stealth_class()
+        if hasattr(stealth_instance, "apply_stealth_sync"):
+            try:
+                stealth_instance.apply_stealth_sync(context)
+                _debug("playwright-stealth applied via Stealth.apply_stealth_sync(context)")
+                return True
+            except TypeError:
+                stealth_instance.apply_stealth_sync(page)
+                _debug("playwright-stealth applied via Stealth.apply_stealth_sync(page)")
+                return True
+
+    _debug("playwright-stealth installed but no supported sync API found")
+    return False
+
+
 def _download_with_playwright(url: str, timeout: int) -> str:
     if not _playwright_fallback_enabled():
         raise RuntimeError("Playwright fallback disabled by STOOQ_PLAYWRIGHT_FALLBACK")
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception as exc:
-        raise RuntimeError(f"Playwright fallback unavailable: {exc}") from exc
+    sync_api = _playwright_sync_api_module()
+    if sync_api is None:
+        raise RuntimeError("Playwright fallback unavailable: playwright.sync_api not installed")
 
     timeout_ms = max(1000, timeout * 1000)
     _debug(f"playwright GET {_redact_url(url)} timeout={timeout}s headless=true")
-    with sync_playwright() as playwright:
+    with sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
             context = browser.new_context(
@@ -165,6 +216,7 @@ def _download_with_playwright(url: str, timeout: int) -> str:
                 extra_http_headers={"Accept-Language": STOOQ_BROWSER_HEADERS["Accept-Language"]},
             )
             page = context.new_page()
+            _apply_playwright_stealth(page, context)
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             text = ""
             for attempt in range(1, 11):

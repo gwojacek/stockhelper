@@ -125,7 +125,7 @@ python -m playwright install chromium
 For the fast Stooq CSV fetch path added for browser verification pages, make sure `curl_cffi` is installed in the Python environment that runs `python run ...`. Poetry installs it from the lock file, but an older or manually maintained `venv` may not have it yet.
 
 ```bash
-python -m pip install -U curl_cffi
+python -m pip install -U curl_cffi playwright-stealth
 python - <<'PY'
 import curl_cffi
 print(curl_cffi.__version__)
@@ -144,7 +144,7 @@ To see which Stooq download path is used, enable HTTP debug logging for one run:
 STOOQ_HTTP_DEBUG=1 python run -fibo_search zal.de
 ```
 
-The debug output prints whether `curl_cffi` was available, the selected impersonation profile, redacted request URLs, response kind (`csv-*`, `html`, or `stooq-js-challenge`), JS-challenge retry attempts, Playwright fallback attempts, and any fallback errors. API keys and challenge cookies are redacted. Set `STOOQ_PLAYWRIGHT_FALLBACK=0` to disable the browser fallback when debugging.
+The debug output prints whether `curl_cffi` was available, the selected impersonation profile, redacted request URLs, response kind (`csv-*`, `html`, or `stooq-js-challenge`), JS-challenge retry attempts, Playwright fallback attempts, whether `playwright-stealth` was applied, and any fallback errors. API keys and challenge cookies are redacted. Set `STOOQ_PLAYWRIGHT_FALLBACK=0` to disable the browser fallback when debugging.
 
 ### Optional/system dependencies
 
@@ -154,6 +154,7 @@ These packages are used by specific workflows:
 - `opencv-python`: CAPTCHA image preprocessing.
 - `easyocr`: CAPTCHA OCR attempts.
 - `curl_cffi`: browser TLS/HTTP impersonation for Stooq CSV downloads when Stooq serves a browser-verification page.
+- `playwright-stealth`: optional stealth patches for the Playwright browser fallback used after persistent Stooq JS challenges.
 - `yfinance`: Yahoo fallback data source.
 - `flask`: local interactive chart UI powered by TradingView Lightweight Charts; `dash`/`plotly` remain available for legacy chart tooling and historical snapshot compatibility.
 - `pyinstaller`: dev-only dependency for building an executable.

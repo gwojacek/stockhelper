@@ -124,3 +124,17 @@ def test_download_stooq_text_uses_playwright_after_unsolved_challenge(monkeypatc
 
     assert text.startswith("Date,Open,High,Low,Close")
     assert len(fake_session.calls) > 1
+
+
+def test_apply_playwright_stealth_uses_stealth_sync(monkeypatch):
+    calls = []
+
+    class FakeStealth:
+        @staticmethod
+        def stealth_sync(page):
+            calls.append(page)
+
+    monkeypatch.setattr(stooq_http, "_playwright_stealth_module", lambda: FakeStealth)
+
+    assert stooq_http._apply_playwright_stealth("page", "context") is True
+    assert calls == ["page"]
