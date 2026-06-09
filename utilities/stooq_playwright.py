@@ -813,6 +813,8 @@ def _solve_stooq_download_captcha(page, symbol: str) -> bool:
             if img is None:
                 link_ready = page.locator("a#cpt_gh").first.count() > 0
                 print(f"[stooq-bulk] captcha image not found; download link ready={link_ready}", flush=True)
+                if not link_ready:
+                    _debug_stooq_download_page(page, symbol, "captcha_image_missing")
                 return link_ready
             suffix = "" if attempt == 1 else f"_a{attempt}"
             raw_path = _captcha_artifact_path(symbol, f"_download_captcha_raw{suffix}")
@@ -891,19 +893,50 @@ def _save_playwright_download(download, download_path: Path, expect_zip: bool, l
     return valid
 
 
+def _debug_stooq_download_page(page, symbol: str, reason: str) -> str:
+    safe_reason = reason.lower().replace(" ", "_").replace("/", "_")
+    shot = _debug_fail_screenshot(symbol, page, suffix=f"_download_{safe_reason}")
+    html_path = ""
+    try:
+        out_dir = Path("debug") / "stooq"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        html = page.content()
+        html_file = out_dir / f"{symbol.lower().replace('.', '_')}_download_{safe_reason}.html"
+        html_file.write_text(html, encoding="utf-8", errors="replace")
+        html_path = str(html_file)
+    except Exception:
+        html_path = ""
+    try:
+        body = page.locator("body").inner_text(timeout=1500).strip().replace("\n", " ")
+        body_preview = body[:500]
+    except Exception:
+        body_preview = ""
+    print(
+        f"[stooq-bulk] debug page state ({reason}): url={getattr(page, 'url', '')} "
+        f"screenshot={shot or '-'} html={html_path or '-'} body={body_preview!r}",
+        flush=True,
+    )
+    return shot
+
+
 def _debug_stooq_download_links(page) -> None:
     try:
-        rows = page.locator("a").evaluate_all(
-            """els => els.slice(0, 25).map((a, i) => ({
-                i,
-                text: (a.innerText || a.textContent || '').trim().slice(0, 60),
-                href: a.getAttribute('href') || '',
-                onclick: a.getAttribute('onclick') || ''
-            }))"""
-        )
-        print(f"[stooq-bulk] Playwright: visible link sample: {rows}", flush=True)
-    except Exception as exc:
-        print(f"[stooq-bulk] Playwright: could not inspect listing links: {exc}", flush=True)
+        contexts = [("page", page)] + [(f"frame:{i}", frame) for i, frame in enumerate(page.frames)]
+    except Exception:
+        contexts = [("page", page)]
+    for label, ctx in contexts:
+        try:
+            rows = ctx.locator("a").evaluate_all(
+                """els => els.slice(0, 25).map((a, i) => ({
+                    i,
+                    text: (a.innerText || a.textContent || '').trim().slice(0, 60),
+                    href: a.getAttribute('href') || '',
+                    onclick: a.getAttribute('onclick') || ''
+                }))"""
+            )
+            print(f"[stooq-bulk] Playwright: visible link sample ({label}): {rows}", flush=True)
+        except Exception as exc:
+            print(f"[stooq-bulk] Playwright: could not inspect listing links ({label}): {exc}", flush=True)
 
 
 def _find_stooq_bulk_listing_link(page, preferred_selector: str | None):
@@ -913,31 +946,40 @@ def _find_stooq_bulk_listing_link(page, preferred_selector: str | None):
         'a[href*="b=d_pl_txt"]',
         'a[href*="db/d/?b=d_pl_txt"]',
     ]
-    for selector in [s for s in selectors if s]:
-        try:
-            link = page.locator(selector).first
-            if link.count() > 0:
-                print(f"[stooq-bulk] Playwright: found listing link with selector: {selector}", flush=True)
-                return link
-        except Exception:
-            continue
     try:
-        links = page.locator("a")
-        for index in range(min(links.count(), 200)):
-            link = links.nth(index)
-            href = link.get_attribute("href") or ""
-            onclick = link.get_attribute("onclick") or ""
-            text = (link.inner_text(timeout=500) or "").strip()
-            haystack = f"{href} {onclick} {text}".lower()
-            if "d_pl_txt" in haystack or "b=d_pl_txt" in haystack:
-                print(
-                    f"[stooq-bulk] Playwright: found listing link by scanning anchors: "
-                    f"index={index} text={text!r} href={href!r}",
-                    flush=True,
-                )
-                return link
-    except Exception as exc:
-        print(f"[stooq-bulk] Playwright: anchor scan failed: {exc}", flush=True)
+        contexts = [("page", page)] + [(f"frame:{i}", frame) for i, frame in enumerate(page.frames)]
+    except Exception:
+        contexts = [("page", page)]
+    for label, ctx in contexts:
+        for selector in [s for s in selectors if s]:
+            try:
+                link = ctx.locator(selector).first
+                if link.count() > 0:
+                    print(
+                        f"[stooq-bulk] Playwright: found listing link with selector: "
+                        f"{selector} ({label})",
+                        flush=True,
+                    )
+                    return link
+            except Exception:
+                continue
+        try:
+            links = ctx.locator("a")
+            for index in range(min(links.count(), 200)):
+                link = links.nth(index)
+                href = link.get_attribute("href") or ""
+                onclick = link.get_attribute("onclick") or ""
+                text = (link.inner_text(timeout=500) or "").strip()
+                haystack = f"{href} {onclick} {text}".lower()
+                if "d_pl_txt" in haystack or "b=d_pl_txt" in haystack:
+                    print(
+                        f"[stooq-bulk] Playwright: found listing link by scanning anchors: "
+                        f"context={label} index={index} text={text!r} href={href!r}",
+                        flush=True,
+                    )
+                    return link
+        except Exception as exc:
+            print(f"[stooq-bulk] Playwright: anchor scan failed ({label}): {exc}", flush=True)
     return None
 
 
@@ -974,6 +1016,11 @@ def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_sele
     if listing_url:
         print(f"[stooq-bulk] Playwright: opening Stooq listing page: {listing_url}", flush=True)
         page.goto(listing_url, wait_until="domcontentloaded", timeout=30000)
+        try:
+            _accept_consent_if_present(page, first_page=True)
+            page.wait_for_timeout(1500)
+        except Exception:
+            pass
         link = _find_stooq_bulk_listing_link(page, link_selector)
         if link is None:
             print(
@@ -982,6 +1029,7 @@ def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_sele
                 flush=True,
             )
             _debug_stooq_download_links(page)
+            _debug_stooq_download_page(page, "stooq_pl_bulk", "listing_link_missing")
             return _open_direct_stooq_download_or_gate(page, url)
         print("[stooq-bulk] Playwright: clicking listing download link...", flush=True)
         try:
@@ -1059,9 +1107,11 @@ def download_stooq_file_with_playwright(
                     pass
 
             if not _solve_stooq_download_captcha(page, symbol):
+                _debug_stooq_download_page(page, symbol, "captcha_not_solved")
                 raise ValueError("Stooq download captcha could not be solved")
             link = page.locator("a#cpt_gh").first
             if link.count() == 0:
+                _debug_stooq_download_page(page, symbol, "download_link_missing_after_captcha")
                 raise ValueError("Stooq download link #cpt_gh not found after captcha approval")
             print("[stooq-bulk] Playwright: clicking Stooq Download file link...", flush=True)
             with page.expect_download(timeout=180000) as download_info:
@@ -1071,6 +1121,7 @@ def download_stooq_file_with_playwright(
                     link.evaluate("el => el.click()")
             download = download_info.value
             if not _save_playwright_download(download, download_path, expect_zip, "captcha download"):
+                _debug_stooq_download_page(page, symbol, "invalid_captcha_download")
                 raise ValueError(f"Downloaded file did not match expected type: {download_path}")
             return download_path
         finally:
