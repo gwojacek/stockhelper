@@ -478,6 +478,7 @@ STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --debug-stooq CB.F
 
 ```bash
 python run --download-stooq-pl-bulk
+python run --download-stooq-pl-bulk --inspector
 python run --force-stooq-pl-bulk-download -ichimoku_search wig
 python run --force-stooq-pl-bulk-download -fibo_search wig
 python run --force-stooq-pl-bulk-download -allsearch wig
@@ -487,6 +488,7 @@ STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --force-stooq-pl-bulk-download -ich
 **Description:**
 
 - `python run --download-stooq-pl-bulk` downloads and extracts the Stooq PL daily bulk ZIP immediately, then exits.
+- `python run --download-stooq-pl-bulk --inspector` opens a headed Playwright browser and pauses so you can inspect or manually solve the consent/captcha flow; click **Resume** in Playwright Inspector to continue.
 - `--force-stooq-pl-bulk-download` forces the next Warsaw-stock data refresh to download a fresh bulk ZIP, even before the normal 17:30 Warsaw freshness gate.
 - If Stooq shows a CAPTCHA, the Playwright downloader tries to OCR it, fills `input#f15` / `input[name="cpt_t"]`, clicks `input#f13` / `Approve`, then clicks the Stooq `Download file...` link (`a#cpt_gh`).
 - Before downloading, the existing repo-local `d_pl_txt` cache folder is deleted so stale TXT files do not remain after a refresh.

@@ -421,7 +421,7 @@ def _find_stooq_pl_bulk_txt(symbol: str) -> Path | None:
     return None
 
 
-def _download_stooq_pl_bulk_archive() -> Path:
+def _download_stooq_pl_bulk_archive(interactive_captcha: bool = False) -> Path:
     cache_root = _stooq_pl_bulk_cache_root()
     print(f"[stooq-bulk] starting PL daily bulk download: url={STOOQ_PL_DAILY_BULK_URL}", flush=True)
     print(f"[stooq-bulk] cache root: {cache_root}", flush=True)
@@ -456,6 +456,7 @@ def _download_stooq_pl_bulk_archive() -> Path:
             expect_zip=True,
             listing_url=STOOQ_PL_DAILY_BULK_PAGE_URL,
             link_selector='a[href*="b=d_pl_txt"]',
+            interactive_captcha=interactive_captcha,
         )
     if not zipfile.is_zipfile(archive_path):
         raise ValueError(f"Downloaded Stooq PL bulk file is not a ZIP archive: {archive_path}")

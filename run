@@ -2448,7 +2448,7 @@ def main()->int:
         print('[stooq-bulk] forced PL bulk download requested -> cache-only mode OFF.')
     if args.download_stooq_pl_bulk:
         from chart_program.chart_loader import _download_stooq_pl_bulk_archive
-        root = _download_stooq_pl_bulk_archive()
+        root = _download_stooq_pl_bulk_archive(interactive_captcha=args.inspector)
         print(f'[stooq-bulk] downloaded/extracted PL daily bulk data to: {root}')
         return 0
     if args.fetch_older_data:

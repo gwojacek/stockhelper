@@ -1289,6 +1289,19 @@ def _download_from_stooq_ready_gate(page, url: str, link, download_path: Path, e
     raise ValueError(f"Stooq final download did not produce a valid file: {download_path}")
 
 
+def _pause_stooq_bulk_inspector(page, symbol: str, phase: str) -> None:
+    print(
+        f"[stooq-bulk] inspector pause ({phase}). Browser is headed; "
+        "inspect/solve consent or captcha if needed, then click Resume in Playwright Inspector.",
+        flush=True,
+    )
+    _debug_stooq_download_page(page, symbol, f"inspector_pause_{phase}")
+    try:
+        page.pause()
+    except Exception as exc:
+        print(f"[stooq-bulk] inspector pause failed ({phase}): {exc}", flush=True)
+
+
 def download_stooq_file_with_playwright(
     url: str,
     download_path: Path,
@@ -1297,13 +1310,16 @@ def download_stooq_file_with_playwright(
     expect_zip: bool = False,
     listing_url: str | None = None,
     link_selector: str | None = None,
+    interactive_captcha: bool = False,
 ) -> Path:
     """Download a Stooq file, solving Stooq's simple captcha challenge if shown."""
     download_path = Path(download_path)
     download_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"[stooq-bulk] launching Playwright downloader: url={url}", flush=True)
+    if interactive_captcha:
+        print("[stooq-bulk] inspector mode enabled: launching headed browser.", flush=True)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=not interactive_captcha, slow_mo=150 if interactive_captcha else 0)
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         try:
@@ -1345,13 +1361,19 @@ def download_stooq_file_with_playwright(
                 except OSError:
                     pass
 
+            if interactive_captcha:
+                _pause_stooq_bulk_inspector(page, symbol, "before_captcha_solver")
             if not _solve_stooq_download_captcha(page, symbol):
+                if interactive_captcha:
+                    _pause_stooq_bulk_inspector(page, symbol, "captcha_solver_failed")
                 _debug_stooq_download_page(page, symbol, "captcha_not_solved")
                 raise ValueError("Stooq download captcha could not be solved")
             link = _stooq_download_link_locator(page, require_visible=True)
             if link is None:
                 _debug_stooq_download_page(page, symbol, "download_link_missing_after_captcha")
                 raise ValueError("Stooq download link #cpt_gh not found after captcha approval")
+            if interactive_captcha:
+                _pause_stooq_bulk_inspector(page, symbol, "before_final_download")
             print("[stooq-bulk] Playwright: Stooq Download file link is ready; starting final download attempts...", flush=True)
             return _download_from_stooq_ready_gate(page, url, link, download_path, expect_zip, symbol)
         finally:
