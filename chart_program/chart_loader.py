@@ -21,7 +21,7 @@ import pandas as pd
 from utilities.stooq_playwright import update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
-STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
+STOOQ_DEFAULT_API_KEY = "MTVdMrgkK9hC1q37wjNtYPiOIWufln60"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -390,6 +390,10 @@ def _stooq_csv_domains() -> list[str]:
     return domains or ["stooq.pl"]
 
 
+def _stooq_default_api_key() -> str:
+    return os.getenv("STOCKHELPER_STOOQ_API_KEY", STOOQ_DEFAULT_API_KEY).strip()
+
+
 def _stooq_verification_text(text: str) -> bool:
     lowered = (text or "").lower()
     markers = (
@@ -741,7 +745,7 @@ def _stooq_download(
 ) -> tuple[pd.DataFrame, str]:
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
-        effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
+        effective_api_key = api_key or _stooq_default_api_key()
         for domain in _stooq_csv_domains():
             url = _stooq_url(
                 candidate,

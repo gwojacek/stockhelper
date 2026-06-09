@@ -1,4 +1,5 @@
 import io
+import os
 from io import StringIO
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
@@ -9,8 +10,13 @@ import yfinance as yf
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 from utilities.output_silence import call_silenced
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
-STOOQ_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
+STOOQ_API_KEY = "MTVdMrgkK9hC1q37wjNtYPiOIWufln60"
 LAST_TURNOVER_SOURCE = "unknown"
+
+
+def _stooq_api_key() -> str:
+    return os.getenv("STOCKHELPER_STOOQ_API_KEY", STOOQ_API_KEY).strip()
+
 _FX_TO_PLN_CACHE: dict[str, tuple[str, float]] = {}
 
 
@@ -84,7 +90,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
 def _fetch_stooq_history(symbol: str, period: str) -> pd.DataFrame:
     d1, d2 = _period_to_date_range(period)
     for candidate in _stooq_symbol_candidates(symbol):
-        params = {"s": candidate, "i": "d", "d1": d1, "d2": d2, "apikey": STOOQ_API_KEY}
+        params = {"s": candidate, "i": "d", "d1": d1, "d2": d2, "apikey": _stooq_api_key()}
         url = f"https://stooq.pl/q/d/l/?{urlencode(params)}"
         with urlopen(url, timeout=15) as response:
             csv_text = response.read().decode("utf-8", errors="replace")
