@@ -19,6 +19,7 @@ from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 STOOQ_PL_DAILY_BULK_URL = "https://stooq.com/db/d/?b=d_pl_txt"
+STOOQ_PL_DAILY_BULK_PAGE_URL = "https://stooq.com/db/h/"
 STOOQ_PL_BULK_READY_TIME = (17, 30)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -452,6 +453,9 @@ def _download_stooq_pl_bulk_archive() -> Path:
             STOOQ_PL_DAILY_BULK_URL,
             archive_path,
             symbol="stooq_pl_bulk",
+            expect_zip=True,
+            listing_url=STOOQ_PL_DAILY_BULK_PAGE_URL,
+            link_selector='a[href*="b=d_pl_txt"]',
         )
     if not zipfile.is_zipfile(archive_path):
         raise ValueError(f"Downloaded Stooq PL bulk file is not a ZIP archive: {archive_path}")
