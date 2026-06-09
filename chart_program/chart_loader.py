@@ -376,7 +376,13 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
 
 def _is_stooq_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
-    return host == "stooq.pl" or host.endswith(".stooq.pl")
+    return host in {"stooq.com", "stooq.pl"} or host.endswith((".stooq.com", ".stooq.pl"))
+
+
+def _stooq_csv_domains() -> list[str]:
+    raw = os.getenv("STOCKHELPER_STOOQ_CSV_DOMAINS", "stooq.com,stooq.pl")
+    domains = [part.strip() for part in raw.split(",") if part.strip()]
+    return domains or ["stooq.com"]
 
 
 def _curl_cffi_requests_module():
@@ -397,7 +403,7 @@ def _download_text_with_curl_cffi(url: str) -> str | None:
         headers={
             "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
             "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://stooq.pl/",
+            "Referer": "https://stooq.com/",
         },
     )
     response.raise_for_status()
@@ -418,39 +424,6 @@ def _download_text(url: str) -> str:
         if text is not None:
             return text
     return _download_text_with_urlopen(url)
-
-
-def _stooq_error_needs_browser_fallback(exc: Exception) -> bool:
-    message = str(exc).lower()
-    markers = (
-        "requires javascript",
-        "wymaga javascriptu",
-        "weryfikacji przeglądarki",
-        "verify your browser",
-        "textencoder",
-        "noindex,nofollow",
-    )
-    return any(marker in message for marker in markers)
-
-
-def _stooq_web_fallback_download(
-    symbol: str,
-    instrument_type: str,
-    lookback_days: int,
-    end_date: datetime | None,
-) -> tuple[pd.DataFrame, str]:
-    csv_filename = f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
-    csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / csv_filename
-    web_symbol = _stooq_symbol_candidates(symbol, instrument_type)[0]
-    df = update_stooq_history_with_playwright(
-        symbol=web_symbol,
-        csv_path=csv_path,
-        lookback_days=lookback_days,
-        end_date=end_date,
-        verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-        interactive_captcha=True,
-    )
-    return df, web_symbol
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
@@ -501,7 +474,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
     return _last_year_only(df)
 
-def _stooq_live_quote_url(symbol: str, domain: str = "stooq.pl") -> str:
+def _stooq_live_quote_url(symbol: str, domain: str = "stooq.com") -> str:
     query = {"s": symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"}
     return f"https://{domain}/q/l/?{urlencode(query)}"
 
@@ -545,7 +518,7 @@ def _stooq_url(
     symbol: str,
     api_key: str | None = None,
     param_name: str | None = None,
-    domain: str = "stooq.pl",
+    domain: str = "stooq.com",
     lookback_days: int = 364,
     end_date: datetime | None = None,
 ) -> str:
@@ -567,20 +540,28 @@ def _stooq_download(
     errors: list[str] = []
     for candidate in _stooq_symbol_candidates(symbol, instrument_type):
         effective_api_key = api_key or STOOQ_DEFAULT_API_KEY
-        url = _stooq_url(candidate, api_key=effective_api_key, param_name="apikey", domain="stooq.pl", lookback_days=lookback_days, end_date=end_date)
+        for domain in _stooq_csv_domains():
+            url = _stooq_url(
+                candidate,
+                api_key=effective_api_key,
+                param_name="apikey",
+                domain=domain,
+                lookback_days=lookback_days,
+                end_date=end_date,
+            )
 
-        try:
-            text = _download_text(url)
-            df = _parse_stooq_csv_text(text)
-            if not df.empty:
-                try:
-                    df = _merge_stooq_current_quote(df, candidate)
-                except Exception:
-                    pass
-                return df, candidate
-            errors.append(f"{candidate}: empty data from {url}")
-        except (URLError, ValueError, pd.errors.ParserError) as exc:
-            errors.append(f"{candidate}: {exc} | url={url}")
+            try:
+                text = _download_text(url)
+                df = _parse_stooq_csv_text(text)
+                if not df.empty:
+                    try:
+                        df = _merge_stooq_current_quote(df, candidate)
+                    except Exception:
+                        pass
+                    return df, candidate
+                errors.append(f"{candidate}@{domain}: empty data from {url}")
+            except (URLError, ValueError, pd.errors.ParserError) as exc:
+                errors.append(f"{candidate}@{domain}: {exc} | url={url}")
 
     raise ValueError(f"No daily data returned from Stooq for {symbol}. Tried: {' | '.join(errors)}")
 
@@ -795,26 +776,14 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
     if data_source == "stooq":
-        try:
-            df, candidate = _stooq_download(
-                symbol,
-                instrument_type,
-                api_key=None if instrument_type == "commodity" else api_key,
-                lookback_days=older_days if fetch_older_data else 364,
-                end_date=older_anchor,
-            )
-            return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
-        except ValueError as exc:
-            if instrument_type != "commodity" and _stooq_error_needs_browser_fallback(exc):
-                df, candidate = _stooq_web_fallback_download(
-                    symbol=symbol,
-                    instrument_type=instrument_type,
-                    lookback_days=older_days if fetch_older_data else 364,
-                    end_date=older_anchor,
-                )
-                reason = f"Stooq CSV forced but browser verification was required; used Stooq web fallback: {exc}"
-                return df, "stooq_web", candidate, None, reason
-            raise
+        df, candidate = _stooq_download(
+            symbol,
+            instrument_type,
+            api_key=None if instrument_type == "commodity" else api_key,
+            lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path_ref),
+            end_date=older_anchor,
+        )
+        return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
     # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20).
@@ -861,25 +830,12 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             symbol,
             instrument_type,
             api_key=api_key,
-            lookback_days=older_days if fetch_older_data else 364,
+            lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path_ref),
             end_date=older_anchor,
         )
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
-
-    if instrument_type != "commodity" and _stooq_error_needs_browser_fallback(primary_error):
-        try:
-            df, candidate = _stooq_web_fallback_download(
-                symbol=symbol,
-                instrument_type=instrument_type,
-                lookback_days=older_days if fetch_older_data else 364,
-                end_date=older_anchor,
-            )
-            reason = f"Stooq CSV required browser verification; used Stooq web fallback: {primary_error}"
-            return df, "stooq_web", candidate, None, reason
-        except Exception as web_exc:
-            raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
 
     if is_literal_commodity:
         try:
