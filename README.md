@@ -36,6 +36,8 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
 | Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
+| Download Stooq PL bulk now | `python run --download-stooq-pl-bulk` | Downloads/extracts the Stooq PL daily bulk ZIP (`d_pl_txt`) immediately, solving CAPTCHA if needed. |
+| Force WIG bulk refresh | `python run --force-stooq-pl-bulk-download -ichimoku_search wig` | Forces a fresh Stooq PL bulk ZIP download during a Warsaw-stock scan, even before 17:30 Warsaw time. |
 | Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
 | Syntax check | `python -m py_compile main.py main_stock.py scanner_search.py chart_program/main.py chart_program/level_selector.py` | Fast Python syntax check without running scanners. |
 
@@ -148,6 +150,10 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_STOOQ_DEBUG` | `1` | Enables verbose Stooq scraper/debug logging. Also enabled by `python run --search-debug ...`. |
 | `STOCKHELPER_STOOQ_CAPTCHA_DEBUG` | `1` | Prints extra CAPTCHA OCR/debug details and writes CAPTCHA debug screenshots. |
 | `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS` | `5` | Number of OCR CAPTCHA attempts before giving up/falling back. Default in code is `5`. |
+| `STOCKHELPER_FORCE_STOOQ_PL_BULK_DOWNLOAD` | `1` | Forces a fresh Stooq PL daily bulk ZIP download for Warsaw-stock bulk refreshes, bypassing local TXT freshness and the normal 17:30 Warsaw gate. |
+| `STOCKHELPER_STOOQ_PL_BULK_CACHE` | `/tmp/d_pl_txt` | Overrides the repo-local cache root used for the downloaded/extracted Stooq PL bulk folder. |
+| `STOCKHELPER_STOOQ_PL_BULK_DIR` | `/home/jacek/Downloads/d_pl_txt/data/daily/pl/wse stocks` | Overrides the local extracted TXT directory to scan before the repo-local cache. |
+| `STOCKHELPER_DISABLE_STOOQ_PL_BULK` | `1` | Disables the Stooq PL bulk path and falls back to the older per-symbol flow. |
 | `STOCKHELPER_STOOQ_MAX_RUNTIME_S` | `900` | Watchdog timeout for Stooq web scraping. Code enforces at least 30 seconds. |
 | `STOCKHELPER_COMMODITIES_WORKERS` | `2` | Worker count for bounded parallel commodity Stooq web scans. Default is `2`; increase only when Stooq is stable. |
 | `STOCKHELPER_COMMODITIES_SEQUENTIAL` | `1` | Forces commodity scans to single-threaded Stooq web fetching. Useful when VPN/CAPTCHA prompts are noisy. |
@@ -468,7 +474,44 @@ python run --debug-stooq CB.F --inspector
 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --debug-stooq CB.F
 ```
 
-### 10. Fetch older cached history
+### 10. Download or force-refresh Stooq PL daily bulk data for WIG/Warsaw stocks
+
+```bash
+python run --download-stooq-pl-bulk
+python run --force-stooq-pl-bulk-download -ichimoku_search wig
+python run --force-stooq-pl-bulk-download -fibo_search wig
+python run --force-stooq-pl-bulk-download -allsearch wig
+STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --force-stooq-pl-bulk-download -ichimoku_search wig
+```
+
+**Description:**
+
+- `python run --download-stooq-pl-bulk` downloads and extracts the Stooq PL daily bulk ZIP immediately, then exits.
+- `--force-stooq-pl-bulk-download` forces the next Warsaw-stock data refresh to download a fresh bulk ZIP, even before the normal 17:30 Warsaw freshness gate.
+- If Stooq shows a CAPTCHA, the Playwright downloader tries to OCR it, fills `input#f15` / `input[name="cpt_t"]`, clicks `input#f13` / `Approve`, then clicks the Stooq `Download file...` link (`a#cpt_gh`).
+- Before downloading, the existing repo-local `d_pl_txt` cache folder is deleted so stale TXT files do not remain after a refresh.
+
+**Default locations:**
+
+- Browser/manual extraction path checked first: `/home/jacek/Downloads/d_pl_txt/data/daily/pl/wse stocks` (more generally `~/Downloads/d_pl_txt/data/daily/pl/wse stocks`).
+- Repo-local download/extraction cache: `data/vendor/stooq/d_pl_txt/`.
+
+**Useful overrides:**
+
+```bash
+STOCKHELPER_STOOQ_PL_BULK_DIR="/home/jacek/Downloads/d_pl_txt/data/daily/pl/wse stocks" python run -ichimoku_search wig
+STOCKHELPER_STOOQ_PL_BULK_CACHE="/tmp/stockhelper_stooq/d_pl_txt" python run --download-stooq-pl-bulk
+STOCKHELPER_FORCE_STOOQ_PL_BULK_DOWNLOAD=1 python run -fibo_search wig
+STOCKHELPER_DISABLE_STOOQ_PL_BULK=1 python run -fibo_search wig
+```
+
+**When to use it:**
+
+- You want to test the Stooq bulk download before 17:30 Warsaw time.
+- You want one ZIP download instead of many per-symbol Stooq calls for WIG/Warsaw stocks.
+- You want debug output showing whether direct HTTP, Playwright, CAPTCHA OCR, extraction, and TXT parsing are working.
+
+### 11. Fetch older cached history
 
 ```bash
 python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4
