@@ -804,20 +804,29 @@ def _click_stooq_captcha_approve(page, symbol: str, attempt: int) -> bool:
 
 def _solve_stooq_download_captcha(page, symbol: str) -> bool:
     max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
-    print("resolving Stooq download captcha...", flush=True)
+    print(f"[stooq-bulk] resolving Stooq download captcha (max_attempts={max_attempts})...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
+            print(f"[stooq-bulk] captcha attempt {attempt}/{max_attempts}: locating captcha image...", flush=True)
             img = _stooq_captcha_image_locator(page)
             if img is None:
-                return page.locator("a#cpt_gh").first.count() > 0
+                link_ready = page.locator("a#cpt_gh").first.count() > 0
+                print(f"[stooq-bulk] captcha image not found; download link ready={link_ready}", flush=True)
+                return link_ready
             suffix = "" if attempt == 1 else f"_a{attempt}"
             raw_path = _captcha_artifact_path(symbol, f"_download_captcha_raw{suffix}")
             cleaned_path = _captcha_artifact_path(symbol, f"_download_captcha_cleaned{suffix}")
             img.screenshot(path=str(raw_path))
+            print(f"[stooq-bulk] captcha screenshot saved: {raw_path}", flush=True)
             if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
                 print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.", flush=True)
                 return False
             code, engine = _ocr_stooq_captcha(cleaned_path)
+            print(
+                f"[stooq-bulk] captcha OCR attempt {attempt}/{max_attempts}: "
+                f"engine={engine or '-'} code_len={len(code)}",
+                flush=True,
+            )
             if len(code) != 4:
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
                     continue
@@ -825,6 +834,7 @@ def _solve_stooq_download_captcha(page, symbol: str) -> bool:
                 print(f"[stooq-web] download captcha OCR uncertain for {symbol}; screenshot={shot or '-'}", flush=True)
                 return False
             page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            print("[stooq-bulk] captcha code filled; clicking approve...", flush=True)
             if _stooq_verbose_enabled():
                 print(
                     f"[stooq-web] download captcha code filled for {symbol} "
@@ -838,9 +848,11 @@ def _solve_stooq_download_captcha(page, symbol: str) -> bool:
                     continue
                 return False
             if page.locator("a#cpt_gh").first.count() > 0:
+                print("[stooq-bulk] captcha approved; download link is visible.", flush=True)
                 return True
             try:
                 page.wait_for_selector("a#cpt_gh", timeout=5000)
+                print("[stooq-bulk] captcha approved; download link appeared after wait.", flush=True)
                 return True
             except Exception:
                 if (
@@ -865,22 +877,27 @@ def download_stooq_file_with_playwright(url: str, download_path: Path, symbol: s
     """Download a Stooq file, solving Stooq's simple captcha challenge if shown."""
     download_path = Path(download_path)
     download_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[stooq-bulk] launching Playwright downloader: url={url}", flush=True)
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         try:
             try:
+                print("[stooq-bulk] Playwright: trying immediate download without captcha...", flush=True)
                 with page.expect_download(timeout=15000) as download_info:
                     page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 download = download_info.value
-            except Exception:
+                print("[stooq-bulk] Playwright: immediate download started.", flush=True)
+            except Exception as direct_exc:
+                print(f"[stooq-bulk] Playwright: immediate download not available ({direct_exc}); loading captcha page...", flush=True)
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 if not _solve_stooq_download_captcha(page, symbol):
                     raise ValueError("Stooq download captcha could not be solved")
                 link = page.locator("a#cpt_gh").first
                 if link.count() == 0:
                     raise ValueError("Stooq download link #cpt_gh not found after captcha approval")
+                print("[stooq-bulk] Playwright: clicking Stooq Download file link...", flush=True)
                 with page.expect_download(timeout=180000) as download_info:
                     try:
                         link.click(timeout=5000, force=True)
@@ -888,10 +905,13 @@ def download_stooq_file_with_playwright(url: str, download_path: Path, symbol: s
                         link.evaluate("el => el.click()")
                 download = download_info.value
             download.save_as(str(download_path))
+            size_mb = download_path.stat().st_size / (1024 * 1024)
+            print(f"[stooq-bulk] Playwright: download saved to {download_path} ({size_mb:.1f} MB)", flush=True)
             return download_path
         finally:
             context.close()
             browser.close()
+            print("[stooq-bulk] Playwright downloader closed.", flush=True)
 
 
 def _try_solve_stooq_captcha(page, symbol: str) -> bool:
@@ -918,10 +938,16 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             raw_path = _captcha_artifact_path(symbol, f"_captcha_raw{suffix}")
             cleaned_path = _captcha_artifact_path(symbol, f"_captcha_cleaned{suffix}")
             img.screenshot(path=str(raw_path))
+            print(f"[stooq-web] captcha screenshot saved: {raw_path}", flush=True)
             if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
                 print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.", flush=True)
                 return False
             code, engine = _ocr_stooq_captcha(cleaned_path)
+            print(
+                f"[stooq-web] captcha OCR attempt {attempt}/{max_attempts}: "
+                f"engine={engine or '-'} code_len={len(code)}",
+                flush=True,
+            )
             if len(code) != 4:
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
                     if _stooq_verbose_enabled():
@@ -938,6 +964,7 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             # so use tag-qualified locators to avoid Playwright strict-mode matches
             # against <font id="f15"> market-value elements.
             page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            print("[stooq-web] captcha code filled; clicking approve...", flush=True)
             if _stooq_verbose_enabled():
                 print(f"[stooq-web] captcha code filled for {symbol} attempt {attempt}/{max_attempts}: {code}", flush=True)
             # Stooq requires submitting the captcha form after filling the code.

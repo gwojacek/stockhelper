@@ -422,9 +422,12 @@ def _find_stooq_pl_bulk_txt(symbol: str) -> Path | None:
 
 def _download_stooq_pl_bulk_archive() -> Path:
     cache_root = _stooq_pl_bulk_cache_root()
+    print(f"[stooq-bulk] starting PL daily bulk download: url={STOOQ_PL_DAILY_BULK_URL}", flush=True)
+    print(f"[stooq-bulk] cache root: {cache_root}", flush=True)
     # Stooq's extracted folder is always named d_pl_txt. Start from a clean
     # folder so old TXT files cannot survive a failed/partial refresh.
     if cache_root.exists():
+        print(f"[stooq-bulk] deleting existing bulk folder before download: {cache_root}", flush=True)
         shutil.rmtree(cache_root)
     cache_root.mkdir(parents=True, exist_ok=True)
     archive_path = cache_root / "d_pl_txt.zip"
@@ -436,11 +439,15 @@ def _download_stooq_pl_bulk_archive() -> Path:
         },
     )
     try:
+        print("[stooq-bulk] trying direct HTTP archive download...", flush=True)
         with urlopen(request, timeout=180) as response:
             archive_path.write_bytes(response.read())
+        size_mb = archive_path.stat().st_size / (1024 * 1024)
+        print(f"[stooq-bulk] direct download saved {archive_path} ({size_mb:.1f} MB)", flush=True)
         if not zipfile.is_zipfile(archive_path):
             raise ValueError("Stooq bulk response was not a ZIP archive")
-    except Exception:
+    except Exception as exc:
+        print(f"[stooq-bulk] direct download failed or returned non-ZIP ({exc}); using Playwright captcha flow...", flush=True)
         archive_path = download_stooq_file_with_playwright(
             STOOQ_PL_DAILY_BULK_URL,
             archive_path,
@@ -449,11 +456,19 @@ def _download_stooq_pl_bulk_archive() -> Path:
     if not zipfile.is_zipfile(archive_path):
         raise ValueError(f"Downloaded Stooq PL bulk file is not a ZIP archive: {archive_path}")
     with zipfile.ZipFile(archive_path) as archive:
+        members = archive.infolist()
+        print(f"[stooq-bulk] extracting {len(members)} archive entries...", flush=True)
         target_root = cache_root.resolve()
-        for member in archive.infolist():
+        extracted = 0
+        skipped = 0
+        for member in members:
             target = (cache_root / member.filename).resolve()
             if target == target_root or target_root in target.parents:
                 archive.extract(member, cache_root)
+                extracted += 1
+            else:
+                skipped += 1
+        print(f"[stooq-bulk] extraction complete: extracted={extracted} skipped={skipped} root={cache_root}", flush=True)
     return cache_root
 
 
@@ -506,14 +521,27 @@ def _stooq_pl_bulk_download(symbol: str, instrument_type: str) -> tuple[pd.DataF
     df = _parse_stooq_pl_bulk_txt(txt_path) if txt_path else pd.DataFrame()
     latest = _latest_date_from_df(df)
     force_download = _force_stooq_pl_bulk_download_enabled()
+    latest_label = latest.date().isoformat() if latest is not None else "missing"
+    print(
+        f"[stooq-bulk] {symbol}: expected_latest={expected_date.isoformat()} "
+        f"local_latest={latest_label} force_download={force_download}",
+        flush=True,
+    )
     if force_download or latest is None or latest.date() < expected_date:
+        reason = "forced" if force_download else "missing/stale"
+        print(f"[stooq-bulk] {symbol}: bulk data {reason}; downloading archive...", flush=True)
         _download_stooq_pl_bulk_archive()
         txt_path = _find_stooq_pl_bulk_txt(symbol)
         if txt_path is None:
             raise ValueError(f"Stooq PL bulk TXT not found for {symbol} after download")
         df = _parse_stooq_pl_bulk_txt(txt_path)
+    else:
+        print(f"[stooq-bulk] {symbol}: using local bulk TXT: {txt_path}", flush=True)
     if df.empty:
         raise ValueError(f"No daily data in Stooq PL bulk TXT for {symbol}")
+    final_latest = _latest_date_from_df(df)
+    final_latest_label = final_latest.date().isoformat() if final_latest is not None else "missing"
+    print(f"[stooq-bulk] {symbol}: loaded {len(df)} rows from bulk TXT latest={final_latest_label}", flush=True)
     return df, f"{_stooq_pl_bulk_symbol(symbol)}.pl"
 
 
