@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 import time
 import os
 import json
+import re
 import threading
 import warnings
 import zipfile
@@ -362,10 +363,27 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             if clicked:
                 break
         if not clicked:
+            consent_re = re.compile(r"zgadzam|consent|agree|accept|allow", re.I)
             for ctx in contexts:
+                try:
+                    ctx.get_by_role("button", name=consent_re).first.click(timeout=2000, force=True)
+                    if _stooq_verbose_enabled():
+                        print("[stooq-web] consent manager clicked with role fallback", flush=True)
+                    clicked = True
+                    break
+                except Exception:
+                    pass
+                try:
+                    ctx.get_by_text(consent_re).first.click(timeout=2000, force=True)
+                    if _stooq_verbose_enabled():
+                        print("[stooq-web] consent manager clicked with text locator fallback", flush=True)
+                    clicked = True
+                    break
+                except Exception:
+                    pass
                 if _click_consent_text_fallback(ctx):
                     if _stooq_verbose_enabled():
-                        print("[stooq-web] consent manager clicked with text fallback", flush=True)
+                        print("[stooq-web] consent manager clicked with JS text fallback", flush=True)
                     clicked = True
                     break
         if clicked:
@@ -941,6 +959,19 @@ def _wait_for_stooq_download_gate_after_click(page, symbol: str, timeout_ms: int
     _debug_stooq_download_page(page, symbol, "gate_after_listing_click_timeout")
 
 
+def _wait_for_stooq_captcha_image(page, timeout_ms: int = 5000):
+    deadline = time.time() + timeout_ms / 1000
+    while time.time() < deadline:
+        img = _stooq_captcha_image_locator(page)
+        if img is not None:
+            return img
+        try:
+            page.wait_for_timeout(500)
+        except Exception:
+            time.sleep(0.5)
+    return None
+
+
 def _click_stooq_captcha_approve(page, symbol: str, attempt: int) -> bool:
     selectors = (
         'input#f13[type="submit"]',
@@ -988,11 +1019,20 @@ def _solve_stooq_download_captcha(page, symbol: str) -> bool:
             print(f"[stooq-bulk] captcha attempt {attempt}/{max_attempts}: locating captcha image...", flush=True)
             img = _stooq_captcha_image_locator(page)
             if img is None:
-                link_ready = _stooq_download_link_ready(page)
-                print(f"[stooq-bulk] captcha image not found; visible download link ready={link_ready}", flush=True)
-                if not link_ready:
-                    _debug_stooq_download_page(page, symbol, "captcha_image_missing")
-                return link_ready
+                input_present = _stooq_captcha_input_locator(page) is not None
+                if input_present:
+                    print("[stooq-bulk] captcha input is present; waiting for captcha image to load...", flush=True)
+                    img = _wait_for_stooq_captcha_image(page, timeout_ms=7000)
+                if img is None:
+                    link_ready = _stooq_download_link_ready(page)
+                    print(
+                        f"[stooq-bulk] captcha image not found; "
+                        f"input_present={input_present} visible_download_link_ready={link_ready}",
+                        flush=True,
+                    )
+                    if not link_ready:
+                        _debug_stooq_download_page(page, symbol, "captcha_image_missing")
+                    return link_ready
             suffix = "" if attempt == 1 else f"_a{attempt}"
             raw_path = _captcha_artifact_path(symbol, f"_download_captcha_raw{suffix}")
             cleaned_path = _captcha_artifact_path(symbol, f"_download_captcha_cleaned{suffix}")
@@ -1363,9 +1403,15 @@ def download_stooq_file_with_playwright(
 
             if interactive_captcha:
                 _pause_stooq_bulk_inspector(page, symbol, "before_captcha_solver")
-            if not _solve_stooq_download_captcha(page, symbol):
-                if interactive_captcha:
-                    _pause_stooq_bulk_inspector(page, symbol, "captcha_solver_failed")
+            captcha_solved = _solve_stooq_download_captcha(page, symbol)
+            if not captcha_solved and interactive_captcha:
+                _pause_stooq_bulk_inspector(page, symbol, "captcha_solver_failed")
+                _accept_stooq_consent_for_bulk(page, "after-manual-inspector")
+                captcha_solved = _stooq_download_link_ready(page)
+                if not captcha_solved and (_stooq_captcha_image_locator(page) is not None or _stooq_captcha_input_locator(page) is not None):
+                    print("[stooq-bulk] retrying captcha solver after inspector pause...", flush=True)
+                    captcha_solved = _solve_stooq_download_captcha(page, symbol)
+            if not captcha_solved:
                 _debug_stooq_download_page(page, symbol, "captcha_not_solved")
                 raise ValueError("Stooq download captcha could not be solved")
             link = _stooq_download_link_locator(page, require_visible=True)
