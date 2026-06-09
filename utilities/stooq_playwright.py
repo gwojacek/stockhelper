@@ -279,6 +279,38 @@ def _switch_to_inspector_for_captcha(
 
 
 
+def _click_consent_text_fallback(ctx) -> bool:
+    """Click common CMP consent buttons by visible text inside a page/frame."""
+    script = """() => {
+        const needles = [
+            'zgadzam się', 'zgadzam sie', 'consent', 'i consent',
+            'i agree', 'agree', 'accept all', 'accept', 'allow all'
+        ];
+        const isVisible = (el) => {
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style && style.visibility !== 'hidden' && style.display !== 'none'
+                && rect.width > 0 && rect.height > 0;
+        };
+        const candidates = Array.from(document.querySelectorAll(
+            'button, [role=\"button\"], input[type=\"button\"], input[type=\"submit\"], a'
+        ));
+        for (const el of candidates) {
+            const text = ((el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '') + '').trim().toLowerCase();
+            if (!text || !isVisible(el)) continue;
+            if (needles.some(n => text.includes(n))) {
+                el.click();
+                return true;
+            }
+        }
+        return false;
+    }"""
+    try:
+        return bool(ctx.evaluate(script))
+    except Exception:
+        return False
+
+
 def _accept_consent_if_present(page, first_page: bool = False) -> None:
     if not first_page:
         return
@@ -329,6 +361,13 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                     continue
             if clicked:
                 break
+        if not clicked:
+            for ctx in contexts:
+                if _click_consent_text_fallback(ctx):
+                    if _stooq_verbose_enabled():
+                        print("[stooq-web] consent manager clicked with text fallback", flush=True)
+                    clicked = True
+                    break
         if clicked:
             # Wait for consent layer to disappear and content table to become available.
             try:
@@ -354,6 +393,7 @@ def _accept_stooq_consent_for_bulk(page, phase: str) -> None:
     try:
         if _consent_overlay_visible(page):
             print(f"[stooq-bulk] consent manager still visible after click attempts ({phase}).", flush=True)
+            _debug_fail_screenshot("stooq_pl_bulk", page, suffix=f"_consent_still_visible_{phase}")
         else:
             print(f"[stooq-bulk] consent manager not blocking page ({phase}).", flush=True)
     except Exception:
@@ -362,21 +402,29 @@ def _accept_stooq_consent_for_bulk(page, phase: str) -> None:
 
 def _consent_overlay_visible(page) -> bool:
     probes = [
-        'text=Stooq prosi o zgodę',
-        'text=Stooq prosi o zgode',
-        'text=Zgadzam się',
-        'text=Zgadzam sie',
-        'text=Consent Manager',
-        'text=Consent',
-        'text=I agree',
-        'text=Accept all',
+        'Stooq prosi o zgodę',
+        'Stooq prosi o zgode',
+        'wykorzystanie Twoich danych osobowych',
+        'wykorzystanie Twoich danych',
+        'Zgadzam się',
+        'Zgadzam sie',
+        'Consent Manager',
+        'Consent',
+        'I agree',
+        'Accept all',
     ]
-    for probe in probes:
+    try:
+        contexts = [page] + list(page.frames)
+    except Exception:
+        contexts = [page]
+    for ctx in contexts:
         try:
-            if page.locator(probe).first.count() > 0:
-                return True
+            body = ctx.locator("body").inner_text(timeout=700)
         except Exception:
-            continue
+            body = ""
+        lowered = body.lower()
+        if any(probe.lower() in lowered for probe in probes):
+            return True
     return False
 
 
