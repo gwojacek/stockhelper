@@ -10,7 +10,7 @@ import zipfile
 from pathlib import Path
 
 import pandas as pd
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
 _CAPTCHA_INSPECTOR_LOCK = threading.Lock()
@@ -26,42 +26,126 @@ _POLISH_MONTHS = {
 
 
 STOOQ_BULK_HISTORY_URL = "https://stooq.com/db/h/"
-STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='db/d/?b=d_pl_txt']"
+STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='d_pl_txt']"
 STOOQ_BULK_TXT_COLUMNS = ["<TICKER>", "<PER>", "<DATE>", "<TIME>", "<OPEN>", "<HIGH>", "<LOW>", "<CLOSE>", "<VOL>", "<OPENINT>"]
+
+
+def _stooq_bulk_debug_dir() -> Path:
+    out_dir = Path(os.getenv("STOCKHELPER_STOOQ_BULK_DEBUG_DIR", "debug/stooq_bulk"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+def _capture_stooq_bulk_failure(page, reason: str) -> str:
+    """Save one screenshot (+ HTML sidecar) for a failing bulk-download step."""
+    safe_reason = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in reason)[:80] or "failure"
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    out_dir = _stooq_bulk_debug_dir()
+    png_path = out_dir / f"bulk_{stamp}_{safe_reason}.png"
+    html_path = out_dir / f"bulk_{stamp}_{safe_reason}.html"
+    try:
+        page.screenshot(path=str(png_path), full_page=True)
+    except Exception:
+        png_path = Path("")
+    try:
+        html_path.write_text(page.content(), encoding="utf-8")
+    except Exception:
+        pass
+    if png_path:
+        print(f"[stooq-bulk] failure screenshot saved: {png_path}", flush=True)
+        return str(png_path)
+    return ""
 
 
 def _accept_stooq_bulk_consent_if_present(page) -> None:
     """Accept the Stooq consent dialog using Playwright auto-waiting only."""
     selectors = [
         'button:has-text("Consent")',
+        'button:has-text("I consent")',
         'button:has-text("Agree")',
         'button:has-text("I agree")',
         'button:has-text("Accept")',
+        'button:has-text("Accept all")',
         'button:has-text("Zgadzam się")',
         'button:has-text("Zgadzam sie")',
         'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Consent"]',
+        'button[aria-label="I consent"]',
         'button[aria-label="Zgadzam się"]',
     ]
-    for selector in selectors:
-        try:
-            button = page.locator(selector).first
-            if button.count() == 0:
-                continue
-            button.click(timeout=5000)
+    try:
+        contexts = [page] + list(page.frames)
+    except Exception:
+        contexts = [page]
+    for ctx in contexts:
+        for selector in selectors:
             try:
-                button.wait_for(state="hidden", timeout=5000)
+                button = ctx.locator(selector).first
+                if button.count() == 0:
+                    continue
+                button.click(timeout=5000)
+                try:
+                    button.wait_for(state="hidden", timeout=5000)
+                except Exception:
+                    pass
+                return
             except Exception:
-                pass
-            return
-        except Exception:
-            continue
+                continue
 
 
 def _bulk_download_link(page):
-    link = page.locator(STOOQ_WIG_BULK_LINK_SELECTOR).first
-    link.wait_for(state="visible", timeout=20000)
-    return link
+    """Find the WIG d_pl_txt link, preferring the required #t4 table/row."""
+    selectors = [
+        STOOQ_WIG_BULK_LINK_SELECTOR,
+        "#t4 a[href*='db/d/'][href*='b=d_pl_txt']",
+        "#t4 a:has-text('MB')",
+        "#t4 a",
+        "a[href*='d_pl_txt']",
+    ]
+    last_error = None
+    try:
+        contexts = [page] + list(page.frames)
+    except Exception:
+        contexts = [page]
+    for ctx in contexts:
+        for selector in selectors:
+            link = ctx.locator(selector).first
+            try:
+                if link.count() == 0:
+                    continue
+                link.wait_for(state="visible", timeout=20000)
+                href = (link.get_attribute("href") or "").lower()
+                text = (link.inner_text(timeout=2000) or "").lower()
+                if "d_pl_txt" in href or (selector == "#t4 a" and "mb" in text):
+                    return link
+            except Exception as exc:
+                last_error = exc
+                continue
+    shot = _capture_stooq_bulk_failure(page, "bulk_link_missing")
+    body_preview = ""
+    try:
+        body_preview = (page.locator("body").inner_text(timeout=2000) or "").strip().replace("\n", " ")[:500]
+    except Exception:
+        pass
+    raise ValueError(
+        "Could not find visible Stooq WIG bulk d_pl_txt link in #t4 "
+        f"(selector={STOOQ_WIG_BULK_LINK_SELECTOR!r}, url={page.url}, screenshot={shot}, "
+        f"body_preview={body_preview!r}, last_error={last_error})"
+    )
+
+
+def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout: int) -> Path | None:
+    """Click the bulk link and return a downloaded zip path only when download starts."""
+    try:
+        with page.expect_download(timeout=timeout) as download_info:
+            _bulk_download_link(page).click(timeout=10000)
+        download = download_info.value
+        suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
+        zip_path = download_dir / suggested
+        download.save_as(str(zip_path))
+        return zip_path
+    except PlaywrightTimeoutError:
+        return None
 
 
 def _bulk_captcha_image(page):
@@ -202,31 +286,47 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
         try:
             page.goto(STOOQ_BULK_HISTORY_URL, wait_until="domcontentloaded")
             _accept_stooq_bulk_consent_if_present(page)
-            _bulk_download_link(page).click(timeout=10000)
+
+            # First required click usually opens Stooq's download captcha. If the
+            # captcha is already trusted and a download starts immediately, keep it.
+            first_download = _click_bulk_link_for_optional_download(page, download_dir, timeout=10000)
+            if first_download is not None:
+                return first_download
+
             try:
-                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                _bulk_captcha_image(page).wait_for(state="visible", timeout=10000)
             except Exception:
-                pass
+                if not _page_has_bulk_captcha(page):
+                    shot = _capture_stooq_bulk_failure(page, "captcha_not_shown_after_first_click")
+                    raise ValueError(
+                        "Stooq bulk link click did not start a download and no captcha became visible "
+                        f"(url={page.url}, screenshot={shot})."
+                    )
+
             if _page_has_bulk_captcha(page):
                 if not _solve_stooq_bulk_download_captcha(page):
                     if not interactive:
-                        raise ValueError("Stooq bulk download captcha could not be solved automatically.")
+                        shot = _capture_stooq_bulk_failure(page, "captcha_auto_solve_failed")
+                        raise ValueError(f"Stooq bulk download captcha could not be solved automatically. Screenshot: {shot}")
                     page.pause()
                 page.reload(wait_until="domcontentloaded")
                 _accept_stooq_bulk_consent_if_present(page)
-            with page.expect_download(timeout=180000) as download_info:
-                _bulk_download_link(page).click(timeout=10000)
-            download = download_info.value
-            suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
-            zip_path = download_dir / suggested
-            download.save_as(str(zip_path))
+
+            zip_path = _click_bulk_link_for_optional_download(page, download_dir, timeout=180000)
+            if zip_path is None:
+                shot = _capture_stooq_bulk_failure(page, "download_not_started_after_captcha")
+                raise ValueError(f"Stooq bulk zip download did not start after captcha flow. Screenshot: {shot}")
             return zip_path
+        except Exception as exc:
+            if "Screenshot:" not in str(exc) and "screenshot=" not in str(exc):
+                shot = _capture_stooq_bulk_failure(page, "bulk_download_exception")
+                raise ValueError(f"Stooq bulk download failed: {exc}. Screenshot: {shot}") from exc
+            raise
         finally:
             try:
                 context.close()
             finally:
                 browser.close()
-
 
 def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
     with zipfile.ZipFile(zip_path) as zf:
