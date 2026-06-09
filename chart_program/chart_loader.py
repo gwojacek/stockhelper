@@ -6,13 +6,13 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
 import os
 
 import pandas as pd
 
 from utilities.stooq_playwright import update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
+from utilities.stooq_http import download_stooq_text
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 
@@ -373,8 +373,7 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
 
 
 def _download_text(url: str) -> str:
-    with urlopen(url, timeout=20) as response:
-        return response.read().decode("utf-8", errors="replace")
+    return download_stooq_text(url, timeout=20)
 
 
 def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:

@@ -116,8 +116,26 @@ There is no `requirements.txt` in this repository. If you do not use Poetry, ins
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install colorama dash flask numpy pandas plotly tabulate tenacity playwright yfinance opencv-python easyocr
+pip install colorama curl_cffi dash flask numpy pandas plotly tabulate tenacity playwright yfinance opencv-python easyocr
 python -m playwright install chromium
+```
+
+### Stooq bot-check downloads
+
+For the fast Stooq CSV fetch path added for browser verification pages, make sure `curl_cffi` is installed in the Python environment that runs `python run ...`. Poetry installs it from the lock file, but an older or manually maintained `venv` may not have it yet.
+
+```bash
+python -m pip install -U curl_cffi
+python - <<'PY'
+import curl_cffi
+print(curl_cffi.__version__)
+PY
+```
+
+If you use Poetry instead of an activated `venv`, refresh the environment with:
+
+```bash
+poetry install
 ```
 
 ### Optional/system dependencies
@@ -127,6 +145,7 @@ These packages are used by specific workflows:
 - `playwright`: Stooq web/table fallback, Stooq debug pages, CAPTCHA/inspector workflows.
 - `opencv-python`: CAPTCHA image preprocessing.
 - `easyocr`: CAPTCHA OCR attempts.
+- `curl_cffi`: browser TLS/HTTP impersonation for Stooq CSV downloads when Stooq serves a browser-verification page.
 - `yfinance`: Yahoo fallback data source.
 - `flask`: local interactive chart UI powered by TradingView Lightweight Charts; `dash`/`plotly` remain available for legacy chart tooling and historical snapshot compatibility.
 - `pyinstaller`: dev-only dependency for building an executable.

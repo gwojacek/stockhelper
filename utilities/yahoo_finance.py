@@ -3,11 +3,11 @@ from io import StringIO
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
 import pandas as pd
 import yfinance as yf
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 from utilities.output_silence import call_silenced
+from utilities.stooq_http import download_stooq_text
 RETRY_EXCEPTIONS = (HTTPError, URLError, ValueError, ConnectionError, TimeoutError, Exception)
 STOOQ_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 LAST_TURNOVER_SOURCE = "unknown"
@@ -86,8 +86,7 @@ def _fetch_stooq_history(symbol: str, period: str) -> pd.DataFrame:
     for candidate in _stooq_symbol_candidates(symbol):
         params = {"s": candidate, "i": "d", "d1": d1, "d2": d2, "apikey": STOOQ_API_KEY}
         url = f"https://stooq.pl/q/d/l/?{urlencode(params)}"
-        with urlopen(url, timeout=15) as response:
-            csv_text = response.read().decode("utf-8", errors="replace")
+        csv_text = download_stooq_text(url, timeout=15)
         df = _parse_stooq_csv_text(csv_text)
         expected_cols = {"Open", "High", "Low", "Close", "Volume"}
         if expected_cols.issubset(df.columns) and not df.empty:
