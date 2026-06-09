@@ -6,10 +6,12 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode, urlparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
+import hashlib
 import importlib
 import importlib.util
 import os
+import re
 
 import pandas as pd
 
@@ -398,6 +400,61 @@ def _stooq_verification_text(text: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
+def _solve_stooq_verification_cookie(text: str) -> str | None:
+    challenge = re.search(r'const\s+c\s*=\s*"([^"]+)"\s*,\s*d\s*=\s*(\d+)', text or "")
+    if challenge is None:
+        return None
+
+    seed = challenge.group(1)
+    difficulty = int(challenge.group(2))
+    prefix = "0" * difficulty
+    max_nonce = int(os.getenv("STOCKHELPER_STOOQ_VERIFY_MAX_NONCE", "5000000"))
+    nonce = None
+    for candidate in range(max_nonce):
+        digest = hashlib.sha256(f"{seed}{candidate}".encode("utf-8")).hexdigest()
+        if digest.startswith(prefix):
+            nonce = candidate
+            break
+    if nonce is None:
+        return None
+
+    cookie_value = None
+    template = re.search(r'document\.cookie\s*=\s*`([^`]+)`', text or "")
+    if template is not None:
+        cookie_value = template.group(1).replace("${n}", str(nonce)).replace("${c}", seed)
+
+    if cookie_value is None:
+        concatenated = re.search(r'document\.cookie\s*=\s*"([^"]*)"\s*\+\s*n\s*\+\s*"([^"]*)"', text or "")
+        if concatenated is not None:
+            cookie_value = f"{concatenated.group(1)}{nonce}{concatenated.group(2)}"
+
+    if cookie_value is None:
+        assignment = re.search(r'document\.cookie\s*=\s*["\']([^"\']*?=)["\']\s*\+\s*n', text or "")
+        if assignment is not None:
+            cookie_value = f"{assignment.group(1)}{nonce}"
+
+    if not cookie_value or "=" not in cookie_value:
+        return None
+    return cookie_value.split(";", 1)[0].strip()
+
+
+def _stooq_headers(cookie: str | None = None) -> dict[str, str]:
+    headers = {
+        "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
+        "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://stooq.com/",
+        "User-Agent": os.getenv(
+            "STOCKHELPER_STOOQ_USER_AGENT",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36",
+        ),
+    }
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
+
+
 def _tls_client_module():
     if importlib.util.find_spec("tls_client") is None:
         return None
@@ -413,19 +470,19 @@ def _download_text_with_tls_client(url: str) -> str | None:
         client_identifier=os.getenv("STOCKHELPER_TLS_CLIENT_IDENTIFIER", "chrome_120"),
         random_tls_extension_order=True,
     )
-    response = session.get(
-        url,
-        timeout_seconds=20,
-        headers={
-            "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
-            "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://stooq.com/",
-        },
-    )
+    response = session.get(url, timeout_seconds=20, headers=_stooq_headers())
     status_code = int(getattr(response, "status_code", 0) or 0)
     if status_code >= 400:
         raise ValueError(f"tls-client returned HTTP {status_code}")
-    return response.text
+    text = response.text
+    cookie = _solve_stooq_verification_cookie(text) if _stooq_verification_text(text) else None
+    if cookie:
+        response = session.get(url, timeout_seconds=20, headers=_stooq_headers(cookie))
+        status_code = int(getattr(response, "status_code", 0) or 0)
+        if status_code >= 400:
+            raise ValueError(f"tls-client returned HTTP {status_code} after verification")
+        text = response.text
+    return text
 
 
 def _curl_cffi_requests_module():
@@ -439,22 +496,37 @@ def _download_text_with_curl_cffi(url: str) -> str | None:
     if requests is None:
         return None
 
-    response = requests.get(
+    session = requests.Session()
+    response = session.get(
         url,
         timeout=20,
         impersonate=os.getenv("STOCKHELPER_CURL_CFFI_IMPERSONATE", "chrome"),
-        headers={
-            "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
-            "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://stooq.com/",
-        },
+        headers=_stooq_headers(),
     )
     response.raise_for_status()
-    return response.text
+    text = response.text
+    cookie = _solve_stooq_verification_cookie(text) if _stooq_verification_text(text) else None
+    if cookie:
+        response = session.get(
+            url,
+            timeout=20,
+            impersonate=os.getenv("STOCKHELPER_CURL_CFFI_IMPERSONATE", "chrome"),
+            headers=_stooq_headers(cookie),
+        )
+        response.raise_for_status()
+        text = response.text
+    return text
 
 
 def _download_text_with_urlopen(url: str) -> str:
-    with urlopen(url, timeout=20) as response:
+    request = Request(url, headers=_stooq_headers() if _is_stooq_url(url) else {})
+    with urlopen(request, timeout=20) as response:
+        text = response.read().decode("utf-8", errors="replace")
+    cookie = _solve_stooq_verification_cookie(text) if _is_stooq_url(url) and _stooq_verification_text(text) else None
+    if not cookie:
+        return text
+    request = Request(url, headers=_stooq_headers(cookie))
+    with urlopen(request, timeout=20) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
