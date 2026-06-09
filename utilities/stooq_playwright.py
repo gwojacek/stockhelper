@@ -286,10 +286,25 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
     selectors = [
         'button:has-text("Zgadzam się")',
         'button:has-text("Zgadzam sie")',
+        'button:has-text("Consent")',
+        'button:has-text("I Consent")',
+        'button:has-text("I agree")',
+        'button:has-text("Agree")',
+        'button:has-text("Accept")',
+        'button:has-text("Accept all")',
+        'button:has-text("Allow all")',
         'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Zgadzam się"]',
+        'button[aria-label="Consent"]',
+        'button[aria-label="I agree"]',
+        'button[aria-label="Accept"]',
         '.fc-dialog-container button:has-text("Zgadzam się")',
+        '.fc-dialog-container button:has-text("Consent")',
+        '.fc-dialog-container button:has-text("Accept")',
+        '#didomi-notice-agree-button',
+        '#onetrust-accept-btn-handler',
         'text=Zgadzam się',
+        'text=Consent',
     ]
 
     for _ in range(4):
@@ -306,6 +321,8 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         continue
                     loc.wait_for(state='visible', timeout=1500)
                     loc.click(timeout=3000, force=True)
+                    if _stooq_verbose_enabled():
+                        print(f"[stooq-web] consent manager clicked with selector: {sel}", flush=True)
                     clicked = True
                     break
                 except Exception:
@@ -326,12 +343,33 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             except Exception:
                 pass
 
+
+def _accept_stooq_consent_for_bulk(page, phase: str) -> None:
+    print(f"[stooq-bulk] checking consent manager ({phase})...", flush=True)
+    try:
+        _accept_consent_if_present(page, first_page=True)
+    except Exception as exc:
+        print(f"[stooq-bulk] consent manager handling failed ({phase}): {exc}", flush=True)
+        return
+    try:
+        if _consent_overlay_visible(page):
+            print(f"[stooq-bulk] consent manager still visible after click attempts ({phase}).", flush=True)
+        else:
+            print(f"[stooq-bulk] consent manager not blocking page ({phase}).", flush=True)
+    except Exception:
+        pass
+
+
 def _consent_overlay_visible(page) -> bool:
     probes = [
         'text=Stooq prosi o zgodę',
         'text=Stooq prosi o zgode',
         'text=Zgadzam się',
         'text=Zgadzam sie',
+        'text=Consent Manager',
+        'text=Consent',
+        'text=I agree',
+        'text=Accept all',
     ]
     for probe in probes:
         try:
@@ -340,6 +378,7 @@ def _consent_overlay_visible(page) -> bool:
         except Exception:
             continue
     return False
+
 
 def _extract_rows_from_frame(frame) -> list[list[str]]:
     try:
@@ -1096,6 +1135,7 @@ def _open_direct_stooq_download_or_gate(page, url: str):
         )
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            _accept_stooq_consent_for_bulk(page, "direct-gate")
         except Exception as goto_exc:
             if "Download is starting" in str(goto_exc):
                 raise ValueError(
@@ -1110,8 +1150,8 @@ def _open_stooq_download_gate(page, url: str, listing_url: str | None, link_sele
     if listing_url:
         print(f"[stooq-bulk] Playwright: opening Stooq listing page: {listing_url}", flush=True)
         page.goto(listing_url, wait_until="domcontentloaded", timeout=30000)
+        _accept_stooq_consent_for_bulk(page, "listing")
         try:
-            _accept_consent_if_present(page, first_page=True)
             page.wait_for_timeout(1500)
         except Exception:
             pass
