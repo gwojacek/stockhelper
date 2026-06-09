@@ -382,9 +382,9 @@ def _is_stooq_url(url: str) -> bool:
 
 
 def _stooq_csv_domains() -> list[str]:
-    raw = os.getenv("STOCKHELPER_STOOQ_CSV_DOMAINS", "stooq.com,stooq.pl")
+    raw = os.getenv("STOCKHELPER_STOOQ_CSV_DOMAINS", "stooq.pl")
     domains = [part.strip() for part in raw.split(",") if part.strip()]
-    return domains or ["stooq.com"]
+    return domains or ["stooq.pl"]
 
 
 def _stooq_verification_text(text: str) -> bool:
@@ -442,7 +442,7 @@ def _stooq_headers(cookie: str | None = None) -> dict[str, str]:
     headers = {
         "Accept": "text/csv,text/plain,application/csv,application/octet-stream,*/*;q=0.9",
         "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://stooq.com/",
+        "Referer": "https://stooq.pl/",
         "User-Agent": os.getenv(
             "STOCKHELPER_STOOQ_USER_AGENT",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -607,7 +607,7 @@ def _parse_stooq_csv_text(csv_text: str) -> pd.DataFrame:
     df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
     return _last_year_only(df)
 
-def _stooq_live_quote_url(symbol: str, domain: str = "stooq.com") -> str:
+def _stooq_live_quote_url(symbol: str, domain: str = "stooq.pl") -> str:
     query = {"s": symbol, "f": "sd2t2ohlcv", "h": "", "e": "csv"}
     return f"https://{domain}/q/l/?{urlencode(query)}"
 
@@ -651,7 +651,7 @@ def _stooq_url(
     symbol: str,
     api_key: str | None = None,
     param_name: str | None = None,
-    domain: str = "stooq.com",
+    domain: str = "stooq.pl",
     lookback_days: int = 364,
     end_date: datetime | None = None,
 ) -> str:
