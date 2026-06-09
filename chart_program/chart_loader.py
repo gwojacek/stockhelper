@@ -577,6 +577,7 @@ async def _download_text_with_nodriver_async(url: str) -> str | None:
             stop_result = browser.stop()
             if inspect.isawaitable(stop_result):
                 await stop_result
+            await asyncio.sleep(float(os.getenv("STOCKHELPER_NODRIVER_SHUTDOWN_SECONDS", "0.5")))
 
 
 def _download_text_with_nodriver(url: str) -> str | None:
@@ -615,7 +616,7 @@ def _download_text(url: str) -> str:
     text = _download_text_with_urlopen(url)
     if _is_stooq_url(url) and _stooq_verification_text(text):
         blocked_text = text
-        if os.getenv("STOCKHELPER_DISABLE_NODRIVER", "0") != "1":
+        if os.getenv("STOCKHELPER_ENABLE_NODRIVER", "0") == "1":
             try:
                 nodriver_text = _download_text_with_nodriver(url)
             except Exception:
