@@ -941,35 +941,38 @@ def _stooq_download_link_ready(page) -> bool:
 
 
 def _wait_for_stooq_download_gate_after_click(page, symbol: str, timeout_ms: int = 10000) -> None:
-    deadline = time.time() + timeout_ms / 1000
-    while time.time() < deadline:
-        if _stooq_captcha_image_locator(page) is not None:
-            print("[stooq-bulk] captcha image appeared after listing click.", flush=True)
-            return
-        if _stooq_download_link_ready(page):
-            print("[stooq-bulk] visible download link appeared after listing click.", flush=True)
-            return
-        if _stooq_captcha_input_locator(page) is not None:
-            print("[stooq-bulk] captcha input appeared after listing click.", flush=True)
-            return
-        try:
-            page.wait_for_timeout(500)
-        except Exception:
-            time.sleep(0.5)
-    _debug_stooq_download_page(page, symbol, "gate_after_listing_click_timeout")
+    try:
+        result = page.wait_for_function(
+            """() => {
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.visibility !== 'hidden' && style.display !== 'none'
+                        && rect.width > 0 && rect.height > 0;
+                };
+                if ([...document.querySelectorAll('img')].some(img => (img.getAttribute('src') || '').includes('/q/l/s/i/'))) return 'captcha_image';
+                if (document.querySelector('input[name="cpt_t"], input#f15')) return 'captcha_input';
+                if ([...document.querySelectorAll('a#cpt_gh, a')].some(a => visible(a) && /Download file/i.test(a.textContent || ''))) return 'download_link';
+                return false;
+            }""",
+            timeout=timeout_ms,
+        ).json_value()
+        print(f"[stooq-bulk] Stooq gate appeared after listing click: {result}", flush=True)
+    except Exception:
+        _debug_stooq_download_page(page, symbol, "gate_after_listing_click_timeout")
 
 
 def _wait_for_stooq_captcha_image(page, timeout_ms: int = 5000):
-    deadline = time.time() + timeout_ms / 1000
-    while time.time() < deadline:
-        img = _stooq_captcha_image_locator(page)
-        if img is not None:
-            return img
-        try:
-            page.wait_for_timeout(500)
-        except Exception:
-            time.sleep(0.5)
-    return None
+    try:
+        page.wait_for_function(
+            """() => [...document.querySelectorAll('img')]
+                .some(img => (img.getAttribute('src') || '').includes('/q/l/s/i/'))""",
+            timeout=timeout_ms,
+        )
+    except Exception:
+        return None
+    return _stooq_captcha_image_locator(page)
 
 
 def _click_stooq_captcha_approve(page, symbol: str, attempt: int) -> bool:
@@ -1342,6 +1345,86 @@ def _pause_stooq_bulk_inspector(page, symbol: str, phase: str) -> None:
         print(f"[stooq-bulk] inspector pause failed ({phase}): {exc}", flush=True)
 
 
+def _click_stooq_listing_link(link) -> None:
+    try:
+        link.click(timeout=5000, force=True)
+    except Exception:
+        link.evaluate("el => el.click()")
+
+
+def _download_stooq_via_listing_captcha_flow(
+    page,
+    url: str,
+    listing_url: str,
+    link_selector: str | None,
+    download_path: Path,
+    expect_zip: bool,
+    symbol: str,
+    interactive_captcha: bool,
+) -> Path:
+    print("[stooq-bulk] Playwright: using listing -> captcha -> listing download flow.", flush=True)
+    page.goto(listing_url, wait_until="domcontentloaded", timeout=30000)
+    _accept_stooq_consent_for_bulk(page, "listing-before-first-click")
+    link = _find_stooq_bulk_listing_link(page, link_selector)
+    if link is None:
+        _debug_stooq_download_links(page)
+        _debug_stooq_download_page(page, symbol, "listing_link_missing_first_click")
+        raise ValueError("Stooq PL listing link d_pl_txt not found")
+
+    print("[stooq-bulk] Playwright: first click on d_pl_txt listing link (expect captcha or immediate download).", flush=True)
+    try:
+        with page.expect_download(timeout=7000) as download_info:
+            _click_stooq_listing_link(link)
+        download = download_info.value
+        if _save_playwright_download(download, download_path, expect_zip, "first listing click"):
+            return download_path
+        try:
+            download_path.unlink()
+        except OSError:
+            pass
+        print("[stooq-bulk] first listing click downloaded invalid file; continuing to captcha gate.", flush=True)
+    except Exception as exc:
+        print(f"[stooq-bulk] first listing click did not download directly ({exc}); waiting for captcha gate.", flush=True)
+        _wait_for_stooq_download_gate_after_click(page, symbol)
+
+    if interactive_captcha:
+        _pause_stooq_bulk_inspector(page, symbol, "before_captcha_solver")
+    captcha_solved = _solve_stooq_download_captcha(page, symbol)
+    if not captcha_solved and interactive_captcha:
+        _pause_stooq_bulk_inspector(page, symbol, "captcha_solver_failed")
+        _accept_stooq_consent_for_bulk(page, "after-manual-inspector")
+        captcha_solved = _stooq_download_link_ready(page)
+        if not captcha_solved and (
+            _stooq_captcha_image_locator(page) is not None
+            or _stooq_captcha_input_locator(page) is not None
+        ):
+            print("[stooq-bulk] retrying captcha solver after inspector pause...", flush=True)
+            captcha_solved = _solve_stooq_download_captcha(page, symbol)
+    if not captcha_solved:
+        _debug_stooq_download_page(page, symbol, "captcha_not_solved")
+        raise ValueError("Stooq download captcha could not be solved")
+
+    print("[stooq-bulk] captcha accepted; refreshing listing page before final d_pl_txt click.", flush=True)
+    page.goto(listing_url, wait_until="domcontentloaded", timeout=30000)
+    _accept_stooq_consent_for_bulk(page, "listing-before-final-click")
+    link = _find_stooq_bulk_listing_link(page, link_selector)
+    if link is None:
+        _debug_stooq_download_links(page)
+        _debug_stooq_download_page(page, symbol, "listing_link_missing_final_click")
+        raise ValueError("Stooq PL listing link d_pl_txt not found after captcha")
+
+    if interactive_captcha:
+        _pause_stooq_bulk_inspector(page, symbol, "before_final_listing_click")
+    print("[stooq-bulk] Playwright: final click on d_pl_txt listing link; expecting ZIP download...", flush=True)
+    with page.expect_download(timeout=180000) as download_info:
+        _click_stooq_listing_link(link)
+    download = download_info.value
+    if not _save_playwright_download(download, download_path, expect_zip, "final listing click"):
+        _debug_stooq_download_page(page, symbol, "invalid_final_listing_download")
+        raise ValueError(f"Downloaded file did not match expected type: {download_path}")
+    return download_path
+
+
 def download_stooq_file_with_playwright(
     url: str,
     download_path: Path,
@@ -1363,6 +1446,18 @@ def download_stooq_file_with_playwright(
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         try:
+            if listing_url:
+                return _download_stooq_via_listing_captcha_flow(
+                    page,
+                    url,
+                    listing_url,
+                    link_selector,
+                    download_path,
+                    expect_zip,
+                    symbol,
+                    interactive_captcha,
+                )
+
             try:
                 print("[stooq-bulk] Playwright: trying immediate download without captcha...", flush=True)
                 with page.expect_download(timeout=15000) as download_info:
