@@ -2435,7 +2435,20 @@ def main()->int:
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
+    parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace data/stocks/*_WA.csv from the wse stocks txt folder.')
+    parser.add_argument('--stooq-bulk-zip', help='Import an already-downloaded Stooq d_pl_txt zip instead of downloading it.')
     args=parser.parse_args()
+    if args.download_wig_bulk or args.stooq_bulk_zip:
+        from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data, import_stooq_wig_bulk_zip
+        if args.stooq_bulk_zip:
+            result = import_stooq_wig_bulk_zip(Path(args.stooq_bulk_zip), PROJECT_ROOT / 'data' / 'stocks')
+        else:
+            result = download_and_import_stooq_wig_bulk_data(stocks_dir=PROJECT_ROOT / 'data' / 'stocks', interactive=args.inspector)
+        print(
+            f"[stooq-bulk] completed written={result['written']} skipped={result['skipped']} "
+            f"members={result['members']} stocks_dir={result['stocks_dir']}"
+        )
+        return 0
     if args.onlycache:
         os.environ['STOCKHELPER_CACHE_ONLY'] = '1'
         os.environ.pop('STOCKHELPER_FORCE_REMOTE_REFRESH', None)

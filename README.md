@@ -34,6 +34,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
 | Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
+| Refresh WIG from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, and replaces `data/stocks/*_WA.csv` from the `wse stocks` txt files. |
 | Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
 | Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
@@ -48,6 +49,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - Stooq API/CSV-style downloads for many stocks/forex/commodities;
   - Yahoo Finance fallback where supported;
   - Stooq web/table fallback for selected commodity data;
+  - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder;
   - local CSV cache in `data/stocks/`, `data/forex/`, `data/commodities/`, and `data/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.

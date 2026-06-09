@@ -6,6 +6,7 @@ import os
 import json
 import threading
 import warnings
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -22,6 +23,303 @@ _POLISH_MONTHS = {
     "sty": "01", "lut": "02", "mar": "03", "kwi": "04", "maj": "05", "cze": "06",
     "lip": "07", "sie": "08", "wrz": "09", "paź": "10", "paz": "10", "lis": "11", "gru": "12",
 }
+
+
+STOOQ_BULK_HISTORY_URL = "https://stooq.com/db/h/"
+STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='db/d/?b=d_pl_txt']"
+STOOQ_BULK_TXT_COLUMNS = ["<TICKER>", "<PER>", "<DATE>", "<TIME>", "<OPEN>", "<HIGH>", "<LOW>", "<CLOSE>", "<VOL>", "<OPENINT>"]
+
+
+def _accept_stooq_bulk_consent_if_present(page) -> None:
+    """Accept the Stooq consent dialog using Playwright auto-waiting only."""
+    selectors = [
+        'button:has-text("Consent")',
+        'button:has-text("Agree")',
+        'button:has-text("I agree")',
+        'button:has-text("Accept")',
+        'button:has-text("Zgadzam się")',
+        'button:has-text("Zgadzam sie")',
+        'button.fc-button.fc-cta-consent.fc-primary-button',
+        'button[aria-label="Consent"]',
+        'button[aria-label="Zgadzam się"]',
+    ]
+    for selector in selectors:
+        try:
+            button = page.locator(selector).first
+            if button.count() == 0:
+                continue
+            button.click(timeout=5000)
+            try:
+                button.wait_for(state="hidden", timeout=5000)
+            except Exception:
+                pass
+            return
+        except Exception:
+            continue
+
+
+def _bulk_download_link(page):
+    link = page.locator(STOOQ_WIG_BULK_LINK_SELECTOR).first
+    link.wait_for(state="visible", timeout=20000)
+    return link
+
+
+def _bulk_captcha_image(page):
+    return page.locator("#t11 img, tr#t11 img, img[src*='/q/l/s/i/']").first
+
+
+def _page_has_bulk_captcha(page) -> bool:
+    try:
+        return _bulk_captcha_image(page).count() > 0
+    except Exception:
+        return False
+
+
+def _request_new_bulk_captcha_code(page, symbol: str, attempt: int) -> bool:
+    try:
+        img = _bulk_captcha_image(page)
+        old_src = img.get_attribute("src", timeout=1000) if img.count() > 0 else ""
+    except Exception:
+        old_src = ""
+    for selector in ('a:has-text("Zmień kod")', 'a:has-text("Zmien kod")', 'a[onclick*="cpt_o"]'):
+        try:
+            link = page.locator(selector).first
+            if link.count() == 0:
+                continue
+            link.click(timeout=3000, force=True)
+            if old_src:
+                try:
+                    page.wait_for_function(
+                        "oldSrc => { const img = document.querySelector('#t11 img, tr#t11 img, img[src*=\'/q/l/s/i/\']'); return img && img.getAttribute('src') !== oldSrc; }",
+                        arg=old_src,
+                        timeout=5000,
+                    )
+                except Exception:
+                    pass
+            return True
+        except Exception:
+            continue
+    try:
+        page.evaluate("() => { if (typeof cpt_o === 'function') cpt_o(); }")
+        return True
+    except Exception:
+        return False
+
+
+def _submit_bulk_captcha_form(page) -> bool:
+    for action in (
+        lambda: page.get_by_role("button", name="Potwierdzam").click(timeout=5000),
+        lambda: page.locator('input#f13[type="submit"], input[type="submit"][value="Potwierdzam"]').first.click(timeout=5000, force=True),
+    ):
+        try:
+            action()
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _refresh_bulk_page_after_captcha(page) -> bool:
+    for selector in ('a#cpt_gh', 'a:has-text("Odśwież stronę")', 'a:has-text("Odswiez strone")'):
+        try:
+            link = page.locator(selector).first
+            if link.count() == 0:
+                continue
+            link.click(timeout=5000, force=True)
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            continue
+    try:
+        page.reload(wait_until="domcontentloaded")
+        return True
+    except Exception:
+        return False
+
+
+def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk") -> bool:
+    """Solve the simple Stooq download captcha without fixed sleeps/timeouts."""
+    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
+    print("[stooq-bulk] resolving download captcha...", flush=True)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            img = _bulk_captcha_image(page)
+            if img.count() == 0:
+                return True
+            suffix = "" if attempt == 1 else f"_a{attempt}"
+            raw_path = _captcha_artifact_path(symbol, f"_captcha_raw{suffix}")
+            cleaned_path = _captcha_artifact_path(symbol, f"_captcha_cleaned{suffix}")
+            img.screenshot(path=str(raw_path))
+            if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
+                return False
+            code, engine = _ocr_stooq_captcha(cleaned_path)
+            if len(code) != 4:
+                if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                    continue
+                return False
+            page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            if _stooq_verbose_enabled():
+                print(f"[stooq-bulk] captcha code filled via {engine}: {code}", flush=True)
+            if not _submit_bulk_captcha_form(page):
+                return False
+            if _captcha_wrong_code_visible(page):
+                if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                    continue
+                return False
+            _refresh_bulk_page_after_captcha(page)
+            try:
+                page.wait_for_url(lambda url: "stooq.com/db/h" in url or "stooq.pl/db/h" in url or "db/h" in url, timeout=10000)
+            except Exception:
+                pass
+            if not _page_has_bulk_captcha(page):
+                return True
+            if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                continue
+            return False
+        except Exception as exc:
+            if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                continue
+            print(f"[stooq-bulk] captcha auto-solve failed: {exc}", flush=True)
+            return False
+    return False
+
+
+def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) -> Path:
+    download_dir.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.set_default_timeout(20000)
+        page.set_default_navigation_timeout(30000)
+        try:
+            page.goto(STOOQ_BULK_HISTORY_URL, wait_until="domcontentloaded")
+            _accept_stooq_bulk_consent_if_present(page)
+            _bulk_download_link(page).click(timeout=10000)
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+            if _page_has_bulk_captcha(page):
+                if not _solve_stooq_bulk_download_captcha(page):
+                    if not interactive:
+                        raise ValueError("Stooq bulk download captcha could not be solved automatically.")
+                    page.pause()
+                page.reload(wait_until="domcontentloaded")
+                _accept_stooq_bulk_consent_if_present(page)
+            with page.expect_download(timeout=180000) as download_info:
+                _bulk_download_link(page).click(timeout=10000)
+            download = download_info.value
+            suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
+            zip_path = download_dir / suggested
+            download.save_as(str(zip_path))
+            return zip_path
+        finally:
+            try:
+                context.close()
+            finally:
+                browser.close()
+
+
+def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
+    with zipfile.ZipFile(zip_path) as zf:
+        members = []
+        for info in zf.infolist():
+            if info.is_dir() or not info.filename.lower().endswith(".txt"):
+                continue
+            normalized_parts = [part.strip().lower() for part in Path(info.filename).parts]
+            if any(part == "wse stocks" for part in normalized_parts):
+                members.append(info.filename)
+        if members:
+            return members
+        # Fallback for archives that encode the folder name slightly differently.
+        for info in zf.infolist():
+            lowered = info.filename.lower().replace("\\", "/")
+            if not info.is_dir() and lowered.endswith(".txt") and "wse" in lowered and "stocks" in lowered:
+                members.append(info.filename)
+        return members
+
+
+def _stooq_bulk_txt_to_ohlcv_df(raw: bytes) -> tuple[str, pd.DataFrame]:
+    from io import BytesIO
+    df = pd.read_csv(BytesIO(raw), sep=",", on_bad_lines="skip")
+    df.columns = [str(c).strip() for c in df.columns]
+    missing = [c for c in STOOQ_BULK_TXT_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"bulk txt missing columns: {missing}")
+    df = df[df["<PER>"].astype(str).str.upper().eq("D")].copy()
+    if df.empty:
+        return "", pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    ticker = str(df["<TICKER>"].iloc[0]).strip().upper()
+    out = pd.DataFrame({
+        "Date": pd.to_datetime(df["<DATE>"].astype(str), format="%Y%m%d", errors="coerce"),
+        "Open": pd.to_numeric(df["<OPEN>"], errors="coerce"),
+        "High": pd.to_numeric(df["<HIGH>"], errors="coerce"),
+        "Low": pd.to_numeric(df["<LOW>"], errors="coerce"),
+        "Close": pd.to_numeric(df["<CLOSE>"], errors="coerce"),
+        "Volume": pd.to_numeric(df["<VOL>"], errors="coerce").fillna(0),
+    })
+    out = out.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    out = out.sort_values("Date").drop_duplicates(subset=["Date"], keep="last").reset_index(drop=True)
+    return ticker, out
+
+
+def _write_daily_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -> None:
+    text = df.to_csv(index=False).rstrip("\r\n")
+    path.write_text(text, encoding="utf-8")
+
+
+def import_stooq_wig_bulk_zip(zip_path: Path, stocks_dir: Path | None = None) -> dict[str, int | str]:
+    """Replace local Warsaw stock CSV files from Stooq's bulk d_pl_txt archive."""
+    zip_path = Path(zip_path)
+    stocks_dir = stocks_dir or Path(__file__).resolve().parents[1] / "data" / "stocks"
+    stocks_dir.mkdir(parents=True, exist_ok=True)
+    members = _find_wse_stocks_txt_members(zip_path)
+    if not members:
+        raise ValueError(f"No 'wse stocks' txt files found in {zip_path}")
+    written = 0
+    skipped = 0
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in members:
+            try:
+                ticker, df = _stooq_bulk_txt_to_ohlcv_df(zf.read(member))
+                if not ticker or df.empty:
+                    skipped += 1
+                    continue
+                safe_ticker = ticker.replace("/", "").replace(".", "_")
+                csv_path = stocks_dir / f"{safe_ticker}_WA.csv"
+                _write_daily_csv_without_trailing_blank_line(df, csv_path)
+                written += 1
+            except Exception as exc:
+                skipped += 1
+                if _stooq_verbose_enabled():
+                    print(f"[stooq-bulk] skipped {member}: {exc}", flush=True)
+    return {"zip_path": str(zip_path), "members": len(members), "written": written, "skipped": skipped, "stocks_dir": str(stocks_dir)}
+
+
+def download_and_import_stooq_wig_bulk_data(
+    download_dir: Path | None = None,
+    stocks_dir: Path | None = None,
+    interactive: bool = False,
+) -> dict[str, int | str]:
+    """Download Stooq d_pl_txt bulk data and replace local data/stocks WSE CSVs."""
+    project_root = Path(__file__).resolve().parents[1]
+    download_dir = download_dir or project_root / "data" / "downloads" / "stooq"
+    zip_path = _download_stooq_wig_bulk_zip(download_dir=Path(download_dir), interactive=interactive)
+    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir)
+    print(
+        f"[stooq-bulk] imported WSE stocks: written={result['written']} skipped={result['skipped']} "
+        f"from_members={result['members']} zip={result['zip_path']}",
+        flush=True,
+    )
+    return result
 
 
 def _page_has_rate_limit_or_captcha(page) -> bool:

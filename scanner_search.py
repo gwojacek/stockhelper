@@ -827,6 +827,28 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         return 0
 
 
+
+def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
+    """Refresh Warsaw stock CSVs from Stooq d_pl_txt bulk and switch scan to cache."""
+    if (group_name or "").upper() != "WIG":
+        return False
+    if os.environ.get("STOCKHELPER_DISABLE_WIG_BULK_REFRESH") == "1":
+        return False
+    try:
+        from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data
+        print(f"[refresh-check] WIG: {reason}; downloading Stooq d_pl_txt bulk archive.")
+        result = download_and_import_stooq_wig_bulk_data(stocks_dir=PROJECT_ROOT / "data" / "stocks")
+        print(
+            f"[refresh-check] WIG: bulk refresh completed "
+            f"written={result['written']} skipped={result['skipped']} members={result['members']}."
+        )
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        return True
+    except Exception as exc:
+        print(f"[refresh-check] WIG: bulk refresh failed ({_retry_error_brief(exc)}); falling back to per-symbol refresh.")
+        return False
+
 def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
     if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
         print(f"[refresh-check] {group_name}: cache-only already requested; skipping remote probe.")
@@ -877,11 +899,15 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             checked += 1
             print(f"[refresh-check] {ticker}: remote {'newer' if newer else 'not newer'}")
             if newer:
+                if _try_refresh_wig_with_stooq_bulk(group_name, f"probe {ticker} found newer remote data"):
+                    return False
                 os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                 return True
         except Exception as exc:
             print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); refreshing to avoid stale cache")
+            if _try_refresh_wig_with_stooq_bulk(group_name, f"probe {ticker} failed"):
+                return False
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             return True
