@@ -144,7 +144,7 @@ To see which Stooq download path is used, enable HTTP debug logging for one run:
 STOOQ_HTTP_DEBUG=1 python run -fibo_search zal.de
 ```
 
-The debug output prints whether `curl_cffi` was available, the selected impersonation profile, redacted request URLs, response kind (`csv-*`, `html`, or `stooq-js-challenge`), JS-challenge retry attempts, and any fallback errors. API keys and challenge cookies are redacted.
+The debug output prints whether `curl_cffi` was available, the selected impersonation profile, redacted request URLs, response kind (`csv-*`, `html`, or `stooq-js-challenge`), JS-challenge retry attempts, Playwright fallback attempts, and any fallback errors. API keys and challenge cookies are redacted. Set `STOOQ_PLAYWRIGHT_FALLBACK=0` to disable the browser fallback when debugging.
 
 ### Optional/system dependencies
 

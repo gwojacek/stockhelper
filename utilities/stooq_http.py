@@ -141,6 +141,66 @@ def _download_with_curl(requests, url: str, timeout: int, headers: dict[str, str
     return text
 
 
+def _playwright_fallback_enabled() -> bool:
+    value = os.getenv("STOOQ_PLAYWRIGHT_FALLBACK", "1")
+    return value.lower() not in {"", "0", "false", "no", "off"}
+
+
+def _download_with_playwright(url: str, timeout: int) -> str:
+    if not _playwright_fallback_enabled():
+        raise RuntimeError("Playwright fallback disabled by STOOQ_PLAYWRIGHT_FALLBACK")
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:
+        raise RuntimeError(f"Playwright fallback unavailable: {exc}") from exc
+
+    timeout_ms = max(1000, timeout * 1000)
+    _debug(f"playwright GET {_redact_url(url)} timeout={timeout}s headless=true")
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            context = browser.new_context(
+                locale="pl-PL",
+                user_agent=STOOQ_BROWSER_HEADERS["User-Agent"],
+                extra_http_headers={"Accept-Language": STOOQ_BROWSER_HEADERS["Accept-Language"]},
+            )
+            page = context.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            text = ""
+            for attempt in range(1, 11):
+                try:
+                    page.wait_for_load_state("networkidle", timeout=1500)
+                except Exception:
+                    pass
+                try:
+                    text = page.locator("body").inner_text(timeout=1500)
+                except Exception:
+                    text = page.content()
+                _debug(f"playwright attempt {attempt}/10 kind={_text_kind(text)} chars={len(text)}")
+                if text and not _looks_like_stooq_challenge(text):
+                    return text
+                page.wait_for_timeout(500)
+            return text
+        finally:
+            browser.close()
+
+
+def _download_with_playwright_after_challenge(url: str, timeout: int, text: str) -> str:
+    if not _looks_like_stooq_challenge(text):
+        return text
+    if not _playwright_fallback_enabled():
+        _debug("playwright fallback disabled; returning challenge page")
+        return text
+    try:
+        fallback_text = _download_with_playwright(url, timeout)
+    except Exception as exc:
+        _debug(f"playwright fallback failed: {type(exc).__name__}: {exc}")
+        return text
+    if _looks_like_stooq_challenge(fallback_text):
+        _debug("playwright fallback still returned Stooq JS challenge")
+    return fallback_text
+
+
 def _looks_like_stooq_challenge(text: str) -> bool:
     lowered = text.lower()
     return (
@@ -293,11 +353,12 @@ def download_stooq_text(url: str, timeout: int = 20) -> str:
         try:
             text = _download_with_curl(requests, url, timeout, base_headers)
             if _looks_like_stooq_challenge(text):
-                return _download_after_challenge(
+                text = _download_after_challenge(
                     base_headers,
                     text,
                     lambda headers: _download_with_curl(requests, url, timeout, headers),
                 )
+                return _download_with_playwright_after_challenge(url, timeout, text)
             return text
         except Exception as exc:
             curl_error = exc
@@ -311,11 +372,12 @@ def download_stooq_text(url: str, timeout: int = 20) -> str:
     try:
         text = _download_with_urllib(url, timeout, base_headers)
         if _looks_like_stooq_challenge(text):
-            return _download_after_challenge(
+            text = _download_after_challenge(
                 base_headers,
                 text,
                 lambda headers: _download_with_urllib(url, timeout, headers),
             )
+            return _download_with_playwright_after_challenge(url, timeout, text)
         return text
     except Exception as urllib_error:
         _debug(f"urllib failed: {type(urllib_error).__name__}: {urllib_error}")

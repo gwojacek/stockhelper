@@ -105,3 +105,22 @@ def test_debug_logging_shows_method_and_redacts_api_key(monkeypatch, capsys):
     assert "curl_cffi GET" in captured.err
     assert "apikey=" in captured.err
     assert "SECRET" not in captured.err
+
+
+def test_download_stooq_text_uses_playwright_after_unsolved_challenge(monkeypatch):
+    challenge_html = '''
+        <!DOCTYPE html><noscript>This site requires JavaScript to verify your browser.</noscript>
+        <script>(async()=>{const c="abc",d=1,t="0".repeat(d),e=new TextEncoder;
+        let n=0;while(1){const h=await crypto.subtle.digest("SHA-256",e.encode(c+n));}})();</script>
+    '''
+    fake_session = _install_fake_curl(monkeypatch, _FakeSession([challenge_html]))
+    monkeypatch.setattr(
+        stooq_http,
+        "_download_with_playwright",
+        lambda url, timeout: "Date,Open,High,Low,Close\n2026-06-09,1,2,0.5,1.5\n",
+    )
+
+    text = stooq_http.download_stooq_text("https://stooq.pl/q/d/l/?s=zal.de&i=d")
+
+    assert text.startswith("Date,Open,High,Low,Close")
+    assert len(fake_session.calls) > 1
