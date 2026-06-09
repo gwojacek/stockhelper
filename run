@@ -2415,6 +2415,8 @@ def main()->int:
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
     parser.add_argument('-onlycache', '--onlycache', action='store_true', help='Use local CSV cache only; skip remote freshness probes/updates (works for commodities too).')
+    parser.add_argument('--force-stooq-pl-bulk-download', action='store_true', help='Force a fresh Stooq PL daily bulk ZIP download for Warsaw stocks, even before/after the normal 17:30 Warsaw freshness gate.')
+    parser.add_argument('--download-stooq-pl-bulk', action='store_true', help='Download/extract the Stooq PL daily bulk ZIP now, then exit.')
     parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
     parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?'); parser.add_argument('chart_modifier', nargs='?', choices=['cfd', 'CFD'], help='Use after -c target to open a stock as CFD/commodity mode.')
@@ -2440,6 +2442,15 @@ def main()->int:
         os.environ['STOCKHELPER_CACHE_ONLY'] = '1'
         os.environ.pop('STOCKHELPER_FORCE_REMOTE_REFRESH', None)
         print('[cache-rule] onlycache requested -> cache-only mode ON; skipping refresh probes.')
+    if args.force_stooq_pl_bulk_download:
+        os.environ['STOCKHELPER_FORCE_STOOQ_PL_BULK_DOWNLOAD'] = '1'
+        os.environ.pop('STOCKHELPER_CACHE_ONLY', None)
+        print('[stooq-bulk] forced PL bulk download requested -> cache-only mode OFF.')
+    if args.download_stooq_pl_bulk:
+        from chart_program.chart_loader import _download_stooq_pl_bulk_archive
+        root = _download_stooq_pl_bulk_archive()
+        print(f'[stooq-bulk] downloaded/extracted PL daily bulk data to: {root}')
+        return 0
     if args.fetch_older_data:
         from chart_program.chart_loader import load_or_update_daily_data
         import pandas as pd

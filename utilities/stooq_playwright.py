@@ -747,6 +747,153 @@ def _ocr_stooq_captcha(cleaned_path: Path) -> tuple[str, str]:
     return "", ""
 
 
+def _stooq_captcha_image_locator(page):
+    selectors = (
+        'img[src*="/q/l/s/i/"]',
+        '#t11 img',
+        'tr#t11 img',
+    )
+    for selector in selectors:
+        try:
+            locator = page.locator(selector).first
+            if locator.count() > 0:
+                return locator
+        except Exception:
+            continue
+    return None
+
+
+def _click_stooq_captcha_approve(page, symbol: str, attempt: int) -> bool:
+    selectors = (
+        'input#f13[type="submit"]',
+        'input[type="submit"][value="Approve"]',
+        'input[type="submit"][value="Potwierdzam"]',
+    )
+    for selector in selectors:
+        try:
+            button = page.locator(selector).first
+            if button.count() == 0:
+                continue
+            button.click(timeout=5000, force=True)
+            if _stooq_verbose_enabled():
+                print(
+                    f"[stooq-web] captcha approve clicked for {symbol} "
+                    f"attempt {attempt} ({selector}).",
+                    flush=True,
+                )
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            continue
+    try:
+        button = page.get_by_role("button", name="Approve")
+        button.click(timeout=5000)
+        return True
+    except Exception:
+        pass
+    _captcha_state_screenshot(page, symbol, "approve_failed", attempt)
+    return False
+
+
+def _solve_stooq_download_captcha(page, symbol: str) -> bool:
+    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
+    print("resolving Stooq download captcha...", flush=True)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            img = _stooq_captcha_image_locator(page)
+            if img is None:
+                return page.locator("a#cpt_gh").first.count() > 0
+            suffix = "" if attempt == 1 else f"_a{attempt}"
+            raw_path = _captcha_artifact_path(symbol, f"_download_captcha_raw{suffix}")
+            cleaned_path = _captcha_artifact_path(symbol, f"_download_captcha_cleaned{suffix}")
+            img.screenshot(path=str(raw_path))
+            if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
+                print("[stooq-web] captcha image found, but cv2/numpy preprocessing is unavailable or failed.", flush=True)
+                return False
+            code, engine = _ocr_stooq_captcha(cleaned_path)
+            if len(code) != 4:
+                if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                    continue
+                shot = _captcha_state_screenshot(page, symbol, "download_ocr_uncertain", attempt)
+                print(f"[stooq-web] download captcha OCR uncertain for {symbol}; screenshot={shot or '-'}", flush=True)
+                return False
+            page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            if _stooq_verbose_enabled():
+                print(
+                    f"[stooq-web] download captcha code filled for {symbol} "
+                    f"attempt {attempt}/{max_attempts}: {code} ({engine}).",
+                    flush=True,
+                )
+            if not _click_stooq_captcha_approve(page, symbol, attempt):
+                return False
+            if _captcha_wrong_code_visible(page):
+                if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                    continue
+                return False
+            if page.locator("a#cpt_gh").first.count() > 0:
+                return True
+            try:
+                page.wait_for_selector("a#cpt_gh", timeout=5000)
+                return True
+            except Exception:
+                if (
+                    _captcha_wrong_code_visible(page)
+                    and attempt < max_attempts
+                    and _request_new_captcha_code(page, symbol, attempt + 1)
+                ):
+                    continue
+                shot = _captcha_state_screenshot(page, symbol, "download_link_missing", attempt)
+                print(f"[stooq-web] download link missing after captcha for {symbol}; screenshot={shot or '-'}", flush=True)
+                return False
+        except Exception as exc:
+            if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
+                continue
+            shot = _captcha_state_screenshot(page, symbol, "download_exception", attempt)
+            print(f"[stooq-web] download captcha flow failed for {symbol}: {exc}; screenshot={shot or '-'}", flush=True)
+            return False
+    return False
+
+
+def download_stooq_file_with_playwright(url: str, download_path: Path, symbol: str = "stooq_bulk") -> Path:
+    """Download a Stooq file, solving Stooq's simple captcha challenge if shown."""
+    download_path = Path(download_path)
+    download_path.parent.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        try:
+            try:
+                with page.expect_download(timeout=15000) as download_info:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                download = download_info.value
+            except Exception:
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                if not _solve_stooq_download_captcha(page, symbol):
+                    raise ValueError("Stooq download captcha could not be solved")
+                link = page.locator("a#cpt_gh").first
+                if link.count() == 0:
+                    raise ValueError("Stooq download link #cpt_gh not found after captcha approval")
+                with page.expect_download(timeout=180000) as download_info:
+                    try:
+                        link.click(timeout=5000, force=True)
+                    except Exception:
+                        link.evaluate("el => el.click()")
+                download = download_info.value
+            download.save_as(str(download_path))
+            return download_path
+        finally:
+            context.close()
+            browser.close()
+
+
 def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     """Best-effort Stooq captcha solver for the simple red-letter challenge.
 

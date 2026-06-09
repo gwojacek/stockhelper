@@ -828,12 +828,17 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
 
 
 def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+    STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
+    group_l = (group_name or "").lower()
+    force_pl_bulk_group = group_l in {"wig", "wig_part1", "wig_part2", "wig_part3", "wig20"} or exchange_suffix == ".WA"
+    if os.environ.get("STOCKHELPER_FORCE_STOOQ_PL_BULK_DOWNLOAD") == "1" and force_pl_bulk_group:
+        print(f"[refresh-check] {group_name}: forced Stooq PL bulk download requested; cache-only mode OFF")
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        return True
     if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
         print(f"[refresh-check] {group_name}: cache-only already requested; skipping remote probe.")
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
-    STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
-    group_l = (group_name or "").lower()
     if group_l == "commodities":
         day, phase = _warsaw_phase_now()
         state = _read_refresh_state()

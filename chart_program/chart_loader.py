@@ -6,15 +6,20 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import os
+import shutil
+import zipfile
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from utilities.stooq_playwright import update_stooq_history_with_playwright
+from utilities.stooq_playwright import download_stooq_file_with_playwright, update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
+STOOQ_PL_DAILY_BULK_URL = "https://stooq.com/db/d/?b=d_pl_txt"
+STOOQ_PL_BULK_READY_TIME = (17, 30)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
@@ -336,6 +341,180 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
             errors.append(f"{candidate}: {exc}")
 
     raise ValueError(f"No daily data returned from Yahoo for {symbol}. Tried: {' | '.join(errors)}")
+
+
+def _is_warsaw_stock_symbol(symbol: str, instrument_type: str) -> bool:
+    if instrument_type != "stock":
+        return False
+    raw = (symbol or "").strip().upper()
+    if not raw:
+        return False
+    if raw.endswith(".US") or raw.endswith(".DE"):
+        return False
+    return raw.endswith((".WA", ".PL")) or ("." not in raw and len(raw) <= 5)
+
+
+def _stooq_pl_bulk_symbol(symbol: str) -> str:
+    raw = (symbol or "").strip().lower().replace("/", "")
+    if "." in raw:
+        raw = raw.split(".", 1)[0]
+    return raw
+
+
+def _expected_latest_warsaw_bulk_date(now: datetime | None = None) -> datetime.date:
+    current = now or datetime.now(ZoneInfo("Europe/Warsaw"))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=ZoneInfo("Europe/Warsaw"))
+    local_now = current.astimezone(ZoneInfo("Europe/Warsaw"))
+    candidate = local_now.date()
+    if candidate.weekday() >= 5 or local_now.time() < datetime.min.time().replace(
+        hour=STOOQ_PL_BULK_READY_TIME[0], minute=STOOQ_PL_BULK_READY_TIME[1]
+    ):
+        candidate = candidate - timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate = candidate - timedelta(days=1)
+    return candidate
+
+
+def _force_stooq_pl_bulk_download_enabled() -> bool:
+    return os.environ.get("STOCKHELPER_FORCE_STOOQ_PL_BULK_DOWNLOAD") == "1"
+
+
+def _stooq_pl_bulk_cache_root() -> Path:
+    default_root = UNIFIED_DATA_DIR / "vendor" / "stooq" / "d_pl_txt"
+    return Path(os.environ.get("STOCKHELPER_STOOQ_PL_BULK_CACHE", default_root))
+
+
+def _stooq_pl_bulk_candidate_dirs() -> list[Path]:
+    candidates: list[Path] = []
+    env_dir = os.environ.get("STOCKHELPER_STOOQ_PL_BULK_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir).expanduser())
+    candidates.append(Path.home() / "Downloads" / "d_pl_txt" / "data" / "daily" / "pl" / "wse stocks")
+    cache_root = _stooq_pl_bulk_cache_root()
+    candidates.append(cache_root / "data" / "daily" / "pl" / "wse stocks")
+    candidates.append(cache_root)
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(candidate)
+    return deduped
+
+
+def _find_stooq_pl_bulk_txt(symbol: str) -> Path | None:
+    filename = f"{_stooq_pl_bulk_symbol(symbol)}.txt"
+    for base in _stooq_pl_bulk_candidate_dirs():
+        direct = base / filename
+        if direct.exists():
+            return direct
+        if base.exists() and base.is_dir():
+            try:
+                matches = list(base.rglob(filename))
+            except OSError:
+                matches = []
+            if matches:
+                return matches[0]
+    return None
+
+
+def _download_stooq_pl_bulk_archive() -> Path:
+    cache_root = _stooq_pl_bulk_cache_root()
+    # Stooq's extracted folder is always named d_pl_txt. Start from a clean
+    # folder so old TXT files cannot survive a failed/partial refresh.
+    if cache_root.exists():
+        shutil.rmtree(cache_root)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    archive_path = cache_root / "d_pl_txt.zip"
+    request = Request(
+        STOOQ_PL_DAILY_BULK_URL,
+        headers={
+            "User-Agent": "Mozilla/5.0 (stockhelper; Stooq PL daily bulk downloader)",
+            "Accept": "application/zip,application/octet-stream,*/*",
+        },
+    )
+    try:
+        with urlopen(request, timeout=180) as response:
+            archive_path.write_bytes(response.read())
+        if not zipfile.is_zipfile(archive_path):
+            raise ValueError("Stooq bulk response was not a ZIP archive")
+    except Exception:
+        archive_path = download_stooq_file_with_playwright(
+            STOOQ_PL_DAILY_BULK_URL,
+            archive_path,
+            symbol="stooq_pl_bulk",
+        )
+    if not zipfile.is_zipfile(archive_path):
+        raise ValueError(f"Downloaded Stooq PL bulk file is not a ZIP archive: {archive_path}")
+    with zipfile.ZipFile(archive_path) as archive:
+        target_root = cache_root.resolve()
+        for member in archive.infolist():
+            target = (cache_root / member.filename).resolve()
+            if target == target_root or target_root in target.parents:
+                archive.extract(member, cache_root)
+    return cache_root
+
+
+def _parse_stooq_pl_bulk_txt(path: Path) -> pd.DataFrame:
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    lines = [line.strip().lstrip("﻿") for line in raw.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError(f"Stooq PL bulk file is empty: {path}")
+
+    first = lines[0].lower()
+    if "<ticker>" in first or "<date>" in first:
+        df = pd.read_csv(StringIO("\n".join(lines)), sep=",", on_bad_lines="skip")
+        df.columns = [str(c).strip().strip("<>").title() for c in df.columns]
+    else:
+        sample_cols = len(lines[0].split(","))
+        if sample_cols >= 9:
+            names = [
+                "Ticker", "Per", "Date", "Time", "Open",
+                "High", "Low", "Close", "Volume", "Openint",
+            ][:sample_cols]
+        else:
+            names = ["Date", "Open", "High", "Low", "Close", "Volume"][:sample_cols]
+        df = pd.read_csv(StringIO("\n".join(lines)), sep=",", names=names, on_bad_lines="skip")
+
+    rename_map = {
+        "Data": "Date",
+        "Otwarcie": "Open",
+        "Najwyzszy": "High",
+        "Najnizszy": "Low",
+        "Zamkniecie": "Close",
+        "Wolumen": "Volume",
+        "Vol": "Volume",
+    }
+    df = df.rename(columns={c: rename_map.get(str(c), str(c).strip().title()) for c in df.columns})
+    if "Date" not in df.columns and df.columns.size >= 1:
+        df = df.rename(columns={df.columns[0]: "Date"})
+    if "Date" in df.columns:
+        df["Date"] = df["Date"].astype(str)
+    if not {"Date", "Open", "High", "Low", "Close"}.issubset(df.columns):
+        raise ValueError(f"Stooq PL bulk file is missing OHLC columns: {path}")
+    keep = [c for c in ["Date", "Open", "High", "Low", "Close", "Volume"] if c in df.columns]
+    return _sanitize_ohlc_dataframe(df[keep])
+
+
+def _stooq_pl_bulk_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str]:
+    if not _is_warsaw_stock_symbol(symbol, instrument_type):
+        raise ValueError(f"{symbol} is not a Warsaw stock symbol")
+    expected_date = _expected_latest_warsaw_bulk_date()
+    txt_path = _find_stooq_pl_bulk_txt(symbol)
+    df = _parse_stooq_pl_bulk_txt(txt_path) if txt_path else pd.DataFrame()
+    latest = _latest_date_from_df(df)
+    force_download = _force_stooq_pl_bulk_download_enabled()
+    if force_download or latest is None or latest.date() < expected_date:
+        _download_stooq_pl_bulk_archive()
+        txt_path = _find_stooq_pl_bulk_txt(symbol)
+        if txt_path is None:
+            raise ValueError(f"Stooq PL bulk TXT not found for {symbol} after download")
+        df = _parse_stooq_pl_bulk_txt(txt_path)
+    if df.empty:
+        raise ValueError(f"No daily data in Stooq PL bulk TXT for {symbol}")
+    return df, f"{_stooq_pl_bulk_symbol(symbol)}.pl"
 
 
 def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
@@ -716,6 +895,37 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     if data_source == "yahoo":
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
+    if (
+        data_source in {"auto", "stooq"}
+        and _is_warsaw_stock_symbol(symbol, instrument_type)
+        and os.environ.get("STOCKHELPER_DISABLE_STOOQ_PL_BULK") != "1"
+    ):
+        try:
+            df, candidate = _stooq_pl_bulk_download(symbol, instrument_type)
+            return df, "stooq_bulk", candidate, None, "Stooq PL daily bulk TXT used for Warsaw stock."
+        except Exception as bulk_exc:
+            if (
+                data_source == "stooq"
+                or _force_stooq_pl_bulk_download_enabled()
+                or _force_remote_refresh_enabled()
+            ):
+                raise ValueError(f"Stooq PL bulk failed for {symbol}: {bulk_exc}") from bulk_exc
+
+    prefer_yahoo_auto = (
+        data_source == "auto"
+        and (
+            instrument_type == "forex"
+            or (instrument_type == "stock" and symbol.strip().upper().endswith((".US", ".DE")))
+        )
+    )
+    if prefer_yahoo_auto:
+        try:
+            df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+            return df, "yahoo", candidate, display_name, "Yahoo used as primary source for forex/US/DE stock."
+        except Exception:
+            if _force_remote_refresh_enabled():
+                raise
+
     csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
     if data_source == "stooq":
@@ -823,7 +1033,12 @@ def load_or_update_daily_data(
 
     # If this symbol was already refreshed in this process and file exists, reuse local CSV
     # to avoid repeated API/web fetches (especially Stooq web + captcha flows).
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty:
+    if (
+        refresh_key in _SESSION_REFRESHED_KEYS
+        and local is not None
+        and not local.empty
+        and not _force_stooq_pl_bulk_download_enabled()
+    ):
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",
