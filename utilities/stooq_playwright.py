@@ -61,6 +61,26 @@ def _stooq_bulk_debug_dir() -> Path:
     return out_dir
 
 
+def _latest_existing_stooq_bulk_zip(download_dir: Path) -> Path | None:
+    candidates = sorted(
+        (path for path in download_dir.glob("*.zip") if path.is_file() and zipfile.is_zipfile(path)),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _fallback_existing_stooq_bulk_zip(download_dir: Path, reason: str) -> Path | None:
+    fallback = _latest_existing_stooq_bulk_zip(download_dir)
+    if fallback is None:
+        return None
+    print(
+        f"[stooq-bulk] {reason}; using latest existing valid zip instead: {fallback}",
+        flush=True,
+    )
+    return fallback
+
+
 def _save_stooq_bulk_download_if_zip(download, download_dir: Path, source: str) -> Path | None:
     suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
     path = download_dir / suggested
@@ -633,6 +653,9 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
                 if isinstance(captcha_result, Path):
                     return captcha_result
                 if not captcha_result:
+                    fallback = _fallback_existing_stooq_bulk_zip(download_dir, "Stooq captcha flow did not produce a valid zip")
+                    if fallback is not None:
+                        return fallback
                     if not interactive:
                         shot = _capture_stooq_bulk_failure(page, "captcha_auto_solve_failed")
                         raise ValueError(f"Stooq bulk download captcha could not be solved automatically. Screenshot: {shot}")
@@ -643,6 +666,12 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
 
             zip_path = _click_bulk_link_for_optional_download(page, download_dir, timeout=180000, purpose="start zip download after captcha")
             if zip_path is None:
+                fallback = _fallback_existing_stooq_bulk_zip(
+                    download_dir,
+                    "Stooq did not provide a valid zip after captcha (possibly bandwidth-limited error.txt)",
+                )
+                if fallback is not None:
+                    return fallback
                 shot = _capture_stooq_bulk_failure(page, "download_not_started_after_captcha")
                 raise ValueError(f"Stooq bulk zip download did not start after captcha flow. Screenshot: {shot}")
             return zip_path
