@@ -262,6 +262,48 @@ def _clear_stooq_bulk_consent_manager(page, reason: str = "") -> None:
     if _stooq_bulk_consent_visible(page):
         _capture_stooq_bulk_failure(page, "consent_manager_still_visible")
 
+
+def _trigger_exact_stooq_bulk_link(page, purpose: str) -> dict:
+    """Invoke Stooq's exact d_pl_txt link in page JS so ad overlays cannot intercept the click."""
+    _return_to_stooq_bulk_history_if_redirected(page, f"before exact d_pl_txt trigger for {purpose}")
+    result = page.evaluate(
+        """() => {
+            const candidates = Array.from(document.querySelectorAll('#t4 a, a'));
+            const link = candidates.find((anchor) => {
+                const href = anchor.getAttribute('href') || '';
+                const onclick = anchor.getAttribute('onclick') || '';
+                const oncontext = anchor.getAttribute('oncontextmenu') || '';
+                return href.includes('db/d/?b=d_pl_txt')
+                    || href.includes('b=d_pl_txt')
+                    || onclick.includes('d_pl_txt')
+                    || oncontext.includes('d_pl_txt');
+            });
+            if (!link) {
+                return {ok: false, reason: 'exact d_pl_txt anchor not found'};
+            }
+            const hrefAttr = link.getAttribute('href') || '';
+            const absoluteHref = link.href || hrefAttr;
+            const rowId = link.closest('tr') ? link.closest('tr').id : '';
+            const text = (link.innerText || link.textContent || '').trim();
+            if (typeof window.cpt_g === 'function') {
+                const ret = window.cpt_g(absoluteHref, 1, 1);
+                return {ok: true, via: 'cpt_g', href: absoluteHref, hrefAttr, rowId, text, returnValue: String(ret)};
+            }
+            link.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
+            return {ok: true, via: 'dispatchEvent', href: absoluteHref, hrefAttr, rowId, text};
+        }"""
+    )
+    if not result or not result.get("ok"):
+        shot = _capture_stooq_bulk_failure(page, "exact_bulk_link_missing")
+        raise ValueError(f"Could not invoke exact Stooq d_pl_txt link for {purpose}: {result}. Screenshot: {shot}")
+    print(
+        f"[stooq-bulk] invoked exact d_pl_txt link via {result.get('via')} "
+        f"(purpose={purpose}, row={result.get('rowId')}, text={result.get('text')!r}, href={result.get('href')}).",
+        flush=True,
+    )
+    return result
+
+
 def _bulk_download_link(page):
     """Find the WIG d_pl_txt link, preferring the required #t4 table/row."""
     selectors = [
@@ -322,8 +364,8 @@ def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout:
     try:
         with page.expect_download(timeout=timeout) as download_info:
             _clear_stooq_bulk_consent_manager(page, reason="inside download wait")
-            print(f"[stooq-bulk] clicking WIG bulk link ({purpose}).", flush=True)
-            _bulk_download_link(page).click(timeout=10000)
+            print(f"[stooq-bulk] clicking exact WIG d_pl_txt link ({purpose}).", flush=True)
+            _trigger_exact_stooq_bulk_link(page, purpose)
         download = download_info.value
         suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
         zip_path = download_dir / suggested
@@ -338,8 +380,8 @@ def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout:
             _clear_stooq_bulk_consent_manager(page, reason="after download timeout")
             try:
                 with page.expect_download(timeout=timeout) as download_info:
-                    print(f"[stooq-bulk] clicking WIG bulk link ({purpose}, retry after consent).", flush=True)
-                    _bulk_download_link(page).click(timeout=10000)
+                    print(f"[stooq-bulk] clicking exact WIG d_pl_txt link ({purpose}, retry after consent).", flush=True)
+                    _trigger_exact_stooq_bulk_link(page, f"{purpose}, retry after consent")
                 download = download_info.value
                 suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
                 zip_path = download_dir / suggested
