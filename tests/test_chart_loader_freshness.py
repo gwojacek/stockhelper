@@ -100,3 +100,58 @@ def test_warsaw_stock_merges_stooq_bulk_with_yahoo_fresh_candle(monkeypatch):
 
 def test_yahoo_symbol_candidates_include_warsaw_suffix_for_short_stock_symbols():
     assert loader._yahoo_symbol_candidates("ABC", "stock") == ["ABC", "ABC.WA"]
+
+
+def test_warsaw_stock_stooq_failure_merges_single_yahoo_candle_from_local_cache(monkeypatch, tmp_path):
+    csv_path = tmp_path / "ZAB_WA.csv"
+    _df("2026-06-09").to_csv(csv_path, index=False)
+
+    def fail_stooq(symbol, instrument_type, api_key=None, lookback_days=364, end_date=None):
+        raise ValueError("Stooq 404")
+
+    def fake_yahoo_window(symbol, instrument_type, *, period):
+        return _df("2026-06-09", "2026-06-10"), "ZAB.WA", "Zabka Group"
+
+    monkeypatch.setattr(loader, "_stooq_download", fail_stooq)
+    monkeypatch.setattr(loader, "_yahoo_download_window", fake_yahoo_window)
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda symbol, instrument_type: csv_path)
+
+    df, source, source_symbol, source_name, reason = loader._download_remote(
+        symbol="ZAB.WA",
+        instrument_type="stock",
+        api_key=None,
+        data_source="auto",
+    )
+
+    assert source == "stooq+yahoo"
+    assert source_symbol == "ZAB.WA"
+    assert source_name == "Zabka Group"
+    assert sorted(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-09", "2026-06-10"]
+    assert "Yahoo newer candles=1" in reason
+
+
+def test_warsaw_stock_stooq_failure_uses_yahoo_when_no_local_cache(monkeypatch, tmp_path):
+    csv_path = tmp_path / "ZAB_WA.csv"
+
+    def fail_stooq(symbol, instrument_type, api_key=None, lookback_days=364, end_date=None):
+        raise ValueError("Stooq 404")
+
+    def fake_yahoo(symbol, instrument_type):
+        return _df("2026-06-10"), "ZAB.WA", "Zabka Group"
+
+    monkeypatch.setattr(loader, "_stooq_download", fail_stooq)
+    monkeypatch.setattr(loader, "_yahoo_download", fake_yahoo)
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda symbol, instrument_type: csv_path)
+
+    df, source, source_symbol, source_name, reason = loader._download_remote(
+        symbol="ZAB.WA",
+        instrument_type="stock",
+        api_key=None,
+        data_source="auto",
+    )
+
+    assert source == "yahoo"
+    assert source_symbol == "ZAB.WA"
+    assert source_name == "Zabka Group"
+    assert df["Date"].max() == pd.Timestamp("2026-06-10")
+    assert "no local cache" in reason

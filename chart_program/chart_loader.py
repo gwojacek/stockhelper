@@ -389,6 +389,43 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
     return _last_year_only(df), candidate, display_name
 
 
+def _yahoo_stock_fallback_after_stooq_failure(
+    symbol: str,
+    stooq_error: Exception,
+    csv_path: Path,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+    if csv_path.exists():
+        local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+        if not local_df.empty:
+            merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
+                local_df,
+                symbol,
+                "stock",
+            )
+            if yahoo_newer_count > 0:
+                return (
+                    merged,
+                    "stooq+yahoo",
+                    yahoo_symbol,
+                    display_name,
+                    "Stooq API failed for Warsaw stock; merged Yahoo newer candle(s) "
+                    f"into existing Stooq/bulk cache (Yahoo newer candles={yahoo_newer_count}; Stooq error: {stooq_error}).",
+                )
+            raise ValueError(
+                "Stooq API failed and Yahoo did not have newer candles "
+                f"for existing local cache (Stooq error: {stooq_error})."
+            )
+
+    df, yahoo_symbol, display_name = _yahoo_download(symbol, "stock")
+    return (
+        df,
+        "yahoo",
+        yahoo_symbol,
+        display_name,
+        f"Stooq API failed for Warsaw stock and no local cache existed; Yahoo used as fallback ({stooq_error}).",
+    )
+
+
 def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     cleaned = symbol.strip().lower().replace("/", "")
 
@@ -863,6 +900,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
     except ValueError as exc:
         primary_error = exc
+        if instrument_type == "stock" and _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
+            try:
+                return _yahoo_stock_fallback_after_stooq_failure(symbol, exc, csv_path_ref)
+            except Exception as yahoo_exc:
+                primary_error = ValueError(f"{exc} ; Yahoo fallback failed: {yahoo_exc}")
 
     if is_literal_commodity:
         try:
