@@ -66,8 +66,8 @@ class StockStrategy(BaseStrategy):
                 persist=True,
             )
             source = str((meta or {}).get("source", "unknown")).lower()
-            if not source.startswith("stooq"):
-                raise ValueError(f"Expected stooq-based source, got: {source}")
+            if not (source.startswith("stooq") or source == "yahoo"):
+                raise ValueError(f"Expected stooq/yahoo source, got: {source}")
             turnover = (
                 df["Close"].astype(float) * df["Volume"].astype(float)
             ).dropna()

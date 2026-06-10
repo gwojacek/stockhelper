@@ -456,41 +456,45 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
     return _last_year_only(df), candidate, display_name
 
 
-def _yahoo_stock_fallback_after_stooq_failure(
+def _stock_local_cache_or_yahoo_download(
     symbol: str,
-    stooq_error: Exception,
     csv_path: Path,
 ) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     if csv_path.exists():
         local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
         if not local_df.empty:
-            merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
-                local_df,
-                symbol,
-                "stock",
-            )
-            if yahoo_newer_count > 0:
-                return (
-                    merged,
-                    "stooq+yahoo",
-                    yahoo_symbol,
-                    display_name,
-                    "Stooq API failed for Warsaw stock; merged Yahoo newer candle(s) "
-                    f"into existing Stooq/bulk cache (Yahoo newer candles={yahoo_newer_count}; Stooq error: {stooq_error}).",
+            try:
+                merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
+                    local_df,
+                    symbol,
+                    "stock",
                 )
-            raise ValueError(
-                "Stooq API failed and Yahoo did not have newer candles "
-                f"for existing local cache (Stooq error: {stooq_error})."
-            )
+            except Exception as yahoo_exc:
+                return (
+                    local_df,
+                    "stooq_bulk",
+                    symbol,
+                    None,
+                    f"Using local Stooq bulk cache; Yahoo freshness merge failed: {yahoo_exc}",
+                )
+            if yahoo_newer_count > 0:
+                reason = (
+                    "Using local Stooq bulk cache plus Yahoo newer candle(s); "
+                    f"Yahoo candles appended={yahoo_newer_count}."
+                )
+                if yahoo_newer_count > 1:
+                    reason += " WARNING: more than one Yahoo candle was needed because Stooq bulk/local cache was behind."
+                return merged, "stooq_bulk+yahoo", yahoo_symbol, display_name, reason
+            return local_df, "stooq_bulk", symbol, None, "Using local Stooq bulk cache; Yahoo had no newer candles."
 
     df, yahoo_symbol, display_name = _yahoo_download(symbol, "stock")
-    return (
-        df,
-        "yahoo",
-        yahoo_symbol,
-        display_name,
-        f"Stooq API failed for Warsaw stock and no local cache existed; Yahoo used as fallback ({stooq_error}).",
+    reason = (
+        "No local Stooq bulk cache exists for this Warsaw stock; "
+        f"Yahoo used as fallback with {len(df)} candle(s)."
     )
+    if len(df) > 1:
+        reason += " WARNING: multiple Yahoo candles were used because no Stooq bulk cache was available."
+    return df, "yahoo", yahoo_symbol, display_name, reason
 
 
 def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
@@ -893,6 +897,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
     csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
+    if instrument_type == "stock":
+        if _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
+            return _stock_local_cache_or_yahoo_download(symbol, csv_path_ref)
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for non-Warsaw-stock data."
     if data_source == "stooq":
         df, candidate = _stooq_download(
             symbol,
@@ -1007,11 +1016,6 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         return df, "stooq", candidate, None, reason
     except ValueError as exc:
         primary_error = exc
-        if instrument_type == "stock" and _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
-            try:
-                return _yahoo_stock_fallback_after_stooq_failure(symbol, exc, csv_path_ref)
-            except Exception as yahoo_exc:
-                primary_error = ValueError(f"{exc} ; Yahoo fallback failed: {yahoo_exc}")
 
     if is_literal_commodity:
         try:
