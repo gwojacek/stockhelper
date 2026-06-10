@@ -30,6 +30,31 @@ STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='d_pl_txt']"
 STOOQ_BULK_TXT_COLUMNS = ["<TICKER>", "<PER>", "<DATE>", "<TIME>", "<OPEN>", "<HIGH>", "<LOW>", "<CLOSE>", "<VOL>", "<OPENINT>"]
 
 
+def _is_stooq_bulk_history_url(url: str) -> bool:
+    lowered = (url or "").lower().split("?", 1)[0].rstrip("/")
+    return lowered in {"https://stooq.com/db/h", "https://stooq.pl/db/h"}
+
+
+def _return_to_stooq_bulk_history_if_redirected(page, reason: str) -> bool:
+    """Keep the flow anchored on https://stooq.com/db/h/ after ads/consent redirects."""
+    current_url = page.url
+    if _is_stooq_bulk_history_url(current_url):
+        return False
+    print(
+        f"[stooq-bulk] page left bulk history URL after {reason}: {current_url}; "
+        f"returning to {STOOQ_BULK_HISTORY_URL}",
+        flush=True,
+    )
+    try:
+        page.goto(STOOQ_BULK_HISTORY_URL, wait_until="domcontentloaded")
+    except Exception:
+        try:
+            page.goto(STOOQ_BULK_HISTORY_URL)
+        except Exception:
+            pass
+    return True
+
+
 def _stooq_bulk_debug_dir() -> Path:
     out_dir = Path(os.getenv("STOCKHELPER_STOOQ_BULK_DEBUG_DIR", "debug/stooq_bulk"))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -197,6 +222,7 @@ def _accept_stooq_bulk_consent_if_present(page) -> None:
         for ctx in _stooq_bulk_contexts(page):
             if _click_stooq_bulk_consent_candidate(ctx):
                 clicked = True
+                _return_to_stooq_bulk_history_if_redirected(page, "consent click")
                 break
         if not clicked:
             break
@@ -212,6 +238,7 @@ def _clear_stooq_bulk_consent_manager(page, reason: str = "") -> None:
     """Repeatedly clear consent that can reappear after Stooq navigation/reload."""
     for round_idx in range(4):
         _accept_stooq_bulk_consent_if_present(page)
+        _return_to_stooq_bulk_history_if_redirected(page, f"consent clear round {round_idx + 1}")
         try:
             page.wait_for_function(
                 """() => {
@@ -240,9 +267,10 @@ def _bulk_download_link(page):
     selectors = [
         STOOQ_WIG_BULK_LINK_SELECTOR,
         "#t4 a[href*='db/d/'][href*='b=d_pl_txt']",
-        "#t4 a:has-text('MB')",
-        "#t4 a",
+        "#t4 a[onclick*='d_pl_txt']",
+        "#t4 a[oncontextmenu*='d_pl_txt']",
         "a[href*='d_pl_txt']",
+        "a[onclick*='d_pl_txt']",
     ]
     last_error = None
     try:
@@ -258,8 +286,9 @@ def _bulk_download_link(page):
                         continue
                     link.wait_for(state="visible", timeout=20000)
                     href = (link.get_attribute("href") or "").lower()
-                    text = (link.inner_text(timeout=2000) or "").lower()
-                    if "d_pl_txt" in href or (selector == "#t4 a" and "mb" in text):
+                    onclick = (link.get_attribute("onclick") or "").lower()
+                    oncontext = (link.get_attribute("oncontextmenu") or "").lower()
+                    if "d_pl_txt" in href or "d_pl_txt" in onclick or "d_pl_txt" in oncontext:
                         return link
                 except Exception as exc:
                     last_error = exc
@@ -287,7 +316,8 @@ def _bulk_download_link(page):
 
 
 def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout: int, purpose: str = "download") -> Path | None:
-    """Click the bulk link and return a downloaded zip path only when download starts."""
+    """Click the exact d_pl_txt bulk link and return a zip path only when download starts."""
+    _return_to_stooq_bulk_history_if_redirected(page, f"before {purpose}")
     _clear_stooq_bulk_consent_manager(page, reason="before bulk link click")
     try:
         with page.expect_download(timeout=timeout) as download_info:
@@ -300,6 +330,10 @@ def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout:
         download.save_as(str(zip_path))
         return zip_path
     except PlaywrightTimeoutError:
+        redirected = _return_to_stooq_bulk_history_if_redirected(page, f"{purpose} click")
+        if redirected:
+            _clear_stooq_bulk_consent_manager(page, reason="after redirect from bulk link click")
+            return None
         if _stooq_bulk_consent_visible(page):
             _clear_stooq_bulk_consent_manager(page, reason="after download timeout")
             try:
@@ -429,6 +463,7 @@ def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk") -> bool:
                 page.wait_for_url(lambda url: "stooq.com/db/h" in url or "stooq.pl/db/h" in url or "db/h" in url, timeout=10000)
             except Exception:
                 pass
+            _return_to_stooq_bulk_history_if_redirected(page, "captcha refresh")
             if not _page_has_bulk_captcha(page):
                 return True
             if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
@@ -448,10 +483,22 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
         browser = p.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
+
+        def _close_unexpected_popup(popup):
+            if popup == page:
+                return
+            try:
+                print(f"[stooq-bulk] closing unexpected popup/ad page: {popup.url}", flush=True)
+                popup.close()
+            except Exception:
+                pass
+
+        context.on("page", _close_unexpected_popup)
         page.set_default_timeout(20000)
         page.set_default_navigation_timeout(30000)
         try:
             page.goto(STOOQ_BULK_HISTORY_URL, wait_until="domcontentloaded")
+            _return_to_stooq_bulk_history_if_redirected(page, "initial load")
             _clear_stooq_bulk_consent_manager(page, reason="initial load")
 
             # First required click usually opens Stooq's download captcha. If the
@@ -465,11 +512,26 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
                 print("[stooq-bulk] WIG bulk link clicked; captcha is visible.", flush=True)
             except Exception:
                 if not _page_has_bulk_captcha(page):
-                    shot = _capture_stooq_bulk_failure(page, "captcha_not_shown_after_first_click")
-                    raise ValueError(
-                        "Stooq bulk link click did not start a download and no captcha became visible "
-                        f"(url={page.url}, screenshot={shot})."
+                    _return_to_stooq_bulk_history_if_redirected(page, "missing captcha after first bulk-link click")
+                    print("[stooq-bulk] no captcha/download after first bulk-link click; retrying exact d_pl_txt link once.", flush=True)
+                    retry_download = _click_bulk_link_for_optional_download(
+                        page,
+                        download_dir,
+                        timeout=10000,
+                        purpose="retry opening captcha or immediate download",
                     )
+                    if retry_download is not None:
+                        return retry_download
+                    try:
+                        _bulk_captcha_image(page).wait_for(state="visible", timeout=10000)
+                        print("[stooq-bulk] WIG bulk link retry opened captcha.", flush=True)
+                    except Exception:
+                        if not _page_has_bulk_captcha(page):
+                            shot = _capture_stooq_bulk_failure(page, "captcha_not_shown_after_first_click")
+                            raise ValueError(
+                                "Stooq bulk link click did not start a download and no captcha became visible "
+                                f"(url={page.url}, screenshot={shot})."
+                            )
 
             if _page_has_bulk_captcha(page):
                 if not _solve_stooq_bulk_download_captcha(page):
@@ -478,6 +540,7 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
                         raise ValueError(f"Stooq bulk download captcha could not be solved automatically. Screenshot: {shot}")
                     page.pause()
                 page.reload(wait_until="domcontentloaded")
+                _return_to_stooq_bulk_history_if_redirected(page, "after captcha reload")
                 _clear_stooq_bulk_consent_manager(page, reason="after captcha reload")
 
             zip_path = _click_bulk_link_for_optional_download(page, download_dir, timeout=180000, purpose="start zip download after captcha")
