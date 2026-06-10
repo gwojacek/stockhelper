@@ -66,8 +66,8 @@ class StockStrategy(BaseStrategy):
                 persist=True,
             )
             source = str((meta or {}).get("source", "unknown")).lower()
-            if source != "stooq":
-                raise ValueError(f"Expected stooq source, got: {source}")
+            if not source.startswith("stooq"):
+                raise ValueError(f"Expected stooq-based source, got: {source}")
             turnover = (
                 df["Close"].astype(float) * df["Volume"].astype(float)
             ).dropna()
@@ -75,7 +75,7 @@ class StockStrategy(BaseStrategy):
                 raise ValueError("Insufficient turnover history from stooq (need >=20 bars)")
             avg_daily_turnover = float(turnover.tail(10).mean())
             daily_turnovers_20d = [float(v) for v in turnover.tail(20).tolist()]
-            self.turnover_data_source = "stooq"
+            self.turnover_data_source = source
             self.currency_pair_used = "PLNPLN=X"
             self.fx_rate_to_pln = 1.0
             self.stock_currency = "PLN"
