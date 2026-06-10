@@ -820,8 +820,7 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
         if remote_dates.empty:
             return 0
-        remote_latest = remote_dates.max().date()
-        return max(0, (remote_latest - local_latest).days)
+        return int((remote_dates.dt.date > local_latest).sum())
     except Exception as exc:
         print(f"[refresh-check] {raw}: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
         return 0
@@ -884,7 +883,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         for t in members:
             missing = _commodity_missing_days_vs_yahoo(t)
             if missing > 0:
-                stale.append(f"{t}({missing}d)")
+                stale.append(f"{t}({missing} candle{'s' if missing != 1 else ''})")
         if stale:
             print(f"[refresh-check] commodities stale vs Yahoo: {', '.join(stale[:8])}{' ...' if len(stale)>8 else ''} -> refresh whole group")
             state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "stale"}

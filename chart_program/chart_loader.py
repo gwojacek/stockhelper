@@ -23,6 +23,7 @@ WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 WARSAW_MARKET_CLOSE_REFRESH_TIME = time(17, 30)
 YAHOO_STOCK_FRESHNESS_PROBE_DAYS = 10
 YAHOO_STOCK_STOOQ_REBASE_THRESHOLD = 2
+YAHOO_COMMODITY_STOOQ_UI_THRESHOLD = 1
 
 DATA_DIR_BY_INSTRUMENT = {
     "stock": UNIFIED_DATA_DIR / "stocks",
@@ -378,6 +379,67 @@ def _merge_yahoo_fresh_candle(
             added_count = int((yahoo_dates.dt.date > local_latest.date()).sum())
         merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_df], ignore_index=True))
     return _last_year_only(merged), yahoo_symbol, display_name, added_count
+
+
+def _try_yahoo_fresh_candle_merge(
+    base: pd.DataFrame,
+    symbol: str,
+    instrument_type: str,
+    *,
+    source: str,
+    source_symbol: str,
+    source_name: str | None,
+    reason: str,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None, int] | None:
+    try:
+        merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
+            base,
+            symbol,
+            instrument_type,
+        )
+    except Exception:
+        return None
+    if yahoo_newer_count <= 0:
+        return None
+    merged_source = f"{source}+yahoo" if not source.endswith("+yahoo") else source
+    merged_reason = f"{reason} Yahoo newer candles={yahoo_newer_count}; merged Yahoo freshest candle(s)."
+    return merged, merged_source, yahoo_symbol or source_symbol, display_name or source_name, merged_reason, yahoo_newer_count
+
+
+def _try_local_commodity_yahoo_merge(
+    symbol: str,
+    csv_path: Path,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None, int] | None:
+    if not csv_path.exists():
+        return None
+    try:
+        local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+        if local_df.empty:
+            return None
+        return _try_yahoo_fresh_candle_merge(
+            local_df,
+            symbol,
+            "commodity",
+            source="stooq_web",
+            source_symbol=symbol,
+            source_name=None,
+            reason="Commodity local Stooq cache used as base because Yahoo was only one candle newer.",
+        )
+    except Exception:
+        return None
+
+
+def _try_local_commodity_yahoo_only_merge(
+    symbol: str,
+    csv_path: Path,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None] | None:
+    merged = _try_local_commodity_yahoo_merge(symbol, csv_path)
+    if merged is None:
+        return None
+    df, source, source_symbol, source_name, reason, yahoo_newer_count = merged
+    if yahoo_newer_count <= YAHOO_COMMODITY_STOOQ_UI_THRESHOLD:
+        return df, source, source_symbol, source_name, reason
+    return None
 
 
 def _is_stock_like_wig_symbol(symbol: str) -> bool:
@@ -853,6 +915,16 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         and (not is_index_like_commodity_symbol or requires_web_even_if_index_like)
         and str(mapped_stooq).lower() not in force_api_only_symbols
     )
+    use_commodity_yahoo_freshness = (
+        instrument_type == "commodity"
+        and not is_index_like_commodity_symbol
+        and not fetch_older_data
+    )
+    if use_commodity_yahoo_freshness:
+        yahoo_only = _try_local_commodity_yahoo_only_merge(symbol, csv_path_ref)
+        if yahoo_only is not None:
+            return yahoo_only
+
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
@@ -865,7 +937,21 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=True,
             )
-            return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
+            reason = "Stooq web used as primary source for commodity."
+            if use_commodity_yahoo_freshness:
+                yahoo_merged = _try_yahoo_fresh_candle_merge(
+                    df,
+                    symbol,
+                    "commodity",
+                    source="stooq_web",
+                    source_symbol=symbol,
+                    source_name=None,
+                    reason=reason,
+                )
+                if yahoo_merged is not None:
+                    merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                    return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+            return df, "stooq_web", symbol, None, reason
         except Exception as web_exc:
             raise ValueError(f"Stooq web failed: {web_exc}") from web_exc
 
@@ -897,7 +983,21 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                     return merged, "stooq+yahoo", yahoo_symbol or candidate, display_name, reason
                 except Exception as yahoo_exc:
                     return df, "stooq", candidate, None, f"Stooq succeeded; Yahoo latest candle merge failed: {yahoo_exc}"
-        return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
+        reason = f"Stooq succeeded as primary source for {instrument_type}."
+        if use_commodity_yahoo_freshness:
+            yahoo_merged = _try_yahoo_fresh_candle_merge(
+                df,
+                symbol,
+                "commodity",
+                source="stooq",
+                source_symbol=candidate,
+                source_name=None,
+                reason=reason,
+            )
+            if yahoo_merged is not None:
+                merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+        return df, "stooq", candidate, None, reason
     except ValueError as exc:
         primary_error = exc
         if instrument_type == "stock" and _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
@@ -918,7 +1018,21 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=True,
             )
-            return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+            reason = f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+            if use_commodity_yahoo_freshness:
+                yahoo_merged = _try_yahoo_fresh_candle_merge(
+                    df,
+                    symbol,
+                    "commodity",
+                    source="stooq_web",
+                    source_symbol=symbol,
+                    source_name=None,
+                    reason=reason,
+                )
+                if yahoo_merged is not None:
+                    merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                    return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+            return df, "stooq_web", symbol, None, reason
         except Exception as web_exc:
             raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
 
@@ -945,6 +1059,7 @@ def load_or_update_daily_data(
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_key = (instrument_type, _storage_symbol_for_csv(symbol, instrument_type).upper(), bool(fetch_older_data))
+    remote_info: tuple[pd.DataFrame, str, str, str | None, str | None] | None = None
 
     # If this symbol was already refreshed in this process and file exists, reuse local CSV
     # to avoid repeated API/web fetches (especially Stooq web + captcha flows).
@@ -973,16 +1088,24 @@ def load_or_update_daily_data(
         }
 
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
-        cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
-        return cached_df, csv_path, {
-            "source": "cache",
-            "symbol": symbol,
-            "name": symbol.title(),
-            "fallback_reason": "Commodity local CSV already has >=1y data.",
-        }
+        local_yahoo_merge = _try_local_commodity_yahoo_merge(symbol, csv_path) if local is not None else None
+        if local_yahoo_merge is None:
+            cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
+            return cached_df, csv_path, {
+                "source": "cache",
+                "symbol": symbol,
+                "name": symbol.title(),
+                "fallback_reason": "Commodity local CSV already has >=1y data.",
+            }
+        merged_df, merged_source, merged_symbol, merged_name, merged_reason, yahoo_newer_count = local_yahoo_merge
+        if yahoo_newer_count <= YAHOO_COMMODITY_STOOQ_UI_THRESHOLD:
+            remote_info = (merged_df, merged_source, merged_symbol, merged_name, merged_reason)
 
     try:
-        remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
+        if remote_info is None:
+            remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
+        else:
+            remote, source, source_symbol, source_name, fallback_reason = remote_info
         _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
         if _force_remote_refresh_enabled():

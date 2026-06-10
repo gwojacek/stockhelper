@@ -155,3 +155,68 @@ def test_warsaw_stock_stooq_failure_uses_yahoo_when_no_local_cache(monkeypatch, 
     assert source_name == "Zabka Group"
     assert df["Date"].max() == pd.Timestamp("2026-06-10")
     assert "no local cache" in reason
+
+
+def test_literal_commodity_uses_yahoo_only_when_one_candle_newer(monkeypatch, tmp_path):
+    csv_path = tmp_path / "CC_F.csv"
+    _df("2026-06-09").to_csv(csv_path, index=False)
+
+    def fail_stooq_web(*_args, **_kwargs):
+        raise AssertionError("one missing commodity candle should not trigger Stooq UI")
+
+    def fake_yahoo_window(symbol, instrument_type, *, period):
+        assert symbol == "COCOA"
+        assert instrument_type == "commodity"
+        return _df("2026-06-09", "2026-06-10"), "CC=F", None
+
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda symbol, instrument_type: csv_path)
+    monkeypatch.setattr(loader, "update_stooq_history_with_playwright", fail_stooq_web)
+    monkeypatch.setattr(loader, "_yahoo_download_window", fake_yahoo_window)
+
+    df, source, source_symbol, source_name, reason = loader._download_remote(
+        symbol="COCOA",
+        instrument_type="commodity",
+        api_key=None,
+        data_source="auto",
+    )
+
+    assert source == "stooq_web+yahoo"
+    assert source_symbol == "CC=F"
+    assert source_name is None
+    assert sorted(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-09", "2026-06-10"]
+    assert "only one candle newer" in reason
+    assert "Yahoo newer candles=1" in reason
+
+
+def test_literal_commodity_uses_stooq_ui_then_yahoo_when_more_than_one_candle_newer(monkeypatch, tmp_path):
+    csv_path = tmp_path / "CC_F.csv"
+    _df("2026-06-08").to_csv(csv_path, index=False)
+    stooq_web_calls = []
+
+    def fake_stooq_web(*, symbol, csv_path, lookback_days, end_date, verbose, interactive_captcha):
+        stooq_web_calls.append(symbol)
+        return _df("2026-06-08", "2026-06-09")
+
+    def fake_yahoo_window(symbol, instrument_type, *, period):
+        assert symbol == "COCOA"
+        assert instrument_type == "commodity"
+        return _df("2026-06-09", "2026-06-10"), "CC=F", None
+
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda symbol, instrument_type: csv_path)
+    monkeypatch.setattr(loader, "update_stooq_history_with_playwright", fake_stooq_web)
+    monkeypatch.setattr(loader, "_yahoo_download_window", fake_yahoo_window)
+
+    df, source, source_symbol, source_name, reason = loader._download_remote(
+        symbol="COCOA",
+        instrument_type="commodity",
+        api_key=None,
+        data_source="auto",
+    )
+
+    assert stooq_web_calls == ["cc.f"]
+    assert source == "stooq_web+yahoo"
+    assert source_symbol == "CC=F"
+    assert source_name is None
+    assert sorted(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-08", "2026-06-09", "2026-06-10"]
+    assert "Stooq web used as primary source for commodity" in reason
+    assert "Yahoo newer candles=1" in reason
