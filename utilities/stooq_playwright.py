@@ -137,12 +137,13 @@ def _click_stooq_bulk_consent_candidate(ctx) -> bool:
             if button.count() == 0:
                 continue
             button.click(timeout=5000, force=True)
+            print(f"[stooq-bulk] consent clicked ({selector}).", flush=True)
             return True
         except Exception:
             continue
 
     try:
-        return bool(ctx.evaluate(
+        clicked = bool(ctx.evaluate(
             """(acceptTexts) => {
                 const norm = (value) => (value || '').toLowerCase().replace(/\\s+/g, ' ').trim();
                 const isVisible = (el) => {
@@ -165,6 +166,9 @@ def _click_stooq_bulk_consent_candidate(ctx) -> bool:
             }""",
             list(_STOOQ_BULK_CONSENT_ACCEPT_TEXTS),
         ))
+        if clicked:
+            print("[stooq-bulk] consent clicked (DOM fallback).", flush=True)
+        return clicked
     except Exception:
         return False
 
@@ -282,12 +286,13 @@ def _bulk_download_link(page):
     )
 
 
-def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout: int) -> Path | None:
+def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout: int, purpose: str = "download") -> Path | None:
     """Click the bulk link and return a downloaded zip path only when download starts."""
     _clear_stooq_bulk_consent_manager(page, reason="before bulk link click")
     try:
         with page.expect_download(timeout=timeout) as download_info:
             _clear_stooq_bulk_consent_manager(page, reason="inside download wait")
+            print(f"[stooq-bulk] clicking WIG bulk link ({purpose}).", flush=True)
             _bulk_download_link(page).click(timeout=10000)
         download = download_info.value
         suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
@@ -299,6 +304,7 @@ def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout:
             _clear_stooq_bulk_consent_manager(page, reason="after download timeout")
             try:
                 with page.expect_download(timeout=timeout) as download_info:
+                    print(f"[stooq-bulk] clicking WIG bulk link ({purpose}, retry after consent).", flush=True)
                     _bulk_download_link(page).click(timeout=10000)
                 download = download_info.value
                 suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
@@ -411,8 +417,7 @@ def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk") -> bool:
                     continue
                 return False
             page.locator('input[name="cpt_t"], input#f15').first.fill(code)
-            if _stooq_verbose_enabled():
-                print(f"[stooq-bulk] captcha code filled via {engine}: {code}", flush=True)
+            print(f"[stooq-bulk] captcha input filled with OCR code {code} (engine={engine}, attempt={attempt}/{max_attempts}).", flush=True)
             if not _submit_bulk_captcha_form(page):
                 return False
             if _captcha_wrong_code_visible(page):
@@ -451,12 +456,13 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
 
             # First required click usually opens Stooq's download captcha. If the
             # captcha is already trusted and a download starts immediately, keep it.
-            first_download = _click_bulk_link_for_optional_download(page, download_dir, timeout=10000)
+            first_download = _click_bulk_link_for_optional_download(page, download_dir, timeout=10000, purpose="open captcha or immediate download")
             if first_download is not None:
                 return first_download
 
             try:
                 _bulk_captcha_image(page).wait_for(state="visible", timeout=10000)
+                print("[stooq-bulk] WIG bulk link clicked; captcha is visible.", flush=True)
             except Exception:
                 if not _page_has_bulk_captcha(page):
                     shot = _capture_stooq_bulk_failure(page, "captcha_not_shown_after_first_click")
@@ -474,7 +480,7 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
                 page.reload(wait_until="domcontentloaded")
                 _clear_stooq_bulk_consent_manager(page, reason="after captcha reload")
 
-            zip_path = _click_bulk_link_for_optional_download(page, download_dir, timeout=180000)
+            zip_path = _click_bulk_link_for_optional_download(page, download_dir, timeout=180000, purpose="start zip download after captcha")
             if zip_path is None:
                 shot = _capture_stooq_bulk_failure(page, "download_not_started_after_captcha")
                 raise ValueError(f"Stooq bulk zip download did not start after captcha flow. Screenshot: {shot}")
