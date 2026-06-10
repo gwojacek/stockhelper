@@ -61,6 +61,30 @@ def _stooq_bulk_debug_dir() -> Path:
     return out_dir
 
 
+def _save_stooq_bulk_download_if_zip(download, download_dir: Path, source: str) -> Path | None:
+    suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
+    path = download_dir / suggested
+    download.save_as(str(path))
+    if zipfile.is_zipfile(path):
+        print(f"[stooq-bulk] zip download saved from {source}: {path}", flush=True)
+        return path
+    preview = ""
+    try:
+        preview = path.read_text(encoding="utf-8", errors="replace")[:300].replace("\n", " ")
+    except Exception:
+        pass
+    print(
+        f"[stooq-bulk] ignoring non-zip download from {source}: {path} "
+        f"(suggested={suggested!r}, preview={preview!r})",
+        flush=True,
+    )
+    try:
+        path.unlink()
+    except Exception:
+        pass
+    return None
+
+
 def _capture_stooq_bulk_failure(page, reason: str) -> str:
     """Save one screenshot (+ HTML sidecar) for a failing bulk-download step."""
     safe_reason = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in reason)[:80] or "failure"
@@ -366,11 +390,7 @@ def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout:
             _clear_stooq_bulk_consent_manager(page, reason="inside download wait")
             print(f"[stooq-bulk] clicking exact WIG d_pl_txt link ({purpose}).", flush=True)
             _trigger_exact_stooq_bulk_link(page, purpose)
-        download = download_info.value
-        suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
-        zip_path = download_dir / suggested
-        download.save_as(str(zip_path))
-        return zip_path
+        return _save_stooq_bulk_download_if_zip(download_info.value, download_dir, purpose)
     except PlaywrightTimeoutError:
         redirected = _return_to_stooq_bulk_history_if_redirected(page, f"{purpose} click")
         if redirected:
@@ -382,11 +402,7 @@ def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout:
                 with page.expect_download(timeout=timeout) as download_info:
                     print(f"[stooq-bulk] clicking exact WIG d_pl_txt link ({purpose}, retry after consent).", flush=True)
                     _trigger_exact_stooq_bulk_link(page, f"{purpose}, retry after consent")
-                download = download_info.value
-                suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
-                zip_path = download_dir / suggested
-                download.save_as(str(zip_path))
-                return zip_path
+                return _save_stooq_bulk_download_if_zip(download_info.value, download_dir, f"{purpose}, retry after consent")
             except PlaywrightTimeoutError:
                 return None
         return None
@@ -478,12 +494,13 @@ def _refresh_bulk_page_after_captcha(page, download_dir: Path | None = None) -> 
                 try:
                     with page.expect_download(timeout=5000) as download_info:
                         link.click(timeout=2500, force=True)
-                    download = download_info.value
-                    suggested = download.suggested_filename or "stooq_d_pl_txt.zip"
-                    zip_path = download_dir / suggested
-                    download.save_as(str(zip_path))
-                    print(f"[stooq-bulk] zip download started from captcha refresh link: {zip_path}", flush=True)
-                    return zip_path
+                    zip_path = _save_stooq_bulk_download_if_zip(download_info.value, download_dir, "captcha refresh link")
+                    if zip_path is not None:
+                        return zip_path
+                    # Stooq can emit a fast error.txt from this link even though
+                    # the page says authorization succeeded. Treat that as
+                    # authorization-only and let the caller click d_pl_txt once.
+                    return True
                 except PlaywrightTimeoutError:
                     # Success link may only refresh authorization state; caller will
                     # click the exact d_pl_txt link once after this.
