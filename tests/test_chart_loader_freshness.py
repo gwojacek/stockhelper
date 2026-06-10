@@ -220,3 +220,58 @@ def test_literal_commodity_uses_stooq_ui_then_yahoo_when_more_than_one_candle_ne
     assert sorted(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-08", "2026-06-09", "2026-06-10"]
     assert "Stooq web used as primary source for commodity" in reason
     assert "Yahoo newer candles=1" in reason
+
+
+def test_yahoo_merge_appends_only_newer_rows_and_preserves_stooq_overlap():
+    base = pd.DataFrame(
+        [
+            {"Date": pd.Timestamp("2026-06-08"), "Open": 10, "High": 12, "Low": 9, "Close": 11, "Volume": 111},
+            {"Date": pd.Timestamp("2026-06-09"), "Open": 20, "High": 22, "Low": 19, "Close": 21, "Volume": 53913},
+        ]
+    )
+    yahoo = pd.DataFrame(
+        [
+            {
+                "Date": pd.Timestamp("2026-06-09"),
+                "Open": 200,
+                "High": 220,
+                "Low": 190,
+                "Close": 210,
+                "Volume": 21110,
+                "Adj Close": 210,
+                "Dividends": 0,
+                "Stock Splits": 0,
+            },
+            {
+                "Date": pd.Timestamp("2026-06-10"),
+                "Open": 30,
+                "High": 32,
+                "Low": 29,
+                "Close": 31,
+                "Volume": 23547,
+                "Adj Close": 31,
+                "Dividends": 0,
+                "Stock Splits": 0,
+            },
+        ]
+    )
+
+    def fake_yahoo_window(symbol, instrument_type, *, period):
+        return yahoo, "CC=F", None
+
+    original = loader._yahoo_download_window
+    loader._yahoo_download_window = fake_yahoo_window
+    try:
+        merged, yahoo_symbol, _name, added_count = loader._merge_yahoo_fresh_candle(base, "COCOA", "commodity")
+    finally:
+        loader._yahoo_download_window = original
+
+    assert yahoo_symbol == "CC=F"
+    assert added_count == 1
+    assert list(merged.columns) == ["Date", "Open", "High", "Low", "Close", "Volume"]
+    assert list(merged["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-08", "2026-06-09", "2026-06-10"]
+    june_9 = merged.loc[merged["Date"] == pd.Timestamp("2026-06-09")].iloc[0]
+    assert float(june_9["Open"]) == 20.0
+    assert float(june_9["Volume"]) == 53913.0
+    june_10 = merged.loc[merged["Date"] == pd.Timestamp("2026-06-10")].iloc[0]
+    assert float(june_10["Volume"]) == 23547.0

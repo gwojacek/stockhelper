@@ -366,18 +366,23 @@ def _merge_yahoo_fresh_candle(
     period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
 ) -> tuple[pd.DataFrame, str, str | None, int]:
     yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
+    yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
     sanitized_base = _sanitize_ohlc_dataframe(base)
     if sanitized_base.empty:
         merged = yahoo_df
         added_count = len(yahoo_df)
     else:
         local_latest = _latest_date_from_df(sanitized_base)
-        yahoo_dates = pd.to_datetime(yahoo_df["Date"], errors="coerce")
         if local_latest is None:
-            added_count = len(yahoo_df)
+            yahoo_new_rows = yahoo_df
         else:
-            added_count = int((yahoo_dates.dt.date > local_latest.date()).sum())
-        merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_df], ignore_index=True))
+            yahoo_dates = pd.to_datetime(yahoo_df["Date"], errors="coerce")
+            yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
+        added_count = len(yahoo_new_rows)
+        if added_count > 0:
+            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_new_rows], ignore_index=True))
+        else:
+            merged = sanitized_base
     return _last_year_only(merged), yahoo_symbol, display_name, added_count
 
 
@@ -682,8 +687,10 @@ def _sanitize_ohlc_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     out = out.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    if "Volume" not in out.columns:
+        out["Volume"] = pd.NA
     out = out.sort_values("Date").drop_duplicates(subset=["Date"], keep="last").reset_index(drop=True)
-    return out
+    return out[["Date", "Open", "High", "Low", "Close", "Volume"]]
 def _last_two_years_only(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
