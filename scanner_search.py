@@ -29,6 +29,7 @@ from chart_program.chart_loader import (
     has_new_remote_data,
     local_csv_path_for_symbol,
     _yahoo_download,
+    _yahoo_download_window,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 from utilities.output_silence import call_silenced
@@ -793,6 +794,10 @@ def _warsaw_phase_now() -> tuple[str, str]:
     return now.strftime("%Y-%m-%d"), phase
 
 
+def _is_after_warsaw_stock_close() -> bool:
+    return _warsaw_now().time() >= dt_time(17, 30)
+
+
 def _is_ui_commodity_ticker(ticker: str) -> bool:
     raw = (ticker or "").strip().upper()
     if raw in API_METAL_COMMODITIES:
@@ -826,24 +831,31 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         return 0
 
 
-def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
+def _stock_yahoo_freshness_probe(fetch_symbol: str) -> tuple[int, str, str, str]:
     csv_path = local_csv_path_for_symbol(fetch_symbol, "stock")
     if not csv_path.exists():
-        return 9999
+        return 9999, "-", "-", "missing-local-cache"
     try:
         local = pd.read_csv(csv_path)
         local_dates = pd.to_datetime(local.get("Date"), errors="coerce").dropna()
         if local_dates.empty:
-            return 9999
+            return 9999, "-", "-", "empty-local-cache"
         local_latest = local_dates.max().date()
-        remote, _candidate, _name = call_silenced(_yahoo_download, fetch_symbol, "stock")
+        remote, candidate, _name = call_silenced(_yahoo_download_window, fetch_symbol, "stock", period="10d")
         remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
         if remote_dates.empty:
-            return 0
-        return int((remote_dates.dt.date > local_latest).sum())
+            return 0, local_latest.isoformat(), "-", candidate
+        remote_latest = remote_dates.max().date()
+        missing = int((remote_dates.dt.date > local_latest).sum())
+        return missing, local_latest.isoformat(), remote_latest.isoformat(), candidate
     except Exception as exc:
         print(f"[refresh-check] {fetch_symbol}: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
-        return 0
+        return 0, "-", "-", "probe-error"
+
+
+def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
+    missing, _local_latest, _remote_latest, _candidate = _stock_yahoo_freshness_probe(fetch_symbol)
+    return missing
 
 
 
@@ -915,9 +927,12 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
         try:
             if group_l == "wig" and instrument == "stock":
-                missing_candles = _stock_missing_candles_vs_yahoo(fetch_symbol)
-                if missing_candles > 0:
-                    print(f"[refresh-check] {ticker}: Yahoo has {missing_candles} newer candle(s)")
+                missing_candles, local_latest, yahoo_latest, yahoo_candidate = _stock_yahoo_freshness_probe(fetch_symbol)
+                checked += 1
+                print(
+                    f"[refresh-check] {ticker}: Yahoo {yahoo_candidate} latest={yahoo_latest}, "
+                    f"local latest={local_latest}, newer candles={missing_candles}"
+                )
                 if missing_candles > 2:
                     if _try_refresh_wig_with_stooq_bulk(
                         group_name,
@@ -928,6 +943,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                     os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     return True
+                continue
             newer = has_new_remote_data(fetch_symbol, instrument)
             checked += 1
             print(f"[refresh-check] {ticker}: remote {'newer' if newer else 'not newer'}")
@@ -944,6 +960,14 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             return True
+    if group_l == "wig" and _is_after_warsaw_stock_close():
+        print(
+            f"[refresh-check] {group_name}: checked {checked} probe(s), no newer Yahoo data found, "
+            "but it is after 17:30 Warsaw -> refresh mode ON to merge per-symbol Yahoo candles where available"
+        )
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        return True
     print(f"[refresh-check] {group_name}: checked {checked} probe(s), no newer remote data -> cache-only mode ON")
     os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
