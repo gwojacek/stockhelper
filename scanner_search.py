@@ -855,17 +855,37 @@ def _wig20_index_yahoo_freshness_probe() -> tuple[int, str, str, str]:
         if local_dates.empty:
             return 9999, "-", "-", "empty-local-cache"
         local_latest = local_dates.max().date()
-        remote, candidate, _name = call_silenced(_yahoo_download_window, "WIG20", "commodity", period="10d")
-        remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
-        if remote_dates.empty:
+
+        # WIG20.WA on Yahoo can expose only the newest candle.  To decide
+        # whether the local Stooq-base WIG20 cache is missing *more than one*
+        # Warsaw session, cross-check against a liquid WIG20 constituent that
+        # reliably updates on Yahoo when WIG20 does (KGH.WA).
+        reference, candidate, _name = call_silenced(_yahoo_download_window, "KGH.WA", "stock", period="10d")
+        reference_dates = pd.to_datetime(reference.get("Date"), errors="coerce").dropna()
+        if reference_dates.empty:
             return 0, local_latest.isoformat(), "-", candidate
-        remote_latest = remote_dates.max().date()
-        remote_new_rows = int((remote_dates.dt.date > local_latest).sum())
-        missing = max(remote_new_rows, _business_day_gap_after_local(local_latest, remote_latest))
-        return missing, local_latest.isoformat(), remote_latest.isoformat(), candidate
+        reference_latest = reference_dates.max().date()
+        missing = _business_day_gap_after_local(local_latest, reference_latest)
+        return missing, local_latest.isoformat(), reference_latest.isoformat(), candidate
     except Exception as exc:
-        print(f"[refresh-check] WIG20: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
-        return 0, "-", "-", "probe-error"
+        print(f"[refresh-check] WIG20/KGH.WA: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
+        try:
+            local_latest_text = "-"
+            if 'local_latest' in locals():
+                local_latest_text = local_latest.isoformat()
+            remote, candidate, _name = call_silenced(_yahoo_download_window, "WIG20", "commodity", period="10d")
+            remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
+            if remote_dates.empty:
+                return 0, local_latest_text, "-", candidate
+            remote_latest = remote_dates.max().date()
+            if local_latest_text == "-":
+                return 0, local_latest_text, remote_latest.isoformat(), candidate
+            local_latest_date = pd.Timestamp(local_latest_text).date()
+            remote_new_rows = int((remote_dates.dt.date > local_latest_date).sum())
+            return remote_new_rows, local_latest_text, remote_latest.isoformat(), candidate
+        except Exception as fallback_exc:
+            print(f"[refresh-check] WIG20: Yahoo fallback freshness probe skipped ({_retry_error_brief(fallback_exc)})")
+            return 0, "-", "-", "probe-error"
 
 def _stock_csv_has_data_for_symbol(fetch_symbol: str) -> bool:
     path = local_csv_path_for_symbol(fetch_symbol, "stock")
@@ -981,8 +1001,8 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
         missing_candles, local_latest, yahoo_latest, yahoo_candidate = _wig20_index_yahoo_freshness_probe()
         print(
-            f"[refresh-check] WIG20: Yahoo {yahoo_candidate} latest={yahoo_latest}, "
-            f"local latest={local_latest}, estimated missing sessions={missing_candles}"
+            f"[refresh-check] WIG20: reference Yahoo {yahoo_candidate} latest={yahoo_latest}, "
+            f"local WIG20 latest={local_latest}, estimated missing sessions={missing_candles}"
         )
         if missing_candles > 1:
             if _try_refresh_wig_with_stooq_bulk(

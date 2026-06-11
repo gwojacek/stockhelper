@@ -445,3 +445,31 @@ def test_indexes_refresh_triggers_stooq_bulk_when_wig20_missing_multiple_session
     assert calls
     assert calls[0][0] == "indexes"
     assert "missing 4 sessions" in calls[0][1]
+
+
+def test_wig20_freshness_probe_uses_kgh_reference_dates(monkeypatch, tmp_path):
+    import scanner_search as scanner
+
+    wig20_csv = tmp_path / "WIG20.csv"
+    _df("2026-06-03").to_csv(wig20_csv, index=False)
+
+    def fake_local_csv_path(symbol, instrument_type):
+        assert symbol == "WIG20"
+        assert instrument_type == "commodity"
+        return wig20_csv
+
+    def fake_yahoo_window(symbol, instrument_type, *, period):
+        assert symbol == "KGH.WA"
+        assert instrument_type == "stock"
+        assert period == "10d"
+        return _df("2026-06-11"), "KGH.WA", "KGHM"
+
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", fake_local_csv_path)
+    monkeypatch.setattr(scanner, "_yahoo_download_window", fake_yahoo_window)
+
+    missing, local_latest, yahoo_latest, candidate = scanner._wig20_index_yahoo_freshness_probe()
+
+    assert missing > 1
+    assert local_latest == "2026-06-03"
+    assert yahoo_latest == "2026-06-11"
+    assert candidate == "KGH.WA"
