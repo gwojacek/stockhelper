@@ -1,0 +1,106 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (27.5)",
+      "x0": "2026-04-24",
+      "x1": "2034-04-22",
+      "y0": 27.5,
+      "y1": 27.5,
+      "price": 27.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (25.59)",
+      "x0": "2026-04-01",
+      "x1": "2034-04-22",
+      "y0": 25.59,
+      "y1": 25.59,
+      "price": 25.59,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (25.0)",
+      "x0": "2026-03-25",
+      "x1": "2034-04-22",
+      "y0": 25,
+      "y1": 25,
+      "price": 25,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (24.41)",
+      "x0": "2026-03-19",
+      "x1": "2034-04-22",
+      "y0": 24.41,
+      "y1": 24.41,
+      "price": 24.41,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (22.5)",
+      "x0": "2026-02-26",
+      "x1": "2034-04-22",
+      "y0": 22.5,
+      "y1": 22.5,
+      "price": 22.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-02-26",
+      "x1": "2026-04-24",
+      "y0": 22.5,
+      "y1": 27.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "entry": 26.14,
+  "stop_loss": 25.86,
+  "__half_points__": [],
+  "position_type": "long",
+  "capital": 255000,
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "entry": {
+      "price": 26.14,
+      "plot_price": 26.14,
+      "date": "2026-06-03"
+    },
+    "stop_loss": {
+      "price": 25.86,
+      "plot_price": 25.86,
+      "date": "2026-06-02"
+    }
+  }
+}

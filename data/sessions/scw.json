@@ -1,0 +1,35 @@
+{
+  "high": null,
+  "low": null,
+  "entry": 353.05,
+  "stop_loss": 336.23,
+  "check_zr_value_fibo_or_elevation": null,
+  "line_cross_value": null,
+  "capital": 255000,
+  "symbol": "SCW.WA",
+  "name": "SCW",
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": true,
+  "__half_points__": [],
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "drawn_objects": [],
+  "level_points": {
+    "stop_loss": {
+      "price": 336.23,
+      "plot_price": 336.23,
+      "date": "2026-06-01"
+    },
+    "entry": {
+      "price": 353.05,
+      "plot_price": 353.05,
+      "date": "2026-06-03"
+    }
+  }
+}
