@@ -126,6 +126,29 @@ def _capture_stooq_bulk_failure(page, reason: str) -> str:
     return ""
 
 
+def _capture_stooq_bulk_attempt(page, symbol: str, label: str, attempt: int) -> str:
+    """Save full-page screenshot and HTML for a captcha attempt state."""
+    safe_symbol = (symbol or "wig_bulk").lower().replace(".", "_")
+    safe_label = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in (label or "state"))[:60]
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    out_dir = _stooq_bulk_debug_dir()
+    png_path = out_dir / f"{safe_symbol}_attempt{attempt}_{stamp}_{safe_label}.png"
+    html_path = out_dir / f"{safe_symbol}_attempt{attempt}_{stamp}_{safe_label}.html"
+    saved = ""
+    try:
+        page.screenshot(path=str(png_path), full_page=True, timeout=5000)
+        saved = str(png_path)
+    except Exception as exc:
+        print(f"[stooq-bulk] attempt {attempt} screenshot failed ({safe_label}): {exc}", flush=True)
+    try:
+        html_path.write_text(page.content(), encoding="utf-8")
+    except Exception:
+        pass
+    if saved:
+        print(f"[stooq-bulk] attempt {attempt} screenshot saved: {saved}", flush=True)
+    return saved
+
+
 _STOOQ_BULK_CONSENT_ACCEPT_TEXTS = (
     "zgadzam się",
     "zgadzam sie",
@@ -538,56 +561,80 @@ def _refresh_bulk_page_after_captcha(page, download_dir: Path | None = None) -> 
     return False
 
 def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_dir: Path | None = None) -> bool | Path:
-    """Solve the simple Stooq download captcha without fixed sleeps/timeouts."""
+    """Solve the simple Stooq download captcha, saving artifacts for every attempt."""
     max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
-    print("[stooq-bulk] resolving download captcha...", flush=True)
+    print(f"[stooq-bulk] resolving download captcha (max attempts={max_attempts})...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
             img = _bulk_captcha_image(page)
             if img.count() == 0:
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_missing_treat_as_solved", attempt)
                 return True
             suffix = "" if attempt == 1 else f"_a{attempt}"
             raw_path = _captcha_artifact_path(symbol, f"_captcha_raw{suffix}")
             cleaned_path = _captcha_artifact_path(symbol, f"_captcha_cleaned{suffix}")
-            img.screenshot(path=str(raw_path), timeout=3000)
+            try:
+                img.screenshot(path=str(raw_path), timeout=5000)
+            except Exception as exc:
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_image_screenshot_failed", attempt)
+                print(f"[stooq-bulk] captcha image screenshot failed for attempt {attempt}/{max_attempts}: {exc}", flush=True)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
+                    continue
+                return False
             if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_preprocess_failed", attempt)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
+                    continue
                 return False
             code, engine = _ocr_stooq_captcha(cleaned_path)
             if len(code) != 4:
-                if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_ocr_uncertain", attempt)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                     continue
                 return False
-            page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            page.locator('input[name="cpt_t"], input#f15').first.fill(code, timeout=3000)
             print(f"[stooq-bulk] captcha input filled with OCR code {code} (engine={engine}, attempt={attempt}/{max_attempts}).", flush=True)
             if not _submit_bulk_captcha_form(page):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_submit_failed", attempt)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
+                    continue
                 return False
             if _captcha_wrong_code_visible(page):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_code_rejected", attempt)
                 print(f"[stooq-bulk] captcha code rejected for attempt {attempt}/{max_attempts}; changing code instead of refreshing.", flush=True)
-                if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                     continue
                 return False
             refresh_result = _refresh_bulk_page_after_captcha(page, download_dir=download_dir)
             if isinstance(refresh_result, Path):
                 return refresh_result
             if not refresh_result:
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_refresh_missing", attempt)
                 if _captcha_wrong_code_visible(page) or _page_has_bulk_captcha(page):
                     print(f"[stooq-bulk] no success refresh link after submit for attempt {attempt}/{max_attempts}; changing captcha code.", flush=True)
-                    if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                    if attempt < max_attempts:
+                        _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                         continue
+                if attempt < max_attempts:
+                    continue
                 return False
             try:
                 page.wait_for_url(lambda url: "stooq.com/db/h" in url or "stooq.pl/db/h" in url or "db/h" in url, timeout=5000)
             except Exception:
                 pass
             _return_to_stooq_bulk_history_if_redirected(page, "captcha refresh")
-            # Once Stooq shows the success refresh link and it is clicked, captcha
-            # authorization is complete. Do not inspect a now-hidden/stale captcha
-            # image or request another code.
             return True
         except Exception as exc:
-            if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+            _capture_stooq_bulk_attempt(page, symbol, "captcha_exception", attempt)
+            print(f"[stooq-bulk] captcha auto-solve failed for attempt {attempt}/{max_attempts}: {exc}", flush=True)
+            if attempt < max_attempts:
+                _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                 continue
-            print(f"[stooq-bulk] captcha auto-solve failed: {exc}", flush=True)
             return False
     return False
 
@@ -653,13 +700,20 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
                 if isinstance(captcha_result, Path):
                     return captcha_result
                 if not captcha_result:
-                    fallback = _fallback_existing_stooq_bulk_zip(download_dir, "Stooq captcha flow did not produce a valid zip")
-                    if fallback is not None:
-                        return fallback
-                    if not interactive:
+                    if interactive:
+                        shot = _capture_stooq_bulk_failure(page, "captcha_auto_solve_failed_before_inspector")
+                        print(
+                            "[stooq-bulk] captcha auto-solve failed; opening Playwright inspector. "
+                            f"Solve/download manually or fix the page, then resume. Screenshot: {shot}",
+                            flush=True,
+                        )
+                        page.pause()
+                    else:
+                        fallback = _fallback_existing_stooq_bulk_zip(download_dir, "Stooq captcha flow did not produce a valid zip")
+                        if fallback is not None:
+                            return fallback
                         shot = _capture_stooq_bulk_failure(page, "captcha_auto_solve_failed")
                         raise ValueError(f"Stooq bulk download captcha could not be solved automatically. Screenshot: {shot}")
-                    page.pause()
                 page.reload(wait_until="domcontentloaded")
                 _return_to_stooq_bulk_history_if_redirected(page, "after captcha reload")
                 _clear_stooq_bulk_consent_manager(page, reason="after captcha reload")
@@ -768,6 +822,7 @@ def download_and_import_stooq_wig_bulk_data(
     interactive: bool = False,
 ) -> dict[str, int | str]:
     """Download Stooq d_pl_txt bulk data and replace local data/stocks WSE CSVs."""
+    interactive = interactive or os.getenv("STOCKHELPER_STOOQ_BULK_INSPECTOR") == "1"
     project_root = Path(__file__).resolve().parents[1]
     download_dir = download_dir or project_root / "data" / "downloads" / "stooq"
     zip_path = _download_stooq_wig_bulk_zip(download_dir=Path(download_dir), interactive=interactive)
@@ -1209,8 +1264,11 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
 
 
 def _captcha_artifact_path(symbol: str, suffix: str) -> Path:
-    out_dir = Path("debug") / "stooq"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if (symbol or "").lower().startswith("wig_bulk"):
+        out_dir = _stooq_bulk_debug_dir()
+    else:
+        out_dir = Path("debug") / "stooq"
+        out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir / f"{symbol.lower().replace('.', '_')}{suffix}.png"
 
 
