@@ -407,9 +407,11 @@ def test_stooq_bulk_import_includes_wse_indices(tmp_path):
     zip_path = tmp_path / "d_pl_txt.zip"
     stock_txt = "<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>\nABC,D,20260609,000000,1,2,0.5,1.5,100,0\n"
     index_txt = "<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>\nWIG20,D,20260609,000000,2800,2810,2790,2805,0,0\n"
+    other_index_txt = "<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>\nMWIG40,D,20260609,000000,6000,6010,5990,6005,0,0\n"
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("data/daily/pl/wse stocks/abc.txt", stock_txt)
         zf.writestr("data/daily/pl/wse indices/wig20.txt", index_txt)
+        zf.writestr("data/daily/pl/wse indices/mwig40.txt", other_index_txt)
 
     stocks_dir = tmp_path / "stocks"
     commodities_dir = tmp_path / "commodities"
@@ -420,6 +422,7 @@ def test_stooq_bulk_import_includes_wse_indices(tmp_path):
     assert (stocks_dir / "ABC_WA.csv").exists()
     wig20_csv = commodities_dir / "WIG20.csv"
     assert wig20_csv.exists()
+    assert not (commodities_dir / "MWIG40.csv").exists()
     assert pd.read_csv(wig20_csv)["Close"].iloc[-1] == 2805
 
 
@@ -473,3 +476,9 @@ def test_wig20_freshness_probe_uses_kgh_reference_dates(monkeypatch, tmp_path):
     assert local_latest == "2026-06-03"
     assert yahoo_latest == "2026-06-11"
     assert candidate == "KGH.WA"
+
+
+def test_precious_metals_use_requested_yahoo_futures_tickers():
+    assert loader._yahoo_symbol_candidates("GOLD", "commodity")[0] == "GC=F"
+    assert loader._yahoo_symbol_candidates("SILVER", "commodity")[0] == "SI=F"
+    assert loader._yahoo_symbol_candidates("PALLADIUM", "commodity")[0] == "PA=F"

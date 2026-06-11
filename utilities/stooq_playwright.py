@@ -837,7 +837,8 @@ def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
 
 
 def _find_wse_indices_txt_members(zip_path: Path) -> list[str]:
-    return _find_wse_txt_members(zip_path, "indices")
+    """Return only WIG20 bulk txt from WSE indices; skip mWIG/sWIG/TR/DVP variants."""
+    return [member for member in _find_wse_txt_members(zip_path, "indices") if Path(member).stem.strip().lower() == "wig20"]
 
 
 def _stooq_bulk_txt_to_ohlcv_df(raw: bytes) -> tuple[str, pd.DataFrame]:
@@ -874,7 +875,7 @@ def import_stooq_wig_bulk_zip(
     stocks_dir: Path | None = None,
     commodities_dir: Path | None = None,
 ) -> dict[str, int | str]:
-    """Replace local Warsaw stock CSV files and WSE index CSVs from Stooq's bulk d_pl_txt archive."""
+    """Replace local Warsaw stock CSV files and only WIG20 from Stooq's WSE indices bulk folder."""
     zip_path = Path(zip_path)
     project_root = Path(__file__).resolve().parents[1]
     stocks_dir = stocks_dir or project_root / "data" / "stocks"
