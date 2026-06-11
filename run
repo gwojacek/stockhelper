@@ -2373,8 +2373,12 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
-        if code == 0 and not _retry_missing_scope_csvs_once(scope):
-            code = 1
+        if code == 0:
+            # Missing CSVs should be visible, but they should not abort allsearch.
+            # Individual scanners already report per-instrument failures; continuing
+            # allows the Fibo phase and final HTML report to be produced from the
+            # instruments that did load successfully.
+            _retry_missing_scope_csvs_once(scope)
         after = sorted(csv_dir.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
         with report.open("a", encoding="utf-8") as out:
