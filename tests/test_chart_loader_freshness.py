@@ -334,3 +334,31 @@ def test_index_yahoo_symbol_candidates_match_expected_yahoo_tickers():
 
     for symbol, yahoo_ticker in expected.items():
         assert loader._yahoo_symbol_candidates(symbol, "commodity")[0] == yahoo_ticker
+
+
+def test_index_yahoo_candidates_translate_legacy_stooq_symbols():
+    expected = {
+        "^BVP": "^BVSP",
+        "^SPX": "^GSPC",
+        "^IPC": "^MXX",
+        "VI.C": "^VIX",
+        "^DJI": "^DJI",
+        "^NDX": "^NDX",
+        "^HSI": "^HSI",
+        "^STI": "^STI",
+        "^AOR": "^AXJO",
+        "0EL.C": "XIN9.FGI",
+        "^NKX": "^N225",
+        "WIG20": "WIG20.WA",
+        "^UKX": "^FTSE",
+        "^FMIB": "FTSEMIB.MI",
+        "^DAX": "^GDAXI",
+        "^CAC": "^FCHI",
+        "^AEX": "^AEX",
+        "^SMI": "^SSMI",
+        "^IBEX": "^IBEX",
+        "FX.F": "^STOXX50E",
+    }
+
+    for symbol, yahoo_ticker in expected.items():
+        assert loader._yahoo_symbol_candidates(symbol, "commodity")[0] == yahoo_ticker

@@ -149,6 +149,21 @@ COMMODITY_STOOQ_MAP = {
     "EU50": "fx.f",
 }
 
+def _canonical_commodity_symbol(symbol: str) -> str:
+    cleaned = (symbol or "").strip().upper()
+    if not cleaned:
+        return cleaned
+    if cleaned in COMMODITY_YAHOO_MAP or cleaned in COMMODITY_STOOQ_MAP:
+        return cleaned
+    for key, value in COMMODITY_STOOQ_MAP.items():
+        if str(value).upper() == cleaned:
+            return key.upper()
+    for key, value in COMMODITY_YAHOO_MAP.items():
+        if str(value).upper() == cleaned:
+            return key.upper()
+    return cleaned
+
+
 COMMODITY_DISPLAY_NAME = {
     "GOLD": "Gold",
     "SILVER": "Silver",
@@ -254,6 +269,9 @@ def _sanitize_symbol_for_filename(symbol: str) -> str:
 def _storage_symbol_for_csv(symbol: str, instrument_type: str) -> str:
     if instrument_type != "commodity":
         return symbol
+    canonical = _canonical_commodity_symbol(symbol)
+    if canonical in COMMODITY_YAHOO_MAP and _is_index_like_commodity(canonical):
+        return canonical
     mapped = COMMODITY_STOOQ_MAP.get((symbol or "").strip().upper())
     return str(mapped or symbol)
 
@@ -269,9 +287,12 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
             candidates.append(f"{compact[:6]}=X")
         candidates.append(f"{compact}=X")
     elif instrument_type == "commodity":
-        mapped = COMMODITY_YAHOO_MAP.get(cleaned)
+        canonical = _canonical_commodity_symbol(cleaned)
+        mapped = COMMODITY_YAHOO_MAP.get(cleaned) or COMMODITY_YAHOO_MAP.get(canonical)
         if mapped:
             candidates.append(mapped)
+        if canonical != cleaned:
+            candidates.append(canonical)
         if cleaned.endswith(".US"):
             candidates.append(cleaned[:-3])
         if cleaned.endswith(".F") and "=" not in cleaned:
@@ -848,7 +869,7 @@ def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, dateti
 
 
 def _mapped_stooq_symbol_for_commodity(symbol: str) -> str:
-    normalized_symbol = symbol.strip().upper()
+    normalized_symbol = _canonical_commodity_symbol(symbol)
     mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
     if not mapped_stooq:
         direct = symbol.strip().lower()
@@ -1179,15 +1200,16 @@ def load_or_update_daily_data(
     display_name = _humanize_symbol(symbol)
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
-        display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), _humanize_symbol(symbol))
+        canonical_symbol = _canonical_commodity_symbol(symbol)
+        display_name = COMMODITY_DISPLAY_NAME.get(canonical_symbol, _humanize_symbol(canonical_symbol))
         # Yahoo enrichment disabled in Stooq-only mode to avoid noisy 404 lookups.
         enriched_name = source_name
         if enriched_name:
             display_name = enriched_name
         elif str(source_symbol).startswith("^"):
             display_name = str(source_symbol).replace("^", "").upper()
-        preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
-        if preferred_stooq_symbol:
+        preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(canonical_symbol)
+        if preferred_stooq_symbol and not _is_index_like_commodity(canonical_symbol):
             display_symbol = preferred_stooq_symbol.upper()
     elif instrument_type == "stock":
         display_name = source_name or symbol.upper()

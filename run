@@ -80,7 +80,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         return ""
     ticker_cmd = ticker
     market = (row.market or "").upper()
-    if market in {"COMMODITIES", "INDEXES"}:
+    if market == "COMMODITIES":
         mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
         if mapped:
             ticker_cmd = str(mapped).upper()
@@ -2230,7 +2230,8 @@ def _expected_scope_csv_paths(scope: str) -> list[Path]:
         if instrument == "stock" and "." not in symbol and len(symbol) <= 5:
             symbol = f"{symbol}.WA"
         if instrument == "commodity":
-            symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
+            if group != "indexes":
+                symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
             folder = PROJECT_ROOT / "data" / "commodities"
         elif instrument == "forex":
             folder = PROJECT_ROOT / "data" / "forex"

@@ -758,7 +758,7 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
         fetch_symbol = f"{ticker}{exchange_suffix}"
     if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
-    if instrument == "commodity":
+    if instrument == "commodity" and group_name != "indexes":
         fetch_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol)).upper()
     return fetch_symbol, instrument
 
@@ -1377,7 +1377,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
     _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
-        mapped = COMMODITY_STOOQ_MAP.get(t_upper)
+        mapped = None if group_name == "indexes" else COMMODITY_STOOQ_MAP.get(t_upper)
         # Requested explicit stooq symbols for scanner output/fetching.
         if t_upper == "ALUMINIUM":
             mapped = "al.f"
@@ -3543,7 +3543,7 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
-        if instrument == "commodity":
+        if instrument == "commodity" and group_name != "indexes":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
@@ -3795,7 +3795,7 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
-        if instrument == "commodity":
+        if instrument == "commodity" and group_name != "indexes":
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         if any(w.ticker == ticker for w in wedge_rows):
             wedge_source_by_ticker[ticker] = (fetch_symbol, instrument)
@@ -3926,7 +3926,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
     if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
-    if instrument == "commodity":
+    if instrument == "commodity" and group_name != "indexes":
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
     df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
