@@ -812,23 +812,32 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
             finally:
                 browser.close()
 
-def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
+def _find_wse_txt_members(zip_path: Path, folder_token: str) -> list[str]:
     with zipfile.ZipFile(zip_path) as zf:
         members = []
+        exact_folder = f"wse {folder_token}"
         for info in zf.infolist():
             if info.is_dir() or not info.filename.lower().endswith(".txt"):
                 continue
             normalized_parts = [part.strip().lower() for part in Path(info.filename).parts]
-            if any(part == "wse stocks" for part in normalized_parts):
+            if any(part == exact_folder for part in normalized_parts):
                 members.append(info.filename)
         if members:
             return members
         # Fallback for archives that encode the folder name slightly differently.
         for info in zf.infolist():
             lowered = info.filename.lower().replace("\\", "/")
-            if not info.is_dir() and lowered.endswith(".txt") and "wse" in lowered and "stocks" in lowered:
+            if not info.is_dir() and lowered.endswith(".txt") and "wse" in lowered and folder_token in lowered:
                 members.append(info.filename)
         return members
+
+
+def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
+    return _find_wse_txt_members(zip_path, "stocks")
+
+
+def _find_wse_indices_txt_members(zip_path: Path) -> list[str]:
+    return _find_wse_txt_members(zip_path, "indices")
 
 
 def _stooq_bulk_txt_to_ohlcv_df(raw: bytes) -> tuple[str, pd.DataFrame]:
@@ -860,18 +869,28 @@ def _write_daily_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -
     path.write_text(text, encoding="utf-8")
 
 
-def import_stooq_wig_bulk_zip(zip_path: Path, stocks_dir: Path | None = None) -> dict[str, int | str]:
-    """Replace local Warsaw stock CSV files from Stooq's bulk d_pl_txt archive."""
+def import_stooq_wig_bulk_zip(
+    zip_path: Path,
+    stocks_dir: Path | None = None,
+    commodities_dir: Path | None = None,
+) -> dict[str, int | str]:
+    """Replace local Warsaw stock CSV files and WSE index CSVs from Stooq's bulk d_pl_txt archive."""
     zip_path = Path(zip_path)
-    stocks_dir = stocks_dir or Path(__file__).resolve().parents[1] / "data" / "stocks"
+    project_root = Path(__file__).resolve().parents[1]
+    stocks_dir = stocks_dir or project_root / "data" / "stocks"
+    commodities_dir = commodities_dir or project_root / "data" / "commodities"
     stocks_dir.mkdir(parents=True, exist_ok=True)
-    members = _find_wse_stocks_txt_members(zip_path)
-    if not members:
+    commodities_dir.mkdir(parents=True, exist_ok=True)
+    stock_members = _find_wse_stocks_txt_members(zip_path)
+    index_members = _find_wse_indices_txt_members(zip_path)
+    if not stock_members:
         raise ValueError(f"No 'wse stocks' txt files found in {zip_path}")
     written = 0
     skipped = 0
+    indices_written = 0
+    indices_skipped = 0
     with zipfile.ZipFile(zip_path) as zf:
-        for member in members:
+        for member in stock_members:
             try:
                 ticker, df = _stooq_bulk_txt_to_ohlcv_df(zf.read(member))
                 if not ticker or df.empty:
@@ -885,12 +904,37 @@ def import_stooq_wig_bulk_zip(zip_path: Path, stocks_dir: Path | None = None) ->
                 skipped += 1
                 if _stooq_verbose_enabled():
                     print(f"[stooq-bulk] skipped {member}: {exc}", flush=True)
-    return {"zip_path": str(zip_path), "members": len(members), "written": written, "skipped": skipped, "stocks_dir": str(stocks_dir)}
+        for member in index_members:
+            try:
+                ticker, df = _stooq_bulk_txt_to_ohlcv_df(zf.read(member))
+                if not ticker or df.empty:
+                    indices_skipped += 1
+                    continue
+                safe_ticker = ticker.replace("/", "").replace(".", "_")
+                csv_path = commodities_dir / f"{safe_ticker}.csv"
+                _write_daily_csv_without_trailing_blank_line(df, csv_path)
+                indices_written += 1
+            except Exception as exc:
+                indices_skipped += 1
+                if _stooq_verbose_enabled():
+                    print(f"[stooq-bulk] skipped index {member}: {exc}", flush=True)
+    return {
+        "zip_path": str(zip_path),
+        "members": len(stock_members),
+        "written": written,
+        "skipped": skipped,
+        "stocks_dir": str(stocks_dir),
+        "indices_members": len(index_members),
+        "indices_written": indices_written,
+        "indices_skipped": indices_skipped,
+        "commodities_dir": str(commodities_dir),
+    }
 
 
 def download_and_import_stooq_wig_bulk_data(
     download_dir: Path | None = None,
     stocks_dir: Path | None = None,
+    commodities_dir: Path | None = None,
     interactive: bool = False,
 ) -> dict[str, int | str]:
     """Download Stooq d_pl_txt bulk data and replace local data/stocks WSE CSVs."""
@@ -898,10 +942,12 @@ def download_and_import_stooq_wig_bulk_data(
     project_root = Path(__file__).resolve().parents[1]
     download_dir = download_dir or project_root / "data" / "downloads" / "stooq"
     zip_path = _download_stooq_wig_bulk_zip(download_dir=Path(download_dir), interactive=interactive)
-    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir)
+    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir)
     print(
         f"[stooq-bulk] imported WSE stocks: written={result['written']} skipped={result['skipped']} "
-        f"from_members={result['members']} zip={result['zip_path']}",
+        f"from_members={result['members']}; indices_written={result['indices_written']} "
+        f"indices_skipped={result['indices_skipped']} from_indices={result['indices_members']} "
+        f"zip={result['zip_path']}",
         flush=True,
     )
     return result

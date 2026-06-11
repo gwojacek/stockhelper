@@ -363,3 +363,61 @@ def test_index_yahoo_candidates_translate_legacy_stooq_symbols():
 
     for symbol, yahoo_ticker in expected.items():
         assert loader._yahoo_symbol_candidates(symbol, "commodity")[0] == yahoo_ticker
+
+
+def test_wig20_uses_stooq_base_and_yahoo_only_for_fresh_candle(monkeypatch, tmp_path):
+    csv_path = tmp_path / "WIG20.csv"
+
+    def fake_stooq(symbol, instrument_type, **_kwargs):
+        assert symbol == "WIG20"
+        assert instrument_type == "commodity"
+        return _df("2026-06-09"), "wig20"
+
+    def fail_full_yahoo(*_args, **_kwargs):
+        raise AssertionError("WIG20 should not use Yahoo max-history as primary source")
+
+    def fake_yahoo_window(symbol, instrument_type, *, period):
+        assert symbol == "WIG20"
+        assert instrument_type == "commodity"
+        assert period == "10d"
+        return _df("2026-06-09", "2026-06-10"), "WIG20.WA", None
+
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda symbol, instrument_type: csv_path)
+    monkeypatch.setattr(loader, "_stooq_download", fake_stooq)
+    monkeypatch.setattr(loader, "_yahoo_download", fail_full_yahoo)
+    monkeypatch.setattr(loader, "_yahoo_download_window", fake_yahoo_window)
+
+    df, source, source_symbol, _source_name, reason = loader._download_remote(
+        symbol="WIG20",
+        instrument_type="commodity",
+        api_key=None,
+        data_source="auto",
+    )
+
+    assert source == "stooq+yahoo"
+    assert source_symbol == "WIG20.WA"
+    assert sorted(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-09", "2026-06-10"]
+    assert "Yahoo is used only for newer WIG20 candle" in reason
+
+
+def test_stooq_bulk_import_includes_wse_indices(tmp_path):
+    import zipfile
+    from utilities.stooq_playwright import import_stooq_wig_bulk_zip
+
+    zip_path = tmp_path / "d_pl_txt.zip"
+    stock_txt = "<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>\nABC,D,20260609,000000,1,2,0.5,1.5,100,0\n"
+    index_txt = "<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>\nWIG20,D,20260609,000000,2800,2810,2790,2805,0,0\n"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("data/daily/pl/wse stocks/abc.txt", stock_txt)
+        zf.writestr("data/daily/pl/wse indices/wig20.txt", index_txt)
+
+    stocks_dir = tmp_path / "stocks"
+    commodities_dir = tmp_path / "commodities"
+    result = import_stooq_wig_bulk_zip(zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir)
+
+    assert result["written"] == 1
+    assert result["indices_written"] == 1
+    assert (stocks_dir / "ABC_WA.csv").exists()
+    wig20_csv = commodities_dir / "WIG20.csv"
+    assert wig20_csv.exists()
+    assert pd.read_csv(wig20_csv)["Close"].iloc[-1] == 2805

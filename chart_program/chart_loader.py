@@ -889,6 +889,58 @@ def _is_index_like_commodity(symbol: str) -> bool:
         or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
     )
 
+
+
+def _is_wig20_index_symbol(symbol: str) -> bool:
+    canonical = _canonical_commodity_symbol(symbol)
+    return canonical in {"WIG20", "W20"}
+
+
+def _download_wig20_index_from_stooq_plus_yahoo(
+    symbol: str,
+    csv_path_ref: Path,
+    *,
+    fetch_older_data: bool,
+    older_days: int,
+    older_anchor: datetime | None,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+    canonical = _canonical_commodity_symbol(symbol)
+    base_source = "stooq"
+    base_symbol = COMMODITY_STOOQ_MAP.get(canonical, "wig20")
+
+    if csv_path_ref.exists() and not fetch_older_data:
+        base_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+        base_source = "stooq_bulk"
+        base_symbol = canonical
+        base_reason = "WIG20 loaded from Stooq bulk WSE indices cache."
+    else:
+        base_df, stooq_candidate = _stooq_download(
+            canonical,
+            "commodity",
+            api_key=None,
+            lookback_days=older_days if fetch_older_data else 364,
+            end_date=older_anchor,
+        )
+        base_symbol = stooq_candidate
+        base_reason = "WIG20 loaded from Stooq index history."
+
+    if fetch_older_data:
+        return base_df, base_source, str(base_symbol).upper(), None, base_reason
+
+    yahoo_merged = _try_yahoo_fresh_candle_merge(
+        base_df,
+        canonical,
+        "commodity",
+        source=base_source,
+        source_symbol=str(base_symbol).upper(),
+        source_name=None,
+        reason=base_reason + " Yahoo is used only for newer WIG20 candle(s).",
+    )
+    if yahoo_merged is not None:
+        merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+        return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+    return base_df, base_source, str(base_symbol).upper(), None, base_reason
+
 def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str, fetch_older_data: bool = False) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     def _incremental_lookback_days(csv_path: Path, default_days: int = 364) -> int:
         try:
@@ -936,6 +988,15 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             end_date=older_anchor,
         )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
+
+    if instrument_type == "commodity" and _is_wig20_index_symbol(symbol):
+        return _download_wig20_index_from_stooq_plus_yahoo(
+            symbol,
+            csv_path_ref,
+            fetch_older_data=fetch_older_data,
+            older_days=older_days,
+            older_anchor=older_anchor,
+        )
 
     if instrument_type == "forex" or (instrument_type == "commodity" and _is_index_like_commodity(symbol)):
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
