@@ -306,3 +306,31 @@ def test_non_warsaw_stock_uses_yahoo_without_stooq_api(monkeypatch):
     assert source_name == "Apple Inc."
     assert df["Date"].max() == pd.Timestamp("2026-06-10")
     assert "non-Warsaw-stock" in reason
+
+
+def test_index_yahoo_symbol_candidates_match_expected_yahoo_tickers():
+    expected = {
+        "BRACOMP": "^BVSP",
+        "US500": "^GSPC",
+        "MEXCOMP": "^MXX",
+        "VIX": "^VIX",
+        "US30": "^DJI",
+        "US100": "^NDX",
+        "HK.CASH": "^HSI",
+        "SG20CASH": "^STI",
+        "AU200.CASH": "^AXJO",
+        "CHN.CASH": "XIN9.FGI",
+        "JP225": "^N225",
+        "WIG20": "WIG20.WA",
+        "UK100": "^FTSE",
+        "ITA40": "FTSEMIB.MI",
+        "DE40": "^GDAXI",
+        "FRA40": "^FCHI",
+        "NED25": "^AEX",
+        "SUI20": "^SSMI",
+        "SPA35": "^IBEX",
+        "EU50": "^STOXX50E",
+    }
+
+    for symbol, yahoo_ticker in expected.items():
+        assert loader._yahoo_symbol_candidates(symbol, "commodity")[0] == yahoo_ticker
