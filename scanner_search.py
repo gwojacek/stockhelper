@@ -831,6 +831,26 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         return 0
 
 
+def _stock_csv_has_data_for_symbol(fetch_symbol: str) -> bool:
+    path = local_csv_path_for_symbol(fetch_symbol, "stock")
+    try:
+        if not path.exists():
+            return False
+        df = pd.read_csv(path, nrows=5)
+        return not df.empty and "Date" in df.columns
+    except Exception:
+        return False
+
+
+def _missing_wig_csv_members(members: list[str], exchange_suffix: str | None) -> list[str]:
+    missing: list[str] = []
+    for ticker in members:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, "wig", exchange_suffix)
+        if instrument == "stock" and not _stock_csv_has_data_for_symbol(fetch_symbol):
+            missing.append(ticker)
+    return missing
+
+
 def _stock_yahoo_freshness_probe(fetch_symbol: str) -> tuple[int, str, str, str]:
     csv_path = local_csv_path_for_symbol(fetch_symbol, "stock")
     if not csv_path.exists():
@@ -861,7 +881,7 @@ def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
 
 def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
     """Refresh Warsaw stock CSVs from Stooq bulk before per-symbol Yahoo merging."""
-    if (group_name or "").upper() != "WIG":
+    if not (group_name or "").upper().startswith("WIG"):
         return False
     if os.environ.get("STOCKHELPER_DISABLE_WIG_BULK_REFRESH") == "1":
         return False
@@ -914,6 +934,19 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
+
+    if group_l.startswith("wig"):
+        missing_members = _missing_wig_csv_members(members, exchange_suffix)
+        if missing_members:
+            preview = ", ".join(missing_members[:10])
+            suffix = " ..." if len(missing_members) > 10 else ""
+            reason = f"missing local bulk CSV(s): {preview}{suffix}"
+            print(f"[refresh-check] {group_name}: {len(missing_members)} expected WIG CSV(s) missing -> Stooq bulk refresh ({reason})")
+            if _try_refresh_wig_with_stooq_bulk(group_name, reason):
+                return True
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
 
     if group_l == "single":
         probes = members[:1]
