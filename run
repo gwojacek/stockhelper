@@ -36,6 +36,7 @@ TROJPOLLOWKI_RETEST_LABELS = {
 
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
+YAHOO_PRIMARY_COMMODITIES = {"GOLD", "SILVER", "PALLADIUM"}
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
 try:
@@ -80,7 +81,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         return ""
     ticker_cmd = ticker
     market = (row.market or "").upper()
-    if market == "COMMODITIES":
+    if market == "COMMODITIES" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
         mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
         if mapped:
             ticker_cmd = str(mapped).upper()
@@ -2230,7 +2231,7 @@ def _expected_scope_csv_paths(scope: str) -> list[Path]:
         if instrument == "stock" and "." not in symbol and len(symbol) <= 5:
             symbol = f"{symbol}.WA"
         if instrument == "commodity":
-            if group != "indexes":
+            if group != "indexes" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
                 symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
             folder = PROJECT_ROOT / "data" / "commodities"
         elif instrument == "forex":
@@ -2479,6 +2480,8 @@ def main()->int:
                 return raw.replace("_", ".")
             # Already stooq ticker with dot.
             if raw.endswith(".F"):
+                return raw
+            if raw in YAHOO_PRIMARY_COMMODITIES:
                 return raw
             mapped = COMMODITY_STOOQ_MAP.get(raw)
             if mapped:

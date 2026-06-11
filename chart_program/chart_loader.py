@@ -37,11 +37,7 @@ _SESSION_REFRESHED_KEYS: set[tuple[str, str, bool]] = set()
 
 COMMODITY_YAHOO_MAP = {
     "GOLD": "GC=F",
-    "XAUUSD": "GC=F",
-    "XAU/USD": "GC=F",
     "SILVER": "SI=F",
-    "XAGUSD": "SI=F",
-    "XAG/USD": "SI=F",
     "COFFEE": "KC=F",
     "COCOA": "CC=F",
     "SUGAR": "SB=F",
@@ -53,8 +49,6 @@ COMMODITY_YAHOO_MAP = {
     "ALUMINIUM": "ALI=F",
     "PLATINUM": "PL=F",
     "PALLADIUM": "PA=F",
-    "XPDUSD": "PA=F",
-    "XPD/USD": "PA=F",
     "WTI": "CL=F",
     "OIL.WTI": "CL=F",
     "OIL": "BZ=F",
@@ -94,15 +88,9 @@ COMMODITY_YAHOO_MAP = {
 
 COMMODITY_STOOQ_MAP = {
     "GOLD": "xauusd",
-    "XAUUSD": "xauusd",
-    "XAU/USD": "xauusd",
     "SILVER": "xagusd",
-    "XAGUSD": "xagusd",
-    "XAG/USD": "xagusd",
     "PLATINUM": "pl.f",
     "PALLADIUM": "xpdusd",
-    "XPDUSD": "xpdusd",
-    "XPD/USD": "xpdusd",
     "COFFEE": "kc.f",
     "COCOA": "cc.f",
     "SUGAR": "sb.f",
@@ -276,6 +264,8 @@ def _storage_symbol_for_csv(symbol: str, instrument_type: str) -> str:
     if instrument_type != "commodity":
         return symbol
     canonical = _canonical_commodity_symbol(symbol)
+    if canonical in {"GOLD", "SILVER", "PALLADIUM"}:
+        return canonical
     if canonical in COMMODITY_YAHOO_MAP and _is_index_like_commodity(canonical):
         return canonical
     mapped = COMMODITY_STOOQ_MAP.get((symbol or "").strip().upper())
@@ -896,7 +886,7 @@ def _is_index_like_commodity(symbol: str) -> bool:
 
 def _is_yahoo_primary_commodity(symbol: str) -> bool:
     canonical = _canonical_commodity_symbol(symbol)
-    return canonical in {"GOLD", "XAUUSD", "XAU/USD", "SILVER", "XAGUSD", "XAG/USD", "PALLADIUM", "XPDUSD", "XPD/USD"}
+    return canonical in {"GOLD", "SILVER", "PALLADIUM"}
 
 def _is_wig20_index_symbol(symbol: str) -> bool:
     canonical = _canonical_commodity_symbol(symbol)

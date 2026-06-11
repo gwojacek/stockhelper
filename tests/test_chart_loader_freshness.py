@@ -482,6 +482,12 @@ def test_precious_metals_use_requested_yahoo_futures_tickers():
     assert loader._yahoo_symbol_candidates("GOLD", "commodity")[0] == "GC=F"
     assert loader._yahoo_symbol_candidates("SILVER", "commodity")[0] == "SI=F"
     assert loader._yahoo_symbol_candidates("PALLADIUM", "commodity")[0] == "PA=F"
+    assert "XAUUSD" not in loader.COMMODITY_YAHOO_MAP
+    assert "XAGUSD" not in loader.COMMODITY_YAHOO_MAP
+    assert "XPDUSD" not in loader.COMMODITY_YAHOO_MAP
+    assert loader._storage_symbol_for_csv("GOLD", "commodity") == "GOLD"
+    assert loader._storage_symbol_for_csv("SILVER", "commodity") == "SILVER"
+    assert loader._storage_symbol_for_csv("PALLADIUM", "commodity") == "PALLADIUM"
 
 
 def test_api_metals_use_yahoo_primary_even_when_scanner_passes_stooq_symbol(monkeypatch):
@@ -498,9 +504,8 @@ def test_api_metals_use_yahoo_primary_even_when_scanner_passes_stooq_symbol(monk
     monkeypatch.setattr(loader, "_stooq_download", fail_stooq)
 
     expected = {
-        "XAUUSD": "GC=F",
-        "XAGUSD": "SI=F",
-        "XPDUSD": "PA=F",
+        "GOLD": "GC=F",
+        "SILVER": "SI=F",
         "PALLADIUM": "PA=F",
     }
     for symbol, yahoo_ticker in expected.items():
@@ -515,3 +520,16 @@ def test_api_metals_use_yahoo_primary_even_when_scanner_passes_stooq_symbol(monk
         assert "API metal" in reason
 
     assert calls == [(symbol, "commodity") for symbol in expected]
+
+
+def test_commodity_search_uses_canonical_metal_names():
+    import scanner_search as scanner
+
+    assert "GOLD" in scanner.COMMODITIES_SEARCH_TICKERS
+    assert "SILVER" in scanner.COMMODITIES_SEARCH_TICKERS
+    assert "PALLADIUM" in scanner.COMMODITIES_SEARCH_TICKERS
+    assert "XAUUSD" not in scanner.COMMODITIES_SEARCH_TICKERS
+    assert "XAGUSD" not in scanner.COMMODITIES_SEARCH_TICKERS
+    assert scanner._search_fetch_symbol("GOLD", "commodities", None) == ("GOLD", "commodity")
+    assert scanner._search_fetch_symbol("SILVER", "commodities", None) == ("SILVER", "commodity")
+    assert scanner._search_fetch_symbol("PALLADIUM", "commodities", None) == ("PALLADIUM", "commodity")

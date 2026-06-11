@@ -44,7 +44,7 @@ STOP_SCAN_EVENT = threading.Event()
 PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
 REFRESH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
-API_METAL_COMMODITIES = {"XAUUSD", "XAGUSD", "XPDUSD"}
+API_METAL_COMMODITIES = {"GOLD", "SILVER", "PALLADIUM"}
 
 
 @dataclass(frozen=True)
@@ -160,7 +160,7 @@ def _search_output_dir(prefix: str) -> Path:
 COMMODITIES_SEARCH_TICKERS = [
     "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
     "COPPER", "ALUMINIUM", "PLATINUM", "PALLADIUM", "WTI",
-    "OIL", "NATURAL_GAS", "XAUUSD", "XAGUSD",
+    "OIL", "NATURAL_GAS", "GOLD", "SILVER",
 ]
 
 INDEXES_SEARCH_TICKERS = [
@@ -649,8 +649,6 @@ def _normalize_commodity_symbol(raw: str) -> str:
         "CRUDEOIL": "CRUDE_OIL",
         "NATURAL_GAS": "NATURAL_GAS",
         "NATGAS": "NATURAL_GAS",
-        "GOLD": "XAUUSD",
-        "SILVER": "XAGUSD",
     }
     cleaned = aliases.get(cleaned, cleaned)
     available = set(COMMODITY_YAHOO_MAP.keys()) | set(COMMODITY_STOOQ_MAP.keys())
@@ -758,7 +756,7 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
         fetch_symbol = f"{ticker}{exchange_suffix}"
     if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
-    if instrument == "commodity" and group_name != "indexes":
+    if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
         fetch_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol)).upper()
     return fetch_symbol, instrument
 
@@ -1460,7 +1458,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
     _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
-        mapped = None if group_name == "indexes" else COMMODITY_STOOQ_MAP.get(t_upper)
+        mapped = None if group_name == "indexes" or t_upper in API_METAL_COMMODITIES else COMMODITY_STOOQ_MAP.get(t_upper)
         # Requested explicit stooq symbols for scanner output/fetching.
         if t_upper == "ALUMINIUM":
             mapped = "al.f"
@@ -3626,7 +3624,7 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
-        if instrument == "commodity" and group_name != "indexes":
+        if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
@@ -3878,7 +3876,7 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
-        if instrument == "commodity" and group_name != "indexes":
+        if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         if any(w.ticker == ticker for w in wedge_rows):
             wedge_source_by_ticker[ticker] = (fetch_symbol, instrument)
@@ -4009,7 +4007,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
     if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
-    if instrument == "commodity" and group_name != "indexes":
+    if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
     df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
