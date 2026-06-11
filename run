@@ -2435,6 +2435,7 @@ def main()->int:
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
+    parser.add_argument('--scan-workers', type=int, help='Override scanner worker count for search/allsearch phases (use 1 for sequential scanning).')
     parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace data/stocks/*_WA.csv from the wse stocks txt folder.')
     parser.add_argument('--stooq-bulk-zip', help='Import an already-downloaded Stooq d_pl_txt zip instead of downloading it.')
     args=parser.parse_args()
@@ -2442,6 +2443,10 @@ def main()->int:
         os.environ['STOCKHELPER_STOOQ_BULK_INSPECTOR'] = '1'
     else:
         os.environ.pop('STOCKHELPER_STOOQ_BULK_INSPECTOR', None)
+    if args.scan_workers is not None:
+        os.environ['STOCKHELPER_SCAN_WORKERS'] = str(max(1, int(args.scan_workers)))
+    else:
+        os.environ.pop('STOCKHELPER_SCAN_WORKERS', None)
     if args.download_wig_bulk or args.stooq_bulk_zip:
         from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data, import_stooq_wig_bulk_zip
         if args.stooq_bulk_zip:

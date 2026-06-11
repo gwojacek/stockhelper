@@ -1009,6 +1009,17 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
     return False
 
+def _scan_workers_override() -> int | None:
+    raw = os.getenv("STOCKHELPER_SCAN_WORKERS", "").strip()
+    if not raw:
+        return None
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        print(f"[workers] ignoring invalid STOCKHELPER_SCAN_WORKERS={raw!r}", flush=True)
+        return None
+
+
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
     if not spec or not spec.loader:
@@ -2249,6 +2260,11 @@ def run_ichimoku_search(target: str) -> int:
         first_flip = _ensure_flip_ticker(first_flip, first)
         flip_results.append(first_flip)
 
+    workers_override = _scan_workers_override()
+    if workers_override == 1 and not sequential:
+        sequential = True
+        print("[workers] STOCKHELPER_SCAN_WORKERS=1 -> sequential Ichimoku scan mode.")
+
     rest = members[1:]
     if sequential or len(rest) == 0:
         if sequential and group_name != "commodities":
@@ -2268,7 +2284,9 @@ def run_ichimoku_search(target: str) -> int:
                 flip = _ensure_flip_ticker(flip, ticker)
                 flip_results.append(flip)
     else:
-        if group_name == "commodities":
+        if workers_override is not None:
+            max_workers = min(max(1, workers_override), len(rest))
+        elif group_name == "commodities":
             try:
                 commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "2"))
             except ValueError:
@@ -3633,9 +3651,13 @@ def run_fibo_search(target: str) -> int:
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc))
 
-    cpu = os.cpu_count() or 4
-    auto_workers = max(4, min(cpu * 3, 32))
-    max_workers = min(auto_workers, len(members))
+    workers_override = _scan_workers_override()
+    if workers_override is not None:
+        max_workers = min(max(1, workers_override), len(members))
+    else:
+        cpu = os.cpu_count() or 4
+        auto_workers = max(4, min(cpu * 3, 32))
+        max_workers = min(auto_workers, len(members))
     print(f"[fibo] parallel mode ({max_workers} workers, bounded queue).")
     indexed_members = list(enumerate(members, start=1))
     next_pos = 0
