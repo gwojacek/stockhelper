@@ -933,13 +933,16 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     f"[refresh-check] {ticker}: Yahoo {yahoo_candidate} latest={yahoo_latest}, "
                     f"local latest={local_latest}, newer candles={missing_candles}"
                 )
-                if missing_candles > 2:
-                    if _try_refresh_wig_with_stooq_bulk(
-                        group_name,
-                        f"probe {ticker} found {missing_candles} newer Yahoo candles",
-                    ):
-                        return True
-                elif missing_candles > 0:
+                if missing_candles > 0:
+                    after_close = _is_after_warsaw_stock_close()
+                    needs_bulk_first = (not after_close) or missing_candles > 1
+                    if needs_bulk_first:
+                        phase_reason = "before Warsaw close" if not after_close else "more than one Yahoo candle missing after Warsaw close"
+                        if _try_refresh_wig_with_stooq_bulk(
+                            group_name,
+                            f"probe {ticker} found {missing_candles} newer Yahoo candles ({phase_reason})",
+                        ):
+                            return True
                     os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                     os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     return True
