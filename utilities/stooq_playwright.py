@@ -457,9 +457,59 @@ def _bulk_captcha_image(page):
 
 def _page_has_bulk_captcha(page) -> bool:
     try:
-        return _bulk_captcha_image(page).count() > 0
+        img = _bulk_captcha_image(page)
+        return img.count() > 0 and img.is_visible(timeout=500)
     except Exception:
         return False
+
+
+def _bulk_authorization_success_visible(page) -> bool:
+    try:
+        body = page.locator("body").inner_text(timeout=1000).lower()
+    except Exception:
+        try:
+            body = page.content().lower()
+        except Exception:
+            body = ""
+    markers = (
+        "authorization successful",
+        "authorisation successful",
+        "download file",
+        "autoryzacja",
+        "pobierz plik",
+    )
+    return any(marker in body for marker in markers)
+
+
+def _click_authorized_bulk_download_link(page, download_dir: Path | None = None) -> bool | Path:
+    selectors = (
+        'a:has-text("Download file")',
+        'a:has-text("Download file...")',
+        'a:has-text("Pobierz plik")',
+        'a[href*="/db/d/"][href*="d_pl_txt"]',
+        'a[href*="b=d_pl_txt"]',
+    )
+    for selector in selectors:
+        try:
+            link = page.locator(selector).first
+            if link.count() == 0 or not link.is_visible(timeout=500):
+                continue
+            print(f"[stooq-bulk] clicking authorized download link ({selector}).", flush=True)
+            if download_dir is not None:
+                try:
+                    with page.expect_download(timeout=30000) as download_info:
+                        link.click(timeout=2500, force=True)
+                    zip_path = _save_stooq_bulk_download_if_zip(download_info.value, download_dir, "authorized download link")
+                    if zip_path is not None:
+                        return zip_path
+                    return True
+                except PlaywrightTimeoutError:
+                    return True
+            link.click(timeout=2500, force=True)
+            return True
+        except Exception:
+            continue
+    return False
 
 
 def _request_new_bulk_captcha_code(page, symbol: str, attempt: int) -> bool:
@@ -540,25 +590,37 @@ def _refresh_bulk_page_after_captcha(page, download_dir: Path | None = None) -> 
                     zip_path = _save_stooq_bulk_download_if_zip(download_info.value, download_dir, "captcha refresh link")
                     if zip_path is not None:
                         return zip_path
-                    # Stooq can emit a fast error.txt from this link even though
-                    # the page says authorization succeeded. Treat that as
-                    # authorization-only and let the caller click d_pl_txt once.
                     return True
                 except PlaywrightTimeoutError:
-                    # Success link may only refresh authorization state; caller will
-                    # click the exact d_pl_txt link once after this.
-                    pass
+                    # The refresh link often opens an "Authorization successful" modal
+                    # with a separate "Download file..." link instead of starting the
+                    # download directly, especially in headless mode.
+                    download_result = _click_authorized_bulk_download_link(page, download_dir)
+                    if download_result:
+                        return download_result
             else:
                 link.click(timeout=2500, force=True)
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=5000)
             except Exception:
                 pass
+            download_result = _click_authorized_bulk_download_link(page, download_dir)
+            if download_result:
+                return download_result
+            if _bulk_authorization_success_visible(page):
+                return True
             return True
         except Exception:
             continue
+    if _bulk_authorization_success_visible(page):
+        print("[stooq-bulk] authorization successful; refresh link missing but download link/state is present.", flush=True)
+        download_result = _click_authorized_bulk_download_link(page, download_dir)
+        if download_result:
+            return download_result
+        return True
     print("[stooq-bulk] captcha refresh link not found; not reloading because code may be wrong.", flush=True)
     return False
+
 
 def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_dir: Path | None = None) -> bool | Path:
     """Solve the simple Stooq download captcha, saving artifacts for every attempt."""
@@ -566,9 +628,14 @@ def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_
     print(f"[stooq-bulk] resolving download captcha (max attempts={max_attempts})...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
+            if _bulk_authorization_success_visible(page):
+                download_result = _click_authorized_bulk_download_link(page, download_dir)
+                if download_result:
+                    return download_result
+                return True
             img = _bulk_captcha_image(page)
-            if img.count() == 0:
-                _capture_stooq_bulk_attempt(page, symbol, "captcha_missing_treat_as_solved", attempt)
+            if img.count() == 0 or not img.is_visible(timeout=1000):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_missing_or_hidden_treat_as_solved", attempt)
                 return True
             suffix = "" if attempt == 1 else f"_a{attempt}"
             raw_path = _captcha_artifact_path(symbol, f"_captcha_raw{suffix}")
@@ -614,6 +681,11 @@ def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_
             if isinstance(refresh_result, Path):
                 return refresh_result
             if not refresh_result:
+                if _bulk_authorization_success_visible(page):
+                    download_result = _click_authorized_bulk_download_link(page, download_dir)
+                    if download_result:
+                        return download_result
+                    return True
                 _capture_stooq_bulk_attempt(page, symbol, "captcha_refresh_missing", attempt)
                 if _captcha_wrong_code_visible(page) or _page_has_bulk_captcha(page):
                     print(f"[stooq-bulk] no success refresh link after submit for attempt {attempt}/{max_attempts}; changing captcha code.", flush=True)
