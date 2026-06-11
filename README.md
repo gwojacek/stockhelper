@@ -34,7 +34,8 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
 | Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, replaces `data/stocks/*_WA.csv`, and imports only `wse indices/wig20.txt` as `data/commodities/WIG20.csv`. |
+| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, replaces `data/stocks/*_WA.csv`, trims WIG stock CSVs to two years, and imports only `wse indices/wig20.txt` as `data/commodities/WIG20.csv`. |
+| Trim WIG stock CSVs | `python run --trim-wig-csvs` | Trims existing `data/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
 | Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
 | Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
@@ -50,7 +51,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - Stooq API/CSV-style downloads for many stocks/forex/commodities;
   - Stooq web/table fallback for selected commodity data;
   - Yahoo fresh-candle merges into Stooq/local bases for Warsaw stocks, WIG20, and selected commodities;
-  - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder;
+  - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder, automatically trimmed to two years from the run date;
   - Stooq bulk `wse indices/wig20.txt` import as `data/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
   - local CSV cache in `data/stocks/`, `data/forex/`, `data/commodities/`, and `data/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
@@ -200,8 +201,15 @@ StockHelper deliberately mixes data sources so scans use the freshest daily cand
 
 ```bash
 # Refresh Warsaw stocks and WIG20 from Stooq bulk.
-# Imports all WSE stocks into data/stocks/*_WA.csv and only wse indices/wig20.txt into data/commodities/WIG20.csv.
+# Imports all WSE stocks into data/stocks/*_WA.csv, trims stock CSVs to two years,
+# and imports only wse indices/wig20.txt into data/commodities/WIG20.csv.
 python run --download-wig-bulk
+
+# Trim existing Warsaw stock CSVs to two years without downloading anything.
+python run --trim-wig-csvs
+
+# Keep a different number of years if needed.
+python run --trim-wig-csvs --wig-trim-years 3
 
 # Inspect the Stooq bulk CAPTCHA/download flow interactively.
 python run --download-wig-bulk --inspector
@@ -220,6 +228,7 @@ data/commodities/GOLD.csv       # Yahoo GC=F
 data/commodities/SILVER.csv     # Yahoo SI=F
 data/commodities/PALLADIUM.csv  # Yahoo PA=F
 data/commodities/WIG20.csv      # Stooq bulk wse indices/wig20.txt + optional Yahoo WIG20.WA fresh candle
+data/stocks/*_WA.csv               # Stooq bulk wse stocks, automatically trimmed to two years
 ```
 
 ## Most useful commands

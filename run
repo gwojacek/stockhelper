@@ -2444,6 +2444,8 @@ def main()->int:
     parser.add_argument('--scan-workers', type=int, help='Override scanner worker count for search/allsearch phases (use 1 for sequential scanning).')
     parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace WSE stock CSVs plus WSE index CSVs such as data/commodities/WIG20.csv.')
     parser.add_argument('--stooq-bulk-zip', help='Import an already-downloaded Stooq d_pl_txt zip instead of downloading it.')
+    parser.add_argument('--trim-wig-csvs', action='store_true', help='Trim local data/stocks/*_WA.csv files to the last --wig-trim-years years without downloading bulk data.')
+    parser.add_argument('--wig-trim-years', type=int, default=2, help='Years to keep when trimming WIG stock CSVs (default: 2).')
     args=parser.parse_args()
     if args.inspector:
         os.environ['STOCKHELPER_STOOQ_BULK_INSPECTOR'] = '1'
@@ -2453,15 +2455,34 @@ def main()->int:
         os.environ['STOCKHELPER_SCAN_WORKERS'] = str(max(1, int(args.scan_workers)))
     else:
         os.environ.pop('STOCKHELPER_SCAN_WORKERS', None)
+    if args.trim_wig_csvs:
+        from utilities.stooq_playwright import trim_wig_stock_csvs
+        result = trim_wig_stock_csvs(stocks_dir=PROJECT_ROOT / 'data' / 'stocks', years=args.wig_trim_years)
+        print(
+            f"[stooq-bulk] trim completed scanned={result['scanned']} trimmed={result['trimmed']} "
+            f"skipped={result['skipped']} rows={result['rows_before']}->{result['rows_after']} "
+            f"cutoff={result['cutoff']} stocks_dir={result['stocks_dir']}"
+        )
+        return 0
     if args.download_wig_bulk or args.stooq_bulk_zip:
         from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data, import_stooq_wig_bulk_zip
         if args.stooq_bulk_zip:
-            result = import_stooq_wig_bulk_zip(Path(args.stooq_bulk_zip), PROJECT_ROOT / 'data' / 'stocks')
+            result = import_stooq_wig_bulk_zip(
+                Path(args.stooq_bulk_zip),
+                stocks_dir=PROJECT_ROOT / 'data' / 'stocks',
+                commodities_dir=PROJECT_ROOT / 'data' / 'commodities',
+            )
         else:
-            result = download_and_import_stooq_wig_bulk_data(stocks_dir=PROJECT_ROOT / 'data' / 'stocks', interactive=args.inspector)
+            result = download_and_import_stooq_wig_bulk_data(
+                stocks_dir=PROJECT_ROOT / 'data' / 'stocks',
+                commodities_dir=PROJECT_ROOT / 'data' / 'commodities',
+                interactive=args.inspector,
+            )
         print(
             f"[stooq-bulk] completed written={result['written']} skipped={result['skipped']} "
-            f"members={result['members']} stocks_dir={result['stocks_dir']}"
+            f"members={result['members']} indices_written={result.get('indices_written', 0)} "
+            f"trimmed={result.get('trimmed', 0)}/{result.get('trim_scanned', 0)} "
+            f"cutoff={result.get('trim_cutoff', '-')} stocks_dir={result['stocks_dir']}"
         )
         return 0
     if args.onlycache:

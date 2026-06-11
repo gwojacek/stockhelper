@@ -533,3 +533,30 @@ def test_commodity_search_uses_canonical_metal_names():
     assert scanner._search_fetch_symbol("GOLD", "commodities", None) == ("GOLD", "commodity")
     assert scanner._search_fetch_symbol("SILVER", "commodities", None) == ("SILVER", "commodity")
     assert scanner._search_fetch_symbol("PALLADIUM", "commodities", None) == ("PALLADIUM", "commodity")
+
+
+def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):
+    from utilities.stooq_playwright import trim_wig_stock_csvs
+
+    stocks_dir = tmp_path / "stocks"
+    stocks_dir.mkdir()
+    stock_csv = stocks_dir / "ABC_WA.csv"
+    pd.DataFrame(
+        [
+            {"Date": "2022-06-10", "Open": 1, "High": 2, "Low": 0.5, "Close": 1.5, "Volume": 100},
+            {"Date": "2024-06-11", "Open": 2, "High": 3, "Low": 1.5, "Close": 2.5, "Volume": 200},
+            {"Date": "2026-06-11", "Open": 3, "High": 4, "Low": 2.5, "Close": 3.5, "Volume": 300},
+        ]
+    ).to_csv(stock_csv, index=False)
+    non_wig_csv = stocks_dir / "AAPL_US.csv"
+    pd.DataFrame([{"Date": "2020-01-01", "Open": 1, "High": 1, "Low": 1, "Close": 1, "Volume": 1}]).to_csv(non_wig_csv, index=False)
+
+    result = trim_wig_stock_csvs(stocks_dir=stocks_dir, years=2, as_of=pd.Timestamp("2026-06-11"))
+
+    trimmed = pd.read_csv(stock_csv)
+    assert result["scanned"] == 1
+    assert result["trimmed"] == 1
+    assert result["rows_before"] == 3
+    assert result["rows_after"] == 2
+    assert list(trimmed["Date"]) == ["2024-06-11", "2026-06-11"]
+    assert pd.read_csv(non_wig_csv)["Date"].iloc[0] == "2020-01-01"

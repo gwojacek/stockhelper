@@ -870,6 +870,58 @@ def _write_daily_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -
     path.write_text(text, encoding="utf-8")
 
 
+
+def _trim_daily_df_to_recent_years(df: pd.DataFrame, years: int = 2, as_of: datetime | None = None) -> pd.DataFrame:
+    if df is None or df.empty or "Date" not in df.columns:
+        return df
+    as_of_ts = pd.Timestamp(as_of or datetime.now(UTC)).tz_localize(None).normalize()
+    cutoff = as_of_ts - pd.DateOffset(years=max(1, int(years)))
+    out = df.copy()
+    out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
+    out = out.dropna(subset=["Date"])
+    out = out.loc[out["Date"] >= cutoff].sort_values("Date").reset_index(drop=True)
+    return out
+
+
+def trim_wig_stock_csvs(stocks_dir: Path | None = None, years: int = 2, as_of: datetime | None = None) -> dict[str, int | str]:
+    """Trim local Warsaw stock CSVs (`*_WA.csv`) to the last `years` years."""
+    project_root = Path(__file__).resolve().parents[1]
+    stocks_dir = stocks_dir or project_root / "data" / "stocks"
+    stocks_dir = Path(stocks_dir)
+    stocks_dir.mkdir(parents=True, exist_ok=True)
+    scanned = 0
+    trimmed = 0
+    skipped = 0
+    rows_before = 0
+    rows_after = 0
+    cutoff = (pd.Timestamp(as_of or datetime.now(UTC)).tz_localize(None).normalize() - pd.DateOffset(years=max(1, int(years)))).date().isoformat()
+    for csv_path in sorted(stocks_dir.glob("*_WA.csv")):
+        scanned += 1
+        try:
+            df = pd.read_csv(csv_path)
+            before = len(df)
+            rows_before += before
+            trimmed_df = _trim_daily_df_to_recent_years(df, years=years, as_of=as_of)
+            after = len(trimmed_df)
+            rows_after += after
+            if after < before:
+                _write_daily_csv_without_trailing_blank_line(trimmed_df, csv_path)
+                trimmed += 1
+        except Exception as exc:
+            skipped += 1
+            if _stooq_verbose_enabled():
+                print(f"[stooq-bulk] trim skipped {csv_path}: {exc}", flush=True)
+    return {
+        "stocks_dir": str(stocks_dir),
+        "years": int(years),
+        "cutoff": cutoff,
+        "scanned": scanned,
+        "trimmed": trimmed,
+        "skipped": skipped,
+        "rows_before": rows_before,
+        "rows_after": rows_after,
+    }
+
 def import_stooq_wig_bulk_zip(
     zip_path: Path,
     stocks_dir: Path | None = None,
@@ -919,6 +971,7 @@ def import_stooq_wig_bulk_zip(
                 indices_skipped += 1
                 if _stooq_verbose_enabled():
                     print(f"[stooq-bulk] skipped index {member}: {exc}", flush=True)
+    trim_result = trim_wig_stock_csvs(stocks_dir=stocks_dir, years=2)
     return {
         "zip_path": str(zip_path),
         "members": len(stock_members),
@@ -929,6 +982,12 @@ def import_stooq_wig_bulk_zip(
         "indices_written": indices_written,
         "indices_skipped": indices_skipped,
         "commodities_dir": str(commodities_dir),
+        "trimmed": trim_result["trimmed"],
+        "trim_scanned": trim_result["scanned"],
+        "trim_skipped": trim_result["skipped"],
+        "trim_rows_before": trim_result["rows_before"],
+        "trim_rows_after": trim_result["rows_after"],
+        "trim_cutoff": trim_result["cutoff"],
     }
 
 
@@ -948,7 +1007,8 @@ def download_and_import_stooq_wig_bulk_data(
         f"[stooq-bulk] imported WSE stocks: written={result['written']} skipped={result['skipped']} "
         f"from_members={result['members']}; indices_written={result['indices_written']} "
         f"indices_skipped={result['indices_skipped']} from_indices={result['indices_members']} "
-        f"zip={result['zip_path']}",
+        f"trimmed={result.get('trimmed', 0)}/{result.get('trim_scanned', 0)} "
+        f"cutoff={result.get('trim_cutoff', '-')} zip={result['zip_path']}",
         flush=True,
     )
     return result
