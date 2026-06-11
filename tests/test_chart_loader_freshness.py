@@ -482,3 +482,36 @@ def test_precious_metals_use_requested_yahoo_futures_tickers():
     assert loader._yahoo_symbol_candidates("GOLD", "commodity")[0] == "GC=F"
     assert loader._yahoo_symbol_candidates("SILVER", "commodity")[0] == "SI=F"
     assert loader._yahoo_symbol_candidates("PALLADIUM", "commodity")[0] == "PA=F"
+
+
+def test_api_metals_use_yahoo_primary_even_when_scanner_passes_stooq_symbol(monkeypatch):
+    calls = []
+
+    def fake_yahoo(symbol, instrument_type):
+        calls.append((symbol, instrument_type))
+        return _df("2026-06-10"), loader._yahoo_symbol_candidates(symbol, instrument_type)[0], None
+
+    def fail_stooq(*_args, **_kwargs):
+        raise AssertionError("API metals should use Yahoo futures tickers instead of Stooq API")
+
+    monkeypatch.setattr(loader, "_yahoo_download", fake_yahoo)
+    monkeypatch.setattr(loader, "_stooq_download", fail_stooq)
+
+    expected = {
+        "XAUUSD": "GC=F",
+        "XAGUSD": "SI=F",
+        "XPDUSD": "PA=F",
+        "PALLADIUM": "PA=F",
+    }
+    for symbol, yahoo_ticker in expected.items():
+        _df_out, source, source_symbol, _name, reason = loader._download_remote(
+            symbol=symbol,
+            instrument_type="commodity",
+            api_key=None,
+            data_source="auto",
+        )
+        assert source == "yahoo"
+        assert source_symbol == yahoo_ticker
+        assert "API metal" in reason
+
+    assert calls == [(symbol, "commodity") for symbol in expected]

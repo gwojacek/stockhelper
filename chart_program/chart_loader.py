@@ -53,6 +53,8 @@ COMMODITY_YAHOO_MAP = {
     "ALUMINIUM": "ALI=F",
     "PLATINUM": "PL=F",
     "PALLADIUM": "PA=F",
+    "XPDUSD": "PA=F",
+    "XPD/USD": "PA=F",
     "WTI": "CL=F",
     "OIL.WTI": "CL=F",
     "OIL": "BZ=F",
@@ -891,6 +893,11 @@ def _is_index_like_commodity(symbol: str) -> bool:
 
 
 
+
+def _is_yahoo_primary_commodity(symbol: str) -> bool:
+    canonical = _canonical_commodity_symbol(symbol)
+    return canonical in {"GOLD", "XAUUSD", "XAU/USD", "SILVER", "XAGUSD", "XAG/USD", "PALLADIUM", "XPDUSD", "XPD/USD"}
+
 def _is_wig20_index_symbol(symbol: str) -> bool:
     canonical = _canonical_commodity_symbol(symbol)
     return canonical in {"WIG20", "W20"}
@@ -988,6 +995,10 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             end_date=older_anchor,
         )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
+
+    if instrument_type == "commodity" and _is_yahoo_primary_commodity(symbol):
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for API metal commodity."
 
     if instrument_type == "commodity" and _is_wig20_index_symbol(symbol):
         return _download_wig20_index_from_stooq_plus_yahoo(
