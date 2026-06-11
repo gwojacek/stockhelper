@@ -831,6 +831,42 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         return 0
 
 
+
+def _business_day_gap_after_local(local_latest: date, remote_latest: date) -> int:
+    if remote_latest <= local_latest:
+        return 0
+    try:
+        days = pd.bdate_range(
+            pd.Timestamp(local_latest) + pd.Timedelta(days=1),
+            pd.Timestamp(remote_latest),
+        )
+        return int(len(days))
+    except Exception:
+        return max(0, (remote_latest - local_latest).days)
+
+
+def _wig20_index_yahoo_freshness_probe() -> tuple[int, str, str, str]:
+    csv_path = local_csv_path_for_symbol("WIG20", "commodity")
+    if not csv_path.exists():
+        return 9999, "-", "-", "missing-local-cache"
+    try:
+        local = pd.read_csv(csv_path)
+        local_dates = pd.to_datetime(local.get("Date"), errors="coerce").dropna()
+        if local_dates.empty:
+            return 9999, "-", "-", "empty-local-cache"
+        local_latest = local_dates.max().date()
+        remote, candidate, _name = call_silenced(_yahoo_download_window, "WIG20", "commodity", period="10d")
+        remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
+        if remote_dates.empty:
+            return 0, local_latest.isoformat(), "-", candidate
+        remote_latest = remote_dates.max().date()
+        remote_new_rows = int((remote_dates.dt.date > local_latest).sum())
+        missing = max(remote_new_rows, _business_day_gap_after_local(local_latest, remote_latest))
+        return missing, local_latest.isoformat(), remote_latest.isoformat(), candidate
+    except Exception as exc:
+        print(f"[refresh-check] WIG20: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
+        return 0, "-", "-", "probe-error"
+
 def _stock_csv_has_data_for_symbol(fetch_symbol: str) -> bool:
     path = local_csv_path_for_symbol(fetch_symbol, "stock")
     try:
@@ -880,18 +916,25 @@ def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
 
 
 def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
-    """Refresh Warsaw stock CSVs from Stooq bulk before per-symbol Yahoo merging."""
-    if not (group_name or "").upper().startswith("WIG"):
+    """Refresh Warsaw stock/index CSVs from Stooq bulk before per-symbol Yahoo merging."""
+    group_l = (group_name or "").lower()
+    if not ((group_name or "").upper().startswith("WIG") or group_l == "indexes"):
         return False
     if os.environ.get("STOCKHELPER_DISABLE_WIG_BULK_REFRESH") == "1":
         return False
     try:
         from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data
-        print(f"[refresh-check] WIG: {reason}; downloading Stooq d_pl_txt bulk archive.")
-        result = download_and_import_stooq_wig_bulk_data(stocks_dir=PROJECT_ROOT / "data" / "stocks")
+        label = "indexes" if group_l == "indexes" else "WIG"
+        print(f"[refresh-check] {label}: {reason}; downloading Stooq d_pl_txt bulk archive.")
+        result = download_and_import_stooq_wig_bulk_data(
+            stocks_dir=PROJECT_ROOT / "data" / "stocks",
+            commodities_dir=PROJECT_ROOT / "data" / "commodities",
+        )
         print(
-            f"[refresh-check] WIG: bulk refresh completed "
-            f"written={result['written']} skipped={result['skipped']} members={result['members']}."
+            f"[refresh-check] {label}: bulk refresh completed "
+            f"written={result['written']} skipped={result['skipped']} members={result['members']} "
+            f"indices_written={result.get('indices_written', 0)} "
+            f"indices_members={result.get('indices_members', 0)}."
         )
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
@@ -934,6 +977,26 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
+
+    if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
+        missing_candles, local_latest, yahoo_latest, yahoo_candidate = _wig20_index_yahoo_freshness_probe()
+        print(
+            f"[refresh-check] WIG20: Yahoo {yahoo_candidate} latest={yahoo_latest}, "
+            f"local latest={local_latest}, estimated missing sessions={missing_candles}"
+        )
+        if missing_candles > 1:
+            if _try_refresh_wig_with_stooq_bulk(
+                group_name,
+                f"WIG20 is missing {missing_candles} sessions vs Yahoo latest; Stooq bulk needed before Yahoo fresh-candle merge",
+            ):
+                return True
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
+        if missing_candles == 1:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
 
     if group_l.startswith("wig"):
         missing_members = _missing_wig_csv_members(members, exchange_suffix)

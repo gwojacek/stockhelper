@@ -421,3 +421,27 @@ def test_stooq_bulk_import_includes_wse_indices(tmp_path):
     wig20_csv = commodities_dir / "WIG20.csv"
     assert wig20_csv.exists()
     assert pd.read_csv(wig20_csv)["Close"].iloc[-1] == 2805
+
+
+def test_indexes_refresh_triggers_stooq_bulk_when_wig20_missing_multiple_sessions(monkeypatch):
+    import scanner_search as scanner
+
+    calls = []
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(
+        scanner,
+        "_wig20_index_yahoo_freshness_probe",
+        lambda: (4, "2026-06-03", "2026-06-11", "WIG20.WA"),
+    )
+
+    def fake_bulk(group_name, reason):
+        calls.append((group_name, reason))
+        return True
+
+    monkeypatch.setattr(scanner, "_try_refresh_wig_with_stooq_bulk", fake_bulk)
+
+    assert scanner._should_refresh_group_data("indexes", ["WIG20"], None) is True
+    assert calls
+    assert calls[0][0] == "indexes"
+    assert "missing 4 sessions" in calls[0][1]
