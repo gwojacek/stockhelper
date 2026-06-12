@@ -1101,9 +1101,14 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         return "bearish" in status or "bearish" in pattern
     def _fibo_steep_23_6_zone(row: ScannerRow) -> bool:
         return row.category == "steep" and "23_6_zone" in str(row.status or "").lower()
+    def _fibo_allowed_deep_pullback(row: ScannerRow) -> bool:
+        near = _fibo_near(row)
+        if 75.0 <= near < 100.0:
+            return True
+        return str(row.pattern or "").strip().lower() not in {"", "-", "none"}
     col1 = [r for r in fibo if r.category == "steep" and _fibo_steep(r) and "invalidated" not in r.status.lower() and not _fibo_has_23_6_warning(r) and not _fibo_steep_23_6_zone(r) and (_fibo_near(r) < 0 or _fibo_near(r) < 15.0)]
     col2 = [r for r in fibo if (r.category == "waiting" and 0.0 <= _fibo_near(r) < 75.0) or (_fibo_steep_23_6_zone(r) and 0.0 <= _fibo_near(r) < 75.0)]
-    col3 = [r for r in fibo if _fibo_near(r) >= 75.0]
+    col3 = [r for r in fibo if _fibo_near(r) >= 75.0 and _fibo_allowed_deep_pullback(r)]
     col1.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("ratio_raw", "-1"), -1), _fibo_start(r), _market_sort_key(r)[1]))
     col2.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))
     col3.sort(key=lambda r: (_market_sort_key(r)[0], -_parse_float_text(r.metrics.get("near61_raw", r.metrics.get("near61", "-1")), -1.0), _market_sort_key(r)[1]))

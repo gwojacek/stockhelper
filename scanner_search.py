@@ -3148,6 +3148,9 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     band_236_to_618 = max(abs(fib_236 - fib_618), 1e-9)
     progress_to_618 = (fib_236 - current_close) / band_236_to_618
     around_23_6 = 0.0 <= progress_to_618 <= 0.15
+    if progress_to_618 >= 1.0:
+        _log("Rejected 3P steep: pullback already reached/crossed 61.8; regular 61.8 pattern rules must handle it.")
+        return None
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
@@ -3354,8 +3357,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             pattern_start_idx = max(i_peak, pattern_idx - 2)
         stop_loss = float(pd.to_numeric(low.iloc[pattern_start_idx:pattern_idx + 1], errors="coerce").min())
         future = w.iloc[pattern_idx + 1:]
-        if pattern != "none" and not future.empty and (pd.to_numeric(future["Low"], errors="coerce") < stop_loss).any():
-            _log("Rejected long: valid 61.8 pattern was invalidated by a later low below the pattern low.")
+        if pattern != "none" and not future.empty and (pd.to_numeric(future["Close"], errors="coerce") < stop_loss).any():
+            _log("Rejected long: valid 61.8 pattern was invalidated by a later close below the pattern low.")
             return None
         decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
         decline_bars = decline_end_idx - i_peak
@@ -3513,8 +3516,8 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         pattern_start_idx = max(i_bottom, pattern_idx - 2)
     stop_loss = float(pd.to_numeric(high.iloc[pattern_start_idx:pattern_idx + 1], errors="coerce").max())
     future = w.iloc[pattern_idx + 1:]
-    if pattern != "none" and not future.empty and (pd.to_numeric(future["High"], errors="coerce") > stop_loss).any():
-        _log("Rejected short: valid 61.8 pattern was invalidated by a later high above the pattern high.")
+    if pattern != "none" and not future.empty and (pd.to_numeric(future["Close"], errors="coerce") > stop_loss).any():
+        _log("Rejected short: valid 61.8 pattern was invalidated by a later close above the pattern high.")
         return None
     decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
     if (decline_end_idx - i_bottom) < 2:
@@ -3616,11 +3619,10 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > touch_ts]
         if after.empty:
             return False
+        close_after = pd.to_numeric(after["Close"], errors="coerce")
         if cand.direction == "long":
-            low_after = pd.to_numeric(after["Low"], errors="coerce")
-            return bool((low_after < float(cand.stop_loss)).any())
-        high_after = pd.to_numeric(after["High"], errors="coerce")
-        return bool((high_after > float(cand.stop_loss)).any())
+            return bool((close_after < float(cand.stop_loss)).any())
+        return bool((close_after > float(cand.stop_loss)).any())
 
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
@@ -3828,22 +3830,19 @@ def run_fibo_search(target: str) -> int:
             return 1
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
-    four_months_ago = pd.Timestamp(datetime.now(UTC).date()) - pd.Timedelta(days=124)
-    rows0 = list(rows3p_steep)
-    rows2 = [
-        r for r in rows
-        if r.status == "valid_reversal"
-        and r.reversal_pattern_name != "none"
-        and pd.Timestamp(r.first_61_8_touch_date) >= four_months_ago
-    ]
+    today_ts = pd.Timestamp(datetime.now(UTC).date())
+    valid_recent_cutoff = today_ts - pd.Timedelta(days=5)
+    valid_archive_cutoff = today_ts - pd.Timedelta(days=31)
+    rows0 = [r for r in rows3p_steep if _fibo_retracement_progress_pct(r) < 100.0]
+    rows2 = []
     rows1 = []
     for r in rows:
-        if (
-            r.status == "valid_reversal"
-            and r.reversal_pattern_name != "none"
-            and pd.Timestamp(r.first_61_8_touch_date) >= four_months_ago
-        ):
-            rows1.append(r)
+        touch_ts = pd.to_datetime(r.first_61_8_touch_date, errors="coerce") if r.first_61_8_touch_date else pd.NaT
+        if r.status == "valid_reversal" and r.reversal_pattern_name != "none" and pd.notna(touch_ts):
+            if touch_ts >= valid_recent_cutoff:
+                rows1.append(r)
+            elif touch_ts >= valid_archive_cutoff:
+                rows2.append(r)
             continue
         if r.status == "touched_61_8_no_pattern":
             continue

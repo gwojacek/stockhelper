@@ -975,8 +975,16 @@ def import_stooq_wig_bulk_zip(
                 if _stooq_verbose_enabled():
                     print(f"[stooq-bulk] skipped index {member}: {exc}", flush=True)
     trim_result = trim_wig_stock_csvs(stocks_dir=stocks_dir, years=2)
+    try:
+        zip_path.unlink(missing_ok=True)
+        zip_deleted = True
+    except Exception as exc:
+        zip_deleted = False
+        if _stooq_verbose_enabled():
+            print(f"[stooq-bulk] could not delete {zip_path}: {exc}", flush=True)
     return {
         "zip_path": str(zip_path),
+        "zip_deleted": str(zip_deleted),
         "members": len(stock_members),
         "written": written,
         "skipped": skipped,
