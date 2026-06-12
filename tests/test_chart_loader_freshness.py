@@ -570,3 +570,63 @@ def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):
     assert result["rows_after"] == 2
     assert list(trimmed["Date"]) == ["2024-06-11", "2026-06-11"]
     assert pd.read_csv(non_wig_csv)["Date"].iloc[0] == "2020-01-01"
+
+
+def test_level_selector_does_not_rewrite_market_data_csv(monkeypatch, tmp_path):
+    import chart_program.level_selector as selector
+
+    csv_path = tmp_path / "ABC_WA.csv"
+    disk_df = _df("2026-06-09", "2026-06-10")
+    disk_df.to_csv(csv_path, index=False)
+    disk_before = csv_path.read_text(encoding="utf-8")
+
+    config_path = tmp_path / "abc.py"
+
+    def fake_load_or_update_daily_data(**_kwargs):
+        # Simulate the chart receiving an older/trimmed dataframe. Opening and
+        # finishing the chart must not let this dataframe undo the cache on disk.
+        return _df("2026-06-09"), csv_path, {
+            "source": "local_csv",
+            "symbol": "ABC.WA",
+            "name": "ABC",
+            "fallback_reason": "test",
+        }
+
+    class FakeUI:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self):
+            return {
+                "__finished__": True,
+                "high": 10.0,
+                "low": 8.0,
+                "entry": 9.0,
+                "stop_loss": 7.5,
+                "check_zr_value_fibo_or_elevation": 1.0,
+                "line_cross_value": 9.5,
+                "capital": 1000.0,
+            }
+
+        def save_chart_snapshot(self, selected, chart_path):
+            chart_path.parent.mkdir(parents=True, exist_ok=True)
+            chart_path.write_bytes(b"fake image")
+
+    def fake_write_or_update_config(*, instrument_type, config_path, values):
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text("# fake config\n", encoding="utf-8")
+        return config_path
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(selector, "detect_instrument_type", lambda *_args, **_kwargs: "stock")
+    monkeypatch.setattr(selector, "resolve_config_path", lambda *_args, **_kwargs: config_path)
+    monkeypatch.setattr(selector, "load_or_update_daily_data", fake_load_or_update_daily_data)
+    monkeypatch.setattr(selector, "LightweightChartLevelSelectorUI", FakeUI)
+    monkeypatch.setattr(selector, "write_or_update_config", fake_write_or_update_config)
+    monkeypatch.setattr(selector, "_save_session_state", lambda *_args, **_kwargs: None)
+
+    result = selector.run_level_selector(["ABC.WA", "--instrument", "stock"])
+
+    assert result["data_path"] == str(csv_path)
+    assert csv_path.read_text(encoding="utf-8") == disk_before
+    assert "2026-06-10" in csv_path.read_text(encoding="utf-8")

@@ -844,7 +844,6 @@ def run_level_selector(raw_args=None):
     config_existed, config_backup = _snapshot_file(final_config_path)
     chart_existed, chart_backup = _snapshot_file(chart_path)
     calculation_existed, calculation_backup = _snapshot_file(calculation_path)
-    data_existed, data_backup = _snapshot_file(data_path)
 
     try:
         path = write_or_update_config(instrument_type=save_instrument_type, config_path=final_config_path, values=values)
@@ -855,13 +854,15 @@ def run_level_selector(raw_args=None):
             calculation_path.parent.mkdir(parents=True, exist_ok=True)
             calculation_path.write_text(json.dumps(calculation, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
-        data_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(data_path, index=False)
+        # `load_or_update_daily_data(..., persist=True)` is the single owner of
+        # market-data cache writes.  Do not write the chart dataframe back here:
+        # it is intentionally trimmed for UI responsiveness and can be older
+        # than a freshly merged Yahoo candle, so saving it would regress the CSV
+        # cache after opening/saving a chart.
     except Exception:
         _restore_file(final_config_path, config_existed, config_backup)
         _restore_file(chart_path, chart_existed, chart_backup)
         _restore_file(calculation_path, calculation_existed, calculation_backup)
-        _restore_file(data_path, data_existed, data_backup)
         raise
 
     return {
