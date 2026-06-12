@@ -415,15 +415,25 @@ def test_stooq_bulk_import_includes_wse_indices(tmp_path):
 
     stocks_dir = tmp_path / "stocks"
     commodities_dir = tmp_path / "commodities"
-    result = import_stooq_wig_bulk_zip(zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir)
+    indexes_dir = tmp_path / "indexes"
+    result = import_stooq_wig_bulk_zip(zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir, indexes_dir=indexes_dir)
 
     assert result["written"] == 1
     assert result["indices_written"] == 1
     assert (stocks_dir / "ABC_WA.csv").exists()
-    wig20_csv = commodities_dir / "WIG20.csv"
+    wig20_csv = indexes_dir / "WIG20.csv"
     assert wig20_csv.exists()
-    assert not (commodities_dir / "MWIG40.csv").exists()
+    assert not (commodities_dir / "WIG20.csv").exists()
+    assert not (indexes_dir / "MWIG40.csv").exists()
     assert pd.read_csv(wig20_csv)["Close"].iloc[-1] == 2805
+
+
+def test_index_like_commodity_csv_path_uses_indexes_folder():
+    from chart_program.chart_loader import local_csv_path_for_symbol
+
+    path = local_csv_path_for_symbol("WIG20", "commodity")
+
+    assert path.parts[-2:] == ("indexes", "WIG20.csv")
 
 
 def test_indexes_refresh_triggers_stooq_bulk_when_wig20_missing_multiple_sessions(monkeypatch):

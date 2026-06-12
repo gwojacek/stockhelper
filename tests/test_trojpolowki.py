@@ -73,6 +73,11 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
         ),
         mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="steep", ticker="CROSSED", status="3p_steep_incline",
+            direction="long", dates={"start": "2026-01-01", "incline": "2026-01-01->2026-05-21"},
+            metrics={"ratio_raw": "100.0", "incline_days": "97", "near61_raw": "109.7"}, chart_url="https://stooq.pl/crossed",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="waiting", ticker="GPW", status="reached_23_6_waiting_for_61_8",
             direction="long", dates={"start": "2026-03-27", "incline": "2026-03-27->2026-05-29"},
             metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
@@ -97,6 +102,7 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert text.count("**🇵🇱 TRN ↗️") == 1
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
     assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
+    assert "CROSSED" not in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
     assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)

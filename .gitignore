@@ -19,3 +19,5 @@ __pycache__/
 *.egg
 dist/
 build/
+# Large Stooq bulk downloads are temporary import artifacts
+data/downloads/stooq/*.zip
