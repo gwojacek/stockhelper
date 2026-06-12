@@ -319,12 +319,12 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                     cur = float(str(r.get("current_close", "0") or "0"))
                     f23 = float(str(r.get("fib_23_6", "0") or "0"))
                     f61 = float(str(r.get("fib_61_8", "0") or "0"))
-                    dist = abs(cur - f61)
                     band = max(abs(f23 - f61), 1e-9)
-                    closeness = max(0.0, 1.0 - (dist / band))
-                    marker = "🟢" if closeness >= 0.7 else ("🟡" if closeness >= 0.35 else "🔴")
-                    r["near61"] = f"{marker} {closeness * 100:5.1f}%"
-                    r["near61_raw"] = closeness
+                    direction = str(r.get("direction", r.get("Dir", "long"))).lower()
+                    progress_pct = ((cur - f23) / band * 100.0) if direction == "short" else ((f23 - cur) / band * 100.0)
+                    marker = "🟢" if progress_pct >= 70.0 else ("🟡" if progress_pct >= 35.0 else "🔴")
+                    r["near61"] = f"{marker} {progress_pct:5.1f}%"
+                    r["near61_raw"] = progress_pct
                 except Exception:
                     r["near61"] = "-"
                     r["near61_raw"] = -1.0
@@ -2027,7 +2027,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 return (_top_choice_rank(f"61.8 reached {touch_date}", row.category), f"61.8 reached ({touch_date})")
             near = _parse_float_text(str(row.metrics.get("near61") or row.metrics.get("near61_raw") or ""), -1.0)
             if near >= 75.0:
-                return (_top_choice_rank(f"{near}% {status_text}", row.category), f"near 61.8: {near:.1f}%")
+                label = "61.8 crossed" if near > 100.0 else "near 61.8"
+                return (_top_choice_rank(f"{near}% {status_text}", row.category), f"{label}: {near:.1f}%")
             return None
         text_low = status_text.lower()
         recent_date = _date_from_text(status_text)

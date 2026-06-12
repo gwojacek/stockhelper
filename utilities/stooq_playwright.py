@@ -926,14 +926,17 @@ def import_stooq_wig_bulk_zip(
     zip_path: Path,
     stocks_dir: Path | None = None,
     commodities_dir: Path | None = None,
+    indexes_dir: Path | None = None,
 ) -> dict[str, int | str]:
-    """Replace local Warsaw stock CSV files and only WIG20 from Stooq's WSE indices bulk folder."""
+    """Replace local Warsaw stock CSV files and WSE index CSV files from Stooq's bulk folder."""
     zip_path = Path(zip_path)
     project_root = Path(__file__).resolve().parents[1]
     stocks_dir = stocks_dir or project_root / "data" / "stocks"
     commodities_dir = commodities_dir or project_root / "data" / "commodities"
+    indexes_dir = indexes_dir or project_root / "data" / "indexes"
     stocks_dir.mkdir(parents=True, exist_ok=True)
     commodities_dir.mkdir(parents=True, exist_ok=True)
+    indexes_dir.mkdir(parents=True, exist_ok=True)
     stock_members = _find_wse_stocks_txt_members(zip_path)
     index_members = _find_wse_indices_txt_members(zip_path)
     if not stock_members:
@@ -964,7 +967,7 @@ def import_stooq_wig_bulk_zip(
                     indices_skipped += 1
                     continue
                 safe_ticker = ticker.replace("/", "").replace(".", "_")
-                csv_path = commodities_dir / f"{safe_ticker}.csv"
+                csv_path = indexes_dir / f"{safe_ticker}.csv"
                 _write_daily_csv_without_trailing_blank_line(df, csv_path)
                 indices_written += 1
             except Exception as exc:
@@ -982,6 +985,7 @@ def import_stooq_wig_bulk_zip(
         "indices_written": indices_written,
         "indices_skipped": indices_skipped,
         "commodities_dir": str(commodities_dir),
+        "indexes_dir": str(indexes_dir),
         "trimmed": trim_result["trimmed"],
         "trim_scanned": trim_result["scanned"],
         "trim_skipped": trim_result["skipped"],
@@ -995,6 +999,7 @@ def download_and_import_stooq_wig_bulk_data(
     download_dir: Path | None = None,
     stocks_dir: Path | None = None,
     commodities_dir: Path | None = None,
+    indexes_dir: Path | None = None,
     interactive: bool = False,
 ) -> dict[str, int | str]:
     """Download Stooq d_pl_txt bulk data and replace local data/stocks WSE CSVs."""
@@ -1002,7 +1007,7 @@ def download_and_import_stooq_wig_bulk_data(
     project_root = Path(__file__).resolve().parents[1]
     download_dir = download_dir or project_root / "data" / "downloads" / "stooq"
     zip_path = _download_stooq_wig_bulk_zip(download_dir=Path(download_dir), interactive=interactive)
-    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir)
+    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir, indexes_dir=indexes_dir)
     print(
         f"[stooq-bulk] imported WSE stocks: written={result['written']} skipped={result['skipped']} "
         f"from_members={result['members']}; indices_written={result['indices_written']} "

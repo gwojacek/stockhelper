@@ -28,6 +28,7 @@ YAHOO_COMMODITY_STOOQ_UI_THRESHOLD = 1
 DATA_DIR_BY_INSTRUMENT = {
     "stock": UNIFIED_DATA_DIR / "stocks",
     "commodity": UNIFIED_DATA_DIR / "commodities",
+    "index": UNIFIED_DATA_DIR / "indexes",
     "forex": UNIFIED_DATA_DIR / "forex",
 }
 
@@ -757,8 +758,14 @@ def _force_remote_refresh_enabled() -> bool:
     return os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
+def _data_dir_for_symbol(symbol: str, instrument_type: str) -> Path:
+    if instrument_type == "index" or (instrument_type == "commodity" and _is_index_like_commodity(symbol)):
+        return DATA_DIR_BY_INSTRUMENT["index"]
+    return DATA_DIR_BY_INSTRUMENT[instrument_type]
+
+
 def local_csv_path_for_symbol(symbol: str, instrument_type: str) -> Path:
-    data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
+    data_dir = _data_dir_for_symbol(symbol, instrument_type)
     return data_dir / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
 
 
@@ -1030,7 +1037,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     if is_literal_commodity:
         try:
-            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+            csv_path = local_csv_path_for_symbol(symbol, instrument_type)
             stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
                 symbol=stooq_fetch_symbol,
@@ -1106,7 +1113,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
 
     if is_literal_commodity:
         try:
-            csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
+            csv_path = local_csv_path_for_symbol(symbol, instrument_type)
             stooq_fetch_symbol = str(mapped_stooq or symbol).lower()
             df = update_stooq_history_with_playwright(
                 symbol=stooq_fetch_symbol,
@@ -1144,7 +1151,7 @@ def load_or_update_daily_data(
     data_source: str = "auto",
     fetch_older_data: bool = False,
 ) -> tuple[pd.DataFrame, Path, dict]:
-    data_dir = DATA_DIR_BY_INSTRUMENT[instrument_type]
+    data_dir = _data_dir_for_symbol(symbol, instrument_type)
     data_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = local_csv_path_for_symbol(symbol, instrument_type)
