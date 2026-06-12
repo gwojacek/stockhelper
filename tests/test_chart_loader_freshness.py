@@ -572,24 +572,36 @@ def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):
     assert pd.read_csv(non_wig_csv)["Date"].iloc[0] == "2020-01-01"
 
 
-def test_level_selector_does_not_rewrite_market_data_csv(monkeypatch, tmp_path):
+def test_level_selector_refreshes_latest_then_does_not_rewrite_market_data_csv(monkeypatch, tmp_path):
     import chart_program.level_selector as selector
 
     csv_path = tmp_path / "ABC_WA.csv"
-    disk_df = _df("2026-06-09", "2026-06-10")
-    disk_df.to_csv(csv_path, index=False)
-    disk_before = csv_path.read_text(encoding="utf-8")
+    _df("2026-06-09").to_csv(csv_path, index=False)
 
     config_path = tmp_path / "abc.py"
+    calls: list[bool] = []
 
-    def fake_load_or_update_daily_data(**_kwargs):
-        # Simulate the chart receiving an older/trimmed dataframe. Opening and
-        # finishing the chart must not let this dataframe undo the cache on disk.
+    def fake_load_or_update_daily_data(**kwargs):
+        calls.append(bool(kwargs.get("fetch_older_data")))
+        if not kwargs.get("fetch_older_data"):
+            # The initial latest-candle refresh persists the Yahoo-fresh row.
+            refreshed = _df("2026-06-09", "2026-06-10")
+            refreshed.to_csv(csv_path, index=False)
+            return refreshed, csv_path, {
+                "source": "stooq_bulk+yahoo",
+                "symbol": "ABC.WA",
+                "name": "ABC",
+                "fallback_reason": "Yahoo candles appended=1",
+            }
+
+        # Simulate the chart/full-history path receiving an older/trimmed
+        # dataframe. Opening and finishing the chart must not let this dataframe
+        # undo the cache on disk.
         return _df("2026-06-09"), csv_path, {
-            "source": "local_csv",
+            "source": "cache",
             "symbol": "ABC.WA",
             "name": "ABC",
-            "fallback_reason": "test",
+            "fallback_reason": "Cache-only mode enabled.",
         }
 
     class FakeUI:
@@ -627,6 +639,6 @@ def test_level_selector_does_not_rewrite_market_data_csv(monkeypatch, tmp_path):
 
     result = selector.run_level_selector(["ABC.WA", "--instrument", "stock"])
 
+    assert calls == [False, True]
     assert result["data_path"] == str(csv_path)
-    assert csv_path.read_text(encoding="utf-8") == disk_before
     assert "2026-06-10" in csv_path.read_text(encoding="utf-8")

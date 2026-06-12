@@ -480,9 +480,26 @@ def run_level_selector(raw_args=None):
         existing["currency_conversion_fee_pct"] = float(existing.get("currency_conversion_fee_pct", 0.01) or 0.01)
         existing["__currency_fee_eligible__"] = _default_currency_conversion_fee(instrument_type, symbol)
 
+    # First do a bounded latest-candle refresh with normal cache rules.
+    # Search reports can discover a Yahoo candle before the bulk Stooq cache has
+    # it; opening the chart should persist that newest candle instead of showing
+    # an older cache-only view.
     prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
-    os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
     try:
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        _latest_df, data_path, latest_fetch_info = load_or_update_daily_data(
+            symbol=symbol,
+            instrument_type=instrument_type,
+            persist=True,
+            api_key=args.api_key,
+            data_source=args.data_source,
+            fetch_older_data=False,
+        )
+
+        # Then load the full cached history for charting without another remote
+        # backfill.  The latest refresh above owns persistence; this cache-only
+        # read is intentionally just for display/calculation history.
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         df, data_path, fetch_info = load_or_update_daily_data(
             symbol=symbol,
             instrument_type=instrument_type,
@@ -492,6 +509,8 @@ def run_level_selector(raw_args=None):
             fetch_older_data=True,
         )
         fetch_info["source"] = "local_csv"
+        fetch_info.setdefault("latest_refresh_source", latest_fetch_info.get("source"))
+        fetch_info.setdefault("latest_refresh_reason", latest_fetch_info.get("fallback_reason"))
     finally:
         if prev_cache_only is None:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
