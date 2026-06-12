@@ -29,6 +29,7 @@ from chart_program.chart_loader import (
     has_new_remote_data,
     local_csv_path_for_symbol,
     _yahoo_download,
+    _yahoo_download_window,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 from utilities.output_silence import call_silenced
@@ -43,7 +44,7 @@ STOP_SCAN_EVENT = threading.Event()
 PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
 REFRESH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
-API_METAL_COMMODITIES = {"XAUUSD", "XAGUSD", "XPDUSD"}
+API_METAL_COMMODITIES = {"GOLD", "SILVER", "PALLADIUM"}
 
 
 @dataclass(frozen=True)
@@ -159,7 +160,7 @@ def _search_output_dir(prefix: str) -> Path:
 COMMODITIES_SEARCH_TICKERS = [
     "COFFEE", "COCOA", "SUGAR", "WHEAT", "CORN", "SOYBEAN", "SOYOIL",
     "COPPER", "ALUMINIUM", "PLATINUM", "PALLADIUM", "WTI",
-    "OIL", "NATURAL_GAS", "XAUUSD", "XAGUSD",
+    "OIL", "NATURAL_GAS", "GOLD", "SILVER",
 ]
 
 INDEXES_SEARCH_TICKERS = [
@@ -648,8 +649,6 @@ def _normalize_commodity_symbol(raw: str) -> str:
         "CRUDEOIL": "CRUDE_OIL",
         "NATURAL_GAS": "NATURAL_GAS",
         "NATGAS": "NATURAL_GAS",
-        "GOLD": "XAUUSD",
-        "SILVER": "XAGUSD",
     }
     cleaned = aliases.get(cleaned, cleaned)
     available = set(COMMODITY_YAHOO_MAP.keys()) | set(COMMODITY_STOOQ_MAP.keys())
@@ -757,7 +756,7 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
         fetch_symbol = f"{ticker}{exchange_suffix}"
     if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
-    if instrument == "commodity":
+    if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
         fetch_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol)).upper()
     return fetch_symbol, instrument
 
@@ -793,6 +792,10 @@ def _warsaw_phase_now() -> tuple[str, str]:
     return now.strftime("%Y-%m-%d"), phase
 
 
+def _is_after_warsaw_stock_close() -> bool:
+    return _warsaw_now().time() >= dt_time(17, 30)
+
+
 def _is_ui_commodity_ticker(ticker: str) -> bool:
     raw = (ticker or "").strip().upper()
     if raw in API_METAL_COMMODITIES:
@@ -820,30 +823,139 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
         if remote_dates.empty:
             return 0
-        remote_latest = remote_dates.max().date()
-        return max(0, (remote_latest - local_latest).days)
+        return int((remote_dates.dt.date > local_latest).sum())
     except Exception as exc:
         print(f"[refresh-check] {raw}: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
         return 0
 
 
 
+def _business_day_gap_after_local(local_latest: date, remote_latest: date) -> int:
+    if remote_latest <= local_latest:
+        return 0
+    try:
+        days = pd.bdate_range(
+            pd.Timestamp(local_latest) + pd.Timedelta(days=1),
+            pd.Timestamp(remote_latest),
+        )
+        return int(len(days))
+    except Exception:
+        return max(0, (remote_latest - local_latest).days)
+
+
+def _wig20_index_yahoo_freshness_probe() -> tuple[int, str, str, str]:
+    csv_path = local_csv_path_for_symbol("WIG20", "commodity")
+    if not csv_path.exists():
+        return 9999, "-", "-", "missing-local-cache"
+    try:
+        local = pd.read_csv(csv_path)
+        local_dates = pd.to_datetime(local.get("Date"), errors="coerce").dropna()
+        if local_dates.empty:
+            return 9999, "-", "-", "empty-local-cache"
+        local_latest = local_dates.max().date()
+
+        # WIG20.WA on Yahoo can expose only the newest candle.  To decide
+        # whether the local Stooq-base WIG20 cache is missing *more than one*
+        # Warsaw session, cross-check against a liquid WIG20 constituent that
+        # reliably updates on Yahoo when WIG20 does (KGH.WA).
+        reference, candidate, _name = call_silenced(_yahoo_download_window, "KGH.WA", "stock", period="10d")
+        reference_dates = pd.to_datetime(reference.get("Date"), errors="coerce").dropna()
+        if reference_dates.empty:
+            return 0, local_latest.isoformat(), "-", candidate
+        reference_latest = reference_dates.max().date()
+        missing = _business_day_gap_after_local(local_latest, reference_latest)
+        return missing, local_latest.isoformat(), reference_latest.isoformat(), candidate
+    except Exception as exc:
+        print(f"[refresh-check] WIG20/KGH.WA: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
+        try:
+            local_latest_text = "-"
+            if 'local_latest' in locals():
+                local_latest_text = local_latest.isoformat()
+            remote, candidate, _name = call_silenced(_yahoo_download_window, "WIG20", "commodity", period="10d")
+            remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
+            if remote_dates.empty:
+                return 0, local_latest_text, "-", candidate
+            remote_latest = remote_dates.max().date()
+            if local_latest_text == "-":
+                return 0, local_latest_text, remote_latest.isoformat(), candidate
+            local_latest_date = pd.Timestamp(local_latest_text).date()
+            remote_new_rows = int((remote_dates.dt.date > local_latest_date).sum())
+            return remote_new_rows, local_latest_text, remote_latest.isoformat(), candidate
+        except Exception as fallback_exc:
+            print(f"[refresh-check] WIG20: Yahoo fallback freshness probe skipped ({_retry_error_brief(fallback_exc)})")
+            return 0, "-", "-", "probe-error"
+
+def _stock_csv_has_data_for_symbol(fetch_symbol: str) -> bool:
+    path = local_csv_path_for_symbol(fetch_symbol, "stock")
+    try:
+        if not path.exists():
+            return False
+        df = pd.read_csv(path, nrows=5)
+        return not df.empty and "Date" in df.columns
+    except Exception:
+        return False
+
+
+def _missing_wig_csv_members(members: list[str], exchange_suffix: str | None) -> list[str]:
+    missing: list[str] = []
+    for ticker in members:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, "wig", exchange_suffix)
+        if instrument == "stock" and not _stock_csv_has_data_for_symbol(fetch_symbol):
+            missing.append(ticker)
+    return missing
+
+
+def _stock_yahoo_freshness_probe(fetch_symbol: str) -> tuple[int, str, str, str]:
+    csv_path = local_csv_path_for_symbol(fetch_symbol, "stock")
+    if not csv_path.exists():
+        return 9999, "-", "-", "missing-local-cache"
+    try:
+        local = pd.read_csv(csv_path)
+        local_dates = pd.to_datetime(local.get("Date"), errors="coerce").dropna()
+        if local_dates.empty:
+            return 9999, "-", "-", "empty-local-cache"
+        local_latest = local_dates.max().date()
+        remote, candidate, _name = call_silenced(_yahoo_download_window, fetch_symbol, "stock", period="10d")
+        remote_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
+        if remote_dates.empty:
+            return 0, local_latest.isoformat(), "-", candidate
+        remote_latest = remote_dates.max().date()
+        missing = int((remote_dates.dt.date > local_latest).sum())
+        return missing, local_latest.isoformat(), remote_latest.isoformat(), candidate
+    except Exception as exc:
+        print(f"[refresh-check] {fetch_symbol}: Yahoo freshness probe skipped ({_retry_error_brief(exc)})")
+        return 0, "-", "-", "probe-error"
+
+
+def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
+    missing, _local_latest, _remote_latest, _candidate = _stock_yahoo_freshness_probe(fetch_symbol)
+    return missing
+
+
+
 def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
-    """Refresh Warsaw stock CSVs from Stooq d_pl_txt bulk and switch scan to cache."""
-    if (group_name or "").upper() != "WIG":
+    """Refresh Warsaw stock/index CSVs from Stooq bulk before per-symbol Yahoo merging."""
+    group_l = (group_name or "").lower()
+    if not ((group_name or "").upper().startswith("WIG") or group_l == "indexes"):
         return False
     if os.environ.get("STOCKHELPER_DISABLE_WIG_BULK_REFRESH") == "1":
         return False
     try:
         from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data
-        print(f"[refresh-check] WIG: {reason}; downloading Stooq d_pl_txt bulk archive.")
-        result = download_and_import_stooq_wig_bulk_data(stocks_dir=PROJECT_ROOT / "data" / "stocks")
-        print(
-            f"[refresh-check] WIG: bulk refresh completed "
-            f"written={result['written']} skipped={result['skipped']} members={result['members']}."
+        label = "indexes" if group_l == "indexes" else "WIG"
+        print(f"[refresh-check] {label}: {reason}; downloading Stooq d_pl_txt bulk archive.")
+        result = download_and_import_stooq_wig_bulk_data(
+            stocks_dir=PROJECT_ROOT / "data" / "stocks",
+            commodities_dir=PROJECT_ROOT / "data" / "commodities",
         )
-        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        print(
+            f"[refresh-check] {label}: bulk refresh completed "
+            f"written={result['written']} skipped={result['skipped']} members={result['members']} "
+            f"indices_written={result.get('indices_written', 0)} "
+            f"indices_members={result.get('indices_members', 0)}."
+        )
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
         return True
     except Exception as exc:
         print(f"[refresh-check] WIG: bulk refresh failed ({_retry_error_brief(exc)}); falling back to per-symbol refresh.")
@@ -864,7 +976,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         for t in members:
             missing = _commodity_missing_days_vs_yahoo(t)
             if missing > 0:
-                stale.append(f"{t}({missing}d)")
+                stale.append(f"{t}({missing} candle{'s' if missing != 1 else ''})")
         if stale:
             print(f"[refresh-check] commodities stale vs Yahoo: {', '.join(stale[:8])}{' ...' if len(stale)>8 else ''} -> refresh whole group")
             state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "stale"}
@@ -884,10 +996,43 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
 
+    if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
+        missing_candles, local_latest, yahoo_latest, yahoo_candidate = _wig20_index_yahoo_freshness_probe()
+        print(
+            f"[refresh-check] WIG20: reference Yahoo {yahoo_candidate} latest={yahoo_latest}, "
+            f"local WIG20 latest={local_latest}, estimated missing sessions={missing_candles}"
+        )
+        if missing_candles > 1:
+            if _try_refresh_wig_with_stooq_bulk(
+                group_name,
+                f"WIG20 is missing {missing_candles} sessions vs Yahoo latest; Stooq bulk needed before Yahoo fresh-candle merge",
+            ):
+                return True
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
+        if missing_candles == 1:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
+
+    if group_l.startswith("wig"):
+        missing_members = _missing_wig_csv_members(members, exchange_suffix)
+        if missing_members:
+            preview = ", ".join(missing_members[:10])
+            suffix = " ..." if len(missing_members) > 10 else ""
+            reason = f"missing local bulk CSV(s): {preview}{suffix}"
+            print(f"[refresh-check] {group_name}: {len(missing_members)} expected WIG CSV(s) missing -> Stooq bulk refresh ({reason})")
+            if _try_refresh_wig_with_stooq_bulk(group_name, reason):
+                return True
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            return True
+
     if group_l == "single":
         probes = members[:1]
     else:
-        probe_count = min(5, len(members))
+        probe_count = min(3 if group_l == "wig" else 5, len(members))
         probes = random.sample(list(members), k=probe_count) if probe_count else []
         if probes:
             print(f"[refresh-check] {group_name}: random freshness probes: {', '.join(probes)}")
@@ -895,26 +1040,66 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     for ticker in probes:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
         try:
+            if group_l == "wig" and instrument == "stock":
+                missing_candles, local_latest, yahoo_latest, yahoo_candidate = _stock_yahoo_freshness_probe(fetch_symbol)
+                checked += 1
+                print(
+                    f"[refresh-check] {ticker}: Yahoo {yahoo_candidate} latest={yahoo_latest}, "
+                    f"local latest={local_latest}, newer candles={missing_candles}"
+                )
+                if missing_candles > 0:
+                    after_close = _is_after_warsaw_stock_close()
+                    needs_bulk_first = (not after_close) or missing_candles > 1
+                    if needs_bulk_first:
+                        phase_reason = "before Warsaw close" if not after_close else "more than one Yahoo candle missing after Warsaw close"
+                        if _try_refresh_wig_with_stooq_bulk(
+                            group_name,
+                            f"probe {ticker} found {missing_candles} newer Yahoo candles ({phase_reason})",
+                        ):
+                            return True
+                    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+                    return True
+                continue
             newer = has_new_remote_data(fetch_symbol, instrument)
             checked += 1
             print(f"[refresh-check] {ticker}: remote {'newer' if newer else 'not newer'}")
             if newer:
                 if _try_refresh_wig_with_stooq_bulk(group_name, f"probe {ticker} found newer remote data"):
-                    return False
+                    return True
                 os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                 return True
         except Exception as exc:
             print(f"[refresh-check] {ticker}: probe failed ({_retry_error_brief(exc)}); refreshing to avoid stale cache")
             if _try_refresh_wig_with_stooq_bulk(group_name, f"probe {ticker} failed"):
-                return False
+                return True
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             return True
+    if group_l == "wig" and _is_after_warsaw_stock_close():
+        print(
+            f"[refresh-check] {group_name}: checked {checked} probe(s), no newer Yahoo data found, "
+            "but it is after 17:30 Warsaw -> refresh mode ON to merge per-symbol Yahoo candles where available"
+        )
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        return True
     print(f"[refresh-check] {group_name}: checked {checked} probe(s), no newer remote data -> cache-only mode ON")
     os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
     return False
+
+def _scan_workers_override() -> int | None:
+    raw = os.getenv("STOCKHELPER_SCAN_WORKERS", "").strip()
+    if not raw:
+        return None
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        print(f"[workers] ignoring invalid STOCKHELPER_SCAN_WORKERS={raw!r}", flush=True)
+        return None
+
 
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
@@ -1273,7 +1458,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
     _debug_log_scan(ticker, f"instrument={instrument}, fetch_symbol={fetch_symbol}, group={group_name}")
     if instrument == "commodity":
         t_upper = ticker.upper()
-        mapped = COMMODITY_STOOQ_MAP.get(t_upper)
+        mapped = None if group_name == "indexes" or t_upper in API_METAL_COMMODITIES else COMMODITY_STOOQ_MAP.get(t_upper)
         # Requested explicit stooq symbols for scanner output/fetching.
         if t_upper == "ALUMINIUM":
             mapped = "al.f"
@@ -2156,6 +2341,11 @@ def run_ichimoku_search(target: str) -> int:
         first_flip = _ensure_flip_ticker(first_flip, first)
         flip_results.append(first_flip)
 
+    workers_override = _scan_workers_override()
+    if workers_override == 1 and not sequential:
+        sequential = True
+        print("[workers] STOCKHELPER_SCAN_WORKERS=1 -> sequential Ichimoku scan mode.")
+
     rest = members[1:]
     if sequential or len(rest) == 0:
         if sequential and group_name != "commodities":
@@ -2175,7 +2365,9 @@ def run_ichimoku_search(target: str) -> int:
                 flip = _ensure_flip_ticker(flip, ticker)
                 flip_results.append(flip)
     else:
-        if group_name == "commodities":
+        if workers_override is not None:
+            max_workers = min(max(1, workers_override), len(rest))
+        elif group_name == "commodities":
             try:
                 commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "2"))
             except ValueError:
@@ -3432,7 +3624,7 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
-        if instrument == "commodity":
+        if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
@@ -3540,9 +3732,13 @@ def run_fibo_search(target: str) -> int:
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc))
 
-    cpu = os.cpu_count() or 4
-    auto_workers = max(4, min(cpu * 3, 32))
-    max_workers = min(auto_workers, len(members))
+    workers_override = _scan_workers_override()
+    if workers_override is not None:
+        max_workers = min(max(1, workers_override), len(members))
+    else:
+        cpu = os.cpu_count() or 4
+        auto_workers = max(4, min(cpu * 3, 32))
+        max_workers = min(auto_workers, len(members))
     print(f"[fibo] parallel mode ({max_workers} workers, bounded queue).")
     indexed_members = list(enumerate(members, start=1))
     next_pos = 0
@@ -3680,7 +3876,7 @@ def run_fibo_search(target: str) -> int:
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
-        if instrument == "commodity":
+        if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         if any(w.ticker == ticker for w in wedge_rows):
             wedge_source_by_ticker[ticker] = (fetch_symbol, instrument)
@@ -3811,7 +4007,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
     fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
     if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
-    if instrument == "commodity":
+    if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
     print(f"[fibo-explain] ticker={ticker}, fetch_symbol={fetch_symbol}, instrument={instrument}")
     df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)

@@ -34,7 +34,8 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
 | Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Refresh WIG from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, and replaces `data/stocks/*_WA.csv` from the `wse stocks` txt files. |
+| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, replaces `data/stocks/*_WA.csv`, trims WIG stock CSVs to two years, and imports only `wse indices/wig20.txt` as `data/commodities/WIG20.csv`. |
+| Trim WIG stock CSVs | `python run --trim-wig-csvs` | Trims existing `data/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
 | Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
 | Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
@@ -46,10 +47,12 @@ Use this table as the fastest path to the commands you will run most often. Deta
 - **Config-first workflow** using Python `TradingConfig` classes in `configs/stocks/`, `configs/forex/`, and `configs/commodities/`.
 - **Short launcher**: `python run <slug>` auto-detects the config/instrument and calls the correct analysis script.
 - **Market data download and cache**:
+  - Yahoo Finance primary routing for forex, global indexes, and canonical metal futures (`GOLD -> GC=F`, `SILVER -> SI=F`, `PALLADIUM -> PA=F`);
   - Stooq API/CSV-style downloads for many stocks/forex/commodities;
-  - Yahoo Finance fallback where supported;
   - Stooq web/table fallback for selected commodity data;
-  - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder;
+  - Yahoo fresh-candle merges into Stooq/local bases for Warsaw stocks, WIG20, and selected commodities;
+  - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder, automatically trimmed to two years from the run date;
+  - Stooq bulk `wse indices/wig20.txt` import as `data/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
   - local CSV cache in `data/stocks/`, `data/forex/`, `data/commodities/`, and `data/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.
@@ -64,7 +67,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - chart snapshots in `charts/`;
   - manual/session state in `data/sessions/`;
   - Stooq debug JSON/HTML/screenshots in `debug/stooq/`.
-- **CAPTCHA/rate-limit support** for Stooq web fallback, including OCR attempts and optional Playwright inspector/manual mode.
+- **CAPTCHA/rate-limit support** for Stooq web and bulk-download fallback, including OCR attempts, saved artifacts, and optional Playwright inspector/manual mode.
 
 Falling wedges are first-class scanner/report items. A separate generic triangle scanner is not documented as an available feature.
 
@@ -156,6 +159,10 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_DEBUG_SYMBOL` | `XTB.WA` | Enables detailed scanner debug logs for one symbol. |
 | `STOCKHELPER_DEFER_OPEN_LINKS` | `1` | Prevents scanner flows from prompting/opening all result links immediately. Used internally by batch reports. |
 | `STOCKHELPER_BATCH_MODE` | `1` | Marks scanner execution as batch mode. Used internally by batch report workflows. |
+| `STOCKHELPER_SCAN_WORKERS` | `1` | Overrides scanner worker count. Use `1` for sequential `-allsearch indexes`/VPN-safe scans; the `--scan-workers` CLI flag sets this internally. |
+| `STOCKHELPER_STOOQ_BULK_INSPECTOR` | `1` | Opens Playwright inspector/manual mode for Stooq bulk `d_pl_txt` downloads. Also set by `python run --download-wig-bulk --inspector`. |
+| `STOCKHELPER_STOOQ_BULK_DEBUG_DIR` | `debug/stooq_bulk` | Directory for Stooq bulk CAPTCHA/download screenshots and HTML attempt artifacts. |
+| `STOCKHELPER_DISABLE_WIG_BULK_REFRESH` | `1` | Disables automatic WIG/WIG20 Stooq bulk refresh attempts during scanner freshness probes. |
 | `PYTEST_XDIST_WORKER` | `gw0` | Optional sharding signal used by `--fetch-older-data`. |
 | `PYTEST_XDIST_WORKER_COUNT` | `4` | Optional total shard count used by `--fetch-older-data`. |
 | `XDIST_WORKER` | `gw0` | Alternative xdist worker variable used by `--fetch-older-data`. |
@@ -173,6 +180,56 @@ python -m chart_program AAPL.US --instrument stock --api-key YOUR_KEY
 ```
 
 The code also contains a built-in Stooq default API key in the data loader. No Stooq API-key environment variable was found.
+
+## Market data freshness and symbol routing
+
+StockHelper deliberately mixes data sources so scans use the freshest daily candles without replacing reliable historical bases unnecessarily.
+
+### Source rules
+
+- **Forex and global index-like instruments** (`US500`, `US100`, `DE40`, `FRA40`, `JP225`, etc.) use Yahoo Finance as the primary source.
+- **Canonical metals** use Yahoo futures tickers and canonical cache names:
+  - `GOLD` -> Yahoo `GC=F` -> `data/commodities/GOLD.csv`
+  - `SILVER` -> Yahoo `SI=F` -> `data/commodities/SILVER.csv`
+  - `PALLADIUM` -> Yahoo `PA=F` -> `data/commodities/PALLADIUM.csv`
+- **Legacy metal aliases are intentionally not used in search groups**: do not expect `XAUUSD`, `XAGUSD`, or `XPDUSD` scan rows or cache files from allsearch. Use `GOLD`, `SILVER`, and `PALLADIUM`.
+- **Warsaw stocks/WIG** use Stooq bulk (`d_pl_txt` / `wse stocks`) as the historical base. After Warsaw close, Yahoo is probed to append fresh `.WA` candles when only the newest session is missing.
+- **WIG20** uses Stooq as the base (`wse indices/wig20.txt` imported to `data/commodities/WIG20.csv`) and Yahoo only for a newer `WIG20.WA` candle. If WIG20 appears to be missing more than one session, StockHelper triggers Stooq bulk first.
+- **Literal commodities** such as cocoa/coffee/oil keep Stooq web/table as the base when needed, with optional Yahoo fresh-candle merges.
+
+### Useful freshness commands
+
+```bash
+# Refresh Warsaw stocks and WIG20 from Stooq bulk.
+# Imports all WSE stocks into data/stocks/*_WA.csv, trims stock CSVs to two years,
+# and imports only wse indices/wig20.txt into data/commodities/WIG20.csv.
+python run --download-wig-bulk
+
+# Trim existing Warsaw stock CSVs to two years without downloading anything.
+python run --trim-wig-csvs
+
+# Keep a different number of years if needed.
+python run --trim-wig-csvs --wig-trim-years 3
+
+# Inspect the Stooq bulk CAPTCHA/download flow interactively.
+python run --download-wig-bulk --inspector
+
+# Run indexes sequentially (useful for VPN/rate-limit safety).
+python run -allsearch indexes --scan-workers 1
+
+# Run commodity allsearch with canonical metal names (GOLD, SILVER, PALLADIUM).
+python run -allsearch commodities --scan-workers 1
+```
+
+### Expected cache filenames
+
+```text
+data/commodities/GOLD.csv       # Yahoo GC=F
+data/commodities/SILVER.csv     # Yahoo SI=F
+data/commodities/PALLADIUM.csv  # Yahoo PA=F
+data/commodities/WIG20.csv      # Stooq bulk wse indices/wig20.txt + optional Yahoo WIG20.WA fresh candle
+data/stocks/*_WA.csv               # Stooq bulk wse stocks, automatically trimmed to two years
+```
 
 ## Most useful commands
 
@@ -365,7 +422,7 @@ python run -fibo_search single -explain MPWR.US
 
 ```bash
 python run -fibo_search wig -explain XTB.WA
-python run -fibo_search commodities -explain XAUUSD
+python run -fibo_search commodities -explain GOLD
 ```
 
 ### 7. Run combined Ichimoku + Fibonacci reports
@@ -414,6 +471,7 @@ python run -allsearch all
 python run -allsearch wig
 python run -allsearch dax
 python run -allsearch commodities
+python run -allsearch indexes --scan-workers 1
 STOCKHELPER_COMMODITIES_WORKERS=3 python run -allsearch commodities
 STOCKHELPER_COMMODITIES_SEQUENTIAL=1 python run -allsearch commodities
 python run --open-allsearch-report all

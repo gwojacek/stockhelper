@@ -126,6 +126,29 @@ def _capture_stooq_bulk_failure(page, reason: str) -> str:
     return ""
 
 
+def _capture_stooq_bulk_attempt(page, symbol: str, label: str, attempt: int) -> str:
+    """Save full-page screenshot and HTML for a captcha attempt state."""
+    safe_symbol = (symbol or "wig_bulk").lower().replace(".", "_")
+    safe_label = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in (label or "state"))[:60]
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    out_dir = _stooq_bulk_debug_dir()
+    png_path = out_dir / f"{safe_symbol}_attempt{attempt}_{stamp}_{safe_label}.png"
+    html_path = out_dir / f"{safe_symbol}_attempt{attempt}_{stamp}_{safe_label}.html"
+    saved = ""
+    try:
+        page.screenshot(path=str(png_path), full_page=True, timeout=5000)
+        saved = str(png_path)
+    except Exception as exc:
+        print(f"[stooq-bulk] attempt {attempt} screenshot failed ({safe_label}): {exc}", flush=True)
+    try:
+        html_path.write_text(page.content(), encoding="utf-8")
+    except Exception:
+        pass
+    if saved:
+        print(f"[stooq-bulk] attempt {attempt} screenshot saved: {saved}", flush=True)
+    return saved
+
+
 _STOOQ_BULK_CONSENT_ACCEPT_TEXTS = (
     "zgadzam się",
     "zgadzam sie",
@@ -434,9 +457,59 @@ def _bulk_captcha_image(page):
 
 def _page_has_bulk_captcha(page) -> bool:
     try:
-        return _bulk_captcha_image(page).count() > 0
+        img = _bulk_captcha_image(page)
+        return img.count() > 0 and img.is_visible(timeout=500)
     except Exception:
         return False
+
+
+def _bulk_authorization_success_visible(page) -> bool:
+    try:
+        body = page.locator("body").inner_text(timeout=1000).lower()
+    except Exception:
+        try:
+            body = page.content().lower()
+        except Exception:
+            body = ""
+    markers = (
+        "authorization successful",
+        "authorisation successful",
+        "download file",
+        "autoryzacja",
+        "pobierz plik",
+    )
+    return any(marker in body for marker in markers)
+
+
+def _click_authorized_bulk_download_link(page, download_dir: Path | None = None) -> bool | Path:
+    selectors = (
+        'a:has-text("Download file")',
+        'a:has-text("Download file...")',
+        'a:has-text("Pobierz plik")',
+        'a[href*="/db/d/"][href*="d_pl_txt"]',
+        'a[href*="b=d_pl_txt"]',
+    )
+    for selector in selectors:
+        try:
+            link = page.locator(selector).first
+            if link.count() == 0 or not link.is_visible(timeout=500):
+                continue
+            print(f"[stooq-bulk] clicking authorized download link ({selector}).", flush=True)
+            if download_dir is not None:
+                try:
+                    with page.expect_download(timeout=30000) as download_info:
+                        link.click(timeout=2500, force=True)
+                    zip_path = _save_stooq_bulk_download_if_zip(download_info.value, download_dir, "authorized download link")
+                    if zip_path is not None:
+                        return zip_path
+                    return True
+                except PlaywrightTimeoutError:
+                    return True
+            link.click(timeout=2500, force=True)
+            return True
+        except Exception:
+            continue
+    return False
 
 
 def _request_new_bulk_captcha_code(page, symbol: str, attempt: int) -> bool:
@@ -517,77 +590,123 @@ def _refresh_bulk_page_after_captcha(page, download_dir: Path | None = None) -> 
                     zip_path = _save_stooq_bulk_download_if_zip(download_info.value, download_dir, "captcha refresh link")
                     if zip_path is not None:
                         return zip_path
-                    # Stooq can emit a fast error.txt from this link even though
-                    # the page says authorization succeeded. Treat that as
-                    # authorization-only and let the caller click d_pl_txt once.
                     return True
                 except PlaywrightTimeoutError:
-                    # Success link may only refresh authorization state; caller will
-                    # click the exact d_pl_txt link once after this.
-                    pass
+                    # The refresh link often opens an "Authorization successful" modal
+                    # with a separate "Download file..." link instead of starting the
+                    # download directly, especially in headless mode.
+                    download_result = _click_authorized_bulk_download_link(page, download_dir)
+                    if download_result:
+                        return download_result
             else:
                 link.click(timeout=2500, force=True)
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=5000)
             except Exception:
                 pass
+            download_result = _click_authorized_bulk_download_link(page, download_dir)
+            if download_result:
+                return download_result
+            if _bulk_authorization_success_visible(page):
+                return True
             return True
         except Exception:
             continue
+    if _bulk_authorization_success_visible(page):
+        print("[stooq-bulk] authorization successful; refresh link missing but download link/state is present.", flush=True)
+        download_result = _click_authorized_bulk_download_link(page, download_dir)
+        if download_result:
+            return download_result
+        return True
     print("[stooq-bulk] captcha refresh link not found; not reloading because code may be wrong.", flush=True)
     return False
 
+
 def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_dir: Path | None = None) -> bool | Path:
-    """Solve the simple Stooq download captcha without fixed sleeps/timeouts."""
+    """Solve the simple Stooq download captcha, saving artifacts for every attempt."""
     max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
-    print("[stooq-bulk] resolving download captcha...", flush=True)
+    print(f"[stooq-bulk] resolving download captcha (max attempts={max_attempts})...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
+            if _bulk_authorization_success_visible(page):
+                download_result = _click_authorized_bulk_download_link(page, download_dir)
+                if download_result:
+                    return download_result
+                return True
             img = _bulk_captcha_image(page)
-            if img.count() == 0:
+            if img.count() == 0 or not img.is_visible(timeout=1000):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_missing_or_hidden_treat_as_solved", attempt)
                 return True
             suffix = "" if attempt == 1 else f"_a{attempt}"
             raw_path = _captcha_artifact_path(symbol, f"_captcha_raw{suffix}")
             cleaned_path = _captcha_artifact_path(symbol, f"_captcha_cleaned{suffix}")
-            img.screenshot(path=str(raw_path), timeout=3000)
+            try:
+                img.screenshot(path=str(raw_path), timeout=5000)
+            except Exception as exc:
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_image_screenshot_failed", attempt)
+                print(f"[stooq-bulk] captcha image screenshot failed for attempt {attempt}/{max_attempts}: {exc}", flush=True)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
+                    continue
+                return False
             if not _preprocess_stooq_captcha_image(raw_path, cleaned_path):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_preprocess_failed", attempt)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
+                    continue
                 return False
             code, engine = _ocr_stooq_captcha(cleaned_path)
             if len(code) != 4:
-                if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_ocr_uncertain", attempt)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                     continue
                 return False
-            page.locator('input[name="cpt_t"], input#f15').first.fill(code)
+            page.locator('input[name="cpt_t"], input#f15').first.fill(code, timeout=3000)
             print(f"[stooq-bulk] captcha input filled with OCR code {code} (engine={engine}, attempt={attempt}/{max_attempts}).", flush=True)
             if not _submit_bulk_captcha_form(page):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_submit_failed", attempt)
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
+                    continue
                 return False
             if _captcha_wrong_code_visible(page):
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_code_rejected", attempt)
                 print(f"[stooq-bulk] captcha code rejected for attempt {attempt}/{max_attempts}; changing code instead of refreshing.", flush=True)
-                if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                if attempt < max_attempts:
+                    _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                     continue
                 return False
             refresh_result = _refresh_bulk_page_after_captcha(page, download_dir=download_dir)
             if isinstance(refresh_result, Path):
                 return refresh_result
             if not refresh_result:
+                if _bulk_authorization_success_visible(page):
+                    download_result = _click_authorized_bulk_download_link(page, download_dir)
+                    if download_result:
+                        return download_result
+                    return True
+                _capture_stooq_bulk_attempt(page, symbol, "captcha_refresh_missing", attempt)
                 if _captcha_wrong_code_visible(page) or _page_has_bulk_captcha(page):
                     print(f"[stooq-bulk] no success refresh link after submit for attempt {attempt}/{max_attempts}; changing captcha code.", flush=True)
-                    if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+                    if attempt < max_attempts:
+                        _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                         continue
+                if attempt < max_attempts:
+                    continue
                 return False
             try:
                 page.wait_for_url(lambda url: "stooq.com/db/h" in url or "stooq.pl/db/h" in url or "db/h" in url, timeout=5000)
             except Exception:
                 pass
             _return_to_stooq_bulk_history_if_redirected(page, "captcha refresh")
-            # Once Stooq shows the success refresh link and it is clicked, captcha
-            # authorization is complete. Do not inspect a now-hidden/stale captcha
-            # image or request another code.
             return True
         except Exception as exc:
-            if attempt < max_attempts and _request_new_bulk_captcha_code(page, symbol, attempt + 1):
+            _capture_stooq_bulk_attempt(page, symbol, "captcha_exception", attempt)
+            print(f"[stooq-bulk] captcha auto-solve failed for attempt {attempt}/{max_attempts}: {exc}", flush=True)
+            if attempt < max_attempts:
+                _request_new_bulk_captcha_code(page, symbol, attempt + 1)
                 continue
-            print(f"[stooq-bulk] captcha auto-solve failed: {exc}", flush=True)
             return False
     return False
 
@@ -653,13 +772,20 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
                 if isinstance(captcha_result, Path):
                     return captcha_result
                 if not captcha_result:
-                    fallback = _fallback_existing_stooq_bulk_zip(download_dir, "Stooq captcha flow did not produce a valid zip")
-                    if fallback is not None:
-                        return fallback
-                    if not interactive:
+                    if interactive:
+                        shot = _capture_stooq_bulk_failure(page, "captcha_auto_solve_failed_before_inspector")
+                        print(
+                            "[stooq-bulk] captcha auto-solve failed; opening Playwright inspector. "
+                            f"Solve/download manually or fix the page, then resume. Screenshot: {shot}",
+                            flush=True,
+                        )
+                        page.pause()
+                    else:
+                        fallback = _fallback_existing_stooq_bulk_zip(download_dir, "Stooq captcha flow did not produce a valid zip")
+                        if fallback is not None:
+                            return fallback
                         shot = _capture_stooq_bulk_failure(page, "captcha_auto_solve_failed")
                         raise ValueError(f"Stooq bulk download captcha could not be solved automatically. Screenshot: {shot}")
-                    page.pause()
                 page.reload(wait_until="domcontentloaded")
                 _return_to_stooq_bulk_history_if_redirected(page, "after captcha reload")
                 _clear_stooq_bulk_consent_manager(page, reason="after captcha reload")
@@ -686,23 +812,33 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
             finally:
                 browser.close()
 
-def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
+def _find_wse_txt_members(zip_path: Path, folder_token: str) -> list[str]:
     with zipfile.ZipFile(zip_path) as zf:
         members = []
+        exact_folder = f"wse {folder_token}"
         for info in zf.infolist():
             if info.is_dir() or not info.filename.lower().endswith(".txt"):
                 continue
             normalized_parts = [part.strip().lower() for part in Path(info.filename).parts]
-            if any(part == "wse stocks" for part in normalized_parts):
+            if any(part == exact_folder for part in normalized_parts):
                 members.append(info.filename)
         if members:
             return members
         # Fallback for archives that encode the folder name slightly differently.
         for info in zf.infolist():
             lowered = info.filename.lower().replace("\\", "/")
-            if not info.is_dir() and lowered.endswith(".txt") and "wse" in lowered and "stocks" in lowered:
+            if not info.is_dir() and lowered.endswith(".txt") and "wse" in lowered and folder_token in lowered:
                 members.append(info.filename)
         return members
+
+
+def _find_wse_stocks_txt_members(zip_path: Path) -> list[str]:
+    return _find_wse_txt_members(zip_path, "stocks")
+
+
+def _find_wse_indices_txt_members(zip_path: Path) -> list[str]:
+    """Return only WIG20 bulk txt from WSE indices; skip mWIG/sWIG/TR/DVP variants."""
+    return [member for member in _find_wse_txt_members(zip_path, "indices") if Path(member).stem.strip().lower() == "wig20"]
 
 
 def _stooq_bulk_txt_to_ohlcv_df(raw: bytes) -> tuple[str, pd.DataFrame]:
@@ -734,18 +870,80 @@ def _write_daily_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -
     path.write_text(text, encoding="utf-8")
 
 
-def import_stooq_wig_bulk_zip(zip_path: Path, stocks_dir: Path | None = None) -> dict[str, int | str]:
-    """Replace local Warsaw stock CSV files from Stooq's bulk d_pl_txt archive."""
-    zip_path = Path(zip_path)
-    stocks_dir = stocks_dir or Path(__file__).resolve().parents[1] / "data" / "stocks"
+
+def _trim_daily_df_to_recent_years(df: pd.DataFrame, years: int = 2, as_of: datetime | None = None) -> pd.DataFrame:
+    if df is None or df.empty or "Date" not in df.columns:
+        return df
+    as_of_ts = pd.Timestamp(as_of or datetime.now(UTC)).tz_localize(None).normalize()
+    cutoff = as_of_ts - pd.DateOffset(years=max(1, int(years)))
+    out = df.copy()
+    out["Date"] = pd.to_datetime(out["Date"], errors="coerce")
+    out = out.dropna(subset=["Date"])
+    out = out.loc[out["Date"] >= cutoff].sort_values("Date").reset_index(drop=True)
+    return out
+
+
+def trim_wig_stock_csvs(stocks_dir: Path | None = None, years: int = 2, as_of: datetime | None = None) -> dict[str, int | str]:
+    """Trim local Warsaw stock CSVs (`*_WA.csv`) to the last `years` years."""
+    project_root = Path(__file__).resolve().parents[1]
+    stocks_dir = stocks_dir or project_root / "data" / "stocks"
+    stocks_dir = Path(stocks_dir)
     stocks_dir.mkdir(parents=True, exist_ok=True)
-    members = _find_wse_stocks_txt_members(zip_path)
-    if not members:
+    scanned = 0
+    trimmed = 0
+    skipped = 0
+    rows_before = 0
+    rows_after = 0
+    cutoff = (pd.Timestamp(as_of or datetime.now(UTC)).tz_localize(None).normalize() - pd.DateOffset(years=max(1, int(years)))).date().isoformat()
+    for csv_path in sorted(stocks_dir.glob("*_WA.csv")):
+        scanned += 1
+        try:
+            df = pd.read_csv(csv_path)
+            before = len(df)
+            rows_before += before
+            trimmed_df = _trim_daily_df_to_recent_years(df, years=years, as_of=as_of)
+            after = len(trimmed_df)
+            rows_after += after
+            if after < before:
+                _write_daily_csv_without_trailing_blank_line(trimmed_df, csv_path)
+                trimmed += 1
+        except Exception as exc:
+            skipped += 1
+            if _stooq_verbose_enabled():
+                print(f"[stooq-bulk] trim skipped {csv_path}: {exc}", flush=True)
+    return {
+        "stocks_dir": str(stocks_dir),
+        "years": int(years),
+        "cutoff": cutoff,
+        "scanned": scanned,
+        "trimmed": trimmed,
+        "skipped": skipped,
+        "rows_before": rows_before,
+        "rows_after": rows_after,
+    }
+
+def import_stooq_wig_bulk_zip(
+    zip_path: Path,
+    stocks_dir: Path | None = None,
+    commodities_dir: Path | None = None,
+) -> dict[str, int | str]:
+    """Replace local Warsaw stock CSV files and only WIG20 from Stooq's WSE indices bulk folder."""
+    zip_path = Path(zip_path)
+    project_root = Path(__file__).resolve().parents[1]
+    stocks_dir = stocks_dir or project_root / "data" / "stocks"
+    commodities_dir = commodities_dir or project_root / "data" / "commodities"
+    stocks_dir.mkdir(parents=True, exist_ok=True)
+    commodities_dir.mkdir(parents=True, exist_ok=True)
+    stock_members = _find_wse_stocks_txt_members(zip_path)
+    index_members = _find_wse_indices_txt_members(zip_path)
+    if not stock_members:
         raise ValueError(f"No 'wse stocks' txt files found in {zip_path}")
     written = 0
     skipped = 0
+    indices_written = 0
+    indices_skipped = 0
     with zipfile.ZipFile(zip_path) as zf:
-        for member in members:
+        for member in stock_members:
             try:
                 ticker, df = _stooq_bulk_txt_to_ohlcv_df(zf.read(member))
                 if not ticker or df.empty:
@@ -759,22 +957,58 @@ def import_stooq_wig_bulk_zip(zip_path: Path, stocks_dir: Path | None = None) ->
                 skipped += 1
                 if _stooq_verbose_enabled():
                     print(f"[stooq-bulk] skipped {member}: {exc}", flush=True)
-    return {"zip_path": str(zip_path), "members": len(members), "written": written, "skipped": skipped, "stocks_dir": str(stocks_dir)}
+        for member in index_members:
+            try:
+                ticker, df = _stooq_bulk_txt_to_ohlcv_df(zf.read(member))
+                if not ticker or df.empty:
+                    indices_skipped += 1
+                    continue
+                safe_ticker = ticker.replace("/", "").replace(".", "_")
+                csv_path = commodities_dir / f"{safe_ticker}.csv"
+                _write_daily_csv_without_trailing_blank_line(df, csv_path)
+                indices_written += 1
+            except Exception as exc:
+                indices_skipped += 1
+                if _stooq_verbose_enabled():
+                    print(f"[stooq-bulk] skipped index {member}: {exc}", flush=True)
+    trim_result = trim_wig_stock_csvs(stocks_dir=stocks_dir, years=2)
+    return {
+        "zip_path": str(zip_path),
+        "members": len(stock_members),
+        "written": written,
+        "skipped": skipped,
+        "stocks_dir": str(stocks_dir),
+        "indices_members": len(index_members),
+        "indices_written": indices_written,
+        "indices_skipped": indices_skipped,
+        "commodities_dir": str(commodities_dir),
+        "trimmed": trim_result["trimmed"],
+        "trim_scanned": trim_result["scanned"],
+        "trim_skipped": trim_result["skipped"],
+        "trim_rows_before": trim_result["rows_before"],
+        "trim_rows_after": trim_result["rows_after"],
+        "trim_cutoff": trim_result["cutoff"],
+    }
 
 
 def download_and_import_stooq_wig_bulk_data(
     download_dir: Path | None = None,
     stocks_dir: Path | None = None,
+    commodities_dir: Path | None = None,
     interactive: bool = False,
 ) -> dict[str, int | str]:
     """Download Stooq d_pl_txt bulk data and replace local data/stocks WSE CSVs."""
+    interactive = interactive or os.getenv("STOCKHELPER_STOOQ_BULK_INSPECTOR") == "1"
     project_root = Path(__file__).resolve().parents[1]
     download_dir = download_dir or project_root / "data" / "downloads" / "stooq"
     zip_path = _download_stooq_wig_bulk_zip(download_dir=Path(download_dir), interactive=interactive)
-    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir)
+    result = import_stooq_wig_bulk_zip(zip_path=zip_path, stocks_dir=stocks_dir, commodities_dir=commodities_dir)
     print(
         f"[stooq-bulk] imported WSE stocks: written={result['written']} skipped={result['skipped']} "
-        f"from_members={result['members']} zip={result['zip_path']}",
+        f"from_members={result['members']}; indices_written={result['indices_written']} "
+        f"indices_skipped={result['indices_skipped']} from_indices={result['indices_members']} "
+        f"trimmed={result.get('trimmed', 0)}/{result.get('trim_scanned', 0)} "
+        f"cutoff={result.get('trim_cutoff', '-')} zip={result['zip_path']}",
         flush=True,
     )
     return result
@@ -1209,8 +1443,11 @@ def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
 
 
 def _captcha_artifact_path(symbol: str, suffix: str) -> Path:
-    out_dir = Path("debug") / "stooq"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if (symbol or "").lower().startswith("wig_bulk"):
+        out_dir = _stooq_bulk_debug_dir()
+    else:
+        out_dir = Path("debug") / "stooq"
+        out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir / f"{symbol.lower().replace('.', '_')}{suffix}.png"
 
 

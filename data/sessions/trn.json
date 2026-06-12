@@ -1,0 +1,112 @@
+{
+  "high": null,
+  "low": null,
+  "entry": 13.99,
+  "stop_loss": 12.83,
+  "check_zr_value_fibo_or_elevation": null,
+  "line_cross_value": null,
+  "capital": 268000,
+  "symbol": "TRN.WA",
+  "name": "TRN.WA",
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (28.1)",
+      "x0": "2026-05-21",
+      "x1": "2034-04-30",
+      "y0": 28.1,
+      "y1": 28.1,
+      "price": 28.1,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (18.71044)",
+      "x0": "2026-03-26",
+      "x1": "2034-04-30",
+      "y0": 18.71044,
+      "y1": 18.71044,
+      "price": 18.71044,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (15.81)",
+      "x0": "2026-03-11",
+      "x1": "2034-04-30",
+      "y0": 15.81,
+      "y1": 15.81,
+      "price": 15.81,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (12.90956)",
+      "x0": "2026-02-23",
+      "x1": "2034-04-30",
+      "y0": 12.90956,
+      "y1": 12.90956,
+      "price": 12.90956,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (3.52)",
+      "x0": "2025-12-29",
+      "x1": "2034-04-30",
+      "y0": 3.52,
+      "y1": 3.52,
+      "price": 3.52,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2025-12-29",
+      "x1": "2026-05-21",
+      "y0": 3.52,
+      "y1": 28.1,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__half_points__": [],
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "stop_loss": {
+      "price": 12.83,
+      "plot_price": 12.83,
+      "date": "2026-06-02"
+    },
+    "entry": {
+      "price": 13.99,
+      "plot_price": 13.99,
+      "date": "2026-06-03"
+    }
+  }
+}

@@ -3,7 +3,8 @@ from __future__ import annotations
 from io import StringIO
 from pathlib import Path
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -18,6 +19,11 @@ STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
+WARSAW_TZ = ZoneInfo("Europe/Warsaw")
+WARSAW_MARKET_CLOSE_REFRESH_TIME = time(17, 30)
+YAHOO_STOCK_FRESHNESS_PROBE_DAYS = 10
+YAHOO_STOCK_STOOQ_REBASE_THRESHOLD = 2
+YAHOO_COMMODITY_STOOQ_UI_THRESHOLD = 1
 
 DATA_DIR_BY_INSTRUMENT = {
     "stock": UNIFIED_DATA_DIR / "stocks",
@@ -31,11 +37,7 @@ _SESSION_REFRESHED_KEYS: set[tuple[str, str, bool]] = set()
 
 COMMODITY_YAHOO_MAP = {
     "GOLD": "GC=F",
-    "XAUUSD": "GC=F",
-    "XAU/USD": "GC=F",
     "SILVER": "SI=F",
-    "XAGUSD": "SI=F",
-    "XAG/USD": "SI=F",
     "COFFEE": "KC=F",
     "COCOA": "CC=F",
     "SUGAR": "SB=F",
@@ -54,20 +56,21 @@ COMMODITY_YAHOO_MAP = {
     "NATURAL_GAS": "NG=F",
     "BTC": "BTC-USD",
     "DOGE": "DOGE-USD",
-    "BRACOMP": "^BVP",
-    "US500": "^SPX",
-    "MEXCOMP": "^IPC",
+    "BRACOMP": "^BVSP",
+    "US500": "^GSPC",
+    "MEXCOMP": "^MXX",
     "VIX": "^VIX",
     "US30": "^DJI",
     "US100": "^NDX",
     "HK.CASH": "^HSI",
     "SG20CASH": "^STI",
-    "AU200.CASH": "^AORD",
-    "CHN.CASH": "000001.SS",
-    "JP225": "^NKX",
-    "NKX": "^NKX",
-    "W20": "WIG20",
-    "WIG20": "WIG20",
+    "AU200.CASH": "^AXJO",
+    "CHN.CASH": "^HSCE",
+    "HSCE": "^HSCE",
+    "JP225": "^N225",
+    "NKX": "^N225",
+    "W20": "WIG20.WA",
+    "WIG20": "WIG20.WA",
     "UK100": "^FTSE",
     "ITA40": "FTSEMIB.MI",
     "DE40": "^GDAXI",
@@ -85,15 +88,9 @@ COMMODITY_YAHOO_MAP = {
 
 COMMODITY_STOOQ_MAP = {
     "GOLD": "xauusd",
-    "XAUUSD": "xauusd",
-    "XAU/USD": "xauusd",
     "SILVER": "xagusd",
-    "XAGUSD": "xagusd",
-    "XAG/USD": "xagusd",
     "PLATINUM": "pl.f",
     "PALLADIUM": "xpdusd",
-    "XPDUSD": "xpdusd",
-    "XPD/USD": "xpdusd",
     "COFFEE": "kc.f",
     "COCOA": "cc.f",
     "SUGAR": "sb.f",
@@ -124,6 +121,7 @@ COMMODITY_STOOQ_MAP = {
     "SG20CASH": "^sti",
     "AU200.CASH": "^aor",
     "CHN.CASH": "0el.c",
+    "HSCE": "0el.c",
     "JP225": "^nkx",
     "NKX": "^nkx",
     "W20": "wig20",
@@ -142,6 +140,21 @@ COMMODITY_STOOQ_MAP = {
     "IBEX": "^ibex",
     "EU50": "fx.f",
 }
+
+def _canonical_commodity_symbol(symbol: str) -> str:
+    cleaned = (symbol or "").strip().upper()
+    if not cleaned:
+        return cleaned
+    if cleaned in COMMODITY_YAHOO_MAP or cleaned in COMMODITY_STOOQ_MAP:
+        return cleaned
+    for key, value in COMMODITY_STOOQ_MAP.items():
+        if str(value).upper() == cleaned:
+            return key.upper()
+    for key, value in COMMODITY_YAHOO_MAP.items():
+        if str(value).upper() == cleaned:
+            return key.upper()
+    return cleaned
+
 
 COMMODITY_DISPLAY_NAME = {
     "GOLD": "Gold",
@@ -167,6 +180,8 @@ COMMODITY_DISPLAY_NAME = {
     "ZINC": "Zinc",
     "CRUDE_OIL_BRENT": "Crude Oil Brent",
     "NATURAL_GAS": "Natural Gas",
+    "CHN.CASH": "Hang Seng China Enterprises Index",
+    "HSCE": "Hang Seng China Enterprises Index",
     "BTC": "Bitcoin",
     "DOGE": "Dogecoin",
 }
@@ -248,6 +263,11 @@ def _sanitize_symbol_for_filename(symbol: str) -> str:
 def _storage_symbol_for_csv(symbol: str, instrument_type: str) -> str:
     if instrument_type != "commodity":
         return symbol
+    canonical = _canonical_commodity_symbol(symbol)
+    if canonical in {"GOLD", "SILVER", "PALLADIUM"}:
+        return canonical
+    if canonical in COMMODITY_YAHOO_MAP and _is_index_like_commodity(canonical):
+        return canonical
     mapped = COMMODITY_STOOQ_MAP.get((symbol or "").strip().upper())
     return str(mapped or symbol)
 
@@ -263,9 +283,12 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
             candidates.append(f"{compact[:6]}=X")
         candidates.append(f"{compact}=X")
     elif instrument_type == "commodity":
-        mapped = COMMODITY_YAHOO_MAP.get(cleaned)
+        canonical = _canonical_commodity_symbol(cleaned)
+        mapped = COMMODITY_YAHOO_MAP.get(cleaned) or COMMODITY_YAHOO_MAP.get(canonical)
         if mapped:
             candidates.append(mapped)
+        if canonical != cleaned:
+            candidates.append(canonical)
         if cleaned.endswith(".US"):
             candidates.append(cleaned[:-3])
         if cleaned.endswith(".F") and "=" not in cleaned:
@@ -275,6 +298,8 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         if cleaned.endswith(".US"):
             candidates.append(cleaned[:-3])
         candidates.append(cleaned)
+        if "." not in cleaned and len(cleaned) <= 5:
+            candidates.append(f"{cleaned}.WA")
 
     deduped = []
     for candidate in candidates:
@@ -283,47 +308,51 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     return deduped
 
 
-def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str, str | None]:
+
+def _yahoo_history_to_ohlc_dataframe(hist: pd.DataFrame) -> pd.DataFrame:
+    df = hist.reset_index()
+    rename_map = {
+        "Datetime": "Date",
+        "date": "Date",
+        "Open": "Open",
+        "High": "High",
+        "Low": "Low",
+        "Close": "Close",
+        "Volume": "Volume",
+    }
+    df = df.rename(columns=rename_map)
+    if "Date" not in df.columns and df.columns.size > 0:
+        df = df.rename(columns={df.columns[0]: "Date"})
+    required_columns = {"Date", "Open", "High", "Low", "Close"}
+    if not required_columns.issubset(df.columns):
+        raise ValueError("Yahoo data is missing required OHLC columns")
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.tz_localize(None)
+    df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    if df.empty:
+        raise ValueError("Yahoo data has no valid OHLC rows")
+    return _sanitize_ohlc_dataframe(df)
+
+
+def _yahoo_download_window(
+    symbol: str,
+    instrument_type: str,
+    *,
+    period: str = "10d",
+) -> tuple[pd.DataFrame, str, str | None]:
     try:
         import yfinance as yf
     except ImportError as exc:
         raise ValueError("yfinance is not installed") from exc
 
-    errors = []
+    errors: list[str] = []
     for candidate in _yahoo_symbol_candidates(symbol, instrument_type):
         try:
             ticker = yf.Ticker(candidate)
-            hist = call_silenced(ticker.history, period="max", interval="1d", auto_adjust=False)
+            hist = call_silenced(ticker.history, period=period, interval="1d", auto_adjust=False)
             if hist is None or hist.empty:
                 errors.append(f"{candidate}: empty data")
                 continue
-
-            df = hist.reset_index()
-            rename_map = {
-                "Datetime": "Date",
-                "date": "Date",
-                "Open": "Open",
-                "High": "High",
-                "Low": "Low",
-                "Close": "Close",
-                "Volume": "Volume",
-            }
-            df = df.rename(columns=rename_map)
-            if "Date" not in df.columns:
-                if df.columns.size > 0:
-                    df = df.rename(columns={df.columns[0]: "Date"})
-
-            required_columns = {"Date", "Open", "High", "Low", "Close"}
-            if not required_columns.issubset(df.columns):
-                errors.append(f"{candidate}: missing OHLC columns")
-                continue
-
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.tz_localize(None)
-            df = df.dropna(subset=["Date", "Open", "High", "Low", "Close"])
-            if df.empty:
-                errors.append(f"{candidate}: no valid OHLC rows")
-                continue
-
+            df = _yahoo_history_to_ohlc_dataframe(hist)
             display_name = None
             if instrument_type == "stock":
                 try:
@@ -331,11 +360,158 @@ def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, st
                     display_name = info.get("longName") or info.get("shortName")
                 except Exception:
                     display_name = None
-            return _last_year_only(df), candidate, display_name
+            return df, candidate, display_name
         except Exception as exc:
             errors.append(f"{candidate}: {exc}")
-
     raise ValueError(f"No daily data returned from Yahoo for {symbol}. Tried: {' | '.join(errors)}")
+
+
+def _is_after_warsaw_market_close(now: datetime | None = None) -> bool:
+    current = now or datetime.now(WARSAW_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=WARSAW_TZ)
+    else:
+        current = current.astimezone(WARSAW_TZ)
+    return current.time() >= WARSAW_MARKET_CLOSE_REFRESH_TIME
+
+
+def _merge_yahoo_fresh_candle(
+    base: pd.DataFrame,
+    symbol: str,
+    instrument_type: str,
+    *,
+    period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
+) -> tuple[pd.DataFrame, str, str | None, int]:
+    yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
+    yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
+    sanitized_base = _sanitize_ohlc_dataframe(base)
+    if sanitized_base.empty:
+        merged = yahoo_df
+        added_count = len(yahoo_df)
+    else:
+        local_latest = _latest_date_from_df(sanitized_base)
+        if local_latest is None:
+            yahoo_new_rows = yahoo_df
+        else:
+            yahoo_dates = pd.to_datetime(yahoo_df["Date"], errors="coerce")
+            yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
+        added_count = len(yahoo_new_rows)
+        if added_count > 0:
+            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_new_rows], ignore_index=True))
+        else:
+            merged = sanitized_base
+    return _last_year_only(merged), yahoo_symbol, display_name, added_count
+
+
+def _try_yahoo_fresh_candle_merge(
+    base: pd.DataFrame,
+    symbol: str,
+    instrument_type: str,
+    *,
+    source: str,
+    source_symbol: str,
+    source_name: str | None,
+    reason: str,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None, int] | None:
+    try:
+        merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
+            base,
+            symbol,
+            instrument_type,
+        )
+    except Exception:
+        return None
+    if yahoo_newer_count <= 0:
+        return None
+    merged_source = f"{source}+yahoo" if not source.endswith("+yahoo") else source
+    merged_reason = f"{reason} Yahoo newer candles={yahoo_newer_count}; merged Yahoo freshest candle(s)."
+    return merged, merged_source, yahoo_symbol or source_symbol, display_name or source_name, merged_reason, yahoo_newer_count
+
+
+def _try_local_commodity_yahoo_merge(
+    symbol: str,
+    csv_path: Path,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None, int] | None:
+    if not csv_path.exists():
+        return None
+    try:
+        local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+        if local_df.empty:
+            return None
+        return _try_yahoo_fresh_candle_merge(
+            local_df,
+            symbol,
+            "commodity",
+            source="stooq_web",
+            source_symbol=symbol,
+            source_name=None,
+            reason="Commodity local Stooq cache used as base because Yahoo was only one candle newer.",
+        )
+    except Exception:
+        return None
+
+
+def _try_local_commodity_yahoo_only_merge(
+    symbol: str,
+    csv_path: Path,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None] | None:
+    merged = _try_local_commodity_yahoo_merge(symbol, csv_path)
+    if merged is None:
+        return None
+    df, source, source_symbol, source_name, reason, yahoo_newer_count = merged
+    if yahoo_newer_count <= YAHOO_COMMODITY_STOOQ_UI_THRESHOLD:
+        return df, source, source_symbol, source_name, reason
+    return None
+
+
+def _is_stock_like_wig_symbol(symbol: str) -> bool:
+    cleaned = (symbol or "").strip().upper()
+    return cleaned.endswith(".WA") or ("." not in cleaned and len(cleaned) <= 5)
+
+def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str, str | None]:
+    df, candidate, display_name = _yahoo_download_window(symbol, instrument_type, period="max")
+    return _last_year_only(df), candidate, display_name
+
+
+def _stock_local_cache_or_yahoo_download(
+    symbol: str,
+    csv_path: Path,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+    if csv_path.exists():
+        local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
+        if not local_df.empty:
+            try:
+                merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
+                    local_df,
+                    symbol,
+                    "stock",
+                )
+            except Exception as yahoo_exc:
+                return (
+                    local_df,
+                    "stooq_bulk",
+                    symbol,
+                    None,
+                    f"Using local Stooq bulk cache; Yahoo freshness merge failed: {yahoo_exc}",
+                )
+            if yahoo_newer_count > 0:
+                reason = (
+                    "Using local Stooq bulk cache plus Yahoo newer candle(s); "
+                    f"Yahoo candles appended={yahoo_newer_count}."
+                )
+                if yahoo_newer_count > 1:
+                    reason += " WARNING: more than one Yahoo candle was needed because Stooq bulk/local cache was behind."
+                return merged, "stooq_bulk+yahoo", yahoo_symbol, display_name, reason
+            return local_df, "stooq_bulk", symbol, None, "Using local Stooq bulk cache; Yahoo had no newer candles."
+
+    df, yahoo_symbol, display_name = _yahoo_download(symbol, "stock")
+    reason = (
+        "No local Stooq bulk cache exists for this Warsaw stock; "
+        f"Yahoo used as fallback with {len(df)} candle(s)."
+    )
+    if len(df) > 1:
+        reason += " WARNING: multiple Yahoo candles were used because no Stooq bulk cache was available."
+    return df, "yahoo", yahoo_symbol, display_name, reason
 
 
 def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
@@ -532,8 +708,10 @@ def _sanitize_ohlc_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     out = out.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    if "Volume" not in out.columns:
+        out["Volume"] = pd.NA
     out = out.sort_values("Date").drop_duplicates(subset=["Date"], keep="last").reset_index(drop=True)
-    return out
+    return out[["Date", "Open", "High", "Low", "Close", "Volume"]]
 def _last_two_years_only(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -685,6 +863,81 @@ def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, dateti
     except Exception:
         return 364, None
 
+
+def _mapped_stooq_symbol_for_commodity(symbol: str) -> str:
+    normalized_symbol = _canonical_commodity_symbol(symbol)
+    mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
+    if not mapped_stooq:
+        direct = symbol.strip().lower()
+        if direct in {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}:
+            mapped_stooq = direct
+    return str(mapped_stooq)
+
+
+def _is_index_like_commodity(symbol: str) -> bool:
+    mapped_stooq = _mapped_stooq_symbol_for_commodity(symbol)
+    return (
+        str(mapped_stooq).startswith("^")
+        or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
+    )
+
+
+
+
+def _is_yahoo_primary_commodity(symbol: str) -> bool:
+    canonical = _canonical_commodity_symbol(symbol)
+    return canonical in {"GOLD", "SILVER", "PALLADIUM"}
+
+def _is_wig20_index_symbol(symbol: str) -> bool:
+    canonical = _canonical_commodity_symbol(symbol)
+    return canonical in {"WIG20", "W20"}
+
+
+def _download_wig20_index_from_stooq_plus_yahoo(
+    symbol: str,
+    csv_path_ref: Path,
+    *,
+    fetch_older_data: bool,
+    older_days: int,
+    older_anchor: datetime | None,
+) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
+    canonical = _canonical_commodity_symbol(symbol)
+    base_source = "stooq"
+    base_symbol = COMMODITY_STOOQ_MAP.get(canonical, "wig20")
+
+    if csv_path_ref.exists() and not fetch_older_data:
+        base_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+        base_source = "stooq_bulk"
+        base_symbol = canonical
+        base_reason = "WIG20 loaded from Stooq bulk WSE indices cache."
+    else:
+        base_df, stooq_candidate = _stooq_download(
+            canonical,
+            "commodity",
+            api_key=None,
+            lookback_days=older_days if fetch_older_data else 364,
+            end_date=older_anchor,
+        )
+        base_symbol = stooq_candidate
+        base_reason = "WIG20 loaded from Stooq index history."
+
+    if fetch_older_data:
+        return base_df, base_source, str(base_symbol).upper(), None, base_reason
+
+    yahoo_merged = _try_yahoo_fresh_candle_merge(
+        base_df,
+        canonical,
+        "commodity",
+        source=base_source,
+        source_symbol=str(base_symbol).upper(),
+        source_name=None,
+        reason=base_reason + " Yahoo is used only for newer WIG20 candle(s).",
+    )
+    if yahoo_merged is not None:
+        merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+        return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+    return base_df, base_source, str(base_symbol).upper(), None, base_reason
+
 def _download_remote(symbol: str, instrument_type: str, api_key: str | None, data_source: str, fetch_older_data: bool = False) -> tuple[pd.DataFrame, str, str, str | None, str | None]:
     def _incremental_lookback_days(csv_path: Path, default_days: int = 364) -> int:
         try:
@@ -718,6 +971,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
     csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
+    if instrument_type == "stock":
+        if _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
+            return _stock_local_cache_or_yahoo_download(symbol, csv_path_ref)
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for non-Warsaw-stock data."
     if data_source == "stooq":
         df, candidate = _stooq_download(
             symbol,
@@ -728,19 +986,28 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
+    if instrument_type == "commodity" and _is_yahoo_primary_commodity(symbol):
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for API metal commodity."
+
+    if instrument_type == "commodity" and _is_wig20_index_symbol(symbol):
+        return _download_wig20_index_from_stooq_plus_yahoo(
+            symbol,
+            csv_path_ref,
+            fetch_older_data=fetch_older_data,
+            older_days=older_days,
+            older_anchor=older_anchor,
+        )
+
+    if instrument_type == "forex" or (instrument_type == "commodity" and _is_index_like_commodity(symbol)):
+        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for forex/index symbols."
+
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
-    # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20).
+    # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20); they returned above via Yahoo.
     normalized_symbol = symbol.strip().upper()
-    mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
-    if not mapped_stooq:
-        # Scanner may already pass mapped stooq symbols (e.g. "fx.f" instead of "EU50").
-        direct = symbol.strip().lower()
-        if direct in {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}:
-            mapped_stooq = direct
-    is_index_like_commodity_symbol = (
-        str(mapped_stooq).startswith("^")
-        or str(mapped_stooq).lower() in {"wig20", "vi.c", "0el.c", "fx.f"}
-    )
+    mapped_stooq = _mapped_stooq_symbol_for_commodity(symbol)
+    is_index_like_commodity_symbol = _is_index_like_commodity(symbol)
     # Some symbols are unavailable via Stooq CSV API and must use web pages.
     requires_web_even_if_index_like = str(mapped_stooq).lower() in {"fx.f"}
     # Force selected metals to stay on API path (no Playwright fallback).
@@ -751,6 +1018,16 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         and (not is_index_like_commodity_symbol or requires_web_even_if_index_like)
         and str(mapped_stooq).lower() not in force_api_only_symbols
     )
+    use_commodity_yahoo_freshness = (
+        instrument_type == "commodity"
+        and not is_index_like_commodity_symbol
+        and not fetch_older_data
+    )
+    if use_commodity_yahoo_freshness:
+        yahoo_only = _try_local_commodity_yahoo_only_merge(symbol, csv_path_ref)
+        if yahoo_only is not None:
+            return yahoo_only
+
     if is_literal_commodity:
         try:
             csv_path = DATA_DIR_BY_INSTRUMENT[instrument_type] / f"{_sanitize_symbol_for_filename(_storage_symbol_for_csv(symbol, instrument_type))}.csv"
@@ -763,7 +1040,21 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=True,
             )
-            return df, "stooq_web", symbol, None, "Stooq web used as primary source for commodity."
+            reason = "Stooq web used as primary source for commodity."
+            if use_commodity_yahoo_freshness:
+                yahoo_merged = _try_yahoo_fresh_candle_merge(
+                    df,
+                    symbol,
+                    "commodity",
+                    source="stooq_web",
+                    source_symbol=symbol,
+                    source_name=None,
+                    reason=reason,
+                )
+                if yahoo_merged is not None:
+                    merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                    return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+            return df, "stooq_web", symbol, None, reason
         except Exception as web_exc:
             raise ValueError(f"Stooq web failed: {web_exc}") from web_exc
 
@@ -776,7 +1067,40 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             lookback_days=older_days if fetch_older_data else 364,
             end_date=older_anchor,
         )
-        return df, "stooq", candidate, None, f"Stooq succeeded as primary source for {instrument_type}."
+        if instrument_type == "stock" and _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
+            should_try_yahoo = not csv_path_ref.exists() or _is_after_warsaw_market_close()
+            if should_try_yahoo:
+                try:
+                    merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
+                        df,
+                        symbol,
+                        instrument_type,
+                    )
+                    reason = (
+                        "Stooq bulk succeeded; Yahoo latest candle merge enabled "
+                        f"({'no local cache' if not csv_path_ref.exists() else 'after 17:30 Warsaw'}; "
+                        f"Yahoo newer candles={yahoo_newer_count})."
+                    )
+                    if yahoo_newer_count > YAHOO_STOCK_STOOQ_REBASE_THRESHOLD:
+                        reason += " Yahoo probe exceeded threshold, so Stooq bulk was used as the base before Yahoo merge."
+                    return merged, "stooq+yahoo", yahoo_symbol or candidate, display_name, reason
+                except Exception as yahoo_exc:
+                    return df, "stooq", candidate, None, f"Stooq succeeded; Yahoo latest candle merge failed: {yahoo_exc}"
+        reason = f"Stooq succeeded as primary source for {instrument_type}."
+        if use_commodity_yahoo_freshness:
+            yahoo_merged = _try_yahoo_fresh_candle_merge(
+                df,
+                symbol,
+                "commodity",
+                source="stooq",
+                source_symbol=candidate,
+                source_name=None,
+                reason=reason,
+            )
+            if yahoo_merged is not None:
+                merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+        return df, "stooq", candidate, None, reason
     except ValueError as exc:
         primary_error = exc
 
@@ -792,12 +1116,25 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 interactive_captcha=True,
             )
-            return df, "stooq_web", symbol, None, f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+            reason = f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
+            if use_commodity_yahoo_freshness:
+                yahoo_merged = _try_yahoo_fresh_candle_merge(
+                    df,
+                    symbol,
+                    "commodity",
+                    source="stooq_web",
+                    source_symbol=symbol,
+                    source_name=None,
+                    reason=reason,
+                )
+                if yahoo_merged is not None:
+                    merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                    return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+            return df, "stooq_web", symbol, None, reason
         except Exception as web_exc:
             raise ValueError(f"Stooq API failed: {primary_error} ; Stooq web failed: {web_exc}") from web_exc
 
     raise ValueError(f"Stooq API failed for non-commodity-web symbol {symbol}: {primary_error}")
-
 
 def load_or_update_daily_data(
     symbol: str,
@@ -820,10 +1157,17 @@ def load_or_update_daily_data(
 
     cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     refresh_key = (instrument_type, _storage_symbol_for_csv(symbol, instrument_type).upper(), bool(fetch_older_data))
+    remote_info: tuple[pd.DataFrame, str, str, str | None, str | None] | None = None
 
     # If this symbol was already refreshed in this process and file exists, reuse local CSV
     # to avoid repeated API/web fetches (especially Stooq web + captcha flows).
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty:
+    stock_after_close_refresh = (
+        instrument_type == "stock"
+        and _is_stock_like_wig_symbol(symbol)
+        and not fetch_older_data
+        and _is_after_warsaw_market_close()
+    )
+    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and not stock_after_close_refresh:
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",
@@ -842,16 +1186,24 @@ def load_or_update_daily_data(
         }
 
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
-        cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
-        return cached_df, csv_path, {
-            "source": "cache",
-            "symbol": symbol,
-            "name": symbol.title(),
-            "fallback_reason": "Commodity local CSV already has >=1y data.",
-        }
+        local_yahoo_merge = _try_local_commodity_yahoo_merge(symbol, csv_path) if local is not None else None
+        if local_yahoo_merge is None:
+            cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
+            return cached_df, csv_path, {
+                "source": "cache",
+                "symbol": symbol,
+                "name": symbol.title(),
+                "fallback_reason": "Commodity local CSV already has >=1y data.",
+            }
+        merged_df, merged_source, merged_symbol, merged_name, merged_reason, yahoo_newer_count = local_yahoo_merge
+        if yahoo_newer_count <= YAHOO_COMMODITY_STOOQ_UI_THRESHOLD:
+            remote_info = (merged_df, merged_source, merged_symbol, merged_name, merged_reason)
 
     try:
-        remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
+        if remote_info is None:
+            remote, source, source_symbol, source_name, fallback_reason = _download_remote(symbol=symbol, instrument_type=instrument_type, api_key=api_key, data_source=data_source, fetch_older_data=fetch_older_data)
+        else:
+            remote, source, source_symbol, source_name, fallback_reason = remote_info
         _SESSION_REFRESHED_KEYS.add(refresh_key)
     except ValueError:
         if _force_remote_refresh_enabled():
@@ -914,15 +1266,16 @@ def load_or_update_daily_data(
     display_name = _humanize_symbol(symbol)
     display_symbol = str(source_symbol).upper()
     if instrument_type == "commodity":
-        display_name = COMMODITY_DISPLAY_NAME.get(symbol.strip().upper(), _humanize_symbol(symbol))
+        canonical_symbol = _canonical_commodity_symbol(symbol)
+        display_name = COMMODITY_DISPLAY_NAME.get(canonical_symbol, _humanize_symbol(canonical_symbol))
         # Yahoo enrichment disabled in Stooq-only mode to avoid noisy 404 lookups.
         enriched_name = source_name
         if enriched_name:
             display_name = enriched_name
         elif str(source_symbol).startswith("^"):
             display_name = str(source_symbol).replace("^", "").upper()
-        preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(symbol.strip().upper())
-        if preferred_stooq_symbol:
+        preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(canonical_symbol)
+        if preferred_stooq_symbol and not _is_index_like_commodity(canonical_symbol):
             display_symbol = preferred_stooq_symbol.upper()
     elif instrument_type == "stock":
         display_name = source_name or symbol.upper()

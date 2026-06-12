@@ -1,0 +1,14 @@
+{
+  "high": 3022,
+  "low": 2726,
+  "entry": 2832,
+  "stop_loss": 2795,
+  "position_type": "long",
+  "capital": 234000,
+  "lot_cost": 6854.0,
+  "pip_value": 20.0,
+  "spread": 54.0,
+  "name": "WIG20",
+  "__show_ichimoku__": true,
+  "spread_multiplier": 2.7
+}

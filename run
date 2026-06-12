@@ -36,6 +36,7 @@ TROJPOLLOWKI_RETEST_LABELS = {
 
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
+YAHOO_PRIMARY_COMMODITIES = {"GOLD", "SILVER", "PALLADIUM"}
 RED_DOT = "🔴"
 GRAY_DOT = "⚪"
 try:
@@ -80,7 +81,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         return ""
     ticker_cmd = ticker
     market = (row.market or "").upper()
-    if market in {"COMMODITIES", "INDEXES"}:
+    if market == "COMMODITIES" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
         mapped = COMMODITY_STOOQ_MAP.get(ticker.upper())
         if mapped:
             ticker_cmd = str(mapped).upper()
@@ -2230,7 +2231,8 @@ def _expected_scope_csv_paths(scope: str) -> list[Path]:
         if instrument == "stock" and "." not in symbol and len(symbol) <= 5:
             symbol = f"{symbol}.WA"
         if instrument == "commodity":
-            symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
+            if group != "indexes" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
+                symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
             folder = PROJECT_ROOT / "data" / "commodities"
         elif instrument == "forex":
             folder = PROJECT_ROOT / "data" / "forex"
@@ -2372,8 +2374,12 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
-        if code == 0 and not _retry_missing_scope_csvs_once(scope):
-            code = 1
+        if code == 0:
+            # Missing CSVs should be visible, but they should not abort allsearch.
+            # Individual scanners already report per-instrument failures; continuing
+            # allows the Fibo phase and final HTML report to be produced from the
+            # instruments that did load successfully.
+            _retry_missing_scope_csvs_once(scope)
         after = sorted(csv_dir.glob("*.csv"), key=lambda p: p.stat().st_mtime)
         new = [p for p in after if p.name not in before_mtime or p.stat().st_mtime > before_mtime[p.name]]
         with report.open("a", encoding="utf-8") as out:
@@ -2435,18 +2441,48 @@ def main()->int:
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
-    parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace data/stocks/*_WA.csv from the wse stocks txt folder.')
+    parser.add_argument('--scan-workers', type=int, help='Override scanner worker count for search/allsearch phases (use 1 for sequential scanning).')
+    parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace WSE stock CSVs plus WSE index CSVs such as data/commodities/WIG20.csv.')
     parser.add_argument('--stooq-bulk-zip', help='Import an already-downloaded Stooq d_pl_txt zip instead of downloading it.')
+    parser.add_argument('--trim-wig-csvs', action='store_true', help='Trim local data/stocks/*_WA.csv files to the last --wig-trim-years years without downloading bulk data.')
+    parser.add_argument('--wig-trim-years', type=int, default=2, help='Years to keep when trimming WIG stock CSVs (default: 2).')
     args=parser.parse_args()
+    if args.inspector:
+        os.environ['STOCKHELPER_STOOQ_BULK_INSPECTOR'] = '1'
+    else:
+        os.environ.pop('STOCKHELPER_STOOQ_BULK_INSPECTOR', None)
+    if args.scan_workers is not None:
+        os.environ['STOCKHELPER_SCAN_WORKERS'] = str(max(1, int(args.scan_workers)))
+    else:
+        os.environ.pop('STOCKHELPER_SCAN_WORKERS', None)
+    if args.trim_wig_csvs:
+        from utilities.stooq_playwright import trim_wig_stock_csvs
+        result = trim_wig_stock_csvs(stocks_dir=PROJECT_ROOT / 'data' / 'stocks', years=args.wig_trim_years)
+        print(
+            f"[stooq-bulk] trim completed scanned={result['scanned']} trimmed={result['trimmed']} "
+            f"skipped={result['skipped']} rows={result['rows_before']}->{result['rows_after']} "
+            f"cutoff={result['cutoff']} stocks_dir={result['stocks_dir']}"
+        )
+        return 0
     if args.download_wig_bulk or args.stooq_bulk_zip:
         from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data, import_stooq_wig_bulk_zip
         if args.stooq_bulk_zip:
-            result = import_stooq_wig_bulk_zip(Path(args.stooq_bulk_zip), PROJECT_ROOT / 'data' / 'stocks')
+            result = import_stooq_wig_bulk_zip(
+                Path(args.stooq_bulk_zip),
+                stocks_dir=PROJECT_ROOT / 'data' / 'stocks',
+                commodities_dir=PROJECT_ROOT / 'data' / 'commodities',
+            )
         else:
-            result = download_and_import_stooq_wig_bulk_data(stocks_dir=PROJECT_ROOT / 'data' / 'stocks', interactive=args.inspector)
+            result = download_and_import_stooq_wig_bulk_data(
+                stocks_dir=PROJECT_ROOT / 'data' / 'stocks',
+                commodities_dir=PROJECT_ROOT / 'data' / 'commodities',
+                interactive=args.inspector,
+            )
         print(
             f"[stooq-bulk] completed written={result['written']} skipped={result['skipped']} "
-            f"members={result['members']} stocks_dir={result['stocks_dir']}"
+            f"members={result['members']} indices_written={result.get('indices_written', 0)} "
+            f"trimmed={result.get('trimmed', 0)}/{result.get('trim_scanned', 0)} "
+            f"cutoff={result.get('trim_cutoff', '-')} stocks_dir={result['stocks_dir']}"
         )
         return 0
     if args.onlycache:
@@ -2465,6 +2501,8 @@ def main()->int:
                 return raw.replace("_", ".")
             # Already stooq ticker with dot.
             if raw.endswith(".F"):
+                return raw
+            if raw in YAHOO_PRIMARY_COMMODITIES:
                 return raw
             mapped = COMMODITY_STOOQ_MAP.get(raw)
             if mapped:
