@@ -11,7 +11,7 @@ try:
 except Exception:
     tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
-from chart_program.chart_loader import COMMODITY_STOOQ_MAP
+from chart_program.chart_loader import COMMODITY_STOOQ_MAP, CSV_DATA_DIR, STATE_DATA_DIR
 from scanner_search import COMMODITIES_SEARCH_TICKERS
 PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
@@ -382,9 +382,9 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 if id(r) in top_ratio_ids:
                     r["ratio_top"] = "1"
             if rows_w1:
-                _write_table(out, "WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", rows_w1, cols_w1)
+                _write_table(out, "WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)", rows_w1, cols_w1)
             if rows_w2:
-                _write_table(out, "WYNIKI FIBO #2 (valid formation, last 4 months)", rows_w2, cols_w2)
+                _write_table(out, "WYNIKI FIBO #2 (valid pattern >5 days, last month)", rows_w2, cols_w2)
         else:
             for r in rows:
                 side = str(r.get("side", ""))
@@ -479,10 +479,27 @@ def _open_existing_allsearch_report(scope: str) -> int:
     _open_html_report(report_html)
     return 0
 
+def _drop_markdown_section(text: str, title_prefix: str) -> str:
+    lines = text.splitlines()
+    kept: list[str] = []
+    skipping = False
+    for line in lines:
+        is_heading = line.startswith("## ")
+        if is_heading:
+            skipping = line[3:].strip().startswith(title_prefix)
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept).strip()
+
+
 def _append_md_sections(report: Path, source_md: Path, header: str) -> None:
     if not source_md or not source_md.exists():
         return
     text = source_md.read_text(encoding="utf-8")
+    if header.upper().startswith("FIBO SOURCE"):
+        text = _drop_markdown_section(text, "WYNIKI FIBO #0")
+    if not text.strip():
+        return
     with report.open("a", encoding="utf-8") as out:
         out.write("\n" + text.strip() + "\n")
 
@@ -2152,9 +2169,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
                   ("WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
-                  ("WYNIKI FIBO #0 (3P steep incline)", [x for x in mrows if x.scanner == "FIBO" and x.category == "steep"]),
-                  ("WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
-                  ("WYNIKI FIBO #2 (valid formation, last 4 months)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
+                  ("WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
+                  ("WYNIKI FIBO #2 (valid pattern >5 days, last month)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
         for gname, grows in groups:
             is_i1 = gname.startswith("WYNIKI 1 ICHIMOKU")
             is_i2 = gname.startswith("WYNIKI 2 ICHIMOKU")
@@ -2239,11 +2255,11 @@ def _expected_scope_csv_paths(scope: str) -> list[Path]:
         if instrument == "commodity":
             if group != "indexes" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
                 symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
-            folder = PROJECT_ROOT / "data" / "commodities"
+            folder = CSV_DATA_DIR / "commodities"
         elif instrument == "forex":
-            folder = PROJECT_ROOT / "data" / "forex"
+            folder = CSV_DATA_DIR / "forex"
         else:
-            folder = PROJECT_ROOT / "data" / "stocks"
+            folder = CSV_DATA_DIR / "stocks"
         fname = symbol.replace("/", "").replace(".", "_").upper() + ".csv"
         out.append(folder / fname)
     return out
@@ -2324,7 +2340,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False) -> i
             _append_md_sections(report, md_f, f"FIBO SOURCE ({md_f.name})")
 
     with report.open("a", encoding="utf-8") as out:
-        out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+        out.write(f"\n\nŹródło danych CSV instrumentów: {CSV_DATA_DIR}\n")
     allsearch_timestamp = datetime.now()
     troj_fibo, troj_ichimoku = _write_trojpolowki_reports(scopes, allsearch_timestamp)
     _build_html_report(scopes, report_html)
@@ -2344,7 +2360,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False) -> i
         if open_all == "y":
             for l in sorted(all_links):
                 webbrowser.open_new_tab(l)
-    print(f"Źródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}")
+    print(f"Źródło danych CSV instrumentów: {CSV_DATA_DIR}")
     return 1 if failures else 0
 
 def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, force_cache_only: bool = False, strict_cache_only: bool = False) -> int:
@@ -2406,7 +2422,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
             print(f"[batch] aborting remaining scopes after {mode}::{scope} failed/stopped.")
             break
     with report.open("a", encoding="utf-8") as out:
-        out.write(f"\n\nŹródło danych CSV instrumentów: {PROJECT_ROOT / 'data'}\n")
+        out.write(f"\n\nŹródło danych CSV instrumentów: {CSV_DATA_DIR}\n")
     print(f"\n[batch] combo report saved: {report}")
     if batch == DEFAULT_ALLSEARCH_SCOPES:
         print(f"[batch] reopen command: python run -{mode}_search all")
@@ -2448,9 +2464,9 @@ def main()->int:
     parser.add_argument('--xdist-worker-count', type=int, help='Optional explicit total worker count for --fetch-older-data sharding.')
     parser.add_argument('--fetch-workers', type=int, default=1, help='Local parallel workers for --fetch-older-data when xdist shard is not active.')
     parser.add_argument('--scan-workers', type=int, help='Override scanner worker count for search/allsearch phases (use 1 for sequential scanning).')
-    parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace WSE stock CSVs plus WSE index CSVs such as data/commodities/WIG20.csv.')
+    parser.add_argument('--download-wig-bulk', action='store_true', help='Download Stooq d_pl_txt bulk archive and replace WSE stock CSVs plus WSE index CSVs such as data/csv/commodities/WIG20.csv.')
     parser.add_argument('--stooq-bulk-zip', help='Import an already-downloaded Stooq d_pl_txt zip instead of downloading it.')
-    parser.add_argument('--trim-wig-csvs', action='store_true', help='Trim local data/stocks/*_WA.csv files to the last --wig-trim-years years without downloading bulk data.')
+    parser.add_argument('--trim-wig-csvs', action='store_true', help='Trim local data/csv/stocks/*_WA.csv files to the last --wig-trim-years years without downloading bulk data.')
     parser.add_argument('--wig-trim-years', type=int, default=2, help='Years to keep when trimming WIG stock CSVs (default: 2).')
     args=parser.parse_args()
     if args.inspector:
@@ -2463,7 +2479,7 @@ def main()->int:
         os.environ.pop('STOCKHELPER_SCAN_WORKERS', None)
     if args.trim_wig_csvs:
         from utilities.stooq_playwright import trim_wig_stock_csvs
-        result = trim_wig_stock_csvs(stocks_dir=PROJECT_ROOT / 'data' / 'stocks', years=args.wig_trim_years)
+        result = trim_wig_stock_csvs(stocks_dir=CSV_DATA_DIR / 'stocks', years=args.wig_trim_years)
         print(
             f"[stooq-bulk] trim completed scanned={result['scanned']} trimmed={result['trimmed']} "
             f"skipped={result['skipped']} rows={result['rows_before']}->{result['rows_after']} "
@@ -2475,13 +2491,13 @@ def main()->int:
         if args.stooq_bulk_zip:
             result = import_stooq_wig_bulk_zip(
                 Path(args.stooq_bulk_zip),
-                stocks_dir=PROJECT_ROOT / 'data' / 'stocks',
-                commodities_dir=PROJECT_ROOT / 'data' / 'commodities',
+                stocks_dir=CSV_DATA_DIR / 'stocks',
+                commodities_dir=CSV_DATA_DIR / 'commodities',
             )
         else:
             result = download_and_import_stooq_wig_bulk_data(
-                stocks_dir=PROJECT_ROOT / 'data' / 'stocks',
-                commodities_dir=PROJECT_ROOT / 'data' / 'commodities',
+                stocks_dir=CSV_DATA_DIR / 'stocks',
+                commodities_dir=CSV_DATA_DIR / 'commodities',
                 interactive=args.inspector,
             )
         print(
@@ -2547,16 +2563,16 @@ def main()->int:
                 return None
             return idx, total
         targets: list[tuple[str, str, Path]] = []
-                # Commodities are intentionally excluded from older-data mode (UI/table issues + unreliable backfill path).
-        groups = [("stock", PROJECT_ROOT / "data" / "stocks"), ("forex", PROJECT_ROOT / "data" / "forex")]
+        # Commodities are intentionally excluded from older-data mode (UI/table issues + unreliable backfill path).
+        groups = [("stock", CSV_DATA_DIR / "stocks"), ("forex", CSV_DATA_DIR / "forex")]
         scope = (args.fetch_older_data_scope or "all").lower()
         if scope == "commodities":
             print("[fetch-older-data] commodities are excluded in older-data mode; nothing to do for scope=commodities.")
             groups = []
         elif scope == "stocks":
-            groups = [("stock", PROJECT_ROOT / "data" / "stocks")]
+            groups = [("stock", CSV_DATA_DIR / "stocks")]
         elif scope == "forex":
-            groups = [("forex", PROJECT_ROOT / "data" / "forex")]
+            groups = [("forex", CSV_DATA_DIR / "forex")]
         for instrument, folder in groups:
             if not folder.exists():
                 continue
@@ -2587,15 +2603,15 @@ def main()->int:
             )
             print("[fetch-older-data] Tip: run with pytest -n N or pass --xdist-worker-index/--xdist-worker-count explicitly.")
         if not targets:
-            print("[fetch-older-data] No local CSV files found in data/* folders.")
+            print("[fetch-older-data] No local CSV files found in data/csv/* folders.")
             return 0
         local_workers = max(1, int(args.fetch_workers or 1))
         print(f"[fetch-older-data] Starting older-window fetch for {len(targets)} instruments (local_workers={local_workers}).")
         failures = 0
         data_dir_by_instrument = {
-            "commodity": PROJECT_ROOT / "data" / "commodities",
-            "stock": PROJECT_ROOT / "data" / "stocks",
-            "forex": PROJECT_ROOT / "data" / "forex",
+            "commodity": CSV_DATA_DIR / "commodities",
+            "stock": CSV_DATA_DIR / "stocks",
+            "forex": CSV_DATA_DIR / "forex",
         }
         def _oldest_date_in_csv(path: Path) -> str:
             try:
@@ -2743,7 +2759,7 @@ def main()->int:
         csv_path = None
         if args.debug_stooq_fetch:
             safe = symbol_for_debug.replace('/', '').replace('.', '_').upper()
-            csv_path = PROJECT_ROOT / "data" / "commodities" / f"{safe}.csv"
+            csv_path = CSV_DATA_DIR / "commodities" / f"{safe}.csv"
         path = debug_stooq_page(symbol_for_debug, interactive_captcha=args.inspector, csv_path=csv_path)
         print(f"Stooq debug zapisany: {path}")
         if csv_path is not None:

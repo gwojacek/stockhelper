@@ -2,11 +2,11 @@
 
 | Ticker | Dir | Status | Incline | Ratio(d) | Near61.8 | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-## WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)
+## WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)
 
 | Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-## WYNIKI FIBO #2 (valid formation, last 4 months)
+## WYNIKI FIBO #2 (valid pattern >5 days, last month)
 
 | Ticker | Dir | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

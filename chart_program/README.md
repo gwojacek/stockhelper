@@ -34,7 +34,7 @@ The `"algt.us cfd"` / `algt.us cfd` form is supported and forces **commodity/CFD
   - `configs/commodities/*.py`
   - `configs/forex/*.py`
 - Downloaded candles are cached under `data/`.
-- Session state is stored under `data/sessions/`.
+- Session state is stored under `data/state/sessions/`.
 - Chart snapshots are saved under `charts/`.
 
 Each generated config includes:

@@ -1010,7 +1010,7 @@ def download_and_import_stooq_wig_bulk_data(
     indexes_dir: Path | None = None,
     interactive: bool = False,
 ) -> dict[str, int | str]:
-    """Download Stooq d_pl_txt bulk data and replace local data/stocks WSE CSVs."""
+    """Download Stooq d_pl_txt bulk data and replace local data/csv/stocks WSE CSVs."""
     interactive = interactive or os.getenv("STOCKHELPER_STOOQ_BULK_INSPECTOR") == "1"
     project_root = Path(__file__).resolve().parents[1]
     download_dir = download_dir or project_root / "data" / "downloads" / "stooq"

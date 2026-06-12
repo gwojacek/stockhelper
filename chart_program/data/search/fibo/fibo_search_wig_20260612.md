@@ -25,7 +25,7 @@
 | DVL | long | 🚀 3p_steep_incline | 2026-03-30->2026-06-05 | 45/1 (33.33:1) | - | 3069320 | [📈](https://stooq.pl/q/a2/?s=dvl&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c DVL --fibo-lines 5 --fibo-anchor-start 2026-03-30 --fibo-anchor-end 2026-06-05 --fibo-right | ✅ | 2026-06-11 | 2026-06-11 |
 | UNT | long | 🚀 3p_steep_incline | 2026-03-30->2026-05-13 | 29/1 (32.82:1) |  23.5% | 768347 | [📈](https://stooq.pl/q/a2/?s=unt&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c UNT --fibo-lines 5 --fibo-anchor-start 2026-03-30 --fibo-anchor-end 2026-05-13 --fibo-right | ✅ | 2026-06-11 | 2026-06-11 |
 | CEZ | long | 🚀 3p_steep_incline | 2026-03-02->2026-06-05 | 65/1 (30.48:1) | - | 2131543 | [📈](https://stooq.pl/q/a2/?s=cez&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c CEZ --fibo-lines 5 --fibo-anchor-start 2026-03-02 --fibo-anchor-end 2026-06-05 --fibo-right | ✅ | 2026-06-11 | 2026-06-11 |
-## WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)
+## WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)
 
 | Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -38,7 +38,7 @@
 | CBF | long | reached_23_6_waiting_for_61_8 | none | 2026-03-30->2026-05-25 | 37/12 (3.08:1) |  | 4217534 |  55.2% | [📈](https://stooq.pl/q/a2/?s=cbf&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c CBF --fibo-lines 5 --fibo-anchor-start 2026-03-30 --fibo-anchor-end 2026-05-25 --fibo-right | ✅ | 2026-06-11 | 2026-06-11 |
 | UNT | long | reached_23_6_waiting_for_61_8 | none | 2026-03-30->2026-05-13 | 29/10 (2.90:1) |  | 768347 |  23.5% | [📈](https://stooq.pl/q/a2/?s=unt&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c UNT --fibo-lines 5 --fibo-anchor-start 2026-03-30 --fibo-anchor-end 2026-05-13 --fibo-right | ✅ | 2026-06-11 | 2026-06-11 |
 | SCW | long | reached_23_6_waiting_for_61_8 | none | 2025-11-21->2026-04-20 | 98/36 (2.72:1) |  | 4148381 |  21.0% | [📈](https://stooq.pl/q/a2/?s=scw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SCW --fibo-lines 5 --fibo-anchor-start 2025-11-21 --fibo-anchor-end 2026-04-20 --fibo-right | ✅ | 2026-06-11 | 2026-06-11 |
-## WYNIKI FIBO #2 (valid formation, last 4 months)
+## WYNIKI FIBO #2 (valid pattern >5 days, last month)
 
 | Ticker | Dir | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
