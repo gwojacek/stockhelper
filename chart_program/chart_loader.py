@@ -19,6 +19,8 @@ STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_DATA_DIR = PROJECT_ROOT / "data"
+CSV_DATA_DIR = UNIFIED_DATA_DIR / "csv"
+STATE_DATA_DIR = UNIFIED_DATA_DIR / "state"
 WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 WARSAW_MARKET_CLOSE_REFRESH_TIME = time(17, 30)
 YAHOO_STOCK_FRESHNESS_PROBE_DAYS = 10
@@ -26,10 +28,10 @@ YAHOO_STOCK_STOOQ_REBASE_THRESHOLD = 2
 YAHOO_COMMODITY_STOOQ_UI_THRESHOLD = 1
 
 DATA_DIR_BY_INSTRUMENT = {
-    "stock": UNIFIED_DATA_DIR / "stocks",
-    "commodity": UNIFIED_DATA_DIR / "commodities",
-    "index": UNIFIED_DATA_DIR / "indexes",
-    "forex": UNIFIED_DATA_DIR / "forex",
+    "stock": CSV_DATA_DIR / "stocks",
+    "commodity": CSV_DATA_DIR / "commodities",
+    "index": CSV_DATA_DIR / "indexes",
+    "forex": CSV_DATA_DIR / "forex",
 }
 
 # Per-process memo of symbols already refreshed from remote.

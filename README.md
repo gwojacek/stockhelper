@@ -34,8 +34,8 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
 | Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, replaces `data/stocks/*_WA.csv`, trims WIG stock CSVs to two years, and imports only `wse indices/wig20.txt` as `data/commodities/WIG20.csv`. |
-| Trim WIG stock CSVs | `python run --trim-wig-csvs` | Trims existing `data/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
+| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright auto-waiting, replaces `data/csv/stocks/*_WA.csv`, trims WIG stock CSVs to two years, and imports only `wse indices/wig20.txt` as `data/csv/commodities/WIG20.csv`. |
+| Trim WIG stock CSVs | `python run --trim-wig-csvs` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
 | Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
 | Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
@@ -52,8 +52,8 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - Stooq web/table fallback for selected commodity data;
   - Yahoo fresh-candle merges into Stooq/local bases for Warsaw stocks, WIG20, and selected commodities;
   - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder, automatically trimmed to two years from the run date;
-  - Stooq bulk `wse indices/wig20.txt` import as `data/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
-  - local CSV cache in `data/stocks/`, `data/forex/`, `data/commodities/`, and `data/indices/`.
+  - Stooq bulk `wse indices/wig20.txt` import as `data/csv/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
+  - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.
 - **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, touch/contact metrics, and chart commands that preload wedge lines.
@@ -65,7 +65,7 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - Trójpolówki Markdown watchlists in `Trojpolowki/fibo.md` and `Trojpolowki/ichimoku.md`;
   - combined Markdown/HTML scanner reports in `chart_program/data/all_insturments_search/allsearch/`;
   - chart snapshots in `charts/`;
-  - manual/session state in `data/sessions/`;
+  - manual/session state in `data/state/sessions/`;
   - Stooq debug JSON/HTML/screenshots in `debug/stooq/`.
 - **CAPTCHA/rate-limit support** for Stooq web and bulk-download fallback, including OCR attempts, saved artifacts, and optional Playwright inspector/manual mode.
 
@@ -189,20 +189,20 @@ StockHelper deliberately mixes data sources so scans use the freshest daily cand
 
 - **Forex and global index-like instruments** (`US500`, `US100`, `DE40`, `FRA40`, `JP225`, etc.) use Yahoo Finance as the primary source.
 - **Canonical metals** use Yahoo futures tickers and canonical cache names:
-  - `GOLD` -> Yahoo `GC=F` -> `data/commodities/GOLD.csv`
-  - `SILVER` -> Yahoo `SI=F` -> `data/commodities/SILVER.csv`
-  - `PALLADIUM` -> Yahoo `PA=F` -> `data/commodities/PALLADIUM.csv`
+  - `GOLD` -> Yahoo `GC=F` -> `data/csv/commodities/GOLD.csv`
+  - `SILVER` -> Yahoo `SI=F` -> `data/csv/commodities/SILVER.csv`
+  - `PALLADIUM` -> Yahoo `PA=F` -> `data/csv/commodities/PALLADIUM.csv`
 - **Legacy metal aliases are intentionally not used in search groups**: do not expect `XAUUSD`, `XAGUSD`, or `XPDUSD` scan rows or cache files from allsearch. Use `GOLD`, `SILVER`, and `PALLADIUM`.
 - **Warsaw stocks/WIG** use Stooq bulk (`d_pl_txt` / `wse stocks`) as the historical base. After Warsaw close, Yahoo is probed to append fresh `.WA` candles when only the newest session is missing.
-- **WIG20** uses Stooq as the base (`wse indices/wig20.txt` imported to `data/commodities/WIG20.csv`) and Yahoo only for a newer `WIG20.WA` candle. If WIG20 appears to be missing more than one session, StockHelper triggers Stooq bulk first.
+- **WIG20** uses Stooq as the base (`wse indices/wig20.txt` imported to `data/csv/commodities/WIG20.csv`) and Yahoo only for a newer `WIG20.WA` candle. If WIG20 appears to be missing more than one session, StockHelper triggers Stooq bulk first.
 - **Literal commodities** such as cocoa/coffee/oil keep Stooq web/table as the base when needed, with optional Yahoo fresh-candle merges.
 
 ### Useful freshness commands
 
 ```bash
 # Refresh Warsaw stocks and WIG20 from Stooq bulk.
-# Imports all WSE stocks into data/stocks/*_WA.csv, trims stock CSVs to two years,
-# and imports only wse indices/wig20.txt into data/commodities/WIG20.csv.
+# Imports all WSE stocks into data/csv/stocks/*_WA.csv, trims stock CSVs to two years,
+# and imports only wse indices/wig20.txt into data/csv/commodities/WIG20.csv.
 python run --download-wig-bulk
 
 # Trim existing Warsaw stock CSVs to two years without downloading anything.
@@ -224,11 +224,11 @@ python run -allsearch commodities --scan-workers 1
 ### Expected cache filenames
 
 ```text
-data/commodities/GOLD.csv       # Yahoo GC=F
-data/commodities/SILVER.csv     # Yahoo SI=F
-data/commodities/PALLADIUM.csv  # Yahoo PA=F
-data/commodities/WIG20.csv      # Stooq bulk wse indices/wig20.txt + optional Yahoo WIG20.WA fresh candle
-data/stocks/*_WA.csv               # Stooq bulk wse stocks, automatically trimmed to two years
+data/csv/commodities/GOLD.csv       # Yahoo GC=F
+data/csv/commodities/SILVER.csv     # Yahoo SI=F
+data/csv/commodities/PALLADIUM.csv  # Yahoo PA=F
+data/csv/commodities/WIG20.csv      # Stooq bulk wse indices/wig20.txt + optional Yahoo WIG20.WA fresh candle
+data/csv/stocks/*_WA.csv               # Stooq bulk wse stocks, automatically trimmed to two years
 ```
 
 ## Most useful commands
@@ -246,7 +246,7 @@ python run ena
 - Finds a matching file in `configs/stocks/` using case-insensitive/normalized matching.
 - Calls `main_stock.py` automatically.
 - Calculates shares, engaged capital, potential loss, loss %, optional take-profit/risk-reward, stock liquidity metrics, and warnings.
-- Uses Stooq-backed local data where possible and updates cache under `data/stocks/`.
+- Uses Stooq-backed local data where possible and updates cache under `data/csv/stocks/`.
 
 **When to use it:**
 
@@ -256,7 +256,7 @@ python run ena
 
 - A terminal table with risk levels and position sizes.
 - Warnings if liquidity/risk-reward checks fail.
-- Updated cached data in `data/stocks/` when data is refreshed.
+- Updated cached data in `data/csv/stocks/` when data is refreshed.
 
 **Common variants:**
 
@@ -286,7 +286,7 @@ python run cocoa_short
 **Output to expect:**
 
 - A terminal risk table and position analysis.
-- Updated cached data in `data/forex/` or `data/commodities/` when data is refreshed by the workflow.
+- Updated cached data in `data/csv/forex/` or `data/csv/commodities/` when data is refreshed by the workflow.
 
 **Common variants:**
 
@@ -318,7 +318,7 @@ python run -c ena
 
 - Config: `configs/stocks/<slug>.py`, `configs/forex/<slug>_<long|short>.py`, or `configs/commodities/<slug>_<long|short>.py`.
 - Chart snapshot: `charts/<config>_levels.png`.
-- Session state: `data/sessions/<config>.json`.
+- Session state: `data/state/sessions/<config>.json`.
 - Cached market data: `data/<group>/<symbol>.csv`.
 
 **Common variants:**
@@ -547,8 +547,8 @@ python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4
 
 **Output files updated:**
 
-- `data/stocks/*.csv`
-- `data/forex/*.csv`
+- `data/csv/stocks/*.csv`
+- `data/csv/forex/*.csv`
 
 **Common variants:**
 
@@ -619,10 +619,10 @@ Use this after editing Python files. It compiles files but does not run imports/
 
 - `chart_program/chart_loader.py` is the main daily-data loader.
 - Local CSV cache paths are generated by instrument type:
-  - stocks: `data/stocks/<SYMBOL>.csv`
-  - forex: `data/forex/<PAIR>.csv`
-  - commodities: `data/commodities/<SYMBOL>.csv`
-  - indices/memberships: `data/indices/`
+  - stocks: `data/csv/stocks/<SYMBOL>.csv`
+  - forex: `data/csv/forex/<PAIR>.csv`
+  - commodities: `data/csv/commodities/<SYMBOL>.csv`
+  - indices/memberships: `data/state/indices/`
 - Chart mode deliberately loads cached data first (`STOCKHELPER_CACHE_ONLY=1` is set internally for the chart load) so the UI opens quickly.
 - Scanner mode usually probes remote freshness first, then decides whether to refresh or use local cache; it refreshes the current window only and does not run older-history backfill implicitly.
 - `--data-source auto|yahoo|stooq` is available in `chart_program` flows.

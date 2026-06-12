@@ -22,7 +22,8 @@ import pandas as pd
 
 from chart_program.instrument_detector import detect_instrument_type
 from chart_program.chart_loader import (
-    UNIFIED_DATA_DIR,
+    CSV_DATA_DIR,
+    STATE_DATA_DIR,
     COMMODITY_STOOQ_MAP,
     COMMODITY_YAHOO_MAP,
     load_or_update_daily_data,
@@ -35,7 +36,7 @@ from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 from utilities.output_silence import call_silenced
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-INDEX_MEMBERS_FILE = PROJECT_ROOT / "data" / "indices" / "memberships.json"
+INDEX_MEMBERS_FILE = STATE_DATA_DIR / "indices" / "memberships.json"
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
 FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
@@ -43,7 +44,7 @@ FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 STOP_SCAN_EVENT = threading.Event()
 PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
-REFRESH_STATE_FILE = PROJECT_ROOT / "data" / "sessions" / "search_refresh_state.json"
+REFRESH_STATE_FILE = STATE_DATA_DIR / "sessions" / "search_refresh_state.json"
 API_METAL_COMMODITIES = {"GOLD", "SILVER", "PALLADIUM"}
 
 
@@ -961,9 +962,9 @@ def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
         label = "indexes" if group_l == "indexes" else "WIG"
         print(f"[refresh-check] {label}: {reason}; downloading Stooq d_pl_txt bulk archive.")
         result = download_and_import_stooq_wig_bulk_data(
-            stocks_dir=PROJECT_ROOT / "data" / "stocks",
-            commodities_dir=PROJECT_ROOT / "data" / "commodities",
-            indexes_dir=PROJECT_ROOT / "data" / "indexes",
+            stocks_dir=CSV_DATA_DIR / "stocks",
+            commodities_dir=CSV_DATA_DIR / "commodities",
+            indexes_dir=CSV_DATA_DIR / "indexes",
         )
         print(
             f"[refresh-check] {label}: bulk refresh completed "
@@ -2513,7 +2514,7 @@ def run_ichimoku_search(target: str) -> int:
 
     links_primary = _print_results_with_links(results, retest_by_ticker_side)
     print(f"\nZapisano MD: {out_md}")
-    print(f"Źródło danych instrumentów: {UNIFIED_DATA_DIR}")
+    print(f"Źródło danych CSV instrumentów: {CSV_DATA_DIR}")
     print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
 
     links_flip = _print_flip_results_with_links(flip_results)
@@ -3547,7 +3548,7 @@ def _print_fibo_results(
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] | None = None,
     ichimoku_retest_by_key: dict[tuple[str, str, str, str], str] | None = None,
 ) -> list[str]:
-    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal):{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_GREEN}WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns):{ANSI_RESET}")
     if not rows1:
         print("Brak wyników.")
         links = []
@@ -3580,7 +3581,7 @@ def _print_fibo_results(
         except Exception:
             pass
         print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
-    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid formation, last 4 months):{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid pattern >5 days, last month):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
         return links
@@ -4018,8 +4019,8 @@ def run_fibo_search(target: str) -> int:
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
-    _write_md_table(out_md,"WYNIKI FIBO #1 (status waiting 23.6->61.8, bez starych valid_reversal)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
-    _write_md_table(out_md,"WYNIKI FIBO #2 (valid formation, last 4 months)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
+    _write_md_table(out_md,"WYNIKI FIBO #2 (valid pattern >5 days, last month)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
     _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)

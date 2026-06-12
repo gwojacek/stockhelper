@@ -109,7 +109,7 @@ def _restore_file(path: Path, existed_before: bool, content: bytes):
 
 
 def _session_path(config_path: Path) -> Path:
-    return PROJECT_ROOT / "data" / "sessions" / f"{config_path.stem}.json"
+    return PROJECT_ROOT / "data" / "state" / "sessions" / f"{config_path.stem}.json"
 
 
 def _load_session_state(config_path: Path) -> dict:
