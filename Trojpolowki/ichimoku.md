@@ -1,6 +1,6 @@
 # Trójpolówki — Ichimoku
 
-Updated from allsearch: 2026-06-12 00:16:58
+Updated from allsearch: 2026-06-12 08:51:10
 
 Legenda:
 - ☁️ Cloud/retest/breakout rows have priority and appear in the third column.
@@ -15,4 +15,4 @@ Legenda:
 
 | 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |
 |---|---|---|---|
-| **🛢️ SOYOIL ↘️ short (4.9m)**<br>Kijun: under<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=zl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |  |  |  |
+|  | **📊 WIG20 ↗️ long (7.9m)**<br>Kijun: touched<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=wig20&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |  |  |

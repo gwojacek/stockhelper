@@ -1,7 +1,7 @@
 ICHIMOKU ALL COMBO REPORT
 
 
-■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 🛢️ COMMODITIES ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 📊 INDEXES ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 
 
 Źródło danych CSV instrumentów: /home/jacek/PycharmProjects/stockhelper/data
