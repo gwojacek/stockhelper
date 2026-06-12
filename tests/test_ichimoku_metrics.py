@@ -164,7 +164,7 @@ def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
             "High": 69.5,
             "Low": 68.5,
             "Close": 69.2,
-            "cloud_top": 67.0,
+            "cloud_top": 68.0,
             "cloud_bottom": 65.0,
         },
         {
@@ -173,7 +173,7 @@ def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
             "High": 69.1,
             "Low": 68.0,
             "Close": 68.5,
-            "cloud_top": 67.0,
+            "cloud_top": 68.0,
             "cloud_bottom": 65.0,
         },
         {
@@ -182,7 +182,7 @@ def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
             "High": 67.5,
             "Low": 65.5,
             "Close": 66.6,
-            "cloud_top": 67.0,
+            "cloud_top": 68.0,
             "cloud_bottom": 65.0,
         },
         {
@@ -191,7 +191,7 @@ def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
             "High": 67.9,
             "Low": 65.5,
             "Close": 67.9,
-            "cloud_top": 67.0,
+            "cloud_top": 68.0,
             "cloud_bottom": 65.0,
         },
         {
@@ -200,7 +200,7 @@ def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
             "High": 68.0,
             "Low": 66.6,
             "Close": 66.6,
-            "cloud_top": 67.0,
+            "cloud_top": 68.0,
             "cloud_bottom": 65.0,
         },
     ]

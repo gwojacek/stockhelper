@@ -459,20 +459,35 @@ def _touches_level(c: pd.Series, level: float) -> bool:
     return float(c["Low"]) <= level <= float(c["High"])
 
 
-def _is_bullish_engulfing(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _overlaps_price_zone(c: pd.Series, lower: float, upper: float) -> bool:
+    return float(c["Low"]) <= upper and float(c["High"]) >= lower
+
+
+def _is_bullish_engulfing(
+    c1: pd.Series,
+    c2: pd.Series,
+    level: float,
+    close_floor: float | None = None,
+    zone_floor: float | None = None,
+) -> bool:
     c1_open = float(c1["Open"])
     c1_close = float(c1["Close"])
     c2_open = float(c2["Open"])
     c2_close = float(c2["Close"])
     if not (c1_close < c1_open and c2_close > c2_open):
         return False
+    close_floor = level if close_floor is None else close_floor
+    if zone_floor is None:
+        touched_retest_area = _touches_level(c1, level) or _touches_level(c2, level)
+    else:
+        touched_retest_area = _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
     return (
         c2_open < c1_close
         and c2_close > c1_open
         and min(c2_open, c2_close) <= min(c1_open, c1_close)
         and max(c2_open, c2_close) >= max(c1_open, c1_close)
-        and (_touches_level(c1, level) or _touches_level(c2, level))
-        and c2_close > level
+        and touched_retest_area
+        and c2_close > close_floor
     )
 
 
@@ -530,18 +545,29 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
     return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
 
-def _is_bearish_engulfing(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_bearish_engulfing(
+    c1: pd.Series,
+    c2: pd.Series,
+    level: float,
+    close_ceiling: float | None = None,
+    zone_ceiling: float | None = None,
+) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1)
     o2, cl2, _, _, _ = _candle_parts(c2)
     if not (cl1 > o1 and cl2 < o2):
         return False
+    close_ceiling = level if close_ceiling is None else close_ceiling
+    if zone_ceiling is None:
+        touched_retest_area = _touches_level(c1, level) or _touches_level(c2, level)
+    else:
+        touched_retest_area = _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
     return (
         o2 > cl1
         and cl2 < o1
         and min(o2, cl2) <= min(o1, cl1)
         and max(o2, cl2) >= max(o1, cl1)
-        and (_touches_level(c1, level) or _touches_level(c2, level))
-        and cl2 < level
+        and touched_retest_area
+        and cl2 < close_ceiling
     )
 
 
@@ -2262,7 +2288,14 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
-                    if _is_bullish_engulfing(w.iloc[j - 1], w.iloc[j], lvl):
+                    floor = float(w["cloud_bottom"].iloc[j])
+                    if _is_bullish_engulfing(
+                        w.iloc[j - 1],
+                        w.iloc[j],
+                        lvl,
+                        close_floor=floor,
+                        zone_floor=floor,
+                    ):
                         pattern_candidates.append((j, "bullish_engulfing"))
                     if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
                         pattern_candidates.append((j, "bullish_harami"))
@@ -2284,7 +2317,14 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
-                    if _is_bearish_engulfing(w.iloc[j - 1], w.iloc[j], lvl):
+                    ceiling = float(w["cloud_top"].iloc[j])
+                    if _is_bearish_engulfing(
+                        w.iloc[j - 1],
+                        w.iloc[j],
+                        lvl,
+                        close_ceiling=ceiling,
+                        zone_ceiling=ceiling,
+                    ):
                         pattern_candidates.append((j, "bearish_engulfing"))
                     if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
                         pattern_candidates.append((j, "bearish_harami"))
