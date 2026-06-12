@@ -49,8 +49,8 @@
     "result": "stale"
   },
   "commodities:2026-06-12:pre1945": {
-    "checked_at": "2026-06-11T22:16:46.102163+00:00",
-    "result": "fresh"
+    "checked_at": "2026-06-12T09:45:25.092054+00:00",
+    "result": "stale"
   },
   "dax40": {
     "last_remote_check": "2026-05-28T16:58:39.959472+02:00"
