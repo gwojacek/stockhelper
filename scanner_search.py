@@ -459,6 +459,38 @@ def _touches_level(c: pd.Series, level: float) -> bool:
     return float(c["Low"]) <= level <= float(c["High"])
 
 
+def _overlaps_price_zone(c: pd.Series, lower: float, upper: float) -> bool:
+    return float(c["Low"]) <= upper and float(c["High"]) >= lower
+
+
+def _is_bullish_engulfing(
+    c1: pd.Series,
+    c2: pd.Series,
+    level: float,
+    close_floor: float | None = None,
+    zone_floor: float | None = None,
+) -> bool:
+    c1_open = float(c1["Open"])
+    c1_close = float(c1["Close"])
+    c2_open = float(c2["Open"])
+    c2_close = float(c2["Close"])
+    if not (c1_close < c1_open and c2_close > c2_open):
+        return False
+    close_floor = level if close_floor is None else close_floor
+    if zone_floor is None:
+        touched_retest_area = _touches_level(c1, level) or _touches_level(c2, level)
+    else:
+        touched_retest_area = _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
+    return (
+        c2_open < c1_close
+        and c2_close > c1_open
+        and min(c2_open, c2_close) <= min(c1_open, c1_close)
+        and max(c2_open, c2_close) >= max(c1_open, c1_close)
+        and touched_retest_area
+        and c2_close > close_floor
+    )
+
+
 def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     c1_open = float(c1["Open"])
     c1_close = float(c1["Close"])
@@ -512,6 +544,32 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
     return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
+
+def _is_bearish_engulfing(
+    c1: pd.Series,
+    c2: pd.Series,
+    level: float,
+    close_ceiling: float | None = None,
+    zone_ceiling: float | None = None,
+) -> bool:
+    o1, cl1, _, _, _ = _candle_parts(c1)
+    o2, cl2, _, _, _ = _candle_parts(c2)
+    if not (cl1 > o1 and cl2 < o2):
+        return False
+    close_ceiling = level if close_ceiling is None else close_ceiling
+    if zone_ceiling is None:
+        touched_retest_area = _touches_level(c1, level) or _touches_level(c2, level)
+    else:
+        touched_retest_area = _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
+    return (
+        o2 > cl1
+        and cl2 < o1
+        and min(o2, cl2) <= min(o1, cl1)
+        and max(o2, cl2) >= max(o1, cl1)
+        and touched_retest_area
+        and cl2 < close_ceiling
+    )
+
 
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
@@ -2230,6 +2288,15 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
+                    floor = float(w["cloud_bottom"].iloc[j])
+                    if _is_bullish_engulfing(
+                        w.iloc[j - 1],
+                        w.iloc[j],
+                        lvl,
+                        close_floor=floor,
+                        zone_floor=floor,
+                    ):
+                        pattern_candidates.append((j, "bullish_engulfing"))
                     if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
                         pattern_candidates.append((j, "bullish_harami"))
                     if _is_bullish_piercing_line(w.iloc[j - 1], w.iloc[j], lvl):
@@ -2250,6 +2317,15 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
+                    ceiling = float(w["cloud_top"].iloc[j])
+                    if _is_bearish_engulfing(
+                        w.iloc[j - 1],
+                        w.iloc[j],
+                        lvl,
+                        close_ceiling=ceiling,
+                        zone_ceiling=ceiling,
+                    ):
+                        pattern_candidates.append((j, "bearish_engulfing"))
                     if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
                         pattern_candidates.append((j, "bearish_harami"))
                     if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
@@ -2260,9 +2336,27 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "evening_star"))
                     if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
                         pattern_candidates.append((j, "evening_doji_star"))
-            # Prefer multi-candle formations over 1-candle ones when both exist in same retest cycle.
-            one_candle = {"hammer", "shooting_star", "bearish_hammer"}
-            ordered_candidates = sorted(set(pattern_candidates), key=lambda x: (0 if x[1] not in one_candle else 1, x[0]))
+            # Prefer stronger multi-candle formations over partial-overlap and 1-candle
+            # signals when more than one pattern ends on the same retest candle.
+            formation_priority = {
+                "bullish_engulfing": 0,
+                "bearish_engulfing": 0,
+                "morning_star": 1,
+                "morning_doji_star": 1,
+                "evening_star": 1,
+                "evening_doji_star": 1,
+                "bullish_piercing_line": 2,
+                "dark_cloud_cover": 2,
+                "bullish_harami": 3,
+                "bearish_harami": 3,
+                "hammer": 4,
+                "shooting_star": 4,
+                "bearish_hammer": 4,
+            }
+            ordered_candidates = sorted(
+                set(pattern_candidates),
+                key=lambda x: (x[0], formation_priority.get(x[1], 99)),
+            )
             for pattern_idx, formation in ordered_candidates:
                 pattern_abs = w_start + pattern_idx
                 local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())

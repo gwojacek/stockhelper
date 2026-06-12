@@ -154,3 +154,62 @@ def test_young_flip_over_kijun_is_not_actionable_until_retest():
 
     assert not scanner_search._flip_still_actionable(row)
     assert scanner_search._flip_still_actionable(touched)
+
+
+def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
+    rows = [
+        {
+            "Date": "2026-06-05",
+            "Open": 69.0,
+            "High": 69.5,
+            "Low": 68.5,
+            "Close": 69.2,
+            "cloud_top": 68.0,
+            "cloud_bottom": 65.0,
+        },
+        {
+            "Date": "2026-06-08",
+            "Open": 68.8,
+            "High": 69.1,
+            "Low": 68.0,
+            "Close": 68.5,
+            "cloud_top": 68.0,
+            "cloud_bottom": 65.0,
+        },
+        {
+            "Date": "2026-06-09",
+            "Open": 67.4,
+            "High": 67.5,
+            "Low": 65.5,
+            "Close": 66.6,
+            "cloud_top": 68.0,
+            "cloud_bottom": 65.0,
+        },
+        {
+            "Date": "2026-06-10",
+            "Open": 66.0,
+            "High": 67.9,
+            "Low": 65.5,
+            "Close": 67.9,
+            "cloud_top": 68.0,
+            "cloud_bottom": 65.0,
+        },
+        {
+            "Date": "2026-06-11",
+            "Open": 67.5,
+            "High": 68.0,
+            "Low": 66.6,
+            "Close": 66.6,
+            "cloud_top": 68.0,
+            "cloud_bottom": 65.0,
+        },
+    ]
+    df = pd.DataFrame(rows)
+
+    status, depth, count, first_date, events = scanner_search._detect_ichimoku_retest(df, 1, "above")
+
+    assert status == "deep_retest_pattern"
+    assert depth == "deep"
+    assert count == 1
+    assert first_date == "2026-06-10"
+    assert events == [("2026-06-10", "bullish_engulfing", "deep")]
