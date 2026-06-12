@@ -67,6 +67,7 @@ Compare: [`1.0...2.0`](https://github.com/gwojacek/stockhelper/compare/1.0...2.0
 
 ### Added
 
+- Added the major chart-rendering upgrade to TradingView Lightweight Charts for the interactive/report chart UI, replacing the older chart rendering path with a faster browser-native candlestick experience.
 - Added an in-chart position calculation panel for report charts.
 - Added calculation drawer controls, including vertical chart panning while calculations are open.
 - Added display of FX conversion fee state in the compact chart calculation UI.
@@ -79,6 +80,7 @@ Compare: [`1.0...2.0`](https://github.com/gwojacek/stockhelper/compare/1.0...2.0
 - Detached report viewer/server processes where needed, then refined the flow to keep report server output attached to the console for easier debugging.
 - Kept report chart calculations in the console flow rather than hiding failures in detached processes.
 - Reworked the calculation panel layout: larger initial drawer height, compact tables, centered content, aligned headers, repositioned panel header, and larger table text.
+- Improved report chart launch plumbing around the Lightweight Charts server flow, including redirect timing, process handling, and console visibility.
 
 ### Fixed
 
@@ -99,7 +101,7 @@ Tag: `1.0` (`9d25779`)
 - Added scanner workflows for Ichimoku cloud setups, Fibonacci formations, all-search combined reports, single-symbol Fibo explanations, and average-liquidity checks.
 - Added Markdown/HTML report generation, terminal output, cached CSV artifacts, debug JSON/HTML/screenshots, and chart image exports.
 - Added the interactive browser chart editor for selecting price levels, saving/updating config files, toggling Ichimoku chart mode, and exporting chart snapshots.
-- Added Trójpołówki (3P) watchlists generated from all-search output, including compact Fibonacci and Ichimoku continuation/watchlist sections.
+- Included Trójpołówki (3P) watchlists by the `1.0` tag, generated from all-search output with compact Fibonacci and Ichimoku continuation/watchlist sections.
 - Added falling-wedge detection and reporting for StockHelper.
 - Integrated wedge detection into the Trójpołówki workflow.
 - Added chart drawing support for wedge trendlines, breakout/retest context, and wedge report visualization.
