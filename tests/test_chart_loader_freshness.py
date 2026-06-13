@@ -570,3 +570,124 @@ def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):
     assert result["rows_after"] == 2
     assert list(trimmed["Date"]) == ["2024-06-11", "2026-06-11"]
     assert pd.read_csv(non_wig_csv)["Date"].iloc[0] == "2020-01-01"
+
+
+def test_level_selector_refreshes_latest_then_does_not_rewrite_market_data_csv(monkeypatch, tmp_path):
+    import chart_program.level_selector as selector
+
+    csv_path = tmp_path / "ABC_WA.csv"
+    _df("2026-06-09").to_csv(csv_path, index=False)
+
+    config_path = tmp_path / "abc.py"
+    calls: list[bool] = []
+
+    def fake_load_or_update_daily_data(**kwargs):
+        calls.append(bool(kwargs.get("fetch_older_data")))
+        if not kwargs.get("fetch_older_data"):
+            # The initial latest-candle refresh persists the Yahoo-fresh row.
+            refreshed = _df("2026-06-09", "2026-06-10")
+            refreshed.to_csv(csv_path, index=False)
+            return refreshed, csv_path, {
+                "source": "stooq_bulk+yahoo",
+                "symbol": "ABC.WA",
+                "name": "ABC",
+                "fallback_reason": "Yahoo candles appended=1",
+            }
+
+        # Simulate the chart/full-history path receiving an older/trimmed
+        # dataframe. Opening and finishing the chart must not let this dataframe
+        # undo the cache on disk.
+        return _df("2026-06-09"), csv_path, {
+            "source": "cache",
+            "symbol": "ABC.WA",
+            "name": "ABC",
+            "fallback_reason": "Cache-only mode enabled.",
+        }
+
+    class FakeUI:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self):
+            return {
+                "__finished__": True,
+                "high": 10.0,
+                "low": 8.0,
+                "entry": 9.0,
+                "stop_loss": 7.5,
+                "check_zr_value_fibo_or_elevation": 1.0,
+                "line_cross_value": 9.5,
+                "capital": 1000.0,
+            }
+
+        def save_chart_snapshot(self, selected, chart_path):
+            chart_path.parent.mkdir(parents=True, exist_ok=True)
+            chart_path.write_bytes(b"fake image")
+
+    def fake_write_or_update_config(*, instrument_type, config_path, values):
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text("# fake config\n", encoding="utf-8")
+        return config_path
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(selector, "detect_instrument_type", lambda *_args, **_kwargs: "stock")
+    monkeypatch.setattr(selector, "resolve_config_path", lambda *_args, **_kwargs: config_path)
+    monkeypatch.setattr(selector, "load_or_update_daily_data", fake_load_or_update_daily_data)
+    monkeypatch.setattr(selector, "LightweightChartLevelSelectorUI", FakeUI)
+    monkeypatch.setattr(selector, "write_or_update_config", fake_write_or_update_config)
+    monkeypatch.setattr(selector, "_save_session_state", lambda *_args, **_kwargs: None)
+
+    result = selector.run_level_selector(["ABC.WA", "--instrument", "stock"])
+
+    assert calls == [False, True]
+    assert result["data_path"] == str(csv_path)
+    assert "2026-06-10" in csv_path.read_text(encoding="utf-8")
+
+
+def test_yahoo_quote_page_row_fills_history_lag(monkeypatch):
+    base = _df("2026-06-11")
+    quote_ts = pd.Timestamp("2026-06-12 17:10", tz="Europe/Warsaw").timestamp()
+
+    def fake_quote(symbol):
+        assert symbol == "PCO.WA"
+        return {
+            "exchangeTimezoneName": "Europe/Warsaw",
+            "regularMarketTime": quote_ts,
+            "regularMarketOpen": 34.5,
+            "regularMarketDayHigh": 35.0,
+            "regularMarketDayLow": 34.2,
+            "regularMarketPrice": 34.8,
+            "regularMarketVolume": 515100,
+        }
+
+    monkeypatch.setattr(loader, "_yahoo_quote_result", fake_quote)
+
+    merged = loader._merge_yahoo_regular_market_quote(base, "PCO.WA")
+
+    assert list(merged["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-11", "2026-06-12"]
+    latest = merged.iloc[-1]
+    assert float(latest["Open"]) == 34.5
+    assert float(latest["Close"]) == 34.8
+    assert float(latest["Volume"]) == 515100.0
+
+
+def test_single_stock_refresh_probe_uses_yahoo_missing_candle_count(monkeypatch):
+    import os
+    import scanner_search as scanner
+
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, group, suffix: ("PCO.WA", "stock"))
+    monkeypatch.setattr(
+        scanner,
+        "_stock_yahoo_freshness_probe",
+        lambda fetch_symbol: (1, "2026-06-11", "2026-06-12", "PCO.WA"),
+    )
+
+    def fail_generic_probe(*_args, **_kwargs):
+        raise AssertionError("stock probes should use Yahoo candle counts, not generic remote probe")
+
+    monkeypatch.setattr(scanner, "has_new_remote_data", fail_generic_probe)
+
+    assert scanner._should_refresh_group_data("single", ["PCO"], None) is True
+    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"

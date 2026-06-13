@@ -48,9 +48,17 @@
     "checked_at": "2026-06-11T20:41:04.231050+00:00",
     "result": "stale"
   },
+  "commodities:2026-06-12:post1945": {
+    "checked_at": "2026-06-12T21:48:43.848978+00:00",
+    "result": "fresh"
+  },
   "commodities:2026-06-12:pre1945": {
     "checked_at": "2026-06-12T09:45:25.092054+00:00",
     "result": "stale"
+  },
+  "commodities:2026-06-13:pre1945": {
+    "checked_at": "2026-06-13T07:39:38.827839+00:00",
+    "result": "fresh"
   },
   "dax40": {
     "last_remote_check": "2026-05-28T16:58:39.959472+02:00"

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+import json
 import tempfile
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import os
 
 import pandas as pd
@@ -336,6 +337,47 @@ def _yahoo_history_to_ohlc_dataframe(hist: pd.DataFrame) -> pd.DataFrame:
     return _sanitize_ohlc_dataframe(df)
 
 
+
+def _yahoo_quote_result(symbol: str) -> dict | None:
+    query = urlencode({"symbols": symbol})
+    url = f"https://query1.finance.yahoo.com/v7/finance/quote?{query}"
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    results = payload.get("quoteResponse", {}).get("result", [])
+    return results[0] if results else None
+
+
+def _merge_yahoo_regular_market_quote(df: pd.DataFrame, yahoo_symbol: str) -> pd.DataFrame:
+    quote = _yahoo_quote_result(yahoo_symbol)
+    if not quote:
+        return df
+    raw_time = quote.get("regularMarketTime")
+    if raw_time is None:
+        return df
+    try:
+        tz = ZoneInfo(str(quote.get("exchangeTimezoneName") or "UTC"))
+    except Exception:
+        tz = timezone.utc
+    quote_date = pd.Timestamp(datetime.fromtimestamp(float(raw_time), tz).date())
+    row = {
+        "Date": quote_date,
+        "Open": quote.get("regularMarketOpen"),
+        "High": quote.get("regularMarketDayHigh"),
+        "Low": quote.get("regularMarketDayLow"),
+        "Close": quote.get("regularMarketPrice"),
+        "Volume": quote.get("regularMarketVolume"),
+    }
+    numeric = {key: pd.to_numeric(value, errors="coerce") for key, value in row.items() if key != "Date"}
+    if any(pd.isna(numeric[key]) for key in ["Open", "High", "Low", "Close"]):
+        return df
+    quote_row = {"Date": quote_date, **numeric}
+    sanitized = _sanitize_ohlc_dataframe(df)
+    latest = _latest_date_from_df(sanitized)
+    if latest is not None and quote_date.date() < latest.date():
+        return sanitized
+    return _sanitize_ohlc_dataframe(pd.concat([sanitized, pd.DataFrame([quote_row])], ignore_index=True))
+
 def _yahoo_download_window(
     symbol: str,
     instrument_type: str,
@@ -356,6 +398,14 @@ def _yahoo_download_window(
                 errors.append(f"{candidate}: empty data")
                 continue
             df = _yahoo_history_to_ohlc_dataframe(hist)
+            try:
+                # Yahoo's historical 1d endpoint can lag the quote page for
+                # Warsaw stocks.  Merge the regular-market quote as the newest
+                # daily row so freshness probes and persisted CSVs match the
+                # visible Yahoo quote date.
+                df = _merge_yahoo_regular_market_quote(df, candidate)
+            except Exception:
+                pass
             display_name = None
             if instrument_type == "stock":
                 try:
