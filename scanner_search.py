@@ -867,6 +867,13 @@ def _warsaw_phase_now() -> tuple[str, str]:
     return now.strftime("%Y-%m-%d"), phase
 
 
+def _warsaw_daily_bulk_day() -> str | None:
+    now = _warsaw_now()
+    if now.time() < dt_time(3, 0):
+        return None
+    return now.strftime("%Y-%m-%d")
+
+
 def _is_after_warsaw_stock_close() -> bool:
     return _warsaw_now().time() >= dt_time(17, 30)
 
@@ -1071,6 +1078,17 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
+
+    daily_bulk_day = _warsaw_daily_bulk_day()
+    if daily_bulk_day and (group_l.startswith("wig") or group_l == "indexes"):
+        state = _read_refresh_state()
+        bucket = f"stooq_bulk:{daily_bulk_day}"
+        if not state.get(bucket):
+            if _try_refresh_wig_with_stooq_bulk(group_name, f"first WIG/index search after 03:00 Warsaw on {daily_bulk_day}"):
+                state = _read_refresh_state()
+                state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "bulk"}
+                _write_refresh_state(state)
+                return True
 
     if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
         missing_candles, local_latest, yahoo_latest, yahoo_candidate = _wig20_index_yahoo_freshness_probe()
