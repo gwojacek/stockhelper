@@ -636,6 +636,25 @@ def run_level_selector(raw_args=None):
                         return None
                     return int((chart_dates - ts).abs().idxmin())
 
+                def _snap_wedge_anchor(point: tuple[pd.Timestamp, float], side: str) -> tuple[pd.Timestamp, float]:
+                    # Report commands can carry rounded prices or be opened with
+                    # fresher provider data.  Auto-wedge anchors must still be
+                    # glued to the actual candle extremes on the displayed chart.
+                    idx = _nearest_idx(point[0])
+                    if idx is None or idx < 0 or idx >= len(df):
+                        return point
+                    row = df.iloc[idx]
+                    price_col = "High" if side == "upper" else "Low"
+                    price = pd.to_numeric(pd.Series([row.get(price_col)]), errors="coerce").iloc[0]
+                    if pd.isna(price):
+                        return point
+                    return pd.to_datetime(chart_dates.iloc[idx]), float(price)
+
+                up0 = _snap_wedge_anchor(up0, "upper")
+                up1 = _snap_wedge_anchor(up1, "upper")
+                lo0 = _snap_wedge_anchor(lo0, "lower")
+                lo1 = _snap_wedge_anchor(lo1, "lower")
+
                 def _date_for_index(idx: int) -> pd.Timestamp:
                     if chart_dates.empty:
                         return pd.Timestamp.today().normalize()

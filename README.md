@@ -193,7 +193,7 @@ StockHelper deliberately mixes data sources so scans use the freshest daily cand
   - `SILVER` -> Yahoo `SI=F` -> `data/csv/commodities/SILVER.csv`
   - `PALLADIUM` -> Yahoo `PA=F` -> `data/csv/commodities/PALLADIUM.csv`
 - **Legacy metal aliases are intentionally not used in search groups**: do not expect `XAUUSD`, `XAGUSD`, or `XPDUSD` scan rows or cache files from allsearch. Use `GOLD`, `SILVER`, and `PALLADIUM`.
-- **Warsaw stocks/WIG** use Stooq bulk (`d_pl_txt` / `wse stocks`) as the historical base. After Warsaw close, Yahoo is probed to append fresh `.WA` candles when only the newest session is missing.
+- **Warsaw stocks/WIG** use Stooq bulk (`d_pl_txt` / `wse stocks`) as the historical base. After Warsaw close, Yahoo is probed to append fresh `.WA` candles when only the newest session is missing. The first WIG/index scanner freshness check after 03:00 Warsaw time downloads Stooq bulk once per Warsaw date so the local WIG base is refreshed before Yahoo fresh-candle merges.
 - **WIG20** uses Stooq as the base (`wse indices/wig20.txt` imported to `data/csv/commodities/WIG20.csv`) and Yahoo only for a newer `WIG20.WA` candle. If WIG20 appears to be missing more than one session, StockHelper triggers Stooq bulk first.
 - **Literal commodities** such as cocoa/coffee/oil keep Stooq web/table as the base when needed, with optional Yahoo fresh-candle merges.
 

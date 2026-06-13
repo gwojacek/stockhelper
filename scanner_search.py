@@ -867,6 +867,13 @@ def _warsaw_phase_now() -> tuple[str, str]:
     return now.strftime("%Y-%m-%d"), phase
 
 
+def _warsaw_daily_bulk_day() -> str | None:
+    now = _warsaw_now()
+    if now.time() < dt_time(3, 0):
+        return None
+    return now.strftime("%Y-%m-%d")
+
+
 def _is_after_warsaw_stock_close() -> bool:
     return _warsaw_now().time() >= dt_time(17, 30)
 
@@ -1071,6 +1078,17 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
+
+    daily_bulk_day = _warsaw_daily_bulk_day()
+    if daily_bulk_day and (group_l.startswith("wig") or group_l == "indexes"):
+        state = _read_refresh_state()
+        bucket = f"stooq_bulk:{daily_bulk_day}"
+        if not state.get(bucket):
+            if _try_refresh_wig_with_stooq_bulk(group_name, f"first WIG/index search after 03:00 Warsaw on {daily_bulk_day}"):
+                state = _read_refresh_state()
+                state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "bulk"}
+                _write_refresh_state(state)
+                return True
 
     if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
         missing_candles, local_latest, yahoo_latest, yahoo_candidate = _wig20_index_yahoo_freshness_probe()
@@ -1728,7 +1746,8 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     t = (ticker or "").strip()
     if "." not in t and len(t) <= 5:
         cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
-        if (cfg_stocks / f"{t}.py").exists():
+        stock_csv = CSV_DATA_DIR / "stocks" / f"{t.upper()}_WA.csv"
+        if (cfg_stocks / f"{t}.py").exists() or stock_csv.exists() or t.upper() in WIG_SEARCH_TICKERS:
             t = f"{t}.WA"
     base = f"python run -c {t}"
     if mode == "fibo":
@@ -2712,6 +2731,13 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         last_close = max(abs(float(closes[end])), 1e-9)
         return max(avg_range * 0.18 if pd.notna(avg_range) else 0.0, last_close * 0.004)
 
+    def _post_anchor_touch_tolerance(price: float) -> float:
+        # After the two strict anchor touches, count only candles whose relevant
+        # wick extreme is within a few pips of the wedge line.  This avoids
+        # treating candles merely located between wedge boundaries as touches.
+        pip = 0.0001 if abs(float(price)) < 1 else 0.01
+        return max(pip * 5, abs(float(price)) * 0.0005)
+
     for length in range(min(180, n), 44, -5):
         start = n - length
         end = n - 1
@@ -2871,16 +2897,20 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     if breakout_idx is not None:
                         continue
                     if i not in upper_anchor_indices and closes[i] <= up + close_eps:
-                        if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= exact_tol:
+                        upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
+                        upper_exact_tol = min(exact_tol, upper_touch_tol)
+                        if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
                             upper_exact_contacts.append(i)
                             upper_contacts.append(i)
-                        elif lows[i] <= up <= highs[i] or abs(highs[i] - up) <= tol or abs(opens[i] - up) <= tol:
+                        elif abs(highs[i] - up) <= upper_touch_tol:
                             upper_contacts.append(i)
                     if i not in lower_anchor_indices and closes[i] >= lo - close_eps:
-                        if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= exact_tol:
+                        lower_touch_tol = min(tol, _post_anchor_touch_tolerance(lo))
+                        lower_exact_tol = min(exact_tol, lower_touch_tol)
+                        if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= lower_exact_tol:
                             lower_exact_contacts.append(i)
                             lower_contacts.append(i)
-                        elif lows[i] <= lo <= highs[i] or abs(lows[i] - lo) <= tol or abs(opens[i] - lo) <= tol:
+                        elif abs(lows[i] - lo) <= lower_touch_tol:
                             lower_contacts.append(i)
                 if invalid:
                     continue
