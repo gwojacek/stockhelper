@@ -1344,13 +1344,37 @@ class LightweightChartLevelSelectorUI:
   }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
+  function commitLineDrawing(time, price) {{
+    const obj = {{id:crypto.randomUUID(), type:'line', label:'LINE', x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, color:lineColor}};
+    drawnObjects.push(obj);
+    const objKey = `obj:${{obj.id}}`;
+    const deleteFn = () => {{ drawnObjects = drawnObjects.filter(o => o.id !== obj.id); hiddenLegendKeys.delete(objKey); }};
+    addLegend(obj.label, obj.color, objKey, deleteFn);
+    const data = editableLineData(obj);
+    if (previewSeries) {{
+      try {{
+        previewSeries.setData(data);
+        previewSeries.applyOptions?.({{color:obj.color, lineWidth:2, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, title:'', autoscaleInfoProvider:() => null}});
+        dynamicSeries.push(previewSeries);
+        objectSeries.set(obj, previewSeries);
+      }} catch(e) {{ console.warn('line commit failed', e); safeRemoveSeries(previewSeries); }}
+      previewSeries = null;
+    }} else {{
+      const series = addLine(data, obj.color, 2, LightweightCharts.LineStyle.Solid, obj.label, false, false, false, objKey, null, false);
+      if (series) objectSeries.set(obj, series);
+    }}
+    lineAnchor = null;
+    updatePanel();
+    requestAnimationFrame(drawCloud);
+  }}
+
   chart.subscribeClick(param => {{
     if (Date.now() < suppressChartClickUntil) return;
     if (!param || !param.point) return;
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
     const time = typeof param.time === 'string' ? param.time : (param.time ? `${{param.time.year}}-${{String(param.time.month).padStart(2,'0')}}-${{String(param.time.day).padStart(2,'0')}}` : nearest(null).time);
     if (!Number.isFinite(price)) return;
-    if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); }} else {{ drawnObjects.push({{id:crypto.randomUUID(), type:'line', label:'LINE', x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, color:lineColor}}); lineAnchor=null; safeRemoveSeries(previewSeries); previewSeries=null; render(); }} updatePanel(); return; }}
+    if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); updatePanel(); }} else {{ commitLineDrawing(time, price); }} return; }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
