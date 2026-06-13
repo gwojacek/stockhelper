@@ -77,7 +77,7 @@ def main() -> int:
     console_stderr_path = ""
     console_log_path = os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG", "")
     console_log = None
-    chart_groups: dict[str, list[dict[str, str]]] = {}
+    chart_groups: dict[str, dict] = {}
     chart_group_lock = threading.Lock()
     if console_log_path:
         try:
@@ -204,11 +204,13 @@ def main() -> int:
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
         if group_id:
             with chart_group_lock:
-                group_items = chart_groups.get(group_id, [])
+                group_data = chart_groups.get(group_id, {})
+            group_items = group_data.get("items") or []
             if group_items:
                 env["STOCKHELPER_CHART_GROUP_JSON"] = json.dumps(
                     {
                         "id": group_id,
+                        "label": str(group_data.get("label") or "Quick charts from group btn"),
                         "items": group_items,
                         "current": original_command,
                         "reportServer": f"http://{args.host}:{args.port}",
@@ -381,6 +383,7 @@ def main() -> int:
                     ln = int(self.headers.get("content-length", "0") or "0")
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
                     payload = json.loads(raw or "{}")
+                    group_label = str(payload.get("label") or "Quick charts from group btn").strip()
                     raw_items = payload.get("items") or []
                     items = []
                     for item in raw_items:
@@ -395,7 +398,7 @@ def main() -> int:
                         self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing commands"}).encode("utf-8")); return
                     group_id = uuid.uuid4().hex
                     with chart_group_lock:
-                        chart_groups[group_id] = items
+                        chart_groups[group_id] = {"label": group_label, "items": items}
                     first_command = items[0]["command"]
                     first_url = f"/open-chart?command={quote(first_command, safe="")}&group={quote(group_id, safe="")}"
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "group": group_id, "url": first_url}).encode("utf-8"))

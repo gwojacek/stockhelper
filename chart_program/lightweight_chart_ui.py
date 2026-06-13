@@ -233,6 +233,7 @@ class LightweightChartLevelSelectorUI:
             return None
         return {
             "id": str(payload.get("id") or ""),
+            "label": str(payload.get("label") or "Quick charts from group btn"),
             "items": items,
             "current": str(payload.get("current") or ""),
             "reportServer": str(payload.get("reportServer") or ""),
@@ -461,8 +462,11 @@ class LightweightChartLevelSelectorUI:
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
     .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
-    .chart-group-nav label {{ margin-top:0; font-weight:800; color:#bfdbfe; }}
-    .chart-group-nav small {{ display:block; margin-top:5px; color:#94a3b8; line-height:1.3; }}
+    .chart-group-nav h4 {{ margin:0 0 8px 0; color:#fde68a; font-size:15px; }}
+    .chart-group-label {{ margin:0 0 8px 0; color:#bfdbfe; font-weight:800; font-size:13px; }}
+    .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
+    .chart-group-buttons button {{ padding:6px 8px; border-radius:999px; background:#1f2937; border-color:#475569; color:#e5e7eb; font-size:12px; }}
+    .chart-group-buttons button.active {{ background:#2563eb; border-color:#93c5fd; color:white; box-shadow:0 0 0 2px rgba(147,197,253,.22); }}
     .values {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 8px; white-space: pre-wrap; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
@@ -538,9 +542,9 @@ class LightweightChartLevelSelectorUI:
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
-        <label for="chart-group-select">Group charts</label>
-        <select id="chart-group-select"></select>
-        <small>Switch to another chart from the group opened in the report.</small>
+        <h4>⭐ Quick charts from group btn</h4>
+        <div id="chart-group-label" class="chart-group-label"></div>
+        <div id="chart-group-buttons" class="chart-group-buttons"></div>
       </div>
       <div id="result-box" style="margin-top:10px"></div>
     </aside>
@@ -1390,26 +1394,29 @@ class LightweightChartLevelSelectorUI:
 
   function setupChartGroupNav() {{
     const wrap = $('chart-group-nav');
-    const select = $('chart-group-select');
-    if (!wrap || !select || !chartGroup || !Array.isArray(chartGroup.items) || chartGroup.items.length < 2 || !chartGroup.reportServer) return;
+    const label = $('chart-group-label');
+    const buttons = $('chart-group-buttons');
+    if (!wrap || !buttons || !chartGroup || !Array.isArray(chartGroup.items) || chartGroup.items.length < 2 || !chartGroup.reportServer) return;
     wrap.style.display = 'block';
-    select.innerHTML = '';
+    if (label) label.textContent = chartGroup.label || 'Group charts';
+    buttons.innerHTML = '';
     const current = String(chartGroup.current || '');
-    chartGroup.items.forEach((item, idx) => {{
-      const option = document.createElement('option');
-      option.value = item.command || '';
-      option.textContent = `${{idx + 1}}. ${{item.label || item.command || 'Chart'}}`;
-      if (current && option.value === current) option.selected = true;
-      select.appendChild(option);
-    }});
-    select.onchange = () => {{
-      const command = select.value;
+    const go = (command) => {{
       if (!command || command === current) return;
       const url = new URL('/open-chart', chartGroup.reportServer);
       url.searchParams.set('command', command);
       if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
       window.location.href = url.href;
     }};
+    chartGroup.items.forEach((item) => {{
+      const command = item.command || '';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = item.label || command || 'Chart';
+      btn.classList.toggle('active', !!current && command === current);
+      btn.onclick = () => go(command);
+      buttons.appendChild(btn);
+    }});
   }}
 
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
