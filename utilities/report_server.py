@@ -357,6 +357,30 @@ def main() -> int:
                     _safe_print(f"[report] chart command failed: {exc}", err=True)
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
+            if parsed.path == "/open-charts":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    commands = payload.get("commands") or []
+                    opened = 0
+                    results = []
+                    for command in commands:
+                        if not isinstance(command, str) or not command.strip():
+                            continue
+                        try:
+                            rc, result = _run_chart_command(command.strip())
+                            if rc == 0 and result.get("url"):
+                                webbrowser.open_new_tab(str(result["url"]))
+                                opened += 1
+                            results.append({"command": command, "ok": rc == 0, **(result or {})})
+                        except Exception as exc:
+                            _safe_print(f"[report] grouped chart command failed: {exc}", err=True)
+                            results.append({"command": command, "ok": False, "error": str(exc)})
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"opened": opened, "results": results}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
             if parsed.path == "/open-links":
                 try:
                     ln = int(self.headers.get("content-length", "0") or "0")
