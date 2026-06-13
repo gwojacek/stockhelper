@@ -1039,7 +1039,8 @@ class LightweightChartLevelSelectorUI:
     ev.stopPropagation();
     ev.stopImmediatePropagation?.();
     applyWedgeDerivedLevels();
-    render();
+    updatePanel();
+    requestAnimationFrame(drawCloud);
     return true;
   }}
 
