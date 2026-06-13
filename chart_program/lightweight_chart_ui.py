@@ -530,9 +530,10 @@ class LightweightChartLevelSelectorUI:
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
   const fibRatios = [0, 0.382, 0.5, 0.618, 1];
-  const fibLineColor = '#64748b';
   const fibGoldenColor = '#facc15';
-  const fibColor = (ratio) => Math.abs(Number(ratio) - 0.618) < 0.0001 ? fibGoldenColor : fibLineColor;
+  const fibHighlightColor = '#22c55e';
+  const fibLineColor = fibGoldenColor;
+  const fibColor = (ratio) => Math.abs(Number(ratio) - 0.618) < 0.0001 ? fibHighlightColor : fibGoldenColor;
   const normalizeLineData = (data) => {{
     const seen = new Set();
     return data
@@ -755,7 +756,8 @@ class LightweightChartLevelSelectorUI:
       if (!byTime.has(row.time)) return;
       const y = byTime.get(row.time);
       const touchPrice = isUpper ? row.high : (isLower ? row.low : row.close);
-      const tolerance = Math.max(Math.abs(row.high - row.low) * 0.28, Math.abs(y || 1) * 0.004);
+      const pip = Math.abs(y) < 1 ? 0.0001 : Math.pow(10, -precision);
+      const tolerance = Math.max(pip * 5, Math.abs(y || 1) * 0.0005);
       if (Math.abs(touchPrice - y) <= tolerance) {{
         if (idx > lastTouchIdx + 1) out.push({{time: row.time, value: y, upper: isUpper, lower:isLower}});
         lastTouchIdx = idx;
@@ -959,6 +961,13 @@ class LightweightChartLevelSelectorUI:
     return match ? match[1] : '';
   }}
 
+  function fibRatioValue(obj) {{
+    if (Number.isFinite(Number(obj.ratio))) return Number(obj.ratio);
+    const label = fibPercentLabel(obj);
+    if (!label) return NaN;
+    return Number(label.replace('%', '')) / 100;
+  }}
+
   function render() {{
     const viewport = captureViewport();
     removeDynamic();
@@ -983,9 +992,9 @@ class LightweightChartLevelSelectorUI:
     const seenFibLegend = new Set();
     let wedgeLegendAdded = false;
     drawnObjects.forEach(obj => {{
-      const color = obj.color || P.lineColors.gold;
       const isFib = obj.type === 'fib';
       const isFibBoundary = obj.type === 'fib-boundary';
+      const color = isFib ? fibColor(fibRatioValue(obj)) : (isFibBoundary ? fibLineColor : (obj.color || P.lineColors.gold));
       const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
       const fibKey = (isFib || isFibBoundary) ? `fib-group:${{obj.group_id || obj.id}}` : null;
       const objKey = isWedge ? `wedge:${{obj.id || obj.label || Math.random()}}` : ((isFib || isFibBoundary) ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
@@ -1097,7 +1106,7 @@ class LightweightChartLevelSelectorUI:
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
       const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
-      fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
+      fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, ratio:r, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
       drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibLineColor, group_id:gid}});
       fibAnchor=null; clearPreviews(); render(); return;
     }}
