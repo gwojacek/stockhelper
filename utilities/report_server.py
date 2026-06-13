@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import html
 import json
 import os
@@ -362,22 +363,33 @@ def main() -> int:
                     ln = int(self.headers.get("content-length", "0") or "0")
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
                     payload = json.loads(raw or "{}")
-                    commands = payload.get("commands") or []
-                    opened = 0
-                    results = []
-                    for command in commands:
-                        if not isinstance(command, str) or not command.strip():
-                            continue
+                    commands = [c.strip() for c in payload.get("commands") or [] if isinstance(c, str) and c.strip()]
+                    open_in_browser = bool(payload.get("open", True))
+
+                    def _run_grouped_chart(command: str) -> dict:
                         try:
-                            rc, result = _run_chart_command(command.strip())
-                            if rc == 0 and result.get("url"):
-                                webbrowser.open_new_tab(str(result["url"]))
-                                opened += 1
-                            results.append({"command": command, "ok": rc == 0, **(result or {})})
+                            rc, result = _run_chart_command(command)
+                            return {"command": command, "ok": rc == 0, **(result or {})}
                         except Exception as exc:
                             _safe_print(f"[report] grouped chart command failed: {exc}", err=True)
-                            results.append({"command": command, "ok": False, "error": str(exc)})
-                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"opened": opened, "results": results}).encode("utf-8"))
+                            return {"command": command, "ok": False, "error": str(exc)}
+
+                    results = [None] * len(commands)
+                    if commands:
+                        workers = min(len(commands), 8)
+                        with ThreadPoolExecutor(max_workers=workers) as executor:
+                            futures = {executor.submit(_run_grouped_chart, command): idx for idx, command in enumerate(commands)}
+                            for future in as_completed(futures):
+                                results[futures[future]] = future.result()
+                    results = [r for r in results if r is not None]
+                    opened = 0
+                    if open_in_browser:
+                        for result in results:
+                            if result.get("ok") and result.get("url"):
+                                webbrowser.open_new_tab(str(result["url"]))
+                                opened += 1
+                    urls = [str(r.get("url", "")) if r.get("ok") and r.get("url") else "" for r in results]
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"opened": opened, "urls": urls, "results": results}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
