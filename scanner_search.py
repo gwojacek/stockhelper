@@ -1116,7 +1116,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
     for ticker in probes:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
         try:
-            if group_l == "wig" and instrument == "stock":
+            if instrument == "stock":
                 missing_candles, local_latest, yahoo_latest, yahoo_candidate = _stock_yahoo_freshness_probe(fetch_symbol)
                 checked += 1
                 print(
@@ -1124,15 +1124,16 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     f"local latest={local_latest}, newer candles={missing_candles}"
                 )
                 if missing_candles > 0:
-                    after_close = _is_after_warsaw_stock_close()
-                    needs_bulk_first = (not after_close) or missing_candles > 1
-                    if needs_bulk_first:
-                        phase_reason = "before Warsaw close" if not after_close else "more than one Yahoo candle missing after Warsaw close"
-                        if _try_refresh_wig_with_stooq_bulk(
-                            group_name,
-                            f"probe {ticker} found {missing_candles} newer Yahoo candles ({phase_reason})",
-                        ):
-                            return True
+                    if group_l == "wig":
+                        after_close = _is_after_warsaw_stock_close()
+                        needs_bulk_first = (not after_close) or missing_candles > 1
+                        if needs_bulk_first:
+                            phase_reason = "before Warsaw close" if not after_close else "more than one Yahoo candle missing after Warsaw close"
+                            if _try_refresh_wig_with_stooq_bulk(
+                                group_name,
+                                f"probe {ticker} found {missing_candles} newer Yahoo candles ({phase_reason})",
+                            ):
+                                return True
                     os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                     os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     return True
@@ -2422,6 +2423,13 @@ def run_ichimoku_search(target: str) -> int:
     flip_results: list[FlipResult] = []
     processed_count = 0
     error_count = 0
+    error_samples: list[str] = []
+
+    def _record_scan_error(ticker: str, err: str | None) -> None:
+        nonlocal error_count
+        error_count += 1
+        if len(error_samples) < 12:
+            error_samples.append(f"{ticker}: {_compact_error(err)}")
 
     # Scan the first symbol as a live rate-limit/captcha check; if clean, scan the rest in parallel.
     first = members[0]
@@ -2445,7 +2453,7 @@ def run_ichimoku_search(target: str) -> int:
         return 1
     processed_count += 1
     if first_err:
-        error_count += 1
+        _record_scan_error(first, first_err)
         print(f"  pominięto ({first_err})")
     elif first_result:
         results.append(first_result)
@@ -2469,7 +2477,7 @@ def run_ichimoku_search(target: str) -> int:
             if stopped:
                 break
             if err:
-                error_count += 1
+                _record_scan_error(ticker, err)
                 print(f"  pominięto ({_compact_error(err)})", flush=True)
             elif result:
                 results.append(result)
@@ -2564,7 +2572,7 @@ def run_ichimoku_search(target: str) -> int:
                         STOP_SCAN_EVENT.set()
                         break
                     if err:
-                        error_count += 1
+                        _record_scan_error(ticker, err)
                         print(f"  pominięto ({_compact_error(err)})", flush=True)
                     elif result:
                         results.append(result)
@@ -2610,6 +2618,8 @@ def run_ichimoku_search(target: str) -> int:
     print(f"\nZapisano MD: {out_md}")
     print(f"Źródło danych CSV instrumentów: {CSV_DATA_DIR}")
     print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
+    if error_samples:
+        print(f"[search] error samples: {'; '.join(error_samples)}")
 
     links_flip = _print_flip_results_with_links(flip_results)
 

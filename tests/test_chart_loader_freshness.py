@@ -642,3 +642,52 @@ def test_level_selector_refreshes_latest_then_does_not_rewrite_market_data_csv(m
     assert calls == [False, True]
     assert result["data_path"] == str(csv_path)
     assert "2026-06-10" in csv_path.read_text(encoding="utf-8")
+
+
+def test_yahoo_quote_page_row_fills_history_lag(monkeypatch):
+    base = _df("2026-06-11")
+    quote_ts = pd.Timestamp("2026-06-12 17:10", tz="Europe/Warsaw").timestamp()
+
+    def fake_quote(symbol):
+        assert symbol == "PCO.WA"
+        return {
+            "exchangeTimezoneName": "Europe/Warsaw",
+            "regularMarketTime": quote_ts,
+            "regularMarketOpen": 34.5,
+            "regularMarketDayHigh": 35.0,
+            "regularMarketDayLow": 34.2,
+            "regularMarketPrice": 34.8,
+            "regularMarketVolume": 515100,
+        }
+
+    monkeypatch.setattr(loader, "_yahoo_quote_result", fake_quote)
+
+    merged = loader._merge_yahoo_regular_market_quote(base, "PCO.WA")
+
+    assert list(merged["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-11", "2026-06-12"]
+    latest = merged.iloc[-1]
+    assert float(latest["Open"]) == 34.5
+    assert float(latest["Close"]) == 34.8
+    assert float(latest["Volume"]) == 515100.0
+
+
+def test_single_stock_refresh_probe_uses_yahoo_missing_candle_count(monkeypatch):
+    import os
+    import scanner_search as scanner
+
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, group, suffix: ("PCO.WA", "stock"))
+    monkeypatch.setattr(
+        scanner,
+        "_stock_yahoo_freshness_probe",
+        lambda fetch_symbol: (1, "2026-06-11", "2026-06-12", "PCO.WA"),
+    )
+
+    def fail_generic_probe(*_args, **_kwargs):
+        raise AssertionError("stock probes should use Yahoo candle counts, not generic remote probe")
+
+    monkeypatch.setattr(scanner, "has_new_remote_data", fail_generic_probe)
+
+    assert scanner._should_refresh_group_data("single", ["PCO"], None) is True
+    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
