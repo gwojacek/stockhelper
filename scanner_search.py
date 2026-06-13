@@ -2934,10 +2934,13 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
                 lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
 
-                up_count = _clustered_contact_count(upper_contacts)
-                lo_count = _clustered_contact_count(lower_contacts)
+                # Count only exact/local-extreme contacts as wedge touches. Candles
+                # merely lying near or between boundaries are validation context,
+                # not touch points.
                 lower_exact_count = _clustered_contact_count(lower_exact_contacts)
                 upper_exact_count = _clustered_contact_count(upper_exact_contacts)
+                up_count = upper_exact_count
+                lo_count = lower_exact_count
                 if lower_exact_count < 2:
                     continue
                 if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
@@ -2968,6 +2971,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
                 median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
                 median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
+                current_width = max(_wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b), 1e-9)
+                current_upper_gap = max(0.0, _wedge_line_value(end, upper_a, upper_b) - highs[end]) / current_width
+                current_lower_gap = max(0.0, lows[end] - _wedge_line_value(end, lower_a, lower_b)) / current_width
+                breakout_potential_quality = max(0.0, min(1.0, 1.0 - (current_upper_gap * 0.70 + median_upper_gap * 0.25 + current_lower_gap * 0.05)))
                 breakout_recent_bonus = 0.0
                 breakout_age = None
                 if breakout_idx is not None:
@@ -2985,6 +2992,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     or last_upper_contact_age > 75
                     or last_lower_contact_age > 55
                     or width_end_pct > 28.0
+                    or breakout_potential_quality < 0.18
                 ):
                     continue
 
@@ -3005,7 +3013,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     slope_strength = "mild"
                 slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality)
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line

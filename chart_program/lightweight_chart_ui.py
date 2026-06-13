@@ -771,27 +771,32 @@ class LightweightChartLevelSelectorUI:
     return [...map.values()].filter(p => p.time && Number.isFinite(p.a) && Number.isFinite(p.b)).sort((x, y) => compareTime(x.time, y.time));
   }}
 
+  function wedgeSide(obj) {{
+    const label = String(obj?.label || '').toLowerCase();
+    if (label.includes('upper')) return 'upper';
+    if (label.includes('lower')) return 'lower';
+    return '';
+  }}
+
+  function candleExtremeForDate(date, side, fallback) {{
+    const row = ohlcByTime.get(String(date).slice(0, 10));
+    if (!row) return Number(fallback);
+    if (side === 'upper') return roundPrice(row.high);
+    if (side === 'lower') return roundPrice(row.low);
+    return Number(fallback);
+  }}
+
   function wedgeTouchPoints(obj) {{
-    const xs = Array.isArray(obj.x) ? obj.x.map(x => String(x).slice(0, 10)) : [];
-    const ys = Array.isArray(obj.y) ? obj.y.map(Number) : [];
-    const byTime = new Map(xs.map((x, i) => [x, ys[i]]));
-    const isUpper = String(obj.label || '').toLowerCase().includes('upper');
-    const isLower = String(obj.label || '').toLowerCase().includes('lower');
-    const out = [];
-    let lastTouchIdx = -999;
-    P.ohlc.forEach((row, idx) => {{
-      if (!byTime.has(row.time)) return;
-      const y = byTime.get(row.time);
-      const touchPrice = isUpper ? row.high : (isLower ? row.low : row.close);
-      const pip = Math.abs(y) < 1 ? 0.0001 : Math.pow(10, -precision);
-      const tolerance = Math.max(pip * 5, Math.abs(y || 1) * 0.0005);
-      if (Math.abs(touchPrice - y) <= tolerance) {{
-        if (idx > lastTouchIdx + 1) out.push({{time: row.time, value: y, upper: isUpper, lower:isLower}});
-        lastTouchIdx = idx;
-      }}
-    }});
-    (obj.anchor_x || []).forEach((x, i) => out.push({{time:String(x).slice(0, 10), value:Number((obj.anchor_y || [])[i]), anchor:true, upper:isUpper, lower:isLower}}));
-    return out.filter(p => p.time && Number.isFinite(p.value));
+    const side = wedgeSide(obj);
+    const isUpper = side === 'upper';
+    const isLower = side === 'lower';
+    const anchors = Array.isArray(obj.anchor_x) ? obj.anchor_x : [];
+    return anchors.map((x, i) => {{
+      const time = String(x).slice(0, 10);
+      const raw = Number((obj.anchor_y || [])[i]);
+      const value = candleExtremeForDate(time, side, raw);
+      return {{time, value, anchor:true, upper:isUpper, lower:isLower}};
+    }}).filter(p => p.time && Number.isFinite(p.value));
   }}
 
   function drawWedgeTouchPoints(ctx) {{
@@ -842,6 +847,27 @@ class LightweightChartLevelSelectorUI:
       const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pt.price ?? pt.plot_price) : null;
       if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
       ctx.save();
+      if (pt.auto_wedge) {{
+        ctx.translate(x, y);
+        ctx.beginPath();
+        ctx.moveTo(0, -9);
+        ctx.lineTo(9, 0);
+        ctx.lineTo(0, 9);
+        ctx.lineTo(-9, 0);
+        ctx.closePath();
+        ctx.fillStyle = '#f97316';
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#111827';
+        ctx.font = 'bold 12px ui-sans-serif, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('↯', 0, 0.5);
+        ctx.restore();
+        return;
+      }}
       ctx.fillStyle = '#3b82f6';
       ctx.strokeStyle = '#f8fafc';
       ctx.lineWidth = 1.4;
@@ -920,6 +946,11 @@ class LightweightChartLevelSelectorUI:
     x1 = String(x1).slice(0, 10);
     y0 = roundPrice(Number(y0));
     y1 = roundPrice(Number(y1));
+    if (isWedgeLineObject(obj)) {{
+      const side = wedgeSide(obj);
+      y0 = candleExtremeForDate(x0, side, y0);
+      y1 = candleExtremeForDate(x1, side, y1);
+    }}
     if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return;
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
       obj.x = [x0, x1];
