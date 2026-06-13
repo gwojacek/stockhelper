@@ -10,4 +10,4 @@ Legenda (progi): 🟨 Fibo: próg płynności Th10d (ostatnie 10 świeczek) = ba
 --------------------------------------------- FIBO ---------------------------------------------
 
 
-Źródło danych CSV instrumentów: /home/jacek/PycharmProjects/stockhelper/data
+Źródło danych CSV instrumentów: /home/jacek/PycharmProjects/stockhelper/data/csv
