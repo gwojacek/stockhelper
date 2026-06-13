@@ -469,6 +469,7 @@ class LightweightChartLevelSelectorUI:
         <button id="tool-half">Half→SL</button>
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
+        <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -504,7 +505,6 @@ class LightweightChartLevelSelectorUI:
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="reset-scanner-drawings" style="display:none;margin-top:8px;width:100%;background:#7c3aed;color:white" title="Restore scanner-created wedge/line drawings to their original positions">Reset scanner drawings</button>
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="result-box" style="margin-top:10px"></div>
@@ -1334,7 +1334,7 @@ class LightweightChartLevelSelectorUI:
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
-    drawnObjects = drawnObjects.filter(obj => !isScannerDrawnObject(obj)).concat(initialScannerDrawnObjects.map(deepClone));
+    drawnObjects = initialScannerDrawnObjects.map(deepClone);
     if (levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge) {{ delete levels.line_cross_value; delete levelPoints.line_cross_value; delete levels.__wedge_auto_line_cross__; }}
     if (levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge) {{ delete levels.stop_loss; delete levelPoints.stop_loss; delete levels.__wedge_auto_stop_loss__; }}
     hiddenLegendKeys.clear();
