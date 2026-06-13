@@ -2974,7 +2974,12 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 current_width = max(_wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b), 1e-9)
                 current_upper_gap = max(0.0, _wedge_line_value(end, upper_a, upper_b) - highs[end]) / current_width
                 current_lower_gap = max(0.0, lows[end] - _wedge_line_value(end, lower_a, lower_b)) / current_width
-                breakout_potential_quality = max(0.0, min(1.0, 1.0 - (current_upper_gap * 0.70 + median_upper_gap * 0.25 + current_lower_gap * 0.05)))
+                # Prefer wedges whose active boundaries are both close enough to
+                # current price to be realistically breakable soon. A top line far
+                # above price or a bottom line far below price is less actionable.
+                current_worst_gap = max(current_upper_gap, current_lower_gap)
+                median_worst_gap = max(median_upper_gap, median_lower_gap)
+                breakout_potential_quality = max(0.0, min(1.0, 1.0 - (current_worst_gap * 0.55 + median_worst_gap * 0.25 + median_min_gap * 0.20)))
                 breakout_recent_bonus = 0.0
                 breakout_age = None
                 if breakout_idx is not None:
