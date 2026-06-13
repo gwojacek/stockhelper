@@ -157,6 +157,15 @@ class LightweightChartLevelSelectorUI:
             )
         return rows
 
+
+    def _future_time_payload(self, periods: int = 30) -> list[str]:
+        dates = pd.to_datetime(self.df["Date"], errors="coerce")
+        if dates.empty or pd.isna(dates.iloc[-1]):
+            return []
+        builder = pd.date_range if self._has_weekend_data() else pd.bdate_range
+        future_dates = builder(dates.iloc[-1] + pd.Timedelta(days=1), periods=periods)
+        return [pd.to_datetime(d).strftime("%Y-%m-%d") for d in future_dates]
+
     def _ichimoku_payload(self) -> dict[str, list[dict]]:
         empty = {"tenkan": [], "kijun": [], "spanA": [], "spanB": [], "chikou": []}
         if len(self.df) < 52:
@@ -218,6 +227,7 @@ class LightweightChartLevelSelectorUI:
             "lineColors": LINE_COLORS,
             "values": self._json_safe(self.values),
             "ohlc": self._ohlc_payload(),
+            "futureTimes": self._future_time_payload(),
             "ichimoku": self._ichimoku_payload(),
         }
 
@@ -258,7 +268,7 @@ class LightweightChartLevelSelectorUI:
         function allPrices() {
           const out = [];
           state.series.forEach(s => (s.data || []).forEach(p => {
-            if (s.kind === 'candlestick') out.push(p.open, p.high, p.low, p.close);
+            if (s.kind === 'candlestick' && Number.isFinite(Number(p.close))) out.push(p.open, p.high, p.low, p.close);
             else out.push(p.value);
           }));
           return out.filter(Number.isFinite);
@@ -323,6 +333,7 @@ class LightweightChartLevelSelectorUI:
           const candles = candleData();
           const candleW = Math.max(2, Math.min(11, (state.width - 124) / Math.max(1, candles.length) * 0.65));
           candles.forEach((p, idx) => {
+            if (!Number.isFinite(Number(p.close))) return;
             const x = xForIndex(idx), yO = priceToY(p.open), yH = priceToY(p.high), yL = priceToY(p.low), yC = priceToY(p.close);
             const up = p.close >= p.open;
             ctx.strokeStyle = up ? '#22c55e' : '#ef4444';
@@ -377,7 +388,7 @@ class LightweightChartLevelSelectorUI:
           addCandlestickSeries(opts) { return makeSeries('candlestick', opts); },
           addLineSeries(opts) { return makeSeries('line', opts); },
           removeSeries(series) { state.series = state.series.filter(s => s !== series); if (state.candleSeries === series) state.candleSeries = null; draw(); },
-          timeScale() { return {fitContent(){ draw(); }, setVisibleLogicalRange(){}, getVisibleLogicalRange(){ return null; }, timeToCoordinate(time){ return xForIndex(indexForTime(typeof time === 'string' ? time : String(time || '').slice(0, 10))); }, subscribeVisibleLogicalRangeChange(){}}; },
+          timeScale() { return {fitContent(){ draw(); }, setVisibleLogicalRange(){}, getVisibleLogicalRange(){ return null; }, timeToCoordinate(time){ return xForIndex(indexForTime(typeof time === 'string' ? time : String(time || '').slice(0, 10))); }, coordinateToTime(x){ const data=candleData(); if(!data.length) return null; const left=54, plotW=Math.max(1,state.width-124); const idx=Math.max(0,Math.min(data.length-1,Math.round(((x-left)/plotW)*Math.max(0,data.length-1)))); return data[idx]?.time || null; }, subscribeVisibleLogicalRangeChange(){}}; },
           subscribeClick(handler) { state.clickHandlers.push(handler); },
           subscribeCrosshairMove(handler) { state.moveHandlers.push(handler); },
           takeScreenshot() { draw(); return canvas; },
@@ -514,6 +525,8 @@ class LightweightChartLevelSelectorUI:
   let halfAnchor = null;
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
+  const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
+  const ohlcWithFuture = [...P.ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(P.ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
 
   const $ = id => document.getElementById(id);
@@ -636,7 +649,7 @@ class LightweightChartLevelSelectorUI:
   const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
   const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
-  candleSeries.setData(P.ohlc);
+  candleSeries.setData(ohlcWithFuture);
   if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
