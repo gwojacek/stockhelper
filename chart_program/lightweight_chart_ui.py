@@ -591,6 +591,8 @@ class LightweightChartLevelSelectorUI:
   let verticalPan = 0;
   let chartDrag = null;
   let lineObjectDrag = null;
+  let lineDragFrame = null;
+  const objectSeries = new WeakMap();
   let suppressChartClickUntil = 0;
   function applyVerticalPan() {{
     verticalPan = clamp(verticalPan, -0.30, 0.30);
@@ -605,7 +607,7 @@ class LightweightChartLevelSelectorUI:
     chartDrag = {{id:ev.pointerId, y:ev.clientY, moved:false}};
     $('chart-wrap').classList.add('dragging');
     $('chart-wrap').setPointerCapture?.(ev.pointerId);
-  }});
+  }}, true);
   $('chart-wrap').addEventListener('pointermove', (ev) => {{
     if (moveLineObjectDrag(ev)) return;
     updateLineObjectHover(ev);
@@ -619,7 +621,7 @@ class LightweightChartLevelSelectorUI:
       chartDrag.y = ev.clientY;
       applyVerticalPan();
     }}
-  }});
+  }}, true);
   const endChartDrag = (ev) => {{
     if (endLineObjectDrag(ev)) return;
     if (!chartDrag || chartDrag.id !== ev.pointerId) return;
@@ -628,8 +630,8 @@ class LightweightChartLevelSelectorUI:
     $('chart-wrap').classList.remove('dragging');
     chartDrag = null;
   }};
-  $('chart-wrap').addEventListener('pointerup', endChartDrag);
-  $('chart-wrap').addEventListener('pointercancel', endChartDrag);
+  $('chart-wrap').addEventListener('pointerup', endChartDrag, true);
+  $('chart-wrap').addEventListener('pointercancel', endChartDrag, true);
   $('chart-wrap').addEventListener('click', (ev) => {{ if (Date.now() < suppressChartClickUntil) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, true);
   const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
@@ -795,7 +797,7 @@ class LightweightChartLevelSelectorUI:
 
   function drawLineObjectHandles(ctx) {{
     drawnObjects.forEach(obj => {{
-      if (!isEditableLineObject(obj) || hiddenLegendKeys.has(`obj:${{obj.id || obj.label || ''}}`)) return;
+      if (!isEditableLineObject(obj) || hiddenLegendKeys.has(editableObjectLegendKey(obj))) return;
       const pts = lineObjectPoints(obj);
       if (!pts) return;
       [pts.start, pts.end].forEach((pt) => {{
@@ -866,15 +868,68 @@ class LightweightChartLevelSelectorUI:
     return Math.round((tb - ta) / 86400000);
   }}
 
+  function isWedgeLineObject(obj) {{
+    return obj && (obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+  }}
+
+  function lineEndpointValues(obj) {{
+    if (!obj) return null;
+    const xs = Array.isArray(obj.anchor_x) && obj.anchor_x.length >= 2 ? obj.anchor_x : (Array.isArray(obj.x) && obj.x.length >= 2 ? obj.x : null);
+    const ys = Array.isArray(obj.anchor_y) && obj.anchor_y.length >= 2 ? obj.anchor_y : (Array.isArray(obj.y) && obj.y.length >= 2 ? obj.y : null);
+    if (xs && ys) {{
+      const last = Math.min(xs.length, ys.length) - 1;
+      const x0 = String(xs[0]).slice(0, 10), x1 = String(xs[last]).slice(0, 10);
+      const y0 = Number(ys[0]), y1 = Number(ys[last]);
+      return x0 && x1 && Number.isFinite(y0) && Number.isFinite(y1) ? {{x0, y0, x1, y1}} : null;
+    }}
+    const x0 = String(obj.x0 || '').slice(0, 10), x1 = String(obj.x1 || '').slice(0, 10);
+    const y0 = Number(obj.y0), y1 = Number(obj.y1);
+    return x0 && x1 && Number.isFinite(y0) && Number.isFinite(y1) ? {{x0, y0, x1, y1}} : null;
+  }}
+
   function isEditableLineObject(obj) {{
-    return obj && obj.type === 'line' && !obj.group_id && obj.x0 && obj.x1 && Number.isFinite(Number(obj.y0)) && Number.isFinite(Number(obj.y1));
+    if (!obj || obj.type === 'fib' || obj.type === 'fib-boundary') return false;
+    return obj.type === 'line' || isWedgeLineObject(obj);
+  }}
+
+  function editableObjectLegendKey(obj) {{
+    if (isWedgeLineObject(obj)) return `wedge:${{obj.id || obj.label || ''}}`;
+    return `obj:${{obj.id || obj.label || ''}}`;
+  }}
+
+  function setLineEndpointValues(obj, x0, y0, x1, y1) {{
+    x0 = String(x0).slice(0, 10);
+    x1 = String(x1).slice(0, 10);
+    y0 = roundPrice(Number(y0));
+    y1 = roundPrice(Number(y1));
+    if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return;
+    if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
+      obj.x = [x0, x1];
+      obj.y = [y0, y1];
+    }} else {{
+      obj.x0 = x0;
+      obj.y0 = y0;
+      obj.x1 = x1;
+      obj.y1 = y1;
+    }}
+    if (isWedgeLineObject(obj)) {{
+      obj.anchor_x = [x0, x1];
+      obj.anchor_y = [y0, y1];
+    }}
+  }}
+
+  function editableLineData(obj) {{
+    const pts = lineEndpointValues(obj);
+    return pts ? normalizeLineData([{{time:pts.x0, value:pts.y0}}, {{time:pts.x1, value:pts.y1}}]) : [];
   }}
 
   function lineObjectPoints(obj) {{
-    const start = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(obj.x0).slice(0,10)) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(obj.y0)) : null}};
-    const end = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(obj.x1).slice(0,10)) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(obj.y1)) : null}};
+    const pts = lineEndpointValues(obj);
+    if (!pts) return null;
+    const start = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
+    const end = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y1) : null}};
     if (start.x === null || end.x === null || start.y === null || end.y === null) return null;
-    return {{start, end}};
+    return {{start, end, values:pts}};
   }}
 
   function distanceToSegment(px, py, ax, ay, bx, by) {{
@@ -889,14 +944,31 @@ class LightweightChartLevelSelectorUI:
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     for (let i = drawnObjects.length - 1; i >= 0; i--) {{
       const obj = drawnObjects[i];
-      if (!isEditableLineObject(obj)) continue;
+      if (!isEditableLineObject(obj) || hiddenLegendKeys.has(editableObjectLegendKey(obj))) continue;
       const pts = lineObjectPoints(obj);
       if (!pts) continue;
-      if (Math.hypot(px - pts.start.x, py - pts.start.y) <= 10) return {{obj, idx:i, mode:'start'}};
-      if (Math.hypot(px - pts.end.x, py - pts.end.y) <= 10) return {{obj, idx:i, mode:'end'}};
-      if (distanceToSegment(px, py, pts.start.x, pts.start.y, pts.end.x, pts.end.y) <= 7) return {{obj, idx:i, mode:'move'}};
+      if (Math.hypot(px - pts.start.x, py - pts.start.y) <= 11) return {{obj, idx:i, mode:'start', points:pts.values}};
+      if (Math.hypot(px - pts.end.x, py - pts.end.y) <= 11) return {{obj, idx:i, mode:'end', points:pts.values}};
+      if (distanceToSegment(px, py, pts.start.x, pts.start.y, pts.end.x, pts.end.y) <= 8) return {{obj, idx:i, mode:'move', points:pts.values}};
     }}
     return null;
+  }}
+
+  function updateDraggedObjectSeries() {{
+    if (!lineObjectDrag) return;
+    const series = objectSeries.get(lineObjectDrag.obj);
+    if (series) {{
+      try {{ series.setData(editableLineData(lineObjectDrag.obj)); }} catch(e) {{ console.warn('line drag update failed', e); }}
+    }}
+    requestAnimationFrame(drawCloud);
+  }}
+
+  function scheduleDraggedObjectSeriesUpdate() {{
+    if (lineDragFrame) return;
+    lineDragFrame = requestAnimationFrame(() => {{
+      lineDragFrame = null;
+      updateDraggedObjectSeries();
+    }});
   }}
 
   function beginLineObjectDrag(ev) {{
@@ -904,11 +976,13 @@ class LightweightChartLevelSelectorUI:
     if (!hit) return false;
     const date = pointDateFromEvent(ev), price = pointPriceFromEvent(ev);
     if (!date || !Number.isFinite(price)) return false;
-    lineObjectDrag = {{id:ev.pointerId, ...hit, startDate:date, startPrice:price, original:{{x0:hit.obj.x0, y0:Number(hit.obj.y0), x1:hit.obj.x1, y1:Number(hit.obj.y1)}}}};
+    lineObjectDrag = {{id:ev.pointerId, ...hit, startDate:date, startPrice:price, original:{{...hit.points}}}};
     $('chart-wrap').classList.add('drawing-object');
     $('chart-wrap').setPointerCapture?.(ev.pointerId);
+    try {{ chart.applyOptions?.({{handleScroll:false, handleScale:false}}); }} catch(e) {{}}
     ev.preventDefault();
     ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
     return true;
   }}
 
@@ -917,23 +991,20 @@ class LightweightChartLevelSelectorUI:
     const date = pointDateFromEvent(ev), price = pointPriceFromEvent(ev);
     if (!date || !Number.isFinite(price)) return true;
     const obj = lineObjectDrag.obj;
+    const o = lineObjectDrag.original;
     if (lineObjectDrag.mode === 'start') {{
-      obj.x0 = date;
-      obj.y0 = price;
+      setLineEndpointValues(obj, date, price, o.x1, o.y1);
     }} else if (lineObjectDrag.mode === 'end') {{
-      obj.x1 = date;
-      obj.y1 = price;
+      setLineEndpointValues(obj, o.x0, o.y0, date, price);
     }} else {{
       const dDays = dayDelta(lineObjectDrag.startDate, date);
       const dPrice = price - lineObjectDrag.startPrice;
-      obj.x0 = dateShiftDays(lineObjectDrag.original.x0, dDays);
-      obj.x1 = dateShiftDays(lineObjectDrag.original.x1, dDays);
-      obj.y0 = roundPrice(lineObjectDrag.original.y0 + dPrice);
-      obj.y1 = roundPrice(lineObjectDrag.original.y1 + dPrice);
+      setLineEndpointValues(obj, dateShiftDays(o.x0, dDays), o.y0 + dPrice, dateShiftDays(o.x1, dDays), o.y1 + dPrice);
     }}
     ev.preventDefault();
     ev.stopPropagation();
-    render();
+    ev.stopImmediatePropagation?.();
+    scheduleDraggedObjectSeriesUpdate();
     return true;
   }}
 
@@ -941,10 +1012,15 @@ class LightweightChartLevelSelectorUI:
     if (!lineObjectDrag || lineObjectDrag.id !== ev.pointerId) return false;
     $('chart-wrap').releasePointerCapture?.(ev.pointerId);
     $('chart-wrap').classList.remove('drawing-object');
+    if (lineDragFrame) {{ cancelAnimationFrame(lineDragFrame); lineDragFrame = null; }}
+    updateDraggedObjectSeries();
     lineObjectDrag = null;
     suppressChartClickUntil = Date.now() + 300;
+    try {{ chart.applyOptions?.({{handleScroll:true, handleScale:true}}); }} catch(e) {{}}
     ev.preventDefault();
     ev.stopPropagation();
+    ev.stopImmediatePropagation?.();
+    applyWedgeDerivedLevels();
     render();
     return true;
   }}
@@ -960,8 +1036,9 @@ class LightweightChartLevelSelectorUI:
       const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
       if (idx >= 0) return Number(obj.y[idx]);
     }}
-    const x0 = String(obj.x0 || '').slice(0, 10), x1 = String(obj.x1 || '').slice(0, 10);
-    const y0 = Number(obj.y0), y1 = Number(obj.y1);
+    const endpoints = lineEndpointValues(obj);
+    const x0 = endpoints ? endpoints.x0 : String(obj.x0 || '').slice(0, 10), x1 = endpoints ? endpoints.x1 : String(obj.x1 || '').slice(0, 10);
+    const y0 = endpoints ? Number(endpoints.y0) : Number(obj.y0), y1 = endpoints ? Number(endpoints.y1) : Number(obj.y1);
     if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return null;
     const t0 = new Date(x0 + 'T00:00:00Z').getTime();
     const t1 = new Date(x1 + 'T00:00:00Z').getTime();
@@ -1159,12 +1236,14 @@ class LightweightChartLevelSelectorUI:
         showLegend = true;
       }}
       const seriesTitle = isFib ? (fibPercentLabel(obj) || objectLegend) : objectLegend;
+      let series = null;
       if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
-        addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
+        series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }} else {{
         const x1 = isFib ? extendFuture(obj.x1, 720) : String(obj.x1).slice(0,10);
-        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
+        series = addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
       }}
+      if (series && isEditableLineObject(obj)) objectSeries.set(obj, series);
     }});
     updatePanel();
     requestAnimationFrame(drawCloud);
