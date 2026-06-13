@@ -212,6 +212,32 @@ class LightweightChartLevelSelectorUI:
             "chikou": line_payload(dates, closes.shift(-26)),
         }
 
+    def _chart_group_payload(self) -> dict | None:
+        raw = os.environ.get("STOCKHELPER_CHART_GROUP_JSON", "")
+        if not raw:
+            return None
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            return None
+        items = []
+        for item in payload.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            command = str(item.get("command") or "").strip()
+            if not command:
+                continue
+            label = str(item.get("label") or command).strip()
+            items.append({"command": command, "label": label})
+        if not items:
+            return None
+        return {
+            "id": str(payload.get("id") or ""),
+            "items": items,
+            "current": str(payload.get("current") or ""),
+            "reportServer": str(payload.get("reportServer") or ""),
+        }
+
     def _payload(self) -> dict:
         return {
             "symbol": self.symbol,
@@ -229,6 +255,7 @@ class LightweightChartLevelSelectorUI:
             "ohlc": self._ohlc_payload(),
             "futureTimes": self._future_time_payload(),
             "ichimoku": self._ichimoku_payload(),
+            "chartGroup": self._chart_group_payload(),
         }
 
 
@@ -433,6 +460,9 @@ class LightweightChartLevelSelectorUI:
     input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
+    .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
+    .chart-group-nav label {{ margin-top:0; font-weight:800; color:#bfdbfe; }}
+    .chart-group-nav small {{ display:block; margin-top:5px; color:#94a3b8; line-height:1.3; }}
     .values {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 8px; white-space: pre-wrap; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
@@ -507,6 +537,11 @@ class LightweightChartLevelSelectorUI:
       <button id="delete-object" style="display:none">Delete selected object</button>
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
+      <div id="chart-group-nav" class="chart-group-nav">
+        <label for="chart-group-select">Group charts</label>
+        <select id="chart-group-select"></select>
+        <small>Switch to another chart from the group opened in the report.</small>
+      </div>
       <div id="result-box" style="margin-top:10px"></div>
     </aside>
   </div>
@@ -514,6 +549,7 @@ class LightweightChartLevelSelectorUI:
   <script>
 (() => {{
   const P = window.STOCKHELPER_PAYLOAD;
+  const chartGroup = P.chartGroup || null;
   const seq = P.selectionSequence;
   const labels = P.labels;
   let levels = {{...(P.values || {{}})}};
@@ -1352,6 +1388,30 @@ class LightweightChartLevelSelectorUI:
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
   }}
 
+  function setupChartGroupNav() {{
+    const wrap = $('chart-group-nav');
+    const select = $('chart-group-select');
+    if (!wrap || !select || !chartGroup || !Array.isArray(chartGroup.items) || chartGroup.items.length < 2 || !chartGroup.reportServer) return;
+    wrap.style.display = 'block';
+    select.innerHTML = '';
+    const current = String(chartGroup.current || '');
+    chartGroup.items.forEach((item, idx) => {{
+      const option = document.createElement('option');
+      option.value = item.command || '';
+      option.textContent = `${{idx + 1}}. ${{item.label || item.command || 'Chart'}}`;
+      if (current && option.value === current) option.selected = true;
+      select.appendChild(option);
+    }});
+    select.onchange = () => {{
+      const command = select.value;
+      if (!command || command === current) return;
+      const url = new URL('/open-chart', chartGroup.reportServer);
+      url.searchParams.set('command', command);
+      if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
+      window.location.href = url.href;
+    }};
+  }}
+
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000;
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
@@ -1518,6 +1578,7 @@ class LightweightChartLevelSelectorUI:
 
   setInterval(() => fetch('/heartbeat', {{method:'POST', keepalive:true}}).catch(()=>{{}}), 1000);
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
+  setupChartGroupNav();
   applyWedgeDerivedLevels(); applyInstrumentControls(); render();
 }})();
   </script>
