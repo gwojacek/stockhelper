@@ -1728,7 +1728,8 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     t = (ticker or "").strip()
     if "." not in t and len(t) <= 5:
         cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
-        if (cfg_stocks / f"{t}.py").exists():
+        stock_csv = CSV_DATA_DIR / "stocks" / f"{t.upper()}_WA.csv"
+        if (cfg_stocks / f"{t}.py").exists() or stock_csv.exists() or t.upper() in WIG_TICKERS:
             t = f"{t}.WA"
     base = f"python run -c {t}"
     if mode == "fibo":

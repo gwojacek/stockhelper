@@ -177,7 +177,13 @@ def _liquidity_legend_text() -> str:
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
     key=_normalize_key(target.replace('.py','')); exact=[p for p in directory.glob('*.py') if _normalize_key(p.stem)==key]
-    return exact or [p for p in directory.glob('*.py') if _normalize_key(p.stem).startswith(key)]
+    if exact:
+        return exact
+    # Do not let partial 3-letter currency codes (e.g. EUR) resolve to a
+    # configured forex pair such as EURCHF; the full 6-letter pair is required.
+    if directory.name == 'forex' and len(key) < 6:
+        return []
+    return [p for p in directory.glob('*.py') if _normalize_key(p.stem).startswith(key)]
 def _resolve_existing_config_path(target: str) -> Path | None:
     raw = (target or '').strip()
     if not raw:
