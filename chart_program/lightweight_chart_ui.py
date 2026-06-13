@@ -413,6 +413,8 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap {{ position: relative; height: calc(100vh - 132px); min-height: 480px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     #chart {{ width: 100%; height: 100%; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }}
+    #chart-wrap.drawing-object {{ cursor: grabbing; }}
+    #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
     .side {{ border-left: 1px solid #1f2937; padding: 16px; background: #0b1220; overflow-y: auto; }}
     label {{ display: block; margin-top: 8px; }}
@@ -588,6 +590,7 @@ class LightweightChartLevelSelectorUI:
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   let verticalPan = 0;
   let chartDrag = null;
+  let lineObjectDrag = null;
   let suppressChartClickUntil = 0;
   function applyVerticalPan() {{
     verticalPan = clamp(verticalPan, -0.30, 0.30);
@@ -597,12 +600,15 @@ class LightweightChartLevelSelectorUI:
     requestAnimationFrame(drawCloud);
   }}
   $('chart-wrap').addEventListener('pointerdown', (ev) => {{
+    if (ev.button === 0 && beginLineObjectDrag(ev)) return;
     if (!$('calc-drawer')?.classList.contains('open') || ev.button !== 0) return;
     chartDrag = {{id:ev.pointerId, y:ev.clientY, moved:false}};
     $('chart-wrap').classList.add('dragging');
     $('chart-wrap').setPointerCapture?.(ev.pointerId);
   }});
   $('chart-wrap').addEventListener('pointermove', (ev) => {{
+    if (moveLineObjectDrag(ev)) return;
+    updateLineObjectHover(ev);
     if (!chartDrag || chartDrag.id !== ev.pointerId || !$('calc-drawer')?.classList.contains('open')) return;
     const dy = ev.clientY - chartDrag.y;
     if (Math.abs(dy) < 2) return;
@@ -615,6 +621,7 @@ class LightweightChartLevelSelectorUI:
     }}
   }});
   const endChartDrag = (ev) => {{
+    if (endLineObjectDrag(ev)) return;
     if (!chartDrag || chartDrag.id !== ev.pointerId) return;
     if (chartDrag.moved) suppressChartClickUntil = Date.now() + 300;
     $('chart-wrap').releasePointerCapture?.(ev.pointerId);
@@ -786,6 +793,26 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function drawLineObjectHandles(ctx) {{
+    drawnObjects.forEach(obj => {{
+      if (!isEditableLineObject(obj) || hiddenLegendKeys.has(`obj:${{obj.id || obj.label || ''}}`)) return;
+      const pts = lineObjectPoints(obj);
+      if (!pts) return;
+      [pts.start, pts.end].forEach((pt) => {{
+        if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = obj.color || P.lineColors.gold;
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }});
+    }});
+  }}
+
   function drawValuePointers(ctx) {{
     const pointerFields = ['line_cross_value'];
     pointerFields.forEach(field => {{
@@ -811,6 +838,120 @@ class LightweightChartLevelSelectorUI:
       ctx.stroke();
       ctx.restore();
     }});
+  }}
+
+  function pointDateFromEvent(ev) {{
+    const rect = $('chart-wrap').getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const ts = chart.timeScale();
+    const raw = ts.coordinateToTime ? ts.coordinateToTime(x) : null;
+    if (typeof raw === 'string') return raw.slice(0, 10);
+    if (raw && Number.isFinite(raw.year)) return `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}`;
+    return nearest(null).time;
+  }}
+
+  function pointPriceFromEvent(ev) {{
+    const rect = $('chart-wrap').getBoundingClientRect();
+    return roundPrice(candleSeries.coordinateToPrice(ev.clientY - rect.top));
+  }}
+
+  function dateShiftDays(date, days) {{
+    return addDays(String(date).slice(0, 10), days);
+  }}
+
+  function dayDelta(a, b) {{
+    const ta = new Date(String(a).slice(0, 10) + 'T00:00:00Z').getTime();
+    const tb = new Date(String(b).slice(0, 10) + 'T00:00:00Z').getTime();
+    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return 0;
+    return Math.round((tb - ta) / 86400000);
+  }}
+
+  function isEditableLineObject(obj) {{
+    return obj && obj.type === 'line' && !obj.group_id && obj.x0 && obj.x1 && Number.isFinite(Number(obj.y0)) && Number.isFinite(Number(obj.y1));
+  }}
+
+  function lineObjectPoints(obj) {{
+    const start = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(obj.x0).slice(0,10)) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(obj.y0)) : null}};
+    const end = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(obj.x1).slice(0,10)) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(obj.y1)) : null}};
+    if (start.x === null || end.x === null || start.y === null || end.y === null) return null;
+    return {{start, end}};
+  }}
+
+  function distanceToSegment(px, py, ax, ay, bx, by) {{
+    const dx = bx - ax, dy = by - ay;
+    if (dx === 0 && dy === 0) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }}
+
+  function hitTestLineObject(ev) {{
+    const rect = $('chart-wrap').getBoundingClientRect();
+    const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    for (let i = drawnObjects.length - 1; i >= 0; i--) {{
+      const obj = drawnObjects[i];
+      if (!isEditableLineObject(obj)) continue;
+      const pts = lineObjectPoints(obj);
+      if (!pts) continue;
+      if (Math.hypot(px - pts.start.x, py - pts.start.y) <= 10) return {{obj, idx:i, mode:'start'}};
+      if (Math.hypot(px - pts.end.x, py - pts.end.y) <= 10) return {{obj, idx:i, mode:'end'}};
+      if (distanceToSegment(px, py, pts.start.x, pts.start.y, pts.end.x, pts.end.y) <= 7) return {{obj, idx:i, mode:'move'}};
+    }}
+    return null;
+  }}
+
+  function beginLineObjectDrag(ev) {{
+    const hit = hitTestLineObject(ev);
+    if (!hit) return false;
+    const date = pointDateFromEvent(ev), price = pointPriceFromEvent(ev);
+    if (!date || !Number.isFinite(price)) return false;
+    lineObjectDrag = {{id:ev.pointerId, ...hit, startDate:date, startPrice:price, original:{{x0:hit.obj.x0, y0:Number(hit.obj.y0), x1:hit.obj.x1, y1:Number(hit.obj.y1)}}}};
+    $('chart-wrap').classList.add('drawing-object');
+    $('chart-wrap').setPointerCapture?.(ev.pointerId);
+    ev.preventDefault();
+    ev.stopPropagation();
+    return true;
+  }}
+
+  function moveLineObjectDrag(ev) {{
+    if (!lineObjectDrag || lineObjectDrag.id !== ev.pointerId) return false;
+    const date = pointDateFromEvent(ev), price = pointPriceFromEvent(ev);
+    if (!date || !Number.isFinite(price)) return true;
+    const obj = lineObjectDrag.obj;
+    if (lineObjectDrag.mode === 'start') {{
+      obj.x0 = date;
+      obj.y0 = price;
+    }} else if (lineObjectDrag.mode === 'end') {{
+      obj.x1 = date;
+      obj.y1 = price;
+    }} else {{
+      const dDays = dayDelta(lineObjectDrag.startDate, date);
+      const dPrice = price - lineObjectDrag.startPrice;
+      obj.x0 = dateShiftDays(lineObjectDrag.original.x0, dDays);
+      obj.x1 = dateShiftDays(lineObjectDrag.original.x1, dDays);
+      obj.y0 = roundPrice(lineObjectDrag.original.y0 + dPrice);
+      obj.y1 = roundPrice(lineObjectDrag.original.y1 + dPrice);
+    }}
+    ev.preventDefault();
+    ev.stopPropagation();
+    render();
+    return true;
+  }}
+
+  function endLineObjectDrag(ev) {{
+    if (!lineObjectDrag || lineObjectDrag.id !== ev.pointerId) return false;
+    $('chart-wrap').releasePointerCapture?.(ev.pointerId);
+    $('chart-wrap').classList.remove('drawing-object');
+    lineObjectDrag = null;
+    suppressChartClickUntil = Date.now() + 300;
+    ev.preventDefault();
+    ev.stopPropagation();
+    render();
+    return true;
+  }}
+
+  function updateLineObjectHover(ev) {{
+    if (lineObjectDrag) return;
+    $('chart-wrap').classList.toggle('line-handle-hover', !!hitTestLineObject(ev));
   }}
 
   function lineValueForDate(obj, time) {{
@@ -917,7 +1058,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); return; }}
+    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -934,6 +1075,7 @@ class LightweightChartLevelSelectorUI:
     }}
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);
+    drawLineObjectHandles(ctx);
   }}
 
   function captureViewport() {{
