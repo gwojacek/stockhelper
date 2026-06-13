@@ -504,6 +504,7 @@ class LightweightChartLevelSelectorUI:
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
+      <button id="reset-scanner-drawings" style="display:none;margin-top:8px;width:100%;background:#7c3aed;color:white" title="Restore scanner-created wedge/line drawings to their original positions">Reset scanner drawings</button>
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="result-box" style="margin-top:10px"></div>
@@ -517,7 +518,10 @@ class LightweightChartLevelSelectorUI:
   const labels = P.labels;
   let levels = {{...(P.values || {{}})}};
   let levelPoints = {{...(levels.level_points || {{}})}};
-  let drawnObjects = Array.isArray(levels.drawn_objects) ? [...levels.drawn_objects] : [];
+  const deepClone = (value) => JSON.parse(JSON.stringify(value));
+  const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
+  let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
+  const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = seq.some(k => levels[k] != null) ? null : 'high';
   let activeTool = 'level';
   let lineAnchor = null;
@@ -1273,6 +1277,8 @@ class LightweightChartLevelSelectorUI:
     $('ichimoku-toggle').textContent = `Ichimoku: ${{levels.__show_ichimoku__ ? 'ON' : 'OFF'}}`;
     $('values-panel').textContent = seq.map(k => `${{labels[k]}}: ${{levels[k] == null ? '--' : fmt(levels[k])}}`).join('\\n');
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
+    const resetScannerBtn = $('reset-scanner-drawings');
+    if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
     const seenFib = new Set();
     drawnObjects.forEach((obj, idx) => {{
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
@@ -1326,6 +1332,16 @@ class LightweightChartLevelSelectorUI:
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('reset-scanner-drawings').onclick = () => {{
+    if (!initialScannerDrawnObjects.length) return;
+    drawnObjects = drawnObjects.filter(obj => !isScannerDrawnObject(obj)).concat(initialScannerDrawnObjects.map(deepClone));
+    if (levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge) {{ delete levels.line_cross_value; delete levelPoints.line_cross_value; delete levels.__wedge_auto_line_cross__; }}
+    if (levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge) {{ delete levels.stop_loss; delete levelPoints.stop_loss; delete levels.__wedge_auto_stop_loss__; }}
+    hiddenLegendKeys.clear();
+    lineAnchor=fibAnchor=halfAnchor=null;
+    applyWedgeDerivedLevels();
+    render();
+  }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
   chart.subscribeClick(param => {{
