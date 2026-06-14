@@ -228,7 +228,8 @@ class LightweightChartLevelSelectorUI:
             if not command:
                 continue
             label = str(item.get("label") or command).strip()
-            items.append({"command": command, "label": label})
+            section = str(item.get("section") or "").strip()
+            items.append({"command": command, "label": label, "section": section})
         if not items:
             return None
         return {
@@ -464,6 +465,8 @@ class LightweightChartLevelSelectorUI:
     .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
     .chart-group-nav h4 {{ margin:0 0 8px 0; color:#fde68a; font-size:15px; }}
     .chart-group-label {{ margin:0 0 8px 0; color:#bfdbfe; font-weight:800; font-size:13px; }}
+    .chart-group-section {{ margin-top:8px; }}
+    .chart-group-section-title {{ color:#cbd5e1; font-size:12px; font-weight:800; margin:5px 0; }}
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .chart-group-buttons button {{ padding:6px 8px; border-radius:999px; background:#1f2937; border-color:#475569; color:#e5e7eb; font-size:12px; }}
     .chart-group-buttons button.active {{ background:#2563eb; border-color:#93c5fd; color:white; box-shadow:0 0 0 2px rgba(147,197,253,.22); }}
@@ -1392,6 +1395,42 @@ class LightweightChartLevelSelectorUI:
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
   }}
 
+  const chartGroupCachedUrls = new Map();
+
+  function chartGroupOpenUrl(command) {{
+    const cached = chartGroupCachedUrls.get(command);
+    if (cached) return cached;
+    const url = new URL('/open-chart', chartGroup.reportServer);
+    url.searchParams.set('command', command);
+    if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
+    return url.href;
+  }}
+
+  function preloadChartGroupCharts() {{
+    if (!chartGroup || !chartGroup.reportServer || !chartGroup.id) return;
+    const current = String(chartGroup.current || '');
+    const commands = chartGroup.items.map(i => i.command || '').filter(c => c && c !== current);
+    if (!commands.length) return;
+    const preloadHost = document.createElement('div');
+    preloadHost.style.display = 'none';
+    document.body.appendChild(preloadHost);
+    const url = new URL('/open-charts', chartGroup.reportServer);
+    fetch(url.href, {{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{commands, open:false, group:chartGroup.id}})}})
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {{
+        (data?.results || []).forEach(result => {{
+          if (!result?.ok || !result?.url || !result?.command) return;
+          chartGroupCachedUrls.set(result.command, result.url);
+          const frame = document.createElement('iframe');
+          frame.src = result.url;
+          frame.loading = 'eager';
+          frame.setAttribute('aria-hidden', 'true');
+          preloadHost.appendChild(frame);
+        }});
+      }})
+      .catch(() => {{}});
+  }}
+
   function setupChartGroupNav() {{
     const wrap = $('chart-group-nav');
     const label = $('chart-group-label');
@@ -1403,20 +1442,39 @@ class LightweightChartLevelSelectorUI:
     const current = String(chartGroup.current || '');
     const go = (command) => {{
       if (!command || command === current) return;
-      const url = new URL('/open-chart', chartGroup.reportServer);
-      url.searchParams.set('command', command);
-      if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
-      window.location.href = url.href;
+      window.location.href = chartGroupOpenUrl(command);
     }};
-    chartGroup.items.forEach((item) => {{
-      const command = item.command || '';
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = item.label || command || 'Chart';
-      btn.classList.toggle('active', !!current && command === current);
-      btn.onclick = () => go(command);
-      buttons.appendChild(btn);
+    const sections = new Map();
+    chartGroup.items.forEach(item => {{
+      const section = item.section || '';
+      if (!sections.has(section)) sections.set(section, []);
+      sections.get(section).push(item);
     }});
+    sections.forEach((items, section) => {{
+      let target = buttons;
+      if (section) {{
+        const block = document.createElement('div');
+        block.className = 'chart-group-section';
+        const title = document.createElement('div');
+        title.className = 'chart-group-section-title';
+        title.textContent = section;
+        target = document.createElement('div');
+        target.className = 'chart-group-buttons';
+        block.appendChild(title);
+        block.appendChild(target);
+        buttons.appendChild(block);
+      }}
+      items.forEach((item) => {{
+        const command = item.command || '';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = item.label || command || 'Chart';
+        btn.classList.toggle('active', !!current && command === current);
+        btn.onclick = () => go(command);
+        target.appendChild(btn);
+      }});
+    }});
+    setTimeout(preloadChartGroupCharts, 250);
   }}
 
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});

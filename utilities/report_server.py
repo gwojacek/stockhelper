@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v11"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v12"
 
 
 def main() -> int:
@@ -412,10 +412,11 @@ def main() -> int:
                     payload = json.loads(raw or "{}")
                     commands = [c.strip() for c in payload.get("commands") or [] if isinstance(c, str) and c.strip()]
                     open_in_browser = bool(payload.get("open", True))
+                    group_id = str(payload.get("group") or "").strip()
 
                     def _run_grouped_chart(command: str) -> dict:
                         try:
-                            rc, result = _run_chart_command(command)
+                            rc, result = _run_chart_command(command, group_id)
                             return {"command": command, "ok": rc == 0, **(result or {})}
                         except Exception as exc:
                             _safe_print(f"[report] grouped chart command failed: {exc}", err=True)
