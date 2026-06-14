@@ -282,6 +282,62 @@ def main() -> int:
         handler.end_headers()
         handler.wfile.write(body)
 
+
+    def _chart_group_from_referer(handler, command: str) -> dict | None:
+        """Best-effort fallback for older/cached report JS that calls /open-chart
+        without first registering a chart group. Find the report table that
+        contains the clicked command and turn all chart buttons in that table
+        into quick-chart metadata.
+        """
+        ref = handler.headers.get("Referer", "")
+        if not ref or not command:
+            return None
+        try:
+            parsed_ref = urlparse(ref)
+            rel_path = parsed_ref.path.lstrip("/")
+            report_path = (root / rel_path).resolve()
+            if not str(report_path).startswith(str(root)) or report_path.suffix.lower() != ".html" or not report_path.exists():
+                return None
+            text = report_path.read_text(encoding="utf-8", errors="replace")
+            needle = html.escape(command, quote=True)
+            tables = re.findall(r"<table\b.*?</table>", text, flags=re.I | re.S)
+            table = next((t for t in tables if command in t or needle in t), "")
+            if not table:
+                return None
+            heading = "Report group"
+            before = text[: text.find(table)]
+            h = re.findall(r"<(?:h2|h3|div)[^>]*>(.*?)</(?:h2|h3|div)>", before[-4000:], flags=re.I | re.S)
+            if h:
+                heading = re.sub(r"<.*?>", " ", h[-1])
+                heading = re.sub(r"\s+", " ", html.unescape(heading)).strip() or heading
+            rows = re.findall(r"<tr\b([^>]*)>(.*?)</tr>", table, flags=re.I | re.S)
+            charts = []
+            for row_attrs, row_html in rows:
+                cmd_match = re.search(r"data-cmd=['\"]([^'\"]+)['\"]", row_html, flags=re.I)
+                if not cmd_match:
+                    continue
+                cmd = html.unescape(cmd_match.group(1)).strip()
+                cell_texts = [re.sub(r"\s+", " ", html.unescape(re.sub(r"<.*?>", " ", c))).strip() for c in re.findall(r"<td\b[^>]*>(.*?)</td>", row_html, flags=re.I | re.S)]
+                row_text = " ".join(x for x in cell_texts if x)
+                market_match = re.search(r"data-market=['\"]([^'\"]+)['\"]", row_attrs, flags=re.I)
+                market = (market_match.group(1).upper() if market_match else "")
+                icon = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️", "INDEXES": "📊"}.get(market, "📊")
+                ticker = next((x for x in cell_texts if re.search(r"[A-Z0-9][A-Z0-9.]{1,15}", x)), "Chart")
+                ticker_match = re.search(r"[A-Z0-9][A-Z0-9.]{1,15}", ticker)
+                ticker = ticker_match.group(0) if ticker_match else ticker
+                low = row_text.lower()
+                direction = "↘️" if ("short" in low or "below" in low or "↘" in row_text) else ("↗️" if ("long" in low or "above" in low or "↗" in row_text) else "")
+                months_match = re.search(r"(\d+(?:\.\d+)?)\s*m(?:\b|ies|onths)?", row_text, flags=re.I)
+                months = f" ({months_match.group(1)}m)" if months_match else ""
+                charts.append({"command": cmd, "label": f"{icon} {ticker} {direction}{months}".strip(), "section": heading, "source": heading})
+            if not charts:
+                return None
+            group_id = hashlib.sha1((str(report_path) + command).encode("utf-8")).hexdigest()[:16]
+            return {"id": group_id, "title": heading, "charts": charts[:80]}
+        except Exception as exc:
+            _safe_print(f"[report] failed to derive chart group from referer: {exc}", err=True)
+            return None
+
     class _Handler(SimpleHTTPRequestHandler):
         def __init__(self, *h_args, **h_kwargs):
             super().__init__(*h_args, directory=str(root), **h_kwargs)
@@ -341,6 +397,12 @@ def main() -> int:
                 if not group_id and LAST_CHART_GROUP_ID:
                     group_id = LAST_CHART_GROUP_ID
                 chart_group = CHART_GROUPS.get(group_id) if group_id else None
+                if chart_group is None:
+                    chart_group = _chart_group_from_referer(self, command)
+                    if chart_group:
+                        group_id = str(chart_group.get("id") or group_id or "referer-group")
+                        chart_group["id"] = group_id
+                        CHART_GROUPS[group_id] = chart_group
                 debug = {"command": command, "group": group_id, "path": self.path}
                 if not command:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return

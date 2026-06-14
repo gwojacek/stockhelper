@@ -623,12 +623,23 @@ class LightweightChartLevelSelectorUI:
   let chartDrag = null;
   let suppressChartClickUntil = 0;
   let drawingDrag = null;
+  let drawingPriceRange = null;
   function applyVerticalPan() {{
     verticalPan = clamp(verticalPan, -0.30, 0.30);
     const margins = {{top:clamp(0.08 + verticalPan, 0.01, 0.50), bottom:clamp(0.12 - verticalPan, 0.01, 0.50)}};
     try {{ chart.priceScale?.('right')?.applyOptions({{scaleMargins:margins}}); }} catch(e) {{}}
     try {{ chart.applyOptions?.({{rightPriceScale:{{scaleMargins:margins}}}}); }} catch(e) {{}}
     requestAnimationFrame(drawCloud);
+  }}
+  function rightPriceScale() {{ try {{ return chart.priceScale?.('right'); }} catch(e) {{ return null; }} }}
+  function freezeDrawingScale() {{
+    try {{ drawingPriceRange = rightPriceScale()?.getVisibleRange?.() || null; }} catch(e) {{ drawingPriceRange = null; }}
+    try {{ rightPriceScale()?.applyOptions?.({{autoScale:false}}); }} catch(e) {{}}
+  }}
+  function restoreDrawingScale() {{
+    try {{ if (drawingPriceRange) rightPriceScale()?.setVisibleRange?.(drawingPriceRange); }} catch(e) {{}}
+    try {{ rightPriceScale()?.applyOptions?.({{autoScale:true}}); }} catch(e) {{}}
+    drawingPriceRange = null;
   }}
   function pointerTimePrice(ev) {{
     const rect = $('chart-wrap').getBoundingClientRect();
@@ -682,15 +693,15 @@ class LightweightChartLevelSelectorUI:
     const pt = pointerTimePrice(ev);
     let hitMode = null;
     const obj = [...drawnObjects].reverse().find(o => {{ hitMode = (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') ? objectHit(o, pt) : null; return !!hitMode; }});
-    if (obj) {{ drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').classList.add('drawing-editing'); $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
+    if (obj) {{ freezeDrawingScale(); drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').classList.add('drawing-editing'); $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
   }});
   $('chart-wrap').addEventListener('pointermove', (ev) => {{
     if (!drawingDrag || drawingDrag.id !== ev.pointerId) return;
     const pt = pointerTimePrice(ev); if (!Number.isFinite(pt.price)) return;
     ev.preventDefault(); ev.stopImmediatePropagation();
-    editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; render(); ev.preventDefault();
+    editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; render(); try {{ if (drawingPriceRange) rightPriceScale()?.setVisibleRange?.(drawingPriceRange); }} catch(e) {{}} ev.preventDefault();
   }});
-  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); drawingDrag = null; }} }};
+  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); drawingDrag = null; restoreDrawingScale(); }} }};
   $('chart-wrap').addEventListener('pointerup', endDrawingDrag);
   $('chart-wrap').addEventListener('pointercancel', endDrawingDrag);
   $('chart-wrap').addEventListener('pointermove', (ev) => {{ if (drawingDrag) return; const pt = pointerTimePrice(ev); const hovering = [...drawnObjects].reverse().some(o => (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') && objectHit(o, pt)); $('chart-wrap').classList.toggle('drawing-hover', hovering); }});
