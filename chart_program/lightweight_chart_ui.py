@@ -158,7 +158,7 @@ class LightweightChartLevelSelectorUI:
         return rows
 
 
-    def _future_time_payload(self, periods: int = 60) -> list[str]:
+    def _future_time_payload(self, periods: int = 120) -> list[str]:
         dates = pd.to_datetime(self.df["Date"], errors="coerce")
         if dates.empty or pd.isna(dates.iloc[-1]):
             return []
@@ -462,9 +462,15 @@ class LightweightChartLevelSelectorUI:
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
-    #chart-wrap {{ position: relative; height: calc(100vh - 170px); min-height: 400px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
+    #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
+    #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
+    .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:15px; height:15px; padding:0 3px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:10px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:2px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
+    .chart-icon.anchor {{ color:#f8fafc; background:#111827; border-color:#f8fafc; text-shadow:0 1px 2px #000; }}
+    .chart-icon.touch {{ color:#0f172a; background:#fbbf24; border-color:#0f172a; width:10px; min-width:10px; height:10px; padding:0; }}
+    .chart-icon.cross {{ color:#f8fafc; background:#a855f7; border-color:#f8fafc; }}
+    .chart-icon.end {{ color:#0f172a; background:#f8fafc; }}
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
@@ -526,7 +532,7 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="chart-legend"></div>
-      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas></div>
+      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -1054,6 +1060,44 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function addDomChartIcon(x, y, cls, text, color=null) {{
+    const layer = $('icon-overlay');
+    if (!layer || x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const icon = document.createElement('span');
+    icon.className = `chart-icon ${{cls || ''}}`;
+    icon.textContent = text;
+    icon.style.left = `${{x}}px`;
+    icon.style.top = `${{y}}px`;
+    if (color) icon.style.borderColor = color;
+    layer.appendChild(icon);
+  }}
+
+  function drawDomChartIcons() {{
+    const layer = $('icon-overlay');
+    if (!layer) return;
+    layer.innerHTML = '';
+    drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge').forEach(obj => {{
+      wedgeTouchPoints(obj).forEach(pt => {{
+        const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pt.time) : null;
+        const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pt.value) : null;
+        addDomChartIcon(x, y, pt.anchor ? 'anchor' : 'touch', pt.anchor ? '◆' : '', obj.color || null);
+      }});
+    }});
+    drawnObjects.forEach(obj => {{
+      if (!isEditableLineObject(obj) || hiddenLegendKeys.has(editableObjectLegendKey(obj))) return;
+      const pts = lineObjectPoints(obj);
+      if (!pts) return;
+      addDomChartIcon(pts.start.x, pts.start.y, 'anchor', '+', obj.color || null);
+      addDomChartIcon(pts.end.x, pts.end.y, 'end', '▶', obj.color || null);
+    }});
+    const cross = levelPoints.line_cross_value;
+    if (cross && !hiddenLegendKeys.has('level:line_cross_value')) {{
+      const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(cross.date) : null;
+      const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(cross.price ?? cross.plot_price) : null;
+      addDomChartIcon(x, y, 'cross', '×');
+    }}
+  }}
+
   function pointDateFromEvent(ev) {{
     const rect = $('chart-wrap').getBoundingClientRect();
     const x = ev.clientX - rect.left;
@@ -1430,7 +1474,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); return; }}
+    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -1448,6 +1492,7 @@ class LightweightChartLevelSelectorUI:
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);
     drawLineObjectHandles(ctx);
+    drawDomChartIcons();
   }}
 
   function captureViewport() {{
@@ -1650,7 +1695,7 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
-  seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
+  seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000;
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
