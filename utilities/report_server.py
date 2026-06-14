@@ -284,14 +284,15 @@ def main() -> int:
         handler.wfile.write(body)
 
 
-    def _chart_group_from_referer(handler, command: str) -> dict | None:
+    def _chart_group_from_referer(handler, command: str, symbol: str = "") -> dict | None:
         """Best-effort fallback for older/cached report JS that calls /open-chart
         without first registering a chart group. Find the report table that
         contains the clicked command and turn all chart buttons in that table
         into quick-chart metadata.
         """
         ref = handler.headers.get("Referer", "")
-        if not command:
+        symbol = (symbol or "").strip()
+        if not command and not symbol:
             return None
         try:
             report_path = None
@@ -301,15 +302,23 @@ def main() -> int:
                 candidate = (root / rel_path).resolve()
                 if str(candidate).startswith(str(root)) and candidate.suffix.lower() == ".html" and candidate.exists():
                     report_path = candidate
+            search_terms = [x for x in [command, html.escape(command, quote=True) if command else "", symbol, symbol.upper(), symbol.lower()] if x]
             if report_path is None:
-                candidates = sorted((root / "chart_program" / "data" / "all_insturments_search" / "allsearch").glob("*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
-                report_path = next((p for p in candidates if command in p.read_text(encoding="utf-8", errors="ignore")), None)
+                candidate_dirs = [
+                    root / "chart_program" / "data" / "all_insturments_search" / "allsearch",
+                    project_root / "chart_program" / "data" / "all_insturments_search" / "allsearch",
+                ]
+                candidates = []
+                for candidate_dir in candidate_dirs:
+                    if candidate_dir.exists():
+                        candidates.extend(candidate_dir.glob("*.html"))
+                candidates = sorted(set(candidates), key=lambda p: p.stat().st_mtime, reverse=True)
+                report_path = next((p for p in candidates if any(term in p.read_text(encoding="utf-8", errors="ignore") for term in search_terms)), None)
             if report_path is None:
                 return None
             text = report_path.read_text(encoding="utf-8", errors="replace")
-            needle = html.escape(command, quote=True)
             tables = re.findall(r"<table\b.*?</table>", text, flags=re.I | re.S)
-            table = next((t for t in tables if command in t or needle in t), "")
+            table = next((t for t in tables if any(term in t for term in search_terms)), "")
             if not table:
                 return None
             heading = "Report group"
@@ -340,7 +349,7 @@ def main() -> int:
                 charts.append({"command": cmd, "label": f"{icon} {ticker} {direction}{months}".strip(), "section": heading, "source": heading})
             if not charts:
                 return None
-            group_id = hashlib.sha1((str(report_path) + command).encode("utf-8")).hexdigest()[:16]
+            group_id = hashlib.sha1((str(report_path) + (command or symbol)).encode("utf-8")).hexdigest()[:16]
             return {"id": group_id, "title": heading, "charts": charts[:80]}
         except Exception as exc:
             _safe_print(f"[report] failed to derive chart group from referer: {exc}", err=True)
@@ -376,7 +385,8 @@ def main() -> int:
                 payload = CHART_GROUPS.get(group_id) if group_id else None
                 if payload is None:
                     command = (qs.get("command", [""])[0] or "").strip()
-                    payload = _chart_group_from_referer(self, command) if command else None
+                    symbol = (qs.get("symbol", [""])[0] or "").strip()
+                    payload = _chart_group_from_referer(self, command, symbol) if (command or symbol) else None
                     if payload:
                         CHART_GROUPS[str(payload.get("id"))] = payload
                 self.send_response(200 if payload else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload or {"ok": False, "error": "missing group"}).encode("utf-8")); return

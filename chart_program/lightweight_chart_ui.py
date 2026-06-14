@@ -670,6 +670,18 @@ class LightweightChartLevelSelectorUI:
     const dtDays = Math.round((new Date(to.time+'T00:00:00Z') - new Date(from.time+'T00:00:00Z')) / 86400000);
     const shiftDate = d => addDays(String(d).slice(0,10), dtDays);
     const shiftPrice = v => roundPrice(Number(v) + dy);
+    const rebuildWedgeProjection = () => {{
+      if (!(obj.type === 'wedge' || obj.group_id === 'auto-wedge') || !Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y) || obj.anchor_x.length < 2 || obj.anchor_y.length < 2) return;
+      const x0 = String(obj.anchor_x[0]).slice(0,10), x1 = String(obj.anchor_x[obj.anchor_x.length - 1]).slice(0,10);
+      const y0 = Number(obj.anchor_y[0]), y1 = Number(obj.anchor_y[obj.anchor_y.length - 1]);
+      const t0 = new Date(x0 + 'T00:00:00Z').getTime(), t1 = new Date(x1 + 'T00:00:00Z').getTime();
+      const spanDays = Math.max(1, Math.round((t1 - t0) / 86400000));
+      const extDays = Math.max(1, 45);
+      const x2 = addDays(x1, extDays);
+      const y2 = roundPrice(y1 + (y1 - y0) * (extDays / spanDays));
+      obj.x = [x0, x1, x2]; obj.y = [roundPrice(y0), roundPrice(y1), y2];
+      obj.x0 = x0; obj.y0 = roundPrice(y0); obj.x1 = x2; obj.y1 = y2; obj.price = y2;
+    }};
     const setEndpoint = (idx) => {{
       let editTime = to.time, editPrice = roundPrice(to.price);
       if (idx === 0 && (obj.type === 'wedge' || obj.group_id === 'auto-wedge')) {{
@@ -677,10 +689,13 @@ class LightweightChartLevelSelectorUI:
         editTime = row.time;
         editPrice = roundPrice(String(obj.label || '').toLowerCase().includes('upper') ? row.high : row.low);
       }}
-      if (Array.isArray(obj.x) && Array.isArray(obj.y) && obj.x.length) {{ obj.x[idx] = editTime; obj.y[idx] = editPrice; }}
+      const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
+      const targetIdx = isWedge && idx > 0 && Array.isArray(obj.anchor_x) && obj.anchor_x.length ? obj.anchor_x.length - 1 : idx;
+      if (!isWedge && Array.isArray(obj.x) && Array.isArray(obj.y) && obj.x.length) {{ obj.x[idx] = editTime; obj.y[idx] = editPrice; }}
       if (idx === 0) {{ obj.x0 = editTime; obj.y0 = editPrice; }} else {{ obj.x1 = editTime; obj.y1 = editPrice; obj.price = editPrice; }}
-      if (Array.isArray(obj.anchor_x) && obj.anchor_x.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_x.length - 1; obj.anchor_x[aIdx] = editTime; }}
-      if (Array.isArray(obj.anchor_y) && obj.anchor_y.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_y.length - 1; obj.anchor_y[aIdx] = editPrice; }}
+      if (Array.isArray(obj.anchor_x) && obj.anchor_x.length) obj.anchor_x[targetIdx] = editTime;
+      if (Array.isArray(obj.anchor_y) && obj.anchor_y.length) obj.anchor_y[targetIdx] = editPrice;
+      rebuildWedgeProjection();
     }};
     if (mode === 'start') {{ setEndpoint(0); return; }}
     if (mode === 'end') {{ setEndpoint(Array.isArray(obj.x) ? obj.x.length - 1 : 1); return; }}
@@ -688,6 +703,7 @@ class LightweightChartLevelSelectorUI:
     ['x0','x1'].forEach(k => {{ if (obj[k]) obj[k]=shiftDate(obj[k]); }}); ['y0','y1','price'].forEach(k => {{ if (Number.isFinite(Number(obj[k]))) obj[k]=shiftPrice(obj[k]); }});
     if (Array.isArray(obj.anchor_x)) obj.anchor_x = obj.anchor_x.map(shiftDate);
     if (Array.isArray(obj.anchor_y)) obj.anchor_y = obj.anchor_y.map(shiftPrice);
+    rebuildWedgeProjection();
   }}
   $('chart-wrap').addEventListener('pointerdown', (ev) => {{
     if (ev.button !== 0) return;
@@ -702,7 +718,7 @@ class LightweightChartLevelSelectorUI:
     ev.preventDefault(); ev.stopImmediatePropagation();
     editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; const ds = objectSeriesByKey.get(drawingDrag.key); if (ds) {{ try {{ ds.setData(normalizeLineData(lineDataForObject(drawingDrag.obj))); }} catch(e) {{}} requestAnimationFrame(drawCloud); }} else if (!drawingRenderFrame) {{ drawingRenderFrame = requestAnimationFrame(() => {{ drawingRenderFrame = null; render(); }}); }} try {{ if (drawingPriceRange) rightPriceScale()?.setVisibleRange?.(drawingPriceRange); }} catch(e) {{}} ev.preventDefault();
   }}, true);
-  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); const changed = drawingDrag.moved; drawingDrag = null; restoreDrawingScale(); if (changed) render(); }} }};
+  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); drawingDrag = null; restoreDrawingScale(); updatePanel(); requestAnimationFrame(drawCloud); }} }};
   $('chart-wrap').addEventListener('pointerup', endDrawingDrag, true);
   $('chart-wrap').addEventListener('pointercancel', endDrawingDrag, true);
   $('chart-wrap').addEventListener('wheel', (ev) => {{ if (drawingDrag) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, {{capture:true, passive:false}});
@@ -1239,7 +1255,7 @@ class LightweightChartLevelSelectorUI:
   async function renderQuickChartPanel() {{
     const panel = $('quick-chart-panel');
     let group = P.chartGroup || {{}}; let charts = Array.isArray(group.charts) ? group.charts : [];
-    if (!charts.length && P.reportServerUrl) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=last' + (P.chartCommand ? '&command=' + encodeURIComponent(P.chartCommand) : '')); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
+    if (!charts.length && P.reportServerUrl) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=last' + (P.chartCommand ? '&command=' + encodeURIComponent(P.chartCommand) : '') + (P.sourceTicker ? '&symbol=' + encodeURIComponent(P.sourceTicker) : '')); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
     if (!panel) return;
     if (!charts.length) {{ if (P.reportLaunched) {{ panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4><div class="muted">No chart group metadata received from the report. Reopen from a report 📊 group.</div>'; panel.style.display='block'; }} return; }}
     const bySection = new Map();
