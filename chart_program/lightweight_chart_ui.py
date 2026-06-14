@@ -876,6 +876,33 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function drawDrawingEndpointHandles(ctx) {{
+    drawnObjects.filter(obj => obj.type === 'line' || obj.type === 'wedge' || obj.group_id === 'auto-wedge').forEach(obj => {{
+      const xs = Array.isArray(obj.x) ? obj.x : [obj.x0, obj.x1];
+      const ys = Array.isArray(obj.y) ? obj.y : [obj.y0, obj.y1];
+      if (!xs.length || !ys.length) return;
+      const endpoints = [[xs[0], ys[0], 'start'], [xs[xs.length - 1], ys[ys.length - 1], 'end']];
+      endpoints.forEach(([tx, py, kind]) => {{
+        const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(tx).slice(0,10)) : null;
+        const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(py)) : null;
+        if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = kind === 'end' ? '#38bdf8' : '#facc15';
+        ctx.strokeStyle = '#020617';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(-7, -7, 14, 14, 3) : ctx.rect(-7, -7, 14, 14);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#020617';
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(kind === 'end' ? '↔' : '↕', 0, 0);
+        ctx.restore();
+      }});
+    }});
+  }}
+
   function drawValuePointers(ctx) {{
     const pointerFields = ['line_cross_value'];
     pointerFields.forEach(field => {{
@@ -1007,7 +1034,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); return; }}
+    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawDrawingEndpointHandles(ctx); drawValuePointers(ctx); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -1023,6 +1050,7 @@ class LightweightChartLevelSelectorUI:
       ctx.fill();
     }}
     drawWedgeTouchPoints(ctx);
+    drawDrawingEndpointHandles(ctx);
     drawValuePointers(ctx);
   }}
 
@@ -1172,7 +1200,8 @@ class LightweightChartLevelSelectorUI:
   function renderQuickChartPanel() {{
     const panel = $('quick-chart-panel');
     const group = P.chartGroup || {{}}; const charts = Array.isArray(group.charts) ? group.charts : [];
-    if (!panel || !charts.length) return;
+    if (!panel) return;
+    if (!charts.length) {{ if (P.reportLaunched) {{ panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4><div class="muted">No chart group metadata received from the report. Reopen from a report 📊 group.</div>'; panel.style.display='block'; }} return; }}
     const bySection = new Map();
     charts.forEach(ch => {{ const key = ch.section || ch.source || group.title || 'Report group'; if(!bySection.has(key)) bySection.set(key, []); bySection.get(key).push(ch); }});
     panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4>' + [...bySection.entries()].map(([section,items]) => `<div class="group-title">${{section}}</div>` + items.map(ch => `<button type="button" data-cmd="${{String(ch.command||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}}">${{ch.label || ch.ticker || ch.command}}</button>`).join('')).join('');

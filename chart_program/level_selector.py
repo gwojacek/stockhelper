@@ -715,9 +715,9 @@ def run_level_selector(raw_args=None):
                     first_idx = min(i0, i1)
                     second_idx = max(i0, i1)
                     if args.wedge_right:
-                        extension = max(abs(i1 - i0) * 2, 80)
+                        extension = 45
                         fallback_end_idx = (len(chart_dates) - 1) + extension
-                        end_idx = max(common_wedge_end_idx or fallback_end_idx, fallback_end_idx)
+                        end_idx = fallback_end_idx
                     else:
                         end_idx = second_idx
                     # Build a polyline on every trading/index step. With Plotly

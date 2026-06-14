@@ -21,6 +21,7 @@ from urllib.request import urlopen
 
 REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v13"
 CHART_GROUPS: dict[str, dict] = {}
+LAST_CHART_GROUP_ID = ""
 
 
 def main() -> int:
@@ -320,6 +321,8 @@ def main() -> int:
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
                 group_id = (qs.get("group", [""])[0] or "").strip()
+                if not group_id and LAST_CHART_GROUP_ID:
+                    group_id = LAST_CHART_GROUP_ID
                 chart_group = CHART_GROUPS.get(group_id) if group_id else None
                 debug = {"command": command, "group": group_id, "path": self.path}
                 if not command:
@@ -365,6 +368,7 @@ def main() -> int:
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
             if parsed.path == "/chart-group":
+                global LAST_CHART_GROUP_ID
                 try:
                     ln = int(self.headers.get("content-length", "0") or "0")
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
@@ -374,6 +378,7 @@ def main() -> int:
                         group_id = hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
                     payload["id"] = group_id
                     CHART_GROUPS[group_id] = payload
+                    LAST_CHART_GROUP_ID = group_id
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "id": group_id}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
