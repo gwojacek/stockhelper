@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v12"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v13"
 
 
 def main() -> int:
@@ -85,6 +85,11 @@ def main() -> int:
             console_log = open(console_log_path, "a", buffering=1, encoding="utf-8", errors="replace")
         except Exception:
             console_log = None
+
+
+    def _clean_group_text(value: object) -> str:
+        text = str(value or "").strip()
+        return text.encode("utf-8", "ignore").decode("utf-8", "ignore")
 
     def _set_console_targets(stdout_path: str = "", stderr_path: str = "") -> bool:
         nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
@@ -383,17 +388,18 @@ def main() -> int:
                     ln = int(self.headers.get("content-length", "0") or "0")
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
                     payload = json.loads(raw or "{}")
-                    group_label = str(payload.get("label") or "Quick charts from group btn").strip()
+                    group_label = _clean_group_text(payload.get("label") or "Quick charts from group btn")
                     raw_items = payload.get("items") or []
                     items = []
                     for item in raw_items:
                         if not isinstance(item, dict):
                             continue
-                        command = str(item.get("command") or "").strip()
+                        command = _clean_group_text(item.get("command") or "")
                         if not command:
                             continue
-                        label = str(item.get("label") or command).strip()
-                        items.append({"command": command, "label": label})
+                        label = _clean_group_text(item.get("label") or command)
+                        section = _clean_group_text(item.get("section") or "")
+                        items.append({"command": command, "label": label, "section": section})
                     if not items:
                         self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing commands"}).encode("utf-8")); return
                     group_id = uuid.uuid4().hex
