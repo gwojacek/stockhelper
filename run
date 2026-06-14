@@ -2171,6 +2171,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return rank[0] == 0 or "recent breakout" in low or "last 3 days" in low or "recent retest" in low or "returned to cloud" in low
 
         html_rows = ""
+        seen_top_choice_tickers: set[str] = set()
         for label, group_rows in groups:
             qualified: list[tuple[tuple[int, int, float, str], ScannerRow, str]] = []
             for r in group_rows:
