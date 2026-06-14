@@ -545,7 +545,7 @@ class LightweightChartLevelSelectorUI:
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
-        <h4>⭐ Quick charts from group btn</h4>
+        <h4>⭐ Quick charts from 📊</h4>
         <div id="chart-group-label" class="chart-group-label"></div>
         <div id="chart-group-buttons" class="chart-group-buttons"></div>
       </div>
@@ -1411,9 +1411,10 @@ class LightweightChartLevelSelectorUI:
     if (label) label.textContent = chartGroup.label || 'Group charts';
     buttons.innerHTML = '';
     const current = String(chartGroup.current || '');
-    const go = (command) => {{
+    const go = (command, clickedButton=null) => {{
       if (!command || command === current) return;
-      window.location.href = chartGroupOpenUrl(command);
+      if (clickedButton) clickedButton.textContent = 'Loading…';
+      window.location.replace(chartGroupOpenUrl(command));
     }};
     const sections = new Map();
     chartGroup.items.forEach(item => {{
@@ -1441,7 +1442,7 @@ class LightweightChartLevelSelectorUI:
         btn.type = 'button';
         btn.textContent = item.label || command || 'Chart';
         btn.classList.toggle('active', !!current && command === current);
-        btn.onclick = () => go(command);
+        btn.onclick = () => go(command, btn);
         target.appendChild(btn);
       }});
     }});
