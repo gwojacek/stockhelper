@@ -2695,6 +2695,20 @@ def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     return groups
 
 
+def _clustered_contact_indices(indices: list[int], max_gap: int = 1) -> list[int]:
+    """Return one representative index per visually separate touch cluster."""
+    ordered = sorted(set(indices))
+    if not ordered:
+        return []
+    reps = [ordered[0]]
+    prev = ordered[0]
+    for idx in ordered[1:]:
+        if idx - prev > max_gap:
+            reps.append(idx)
+        prev = idx
+    return reps
+
+
 def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     """Detect an unbroken descending wedge ending at the latest candle.
 
@@ -2837,12 +2851,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 close_eps = max(tol * 0.02, max(abs(float(closes[end])), 1e-9) * 1e-6)
                 exact_tol = max(tol * 0.12, max(abs(float(closes[end])), 1e-9) * 1e-6)
 
-                def _is_local_extreme(i: int, side: str) -> bool:
+                def _is_local_extreme(i: int, side: str, radius: int = 1) -> bool:
                     if i <= 0 or i >= n - 1:
                         return True
+                    left = max(0, i - radius)
+                    right = min(n, i + radius + 1)
                     if side == "upper":
-                        return highs[i] >= highs[i - 1] and highs[i] >= highs[i + 1]
-                    return lows[i] <= lows[i - 1] and lows[i] <= lows[i + 1]
+                        return highs[i] >= max(highs[left:right])
+                    return lows[i] <= min(lows[left:right])
 
                 def _accept_or_reject_breakout(i: int, direction: str) -> bool:
                     nonlocal breakout_idx, breakout_direction
@@ -2934,11 +2950,32 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
                 lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
 
-                up_count = _clustered_contact_count(upper_contacts)
-                lo_count = _clustered_contact_count(lower_contacts)
-                lower_exact_count = _clustered_contact_count(lower_exact_contacts)
+                def _structural_contacts(
+                    contacts: list[int],
+                    exact_contacts: list[int],
+                    side: str,
+                ) -> list[int]:
+                    # The two anchors are always real touches.  After anchors,
+                    # a candle counts only when the wedge boundary is touched by
+                    # a visible local wick extreme.  That keeps "touches" aligned
+                    # with the dots drawn on the chart without counting random
+                    # candles that simply travel inside the wedge.
+                    exact = set(exact_contacts)
+                    structural: list[int] = []
+                    for idx in sorted(set(contacts)):
+                        if idx in upper_anchor_indices or idx in lower_anchor_indices:
+                            structural.append(idx)
+                        elif idx in exact or _is_local_extreme(idx, side, radius=2):
+                            structural.append(idx)
+                    return _clustered_contact_indices(structural)
+
+                upper_structural_contacts = _structural_contacts(upper_contacts, upper_exact_contacts, "upper")
+                lower_structural_contacts = _structural_contacts(lower_contacts, lower_exact_contacts, "lower")
                 upper_exact_count = _clustered_contact_count(upper_exact_contacts)
-                if lower_exact_count < 2:
+                lower_exact_count = _clustered_contact_count(lower_exact_contacts)
+                up_count = len(upper_structural_contacts)
+                lo_count = len(lower_structural_contacts)
+                if lo_count < 2:
                     continue
                 if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
                     continue
@@ -2968,6 +3005,15 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
                 median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
                 median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
+                current_width = max(_wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b), 1e-9)
+                current_upper_gap = max(0.0, _wedge_line_value(end, upper_a, upper_b) - highs[end]) / current_width
+                current_lower_gap = max(0.0, lows[end] - _wedge_line_value(end, lower_a, lower_b)) / current_width
+                # Prefer wedges whose active boundaries are both close enough to
+                # current price to be realistically breakable soon. A top line far
+                # above price or a bottom line far below price is less actionable.
+                current_worst_gap = max(current_upper_gap, current_lower_gap)
+                median_worst_gap = max(median_upper_gap, median_lower_gap)
+                breakout_potential_quality = max(0.0, min(1.0, 1.0 - (current_worst_gap * 0.55 + median_worst_gap * 0.25 + median_min_gap * 0.20)))
                 breakout_recent_bonus = 0.0
                 breakout_age = None
                 if breakout_idx is not None:
@@ -2985,6 +3031,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     or last_upper_contact_age > 75
                     or last_lower_contact_age > 55
                     or width_end_pct > 28.0
+                    or breakout_potential_quality < 0.18
                 ):
                     continue
 
@@ -3005,7 +3052,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     slope_strength = "mild"
                 slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality)
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line
