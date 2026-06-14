@@ -1395,40 +1395,11 @@ class LightweightChartLevelSelectorUI:
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
   }}
 
-  const chartGroupCachedUrls = new Map();
-
   function chartGroupOpenUrl(command) {{
-    const cached = chartGroupCachedUrls.get(command);
-    if (cached) return cached;
     const url = new URL('/open-chart', chartGroup.reportServer);
     url.searchParams.set('command', command);
     if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
     return url.href;
-  }}
-
-  function preloadChartGroupCharts() {{
-    if (!chartGroup || !chartGroup.reportServer || !chartGroup.id) return;
-    const current = String(chartGroup.current || '');
-    const commands = chartGroup.items.map(i => i.command || '').filter(c => c && c !== current);
-    if (!commands.length) return;
-    const preloadHost = document.createElement('div');
-    preloadHost.style.display = 'none';
-    document.body.appendChild(preloadHost);
-    const url = new URL('/open-charts', chartGroup.reportServer);
-    fetch(url.href, {{method:'POST',headers:{{'content-type':'application/json'}},body:JSON.stringify({{commands, open:false, group:chartGroup.id}})}})
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {{
-        (data?.results || []).forEach(result => {{
-          if (!result?.ok || !result?.url || !result?.command) return;
-          chartGroupCachedUrls.set(result.command, result.url);
-          const frame = document.createElement('iframe');
-          frame.src = result.url;
-          frame.loading = 'eager';
-          frame.setAttribute('aria-hidden', 'true');
-          preloadHost.appendChild(frame);
-        }});
-      }})
-      .catch(() => {{}});
   }}
 
   function setupChartGroupNav() {{
@@ -1474,7 +1445,6 @@ class LightweightChartLevelSelectorUI:
         target.appendChild(btn);
       }});
     }});
-    setTimeout(preloadChartGroupCharts, 250);
   }}
 
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
