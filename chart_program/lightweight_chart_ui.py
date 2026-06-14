@@ -591,8 +591,9 @@ class LightweightChartLevelSelectorUI:
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
-  const ohlcWithFuture = [...P.ohlc, ...futureTimes.map(time => ({{time}}))];
-  const ohlcByTime = new Map(P.ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
+  const ohlc = Array.isArray(P.ohlc) ? P.ohlc : [];
+  const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
+  const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
 
   const $ = id => document.getElementById(id);
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
@@ -727,6 +728,13 @@ class LightweightChartLevelSelectorUI:
   candleSeries.setData(ohlcWithFuture);
   if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
+  requestAnimationFrame(() => {{
+    try {{
+      const ts = chart.timeScale();
+      if (ts.setVisibleLogicalRange && ohlc.length) ts.setVisibleLogicalRange({{from: 0, to: Math.max(ohlc.length - 1, 0) + 18}});
+    }} catch(e) {{}}
+    requestAnimationFrame(drawCloud);
+  }});
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
   window.addEventListener('resize', () => requestAnimationFrame(drawCloud));
   const dynamicSeries = [];
@@ -1699,9 +1707,9 @@ class LightweightChartLevelSelectorUI:
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000;
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
-  $('tool-line').onclick = () => {{ clearPreviews(); activeTool='line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
-  $('tool-fib').onclick = () => {{ clearPreviews(); activeTool='fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
-  $('tool-half').onclick = () => {{ clearPreviews(); activeTool='half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
+  $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
+  $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
+  $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
