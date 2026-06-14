@@ -203,7 +203,7 @@ class LightweightChartLevelSelectorUI:
             "chikou": line_payload(dates, closes.shift(-26)),
         }
 
-    def _future_time_slots(self, periods: int = 80) -> list[str]:
+    def _future_time_slots(self, periods: int = 90) -> list[str]:
         if self.df.empty:
             return []
         dates = pd.to_datetime(self.df["Date"], errors="coerce").dropna()
@@ -676,7 +676,7 @@ class LightweightChartLevelSelectorUI:
       const y0 = Number(obj.anchor_y[0]), y1 = Number(obj.anchor_y[obj.anchor_y.length - 1]);
       const t0 = new Date(x0 + 'T00:00:00Z').getTime(), t1 = new Date(x1 + 'T00:00:00Z').getTime();
       const spanDays = Math.max(1, Math.round((t1 - t0) / 86400000));
-      const extDays = Math.max(1, 45);
+      const extDays = Math.max(1, 90);
       const x2 = addDays(x1, extDays);
       const y2 = roundPrice(y1 + (y1 - y0) * (extDays / spanDays));
       obj.x = [x0, x1, x2]; obj.y = [roundPrice(y0), roundPrice(y1), y2];
@@ -1255,9 +1255,9 @@ class LightweightChartLevelSelectorUI:
   async function renderQuickChartPanel() {{
     const panel = $('quick-chart-panel');
     let group = P.chartGroup || {{}}; let charts = Array.isArray(group.charts) ? group.charts : [];
-    if (!charts.length && P.reportServerUrl) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=last' + (P.chartCommand ? '&command=' + encodeURIComponent(P.chartCommand) : '') + (P.sourceTicker ? '&symbol=' + encodeURIComponent(P.sourceTicker) : '')); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
+    if (!charts.length && P.reportServerUrl && (group.grouped || group.id)) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=' + encodeURIComponent(group.id || 'last') + (P.chartCommand ? '&command=' + encodeURIComponent(P.chartCommand) : '') + (P.sourceTicker ? '&symbol=' + encodeURIComponent(P.sourceTicker) : '')); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
     if (!panel) return;
-    if (!charts.length) {{ if (P.reportLaunched) {{ panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4><div class="muted">No chart group metadata received from the report. Reopen from a report 📊 group.</div>'; panel.style.display='block'; }} return; }}
+    if (charts.length < 2) {{ panel.style.display='none'; return; }}
     const bySection = new Map();
     charts.forEach(ch => {{ const key = ch.section || ch.source || group.title || 'Report group'; if(!bySection.has(key)) bySection.set(key, []); bySection.get(key).push(ch); }});
     panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4>' + [...bySection.entries()].map(([section,items]) => `<div class="group-title">${{section}}</div>` + items.map(ch => `<button type="button" data-cmd="${{String(ch.command||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}}">${{ch.label || ch.ticker || ch.command}}</button>`).join('')).join('');

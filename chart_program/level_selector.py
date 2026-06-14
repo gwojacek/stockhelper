@@ -715,7 +715,7 @@ def run_level_selector(raw_args=None):
                     first_idx = min(i0, i1)
                     second_idx = max(i0, i1)
                     if args.wedge_right:
-                        extension = 45
+                        extension = 90
                         fallback_end_idx = (len(chart_dates) - 1) + extension
                         end_idx = fallback_end_idx
                     else:

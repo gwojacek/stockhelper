@@ -417,10 +417,8 @@ def main() -> int:
                             CHART_GROUPS[group_id] = chart_group_payload
                     except Exception:
                         pass
-                if not group_id and LAST_CHART_GROUP_ID:
-                    group_id = LAST_CHART_GROUP_ID
                 chart_group = CHART_GROUPS.get(group_id) if group_id else None
-                if chart_group is None:
+                if chart_group is None and (group_id or group_payload_raw):
                     chart_group = _chart_group_from_referer(self, command)
                     if chart_group:
                         group_id = str(chart_group.get("id") or group_id or "referer-group")
