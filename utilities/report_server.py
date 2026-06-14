@@ -321,6 +321,16 @@ def main() -> int:
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
                 group_id = (qs.get("group", [""])[0] or "").strip()
+                group_payload_raw = (qs.get("group_payload", [""])[0] or "").strip()
+                if group_payload_raw:
+                    try:
+                        chart_group_payload = json.loads(group_payload_raw)
+                        if isinstance(chart_group_payload, dict):
+                            group_id = str(chart_group_payload.get("id") or group_id or "inline-group")
+                            chart_group_payload["id"] = group_id
+                            CHART_GROUPS[group_id] = chart_group_payload
+                    except Exception:
+                        pass
                 if not group_id and LAST_CHART_GROUP_ID:
                     group_id = LAST_CHART_GROUP_ID
                 chart_group = CHART_GROUPS.get(group_id) if group_id else None

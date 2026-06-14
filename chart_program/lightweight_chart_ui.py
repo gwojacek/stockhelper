@@ -432,7 +432,9 @@ class LightweightChartLevelSelectorUI:
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
-    #chart-wrap {{ position: relative; height: calc(100vh - 132px); min-height: 480px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: crosshair; }}
+    #chart-wrap {{ position: relative; height: calc(100vh - 190px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: crosshair; }}
+    #chart-wrap.drawing-hover {{ cursor: grab; }}
+    #chart-wrap.drawing-editing {{ cursor: grabbing; }}
     #date-axis-fallback {{ position:absolute; left:0; right:0; bottom:0; height:24px; z-index:4; pointer-events:none; display:flex; justify-content:space-between; padding:3px 10px; font:11px ui-monospace,monospace; color:#cbd5e1; background:linear-gradient(transparent,rgba(15,23,42,.78)); }}
     .quick-chart-panel {{ margin:12px 0; border:1px solid #334155; border-radius:10px; padding:10px; background:#111827; }}
     .quick-chart-panel h4 {{ margin:0 0 8px; color:#facc15; }}
@@ -541,6 +543,8 @@ class LightweightChartLevelSelectorUI:
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const ohlcByTime = new Map(P.ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
+  const chartTimes = [...P.ohlc.map(r => r.time), ...(P.futureSlots || [])];
+  const timeAtChartIndex = (idx) => chartTimes[Math.max(0, Math.min(chartTimes.length - 1, idx))] || dateAtIndex(idx);
   const scannerDrawnObjects = JSON.parse(JSON.stringify(drawnObjects));
 
   const $ = id => document.getElementById(id);
@@ -630,8 +634,11 @@ class LightweightChartLevelSelectorUI:
     const rect = $('chart-wrap').getBoundingClientRect();
     const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
     const price = candleSeries.coordinateToPrice ? candleSeries.coordinateToPrice(y) : null;
-    const idx = Math.round((x / Math.max(1, rect.width)) * Math.max(0, P.ohlc.length - 1));
-    return {{x, y, time: dateAtIndex(idx), price: Number(price)}};
+    let time = null;
+    try {{ time = chart.timeScale().coordinateToTime ? chart.timeScale().coordinateToTime(x) : null; }} catch(e) {{ time = null; }}
+    if (time && typeof time !== 'string') time = `${{time.year}}-${{String(time.month).padStart(2,'0')}}-${{String(time.day).padStart(2,'0')}}`;
+    if (!time) {{ const idx = Math.round((x / Math.max(1, rect.width)) * Math.max(0, chartTimes.length - 1)); time = timeAtChartIndex(idx); }}
+    return {{x, y, time:String(time).slice(0,10), price: Number(price)}};
   }}
   function editableObjectsEnabled() {{ return !(activeTool === 'level' && activeField); }}
   function objectHit(obj, pt) {{
@@ -652,10 +659,16 @@ class LightweightChartLevelSelectorUI:
     const shiftDate = d => addDays(String(d).slice(0,10), dtDays);
     const shiftPrice = v => roundPrice(Number(v) + dy);
     const setEndpoint = (idx) => {{
-      if (Array.isArray(obj.x) && Array.isArray(obj.y) && obj.x.length) {{ obj.x[idx] = to.time; obj.y[idx] = roundPrice(to.price); }}
-      if (idx === 0) {{ obj.x0 = to.time; obj.y0 = roundPrice(to.price); }} else {{ obj.x1 = to.time; obj.y1 = roundPrice(to.price); obj.price = roundPrice(to.price); }}
-      if (Array.isArray(obj.anchor_x) && obj.anchor_x.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_x.length - 1; obj.anchor_x[aIdx] = to.time; }}
-      if (Array.isArray(obj.anchor_y) && obj.anchor_y.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_y.length - 1; obj.anchor_y[aIdx] = roundPrice(to.price); }}
+      let editTime = to.time, editPrice = roundPrice(to.price);
+      if (idx === 0 && (obj.type === 'wedge' || obj.group_id === 'auto-wedge')) {{
+        const row = nearest(to.time);
+        editTime = row.time;
+        editPrice = roundPrice(String(obj.label || '').toLowerCase().includes('upper') ? row.high : row.low);
+      }}
+      if (Array.isArray(obj.x) && Array.isArray(obj.y) && obj.x.length) {{ obj.x[idx] = editTime; obj.y[idx] = editPrice; }}
+      if (idx === 0) {{ obj.x0 = editTime; obj.y0 = editPrice; }} else {{ obj.x1 = editTime; obj.y1 = editPrice; obj.price = editPrice; }}
+      if (Array.isArray(obj.anchor_x) && obj.anchor_x.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_x.length - 1; obj.anchor_x[aIdx] = editTime; }}
+      if (Array.isArray(obj.anchor_y) && obj.anchor_y.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_y.length - 1; obj.anchor_y[aIdx] = editPrice; }}
     }};
     if (mode === 'start') {{ setEndpoint(0); return; }}
     if (mode === 'end') {{ setEndpoint(Array.isArray(obj.x) ? obj.x.length - 1 : 1); return; }}
@@ -669,16 +682,19 @@ class LightweightChartLevelSelectorUI:
     const pt = pointerTimePrice(ev);
     let hitMode = null;
     const obj = [...drawnObjects].reverse().find(o => {{ hitMode = (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') ? objectHit(o, pt) : null; return !!hitMode; }});
-    if (obj) {{ drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
+    if (obj) {{ drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').classList.add('drawing-editing'); $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
   }});
   $('chart-wrap').addEventListener('pointermove', (ev) => {{
     if (!drawingDrag || drawingDrag.id !== ev.pointerId) return;
     const pt = pointerTimePrice(ev); if (!Number.isFinite(pt.price)) return;
+    ev.preventDefault(); ev.stopImmediatePropagation();
     editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; render(); ev.preventDefault();
   }});
-  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); drawingDrag = null; }} }};
+  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); drawingDrag = null; }} }};
   $('chart-wrap').addEventListener('pointerup', endDrawingDrag);
   $('chart-wrap').addEventListener('pointercancel', endDrawingDrag);
+  $('chart-wrap').addEventListener('pointermove', (ev) => {{ if (drawingDrag) return; const pt = pointerTimePrice(ev); const hovering = [...drawnObjects].reverse().some(o => (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') && objectHit(o, pt)); $('chart-wrap').classList.toggle('drawing-hover', hovering); }});
+  $('chart-wrap').addEventListener('pointerleave', () => $('chart-wrap').classList.remove('drawing-hover'));
   $('chart-wrap').addEventListener('pointerdown', (ev) => {{
     if (!$('calc-drawer')?.classList.contains('open') || ev.button !== 0) return;
     chartDrag = {{id:ev.pointerId, y:ev.clientY, moved:false}};
@@ -743,6 +759,7 @@ class LightweightChartLevelSelectorUI:
       title: rightLabel ? title : '',
       pointMarkersVisible: pointMarkers,
       crosshairMarkerVisible: pointMarkers,
+      autoscaleInfoProvider: () => null,
     }};
     const s = addLineSeries(options);
     try {{
