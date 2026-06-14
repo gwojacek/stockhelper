@@ -61,6 +61,7 @@ def calculate_stock_position(
     risk_percent: float,
     max_capital: float,
     conversion_fee_pct: float = 0.0,
+    position_type: str = "long",
 ) -> dict:
     if not math.isfinite(entry) or entry <= 0:
         raise ValueError(f"Invalid entry price for stock position calculation: {entry}")
@@ -77,7 +78,8 @@ def calculate_stock_position(
     if not math.isfinite(conversion_fee_pct) or conversion_fee_pct < 0:
         raise ValueError(f"Invalid conversion_fee_pct: {conversion_fee_pct}")
 
-    loss_per_share = entry - stop_loss
+    position_type = "short" if str(position_type).lower() == "short" else "long"
+    loss_per_share = entry - stop_loss if position_type == "long" else stop_loss - entry
     fx_fee_per_share = (entry + stop_loss) * conversion_fee_pct
     effective_loss_per_share = loss_per_share + fx_fee_per_share
     max_loss = risk_percent * capital

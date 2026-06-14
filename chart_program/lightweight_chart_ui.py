@@ -927,11 +927,18 @@ class LightweightChartLevelSelectorUI:
           ctx.lineTo(0, 7);
           ctx.lineTo(-7, 0);
           ctx.closePath();
-          ctx.fillStyle = anchorFill;
+          ctx.shadowColor = 'rgba(0,0,0,.55)';
+          ctx.shadowBlur = 5;
+          ctx.fillStyle = '#f8fafc';
           ctx.strokeStyle = '#f8fafc';
           ctx.lineWidth = 2;
           ctx.fill();
           ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = anchorFill;
+          ctx.fill();
           ctx.beginPath();
           ctx.moveTo(-4, 0);
           ctx.lineTo(4, 0);
@@ -945,11 +952,14 @@ class LightweightChartLevelSelectorUI:
         }}
         ctx.beginPath();
         ctx.arc(x, y, 3.6, 0, Math.PI * 2);
+        ctx.shadowColor = 'rgba(0,0,0,.55)';
+        ctx.shadowBlur = 4;
         ctx.fillStyle = '#fbbf24';
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = 1.1;
         ctx.fill();
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }});
     }});
   }}
@@ -969,11 +979,14 @@ class LightweightChartLevelSelectorUI:
         ctx.lineTo(0, 7);
         ctx.lineTo(-7, 0);
         ctx.closePath();
-        ctx.fillStyle = obj.color || P.lineColors.gold;
-        ctx.strokeStyle = '#f8fafc';
-        ctx.lineWidth = 2;
+        ctx.shadowColor = 'rgba(0,0,0,.55)';
+        ctx.shadowBlur = 5;
+        ctx.fillStyle = '#f8fafc';
+        ctx.strokeStyle = obj.color || P.lineColors.gold;
+        ctx.lineWidth = 2.4;
         ctx.fill();
         ctx.stroke();
+        ctx.shadowBlur = 0;
         ctx.beginPath();
         if (idx === 0) {{
           ctx.moveTo(-4, 0);
@@ -1374,15 +1387,22 @@ class LightweightChartLevelSelectorUI:
     if (!candidates.length) {{
       if (levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge) {{ delete levels.line_cross_value; delete levelPoints.line_cross_value; delete levels.__wedge_auto_line_cross__; }}
       if (levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge) {{ delete levels.stop_loss; delete levelPoints.stop_loss; delete levels.__wedge_auto_stop_loss__; }}
+      if (levels.__wedge_auto_position_type__) {{ delete levels.position_type; delete levels.__wedge_auto_position_type__; }}
       return;
     }}
     if (candidates.length) {{
       const cross = candidates[0];
+      const wedgePositionType = cross.isLower ? 'short' : 'long';
       const lineCrossIsAuto = levels.line_cross_value == null || levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge;
       if (lineCrossIsAuto) {{
         levels.line_cross_value = cross.value;
         levels.__wedge_auto_line_cross__ = true;
         levelPoints.line_cross_value = {{price:cross.value, plot_price:cross.value, date:cross.time, auto_wedge:true}};
+      }}
+      if (!levels.position_type || levels.__wedge_auto_position_type__) {{
+        levels.position_type = wedgePositionType;
+        levels.__wedge_auto_position_type__ = true;
+        if ($('position-type')) $('position-type').value = wedgePositionType;
       }}
       const counterpart = cross.isUpper ? lower : (cross.isLower ? upper : null);
       const otherLine = lineValueForDate(counterpart, cross.time);
@@ -1845,7 +1865,7 @@ class LightweightChartLevelSelectorUI:
                 except Exception as exc:
                     warnings.append(f"Could not derive turnover max capital: {exc}")
                 for risk in risk_levels:
-                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=conversion_fee_pct)
+                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=conversion_fee_pct, position_type=position_type)
                     rows.append({
                         "risk": risk,
                         "risk_label": f"{risk * 100:.1f}%",
@@ -1897,11 +1917,11 @@ class LightweightChartLevelSelectorUI:
             profit_percent = None
             if high and low and levels.get("line_cross_value") not in (None, ""):
                 try:
-                    take_profit = calculate_take_profit(entry, high, low, position_type if effective_instrument != "stock" else "long", start_value=_num("line_cross_value"))
+                    take_profit = calculate_take_profit(entry, high, low, position_type, start_value=_num("line_cross_value"))
                     base = next((r for r in rows if float(r.get("position_size", 0) or 0) > 0), None)
                     if base and float(base.get("potential_loss", 0) or 0) > 0:
                         if base["position_unit"] == "Shares":
-                            profit = float(base["position_size"]) * (take_profit - entry)
+                            profit = float(base["position_size"]) * ((take_profit - entry) if position_type == "long" else (entry - take_profit))
                         else:
                             pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
                             pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
