@@ -959,7 +959,7 @@ class LightweightChartLevelSelectorUI:
       if (!isEditableLineObject(obj) || hiddenLegendKeys.has(editableObjectLegendKey(obj))) return;
       const pts = lineObjectPoints(obj);
       if (!pts) return;
-      [pts.start, pts.end].forEach((pt) => {{
+      [pts.start, pts.end].forEach((pt, idx) => {{
         if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
         ctx.save();
         ctx.translate(pt.x, pt.y);
@@ -975,10 +975,18 @@ class LightweightChartLevelSelectorUI:
         ctx.fill();
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(-4, 0);
-        ctx.lineTo(4, 0);
-        ctx.moveTo(0, -4);
-        ctx.lineTo(0, 4);
+        if (idx === 0) {{
+          ctx.moveTo(-4, 0);
+          ctx.lineTo(4, 0);
+          ctx.moveTo(0, -4);
+          ctx.lineTo(0, 4);
+        }} else {{
+          ctx.moveTo(-4, -4);
+          ctx.lineTo(3, 0);
+          ctx.lineTo(-4, 4);
+          ctx.moveTo(3, 0);
+          ctx.lineTo(-6, 0);
+        }}
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = 1.4;
         ctx.stroke();
@@ -1003,6 +1011,14 @@ class LightweightChartLevelSelectorUI:
         ctx.strokeStyle = '#f8fafc';
         ctx.lineWidth = 1.4;
         ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - 2.8, y - 2.8);
+        ctx.lineTo(x + 2.8, y + 2.8);
+        ctx.moveTo(x + 2.8, y - 2.8);
+        ctx.lineTo(x - 2.8, y + 2.8);
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();
         return;
@@ -1140,6 +1156,26 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
 
+  function setDisplayEndPrice(obj, value) {{
+    const next = roundPrice(Number(value));
+    if (!Number.isFinite(next)) return;
+    if (Array.isArray(obj?.y) && obj.y.length >= 2) {{
+      obj.y[obj.y.length - 1] = next;
+    }} else if (obj) {{
+      obj.y1 = next;
+    }}
+  }}
+
+  function enforceLineDirection(obj, expectedSign, originalDelta) {{
+    if (!expectedSign) return;
+    const pts = lineDisplayValues(obj);
+    if (!pts) return;
+    const currentSign = Math.sign(Number(pts.y1) - Number(pts.y0));
+    if (currentSign === expectedSign) return;
+    const minDelta = Math.max(Math.abs(Number(originalDelta) || 0), Math.abs(Number(pts.y0)) * 0.002, 0.01);
+    setDisplayEndPrice(obj, Number(pts.y0) + expectedSign * minDelta);
+  }}
+
   function editableLineData(obj) {{
     const pts = lineDisplayValues(obj);
     return pts ? normalizeLineData([{{time:pts.x0, value:pts.y0}}, {{time:pts.x1, value:pts.y1}}]) : [];
@@ -1205,6 +1241,7 @@ class LightweightChartLevelSelectorUI:
       startDate:date,
       startPrice:price,
       original:{{...hit.points}},
+      originalSlopeSign:Math.sign(Number(hit.points.y1) - Number(hit.points.y0)),
       originalAnchors:{{
         x:Array.isArray(hit.obj.anchor_x) ? [...hit.obj.anchor_x] : null,
         y:Array.isArray(hit.obj.anchor_y) ? [...hit.obj.anchor_y] : null,
@@ -1226,6 +1263,7 @@ class LightweightChartLevelSelectorUI:
     const o = lineObjectDrag.original;
     if (lineObjectDrag.mode === 'start') {{
       setLineEndpointValues(obj, date, price, o.x1, o.y1, 'start');
+      enforceLineDirection(obj, lineObjectDrag.originalSlopeSign, o.y1 - o.y0);
     }} else if (lineObjectDrag.mode === 'end') {{
       setLineEndpointValues(obj, o.x0, o.y0, date, price, 'end');
     }} else {{
