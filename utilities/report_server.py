@@ -304,6 +304,13 @@ def main() -> int:
             if parsed.path == "/__stockhelper_report_server_info":
                 payload = {"protocol": REPORT_SERVER_PROTOCOL, "project_root": str(project_root), "root": str(root)}
                 self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/chart-group":
+                qs = parse_qs(parsed.query)
+                group_id = (qs.get("id", [""])[0] or "").strip()
+                if group_id == "last":
+                    group_id = LAST_CHART_GROUP_ID
+                payload = CHART_GROUPS.get(group_id) if group_id else None
+                self.send_response(200 if payload else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload or {"ok": False, "error": "missing group"}).encode("utf-8")); return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
@@ -353,6 +360,7 @@ def main() -> int:
             super().do_GET()
 
         def do_POST(self):
+            global LAST_CHART_GROUP_ID
             parsed = urlparse(self.path)
             if parsed.path == "/attach-console":
                 try:
@@ -378,7 +386,6 @@ def main() -> int:
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
             if parsed.path == "/chart-group":
-                global LAST_CHART_GROUP_ID
                 try:
                     ln = int(self.headers.get("content-length", "0") or "0")
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"

@@ -424,15 +424,15 @@ class LightweightChartLevelSelectorUI:
   {fallback_script}
   <style>
     * {{ box-sizing: border-box; }}
-    body {{ margin: 0; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    body {{ margin: 0; overflow:hidden; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
     .layout {{ display: grid; grid-template-columns: 1fr 380px; height: 100vh; }}
-    .main {{ padding: 14px; min-width: 0; }}
+    .main {{ padding: 10px 0 10px 10px; min-width: 0; }}
     h3 {{ margin: 0 0 10px 0; }}
     button {{ background: #1f2937; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; font-weight: 700; }}
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
-    #chart-wrap {{ position: relative; height: calc(100vh - 190px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: crosshair; }}
+    #chart-wrap {{ position: relative; height: calc(100vh - 320px); min-height: 300px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: crosshair; }}
     #chart-wrap.drawing-hover {{ cursor: grab; }}
     #chart-wrap.drawing-editing {{ cursor: grabbing; }}
     #date-axis-fallback {{ position:absolute; left:0; right:0; bottom:0; height:24px; z-index:4; pointer-events:none; display:flex; justify-content:space-between; padding:3px 10px; font:11px ui-monospace,monospace; color:#cbd5e1; background:linear-gradient(transparent,rgba(15,23,42,.78)); }}
@@ -1214,9 +1214,10 @@ class LightweightChartLevelSelectorUI:
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
   }}
 
-  function renderQuickChartPanel() {{
+  async function renderQuickChartPanel() {{
     const panel = $('quick-chart-panel');
-    const group = P.chartGroup || {{}}; const charts = Array.isArray(group.charts) ? group.charts : [];
+    let group = P.chartGroup || {{}}; let charts = Array.isArray(group.charts) ? group.charts : [];
+    if (!charts.length && P.reportServerUrl) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=last'); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
     if (!panel) return;
     if (!charts.length) {{ if (P.reportLaunched) {{ panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4><div class="muted">No chart group metadata received from the report. Reopen from a report 📊 group.</div>'; panel.style.display='block'; }} return; }}
     const bySection = new Map();
@@ -1227,7 +1228,7 @@ class LightweightChartLevelSelectorUI:
   }}
   renderQuickChartPanel();
 
-  seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
+  seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); if (activeTool === 'level' && activeField === field) {{ activeTool=null; activeField=null; }} else {{ activeTool='level'; activeField=field; }} lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000;
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
