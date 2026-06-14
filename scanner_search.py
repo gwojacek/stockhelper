@@ -2695,6 +2695,20 @@ def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     return groups
 
 
+def _clustered_contact_indices(indices: list[int], max_gap: int = 1) -> list[int]:
+    """Return one representative index per visually separate touch cluster."""
+    ordered = sorted(set(indices))
+    if not ordered:
+        return []
+    reps = [ordered[0]]
+    prev = ordered[0]
+    for idx in ordered[1:]:
+        if idx - prev > max_gap:
+            reps.append(idx)
+        prev = idx
+    return reps
+
+
 def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     """Detect an unbroken descending wedge ending at the latest candle.
 
@@ -2837,12 +2851,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 close_eps = max(tol * 0.02, max(abs(float(closes[end])), 1e-9) * 1e-6)
                 exact_tol = max(tol * 0.12, max(abs(float(closes[end])), 1e-9) * 1e-6)
 
-                def _is_local_extreme(i: int, side: str) -> bool:
+                def _is_local_extreme(i: int, side: str, radius: int = 1) -> bool:
                     if i <= 0 or i >= n - 1:
                         return True
+                    left = max(0, i - radius)
+                    right = min(n, i + radius + 1)
                     if side == "upper":
-                        return highs[i] >= highs[i - 1] and highs[i] >= highs[i + 1]
-                    return lows[i] <= lows[i - 1] and lows[i] <= lows[i + 1]
+                        return highs[i] >= max(highs[left:right])
+                    return lows[i] <= min(lows[left:right])
 
                 def _accept_or_reject_breakout(i: int, direction: str) -> bool:
                     nonlocal breakout_idx, breakout_direction
@@ -2934,14 +2950,30 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
                 lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
 
-                # Count only exact/local-extreme contacts as wedge touches. Candles
-                # merely lying near or between boundaries are validation context,
-                # not touch points.
-                lower_exact_count = _clustered_contact_count(lower_exact_contacts)
-                upper_exact_count = _clustered_contact_count(upper_exact_contacts)
-                up_count = upper_exact_count
-                lo_count = lower_exact_count
-                if lower_exact_count < 2:
+                def _structural_contacts(
+                    contacts: list[int],
+                    exact_contacts: list[int],
+                    side: str,
+                ) -> list[int]:
+                    # The two anchors are always real touches.  After anchors,
+                    # a candle counts only when the wedge boundary is touched by
+                    # a visible local wick extreme.  That keeps "touches" aligned
+                    # with the dots drawn on the chart without counting random
+                    # candles that simply travel inside the wedge.
+                    exact = set(exact_contacts)
+                    structural: list[int] = []
+                    for idx in sorted(set(contacts)):
+                        if idx in upper_anchor_indices or idx in lower_anchor_indices:
+                            structural.append(idx)
+                        elif idx in exact or _is_local_extreme(idx, side, radius=2):
+                            structural.append(idx)
+                    return _clustered_contact_indices(structural)
+
+                upper_structural_contacts = _structural_contacts(upper_contacts, upper_exact_contacts, "upper")
+                lower_structural_contacts = _structural_contacts(lower_contacts, lower_exact_contacts, "lower")
+                up_count = len(upper_structural_contacts)
+                lo_count = len(lower_structural_contacts)
+                if lo_count < 2:
                     continue
                 if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
                     continue

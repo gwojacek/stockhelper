@@ -834,12 +834,58 @@ class LightweightChartLevelSelectorUI:
     const isUpper = side === 'upper';
     const isLower = side === 'lower';
     const anchors = Array.isArray(obj.anchor_x) ? obj.anchor_x : [];
-    return anchors.map((x, i) => {{
+    const points = anchors.map((x, i) => {{
       const time = String(x).slice(0, 10);
       const raw = Number((obj.anchor_y || [])[i]);
       const value = candleExtremeForDate(time, side, raw);
-      return {{time, value, anchor:true, upper:isUpper, lower:isLower}};
+      return {{time, value, anchor:true, upper:isUpper, lower:isLower, idx: ohlc.findIndex(c => c.time === time)}};
     }}).filter(p => p.time && Number.isFinite(p.value));
+    if (!side || points.length < 2) return points;
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)));
+    const byTimeIndex = new Map(realCandles.map((c, idx) => [String(c.time).slice(0, 10), idx]));
+    const p0 = points[0];
+    const p1 = points[points.length - 1];
+    const idx0 = byTimeIndex.get(p0.time);
+    const idx1 = byTimeIndex.get(p1.time);
+    if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return points;
+    const slope = (Number(p1.value) - Number(p0.value)) / (idx1 - idx0);
+    const anchorTimes = new Set(points.map(p => p.time));
+    const touchCandidates = [];
+    const start = Math.min(idx0, idx1);
+    const end = realCandles.length - 1;
+    const avgRangeRows = realCandles.slice(Math.max(0, end - 29), end + 1)
+      .map(c => Number(c.high) - Number(c.low))
+      .filter(Number.isFinite);
+    const avgRange = avgRangeRows.length ? avgRangeRows.reduce((a, b) => a + b, 0) / avgRangeRows.length : 0;
+    for (let idx = start; idx <= end; idx += 1) {{
+      const c = realCandles[idx];
+      const time = String(c.time).slice(0, 10);
+      if (anchorTimes.has(time)) continue;
+      const extreme = side === 'upper' ? Number(c.high) : Number(c.low);
+      if (!Number.isFinite(extreme)) continue;
+      const lineValue = Number(p0.value) + slope * (idx - idx0);
+      if (!Number.isFinite(lineValue)) continue;
+      const localFrom = Math.max(0, idx - 2);
+      const localTo = Math.min(realCandles.length - 1, idx + 2);
+      let localExtreme = true;
+      for (let j = localFrom; j <= localTo; j += 1) {{
+        const other = side === 'upper' ? Number(realCandles[j].high) : Number(realCandles[j].low);
+        if (!Number.isFinite(other)) continue;
+        if (side === 'upper' && extreme < other) localExtreme = false;
+        if (side === 'lower' && extreme > other) localExtreme = false;
+      }}
+      const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
+      if (localExtreme && Math.abs(extreme - lineValue) <= tolerance) {{
+        touchCandidates.push({{time, value: roundPrice(extreme), anchor:false, upper:isUpper, lower:isLower, idx}});
+      }}
+    }}
+    let lastIdx = null;
+    touchCandidates.forEach(pt => {{
+      if (lastIdx !== null && pt.idx - lastIdx <= 1) return;
+      points.push(pt);
+      lastIdx = pt.idx;
+    }});
+    return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
   }}
 
   function drawWedgeTouchPoints(ctx) {{
