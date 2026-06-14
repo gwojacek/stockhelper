@@ -311,12 +311,15 @@ def main() -> int:
                     _safe_print(f"[report] chart command failed: {exc}", err=True)
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
                 return
-            if parsed.path == "/open-chart":
+            if parsed.path in {"/open-chart", "/chart"}:
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
-                debug = {"command": command, "path": self.path}
+                symbol = (qs.get("symbol", [""])[0] or "").strip()
+                if not command and symbol:
+                    command = f"python run -c {shlex.quote(symbol)}"
+                debug = {"command": command, "symbol": symbol, "path": self.path}
                 if not command:
-                    _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
+                    _send_html(self, "StockHelper chart failed", "missing command or symbol", debug, 400); return
                 try:
                     rc, payload = _run_chart_command(command)
                     debug.update(payload or {})
