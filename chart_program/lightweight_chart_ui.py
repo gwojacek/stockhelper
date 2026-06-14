@@ -484,7 +484,7 @@ class LightweightChartLevelSelectorUI:
         <button id="tool-fib">Fib 61.8</button>
         <button id="tool-half">Half→SL</button>
         <button id="ichimoku-toggle">Ichimoku</button>
-        <button id="reset-drawings">Reset drawings</button><button id="reset-all" style="margin-left:auto">Reset all</button>
+        <button id="reset-all" style="margin-left:auto">Reset all</button><button id="reset-drawings">Reset drawings</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -656,8 +656,9 @@ class LightweightChartLevelSelectorUI:
   function objectHit(obj, pt) {{
     if (!editableObjectsEnabled() || !Number.isFinite(pt.price)) return null;
     const threshold = Math.max(Math.abs(pt.price)*0.015, Math.pow(10,-precision)*20);
-    const xs = Array.isArray(obj.x) ? obj.x : [obj.x0, obj.x1];
-    const ys = Array.isArray(obj.y) ? obj.y : [obj.y0, obj.y1];
+    const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
+    const xs = isWedge && Array.isArray(obj.anchor_x) && obj.anchor_x.length >= 2 ? obj.anchor_x : (Array.isArray(obj.x) ? obj.x : [obj.x0, obj.x1]);
+    const ys = isWedge && Array.isArray(obj.anchor_y) && obj.anchor_y.length >= 2 ? obj.anchor_y : (Array.isArray(obj.y) ? obj.y : [obj.y0, obj.y1]);
     const first = xs[0] ? {{time:String(xs[0]).slice(0,10), price:Number(ys[0])}} : null;
     const last = xs[xs.length-1] ? {{time:String(xs[xs.length-1]).slice(0,10), price:Number(ys[ys.length-1])}} : null;
     if (first && Math.abs(lineValueForDate({{x0:first.time,x1:first.time,y0:first.price,y1:first.price}}, pt.time) - pt.price) <= threshold && Math.abs(compareTime(first.time, pt.time)) < 86400000*7) return 'start';
@@ -675,11 +676,12 @@ class LightweightChartLevelSelectorUI:
       const x0 = String(obj.anchor_x[0]).slice(0,10), x1 = String(obj.anchor_x[obj.anchor_x.length - 1]).slice(0,10);
       const y0 = Number(obj.anchor_y[0]), y1 = Number(obj.anchor_y[obj.anchor_y.length - 1]);
       const t0 = new Date(x0 + 'T00:00:00Z').getTime(), t1 = new Date(x1 + 'T00:00:00Z').getTime();
+      if (!Number.isFinite(t0) || !Number.isFinite(t1) || !Number.isFinite(y0) || !Number.isFinite(y1)) return;
       const spanDays = Math.max(1, Math.round((t1 - t0) / 86400000));
       const extDays = Math.max(1, 90);
       const x2 = addDays(x1, extDays);
       const y2 = roundPrice(y1 + (y1 - y0) * (extDays / spanDays));
-      obj.x = [x0, x1, x2]; obj.y = [roundPrice(y0), roundPrice(y1), y2];
+      obj.x = [x0, x2]; obj.y = [roundPrice(y0), y2];
       obj.x0 = x0; obj.y0 = roundPrice(y0); obj.x1 = x2; obj.y1 = y2; obj.price = y2;
     }};
     const setEndpoint = (idx) => {{
@@ -690,6 +692,10 @@ class LightweightChartLevelSelectorUI:
         editPrice = roundPrice(String(obj.label || '').toLowerCase().includes('upper') ? row.high : row.low);
       }}
       const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
+      if (isWedge && idx > 0) {{
+        const maxTime = addDays(P.ohlc[P.ohlc.length - 1]?.time || to.time, 90);
+        if (compareTime(editTime, maxTime) > 0) editTime = maxTime;
+      }}
       const targetIdx = isWedge && idx > 0 && Array.isArray(obj.anchor_x) && obj.anchor_x.length ? obj.anchor_x.length - 1 : idx;
       if (!isWedge && Array.isArray(obj.x) && Array.isArray(obj.y) && obj.x.length) {{ obj.x[idx] = editTime; obj.y[idx] = editPrice; }}
       if (idx === 0) {{ obj.x0 = editTime; obj.y0 = editPrice; }} else {{ obj.x1 = editTime; obj.y1 = editPrice; obj.price = editPrice; }}
@@ -923,8 +929,9 @@ class LightweightChartLevelSelectorUI:
 
   function drawDrawingEndpointHandles(ctx) {{
     drawnObjects.filter(obj => obj.type === 'line' || obj.type === 'wedge' || obj.group_id === 'auto-wedge').forEach(obj => {{
-      const xs = Array.isArray(obj.x) ? obj.x : [obj.x0, obj.x1];
-      const ys = Array.isArray(obj.y) ? obj.y : [obj.y0, obj.y1];
+      const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
+      const xs = isWedge && Array.isArray(obj.anchor_x) && obj.anchor_x.length >= 2 ? obj.anchor_x : (Array.isArray(obj.x) ? obj.x : [obj.x0, obj.x1]);
+      const ys = isWedge && Array.isArray(obj.anchor_y) && obj.anchor_y.length >= 2 ? obj.anchor_y : (Array.isArray(obj.y) ? obj.y : [obj.y0, obj.y1]);
       if (!xs.length || !ys.length) return;
       const endpoints = [[xs[0], ys[0], 'start'], [xs[xs.length - 1], ys[ys.length - 1], 'end']];
       endpoints.forEach(([tx, py, kind]) => {{
@@ -1137,6 +1144,17 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function lineDataForObject(obj) {{
+    if ((obj.type === 'wedge' || obj.group_id === 'auto-wedge') && Array.isArray(obj.anchor_x) && Array.isArray(obj.anchor_y) && obj.anchor_x.length >= 2 && obj.anchor_y.length >= 2) {{
+      const x0 = String(obj.anchor_x[0]).slice(0,10), x1 = String(obj.anchor_x[obj.anchor_x.length - 1]).slice(0,10);
+      const y0 = Number(obj.anchor_y[0]), y1 = Number(obj.anchor_y[obj.anchor_y.length - 1]);
+      const t0 = new Date(x0 + 'T00:00:00Z').getTime(), t1 = new Date(x1 + 'T00:00:00Z').getTime();
+      if (Number.isFinite(t0) && Number.isFinite(t1) && Number.isFinite(y0) && Number.isFinite(y1)) {{
+        const spanDays = Math.max(1, Math.round((t1 - t0) / 86400000));
+        const x2 = addDays(x1, 90);
+        const y2 = roundPrice(y1 + (y1 - y0) * (90 / spanDays));
+        return [{{time:x0, value:roundPrice(y0)}}, {{time:x2, value:y2}}];
+      }}
+    }}
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) return obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}}));
     return [{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:String(obj.x1).slice(0,10), value:Number(obj.y1)}}];
   }}
