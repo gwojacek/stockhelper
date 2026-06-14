@@ -284,17 +284,30 @@ def main() -> int:
             return 0
         chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
         if chrome:
-            try:
-                subprocess.Popen([chrome, "--new-window", *clean], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-                return len(clean)
-            except Exception as exc:
-                _safe_print(f"[report] failed to open charts with chrome: {exc}", err=True)
+            opened = 0
+            for idx, url in enumerate(clean):
+                # Launch each URL as its own Chrome command. In practice Chrome
+                # sometimes ignores all but the first URL when many URLs are sent
+                # in one process invocation from an app-window report. Separate
+                # invocations reliably enqueue every chart as a tab in Chrome.
+                args_chrome = [chrome, "--new-window" if idx == 0 else "--new-tab", url]
+                try:
+                    subprocess.Popen(args_chrome, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                    opened += 1
+                    time.sleep(0.18)
+                except Exception as exc:
+                    _safe_print(f"[report] failed to open chart with chrome: {exc}", err=True)
+            return opened
         opened = 0
+        xdg_open = shutil.which("xdg-open")
         for url in clean:
             try:
-                if webbrowser.open_new_tab(url):
+                if xdg_open:
+                    subprocess.Popen([xdg_open, url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
                     opened += 1
-                time.sleep(0.12)
+                elif webbrowser.open_new_tab(url):
+                    opened += 1
+                time.sleep(0.18)
             except Exception:
                 pass
         return opened
