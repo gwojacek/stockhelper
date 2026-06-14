@@ -651,6 +651,13 @@ def _patch_report_runtime_js(path: Path) -> None:
         flags=re.S,
     )
     if count:
+        patched = re.sub(
+            r"async function _openStockhelperButtons\(buttons\)\{.*?\}function openClosestStockhelperCharts",
+            "async function _openStockhelperButtons(buttons){const uniq=[...new Map(buttons.map(b=>[b.dataset.cmd,b])).values()];if(uniq.length){await openStockhelperChart(uniq[0],uniq);}}function openClosestStockhelperCharts",
+            patched,
+            count=1,
+            flags=re.S,
+        )
         path.write_text(patched, encoding="utf-8")
 
 def _open_html_report(path: Path) -> None:

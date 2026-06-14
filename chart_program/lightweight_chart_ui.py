@@ -652,7 +652,7 @@ class LightweightChartLevelSelectorUI:
     if (!time) {{ const idx = Math.round((x / Math.max(1, rect.width)) * Math.max(0, chartTimes.length - 1)); time = timeAtChartIndex(idx); }}
     return {{x, y, time:String(time).slice(0,10), price: Number(price)}};
   }}
-  function editableObjectsEnabled() {{ return !(activeTool === 'level' && activeField); }}
+  function editableObjectsEnabled() {{ return !(activeTool === 'level' && activeField) && activeTool !== 'half'; }}
   function objectHit(obj, pt) {{
     if (!editableObjectsEnabled() || !Number.isFinite(pt.price)) return null;
     const threshold = Math.max(Math.abs(pt.price)*0.015, Math.pow(10,-precision)*20);
