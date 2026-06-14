@@ -3004,7 +3004,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 else:
                     slope_strength = "mild"
                 slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
-                breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
+                breakout_potential_quality = max(0.0, min(1.0, (compression_quality * 0.45) + (proximity_quality * 0.35) + (min(1.0, slope_pct / 0.40) * 0.20)))
+                breakout_bonus = 1.0 + breakout_recent_bonus * 4.0 + breakout_potential_quality * 0.35
                 score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,

@@ -203,6 +203,25 @@ class LightweightChartLevelSelectorUI:
             "chikou": line_payload(dates, closes.shift(-26)),
         }
 
+    def _future_time_slots(self, periods: int = 80) -> list[str]:
+        if self.df.empty:
+            return []
+        dates = pd.to_datetime(self.df["Date"], errors="coerce").dropna()
+        if dates.empty:
+            return []
+        builder = pd.date_range if self._has_weekend_data() else pd.bdate_range
+        return [pd.to_datetime(d).strftime("%Y-%m-%d") for d in builder(dates.iloc[-1] + pd.Timedelta(days=1), periods=periods)]
+
+    def _chart_group_payload(self) -> dict:
+        raw = os.environ.get("STOCKHELPER_CHART_GROUP_JSON", "")
+        if not raw:
+            return {}
+        try:
+            payload = json.loads(raw)
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            return {}
+
     def _payload(self) -> dict:
         return {
             "symbol": self.symbol,
@@ -211,6 +230,9 @@ class LightweightChartLevelSelectorUI:
             "sourceName": self.source_name,
             "sourceProvider": self.source_provider,
             "reportLaunched": os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1",
+            "reportServerUrl": os.environ.get("STOCKHELPER_REPORT_SERVER_URL", ""),
+            "futureSlots": self._future_time_slots(),
+            "chartGroup": self._chart_group_payload(),
             "pricePrecision": self._precision_for_price(),
             "basePrecision": self.price_precision,
             "selectionSequence": SELECTION_SEQUENCE,
@@ -410,7 +432,12 @@ class LightweightChartLevelSelectorUI:
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
-    #chart-wrap {{ position: relative; height: calc(100vh - 132px); min-height: 480px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
+    #chart-wrap {{ position: relative; height: calc(100vh - 132px); min-height: 480px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: crosshair; }}
+    #date-axis-fallback {{ position:absolute; left:0; right:0; bottom:0; height:24px; z-index:4; pointer-events:none; display:flex; justify-content:space-between; padding:3px 10px; font:11px ui-monospace,monospace; color:#cbd5e1; background:linear-gradient(transparent,rgba(15,23,42,.78)); }}
+    .quick-chart-panel {{ margin:12px 0; border:1px solid #334155; border-radius:10px; padding:10px; background:#111827; }}
+    .quick-chart-panel h4 {{ margin:0 0 8px; color:#facc15; }}
+    .quick-chart-panel .group-title {{ margin-top:8px; font-size:12px; color:#93c5fd; font-weight:800; }}
+    .quick-chart-panel button {{ width:100%; margin-top:5px; text-align:left; padding:6px; font-size:12px; }}
     #chart {{ width: 100%; height: 100%; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }}
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
@@ -455,7 +482,7 @@ class LightweightChartLevelSelectorUI:
         <button id="tool-fib">Fib 61.8</button>
         <button id="tool-half">Half→SL</button>
         <button id="ichimoku-toggle">Ichimoku</button>
-        <button id="reset-all" style="margin-left:auto">Reset all</button>
+        <button id="reset-drawings">Reset drawings</button><button id="reset-all" style="margin-left:auto">Reset all</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -463,7 +490,7 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="chart-legend"></div>
-      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas></div>
+      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="date-axis-fallback"></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -479,6 +506,7 @@ class LightweightChartLevelSelectorUI:
       <h4 id="instrument-title" style="margin-top:0;margin-bottom:6px;color:#cbd5e1"></h4>
       <button id="stock-cfd-toggle" style="width:100%;margin-bottom:8px;display:none"></button>
       <div class="source" id="source"></div>
+      <div id="quick-chart-panel" class="quick-chart-panel" style="display:none"></div>
       <h4>Selected values</h4>
       <div id="values-panel" class="values"></div>
       <h4>Manual inputs</h4>
@@ -513,6 +541,7 @@ class LightweightChartLevelSelectorUI:
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const ohlcByTime = new Map(P.ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
+  const scannerDrawnObjects = JSON.parse(JSON.stringify(drawnObjects));
 
   const $ = id => document.getElementById(id);
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
@@ -578,7 +607,7 @@ class LightweightChartLevelSelectorUI:
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
     grid: {{ vertLines: {{ color: '#1f2937' }}, horzLines: {{ color: '#1f2937' }} }},
     rightPriceScale: {{ borderColor: '#334155', scaleMargins: {{top:0.08, bottom:0.12}} }},
-    timeScale: {{ borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
+    timeScale: {{ visible:true, borderVisible:true, timeVisible:true, secondsVisible:false, borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
       const d = typeof time === 'string' ? new Date(time + 'T00:00:00Z') : new Date(Date.UTC(time.year, time.month - 1, time.day));
       return d.getUTCMonth() === 0 ? String(d.getUTCFullYear()) : d.toLocaleString('en-US', {{month:'short', timeZone:'UTC'}});
     }} }},
@@ -589,6 +618,7 @@ class LightweightChartLevelSelectorUI:
   let verticalPan = 0;
   let chartDrag = null;
   let suppressChartClickUntil = 0;
+  let drawingDrag = null;
   function applyVerticalPan() {{
     verticalPan = clamp(verticalPan, -0.30, 0.30);
     const margins = {{top:clamp(0.08 + verticalPan, 0.01, 0.50), bottom:clamp(0.12 - verticalPan, 0.01, 0.50)}};
@@ -596,6 +626,59 @@ class LightweightChartLevelSelectorUI:
     try {{ chart.applyOptions?.({{rightPriceScale:{{scaleMargins:margins}}}}); }} catch(e) {{}}
     requestAnimationFrame(drawCloud);
   }}
+  function pointerTimePrice(ev) {{
+    const rect = $('chart-wrap').getBoundingClientRect();
+    const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+    const price = candleSeries.coordinateToPrice ? candleSeries.coordinateToPrice(y) : null;
+    const idx = Math.round((x / Math.max(1, rect.width)) * Math.max(0, P.ohlc.length - 1));
+    return {{x, y, time: dateAtIndex(idx), price: Number(price)}};
+  }}
+  function editableObjectsEnabled() {{ return !(activeTool === 'level' && activeField); }}
+  function objectHit(obj, pt) {{
+    if (!editableObjectsEnabled() || !Number.isFinite(pt.price)) return null;
+    const threshold = Math.max(Math.abs(pt.price)*0.015, Math.pow(10,-precision)*20);
+    const xs = Array.isArray(obj.x) ? obj.x : [obj.x0, obj.x1];
+    const ys = Array.isArray(obj.y) ? obj.y : [obj.y0, obj.y1];
+    const first = xs[0] ? {{time:String(xs[0]).slice(0,10), price:Number(ys[0])}} : null;
+    const last = xs[xs.length-1] ? {{time:String(xs[xs.length-1]).slice(0,10), price:Number(ys[ys.length-1])}} : null;
+    if (first && Math.abs(lineValueForDate({{x0:first.time,x1:first.time,y0:first.price,y1:first.price}}, pt.time) - pt.price) <= threshold && Math.abs(compareTime(first.time, pt.time)) < 86400000*7) return 'start';
+    if (last && Math.abs(lineValueForDate({{x0:last.time,x1:last.time,y0:last.price,y1:last.price}}, pt.time) - pt.price) <= threshold && Math.abs(compareTime(last.time, pt.time)) < 86400000*7) return 'end';
+    const y = lineValueForDate(obj, pt.time);
+    return Number.isFinite(y) && Math.abs(y - pt.price) <= threshold ? 'move' : null;
+  }}
+  function editObject(obj, from, to, mode='move') {{
+    const dy = roundPrice(to.price - from.price);
+    const dtDays = Math.round((new Date(to.time+'T00:00:00Z') - new Date(from.time+'T00:00:00Z')) / 86400000);
+    const shiftDate = d => addDays(String(d).slice(0,10), dtDays);
+    const shiftPrice = v => roundPrice(Number(v) + dy);
+    const setEndpoint = (idx) => {{
+      if (Array.isArray(obj.x) && Array.isArray(obj.y) && obj.x.length) {{ obj.x[idx] = to.time; obj.y[idx] = roundPrice(to.price); }}
+      if (idx === 0) {{ obj.x0 = to.time; obj.y0 = roundPrice(to.price); }} else {{ obj.x1 = to.time; obj.y1 = roundPrice(to.price); obj.price = roundPrice(to.price); }}
+      if (Array.isArray(obj.anchor_x) && obj.anchor_x.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_x.length - 1; obj.anchor_x[aIdx] = to.time; }}
+      if (Array.isArray(obj.anchor_y) && obj.anchor_y.length) {{ const aIdx = idx === 0 ? 0 : obj.anchor_y.length - 1; obj.anchor_y[aIdx] = roundPrice(to.price); }}
+    }};
+    if (mode === 'start') {{ setEndpoint(0); return; }}
+    if (mode === 'end') {{ setEndpoint(Array.isArray(obj.x) ? obj.x.length - 1 : 1); return; }}
+    if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{ obj.x = obj.x.map(shiftDate); obj.y = obj.y.map(shiftPrice); }}
+    ['x0','x1'].forEach(k => {{ if (obj[k]) obj[k]=shiftDate(obj[k]); }}); ['y0','y1','price'].forEach(k => {{ if (Number.isFinite(Number(obj[k]))) obj[k]=shiftPrice(obj[k]); }});
+    if (Array.isArray(obj.anchor_x)) obj.anchor_x = obj.anchor_x.map(shiftDate);
+    if (Array.isArray(obj.anchor_y)) obj.anchor_y = obj.anchor_y.map(shiftPrice);
+  }}
+  $('chart-wrap').addEventListener('pointerdown', (ev) => {{
+    if (ev.button !== 0) return;
+    const pt = pointerTimePrice(ev);
+    let hitMode = null;
+    const obj = [...drawnObjects].reverse().find(o => {{ hitMode = (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') ? objectHit(o, pt) : null; return !!hitMode; }});
+    if (obj) {{ drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
+  }});
+  $('chart-wrap').addEventListener('pointermove', (ev) => {{
+    if (!drawingDrag || drawingDrag.id !== ev.pointerId) return;
+    const pt = pointerTimePrice(ev); if (!Number.isFinite(pt.price)) return;
+    editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; render(); ev.preventDefault();
+  }});
+  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); drawingDrag = null; }} }};
+  $('chart-wrap').addEventListener('pointerup', endDrawingDrag);
+  $('chart-wrap').addEventListener('pointercancel', endDrawingDrag);
   $('chart-wrap').addEventListener('pointerdown', (ev) => {{
     if (!$('calc-drawer')?.classList.contains('open') || ev.button !== 0) return;
     chartDrag = {{id:ev.pointerId, y:ev.clientY, moved:false}};
@@ -630,6 +713,8 @@ class LightweightChartLevelSelectorUI:
   candleSeries.setData(P.ohlc);
   if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
+  function updateFallbackDateAxis() {{ const el=$('date-axis-fallback'); if(!el||!P.ohlc.length)return; const first=P.ohlc[0].time, last=P.futureSlots?.length?P.futureSlots[P.futureSlots.length-1]:P.ohlc[P.ohlc.length-1].time; el.innerHTML=`<span>${{first}}</span><span>${{P.ohlc[Math.floor(P.ohlc.length/2)]?.time||''}}</span><span>${{last}}</span>`; }}
+  updateFallbackDateAxis();
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
   window.addEventListener('resize', () => requestAnimationFrame(drawCloud));
   const dynamicSeries = [];
@@ -775,11 +860,16 @@ class LightweightChartLevelSelectorUI:
         const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pt.time) : null;
         const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pt.value) : null;
         if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
-        ctx.beginPath();
-        ctx.arc(x, y, pt.anchor ? 5.2 : 4.4, 0, Math.PI * 2);
-        ctx.fillStyle = fill;
+        ctx.fillStyle = pt.anchor ? fill : '#facc15';
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = pt.anchor ? 1.8 : 1.0;
+        if (pt.anchor) {{
+          ctx.beginPath();
+          ctx.moveTo(x, y - 8); ctx.lineTo(x + 8, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 8, y); ctx.closePath();
+        }} else {{
+          ctx.beginPath();
+          ctx.arc(x, y, 3.0, 0, Math.PI * 2);
+        }}
         ctx.fill();
         ctx.stroke();
       }});
@@ -1079,6 +1169,18 @@ class LightweightChartLevelSelectorUI:
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
   }}
 
+  function renderQuickChartPanel() {{
+    const panel = $('quick-chart-panel');
+    const group = P.chartGroup || {{}}; const charts = Array.isArray(group.charts) ? group.charts : [];
+    if (!panel || !charts.length) return;
+    const bySection = new Map();
+    charts.forEach(ch => {{ const key = ch.section || ch.source || group.title || 'Report group'; if(!bySection.has(key)) bySection.set(key, []); bySection.get(key).push(ch); }});
+    panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4>' + [...bySection.entries()].map(([section,items]) => `<div class="group-title">${{section}}</div>` + items.map(ch => `<button type="button" data-cmd="${{String(ch.command||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}}">${{ch.label || ch.ticker || ch.command}}</button>`).join('')).join('');
+    panel.style.display = 'block';
+    panel.querySelectorAll('button[data-cmd]').forEach(b => b.onclick = () => {{ const base=P.reportServerUrl||''; const url=(base?base:'') + '/open-chart?command=' + encodeURIComponent(b.dataset.cmd || '') + (P.chartGroup?.id ? '&group=' + encodeURIComponent(P.chartGroup.id) : ''); window.open(url, '_blank'); }});
+  }}
+  renderQuickChartPanel();
+
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); activeTool='level'; activeField=field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000;
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
@@ -1088,6 +1190,7 @@ class LightweightChartLevelSelectorUI:
   $('tool-half').onclick = () => {{ clearPreviews(); activeTool='half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
+  $('reset-drawings').onclick = () => {{ drawnObjects = JSON.parse(JSON.stringify(scannerDrawnObjects)); render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};

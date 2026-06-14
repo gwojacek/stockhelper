@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import hashlib
 import json
 import os
 import re
@@ -18,7 +19,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v9"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v13"
+CHART_GROUPS: dict[str, dict] = {}
 
 
 def main() -> int:
@@ -189,7 +191,7 @@ def main() -> int:
     def _is_report_chart_command(argv: list[str]) -> bool:
         return len(argv) >= 3 and Path(argv[1]).name == "run" and argv[2] in {"-c", "--chart"}
 
-    def _run_chart_command(command: str) -> tuple[int, dict]:
+    def _run_chart_command(command: str, chart_group: dict | None = None) -> tuple[int, dict]:
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
         if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
@@ -197,6 +199,9 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
+        env["STOCKHELPER_REPORT_SERVER_URL"] = f"http://{args.host}:{args.port}"
+        if chart_group:
+            env["STOCKHELPER_CHART_GROUP_JSON"] = json.dumps(chart_group, ensure_ascii=False)
         _safe_print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}")
 
         if _is_report_chart_command(argv):
@@ -314,11 +319,13 @@ def main() -> int:
             if parsed.path == "/open-chart":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
-                debug = {"command": command, "path": self.path}
+                group_id = (qs.get("group", [""])[0] or "").strip()
+                chart_group = CHART_GROUPS.get(group_id) if group_id else None
+                debug = {"command": command, "group": group_id, "path": self.path}
                 if not command:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
                 try:
-                    rc, payload = _run_chart_command(command)
+                    rc, payload = _run_chart_command(command, chart_group)
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
                         self.send_response(303)
@@ -356,6 +363,37 @@ def main() -> int:
                     payload = {"ok": False, "error": str(exc), "command": command}
                     _safe_print(f"[report] chart command failed: {exc}", err=True)
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
+                return
+            if parsed.path == "/chart-group":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    group_id = str(payload.get("id") or payload.get("group_id") or "").strip()
+                    if not group_id:
+                        group_id = hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+                    payload["id"] = group_id
+                    CHART_GROUPS[group_id] = payload
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "id": group_id}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/open-charts":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    charts = payload.get("charts") or []
+                    group = payload.get("group") if isinstance(payload.get("group"), dict) else None
+                    opened = []
+                    for item in charts:
+                        command = str((item or {}).get("command") or item or "").strip()
+                        if command:
+                            rc, result = _run_chart_command(command, group)
+                            opened.append({"command": command, "ok": rc == 0, **(result or {})})
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "opened": opened}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
             if parsed.path == "/open-links":
                 try:
