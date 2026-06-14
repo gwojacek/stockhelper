@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import subprocess
+import shutil
 import sys
 import tempfile
 import threading
@@ -276,6 +277,28 @@ def main() -> int:
         handler.end_headers()
         handler.wfile.write(body)
 
+
+    def _open_chart_urls(urls: list[str]) -> int:
+        clean = [u for u in urls if isinstance(u, str) and u.startswith("http")]
+        if not clean:
+            return 0
+        chrome = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
+        if chrome:
+            try:
+                subprocess.Popen([chrome, "--new-window", *clean], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                return len(clean)
+            except Exception as exc:
+                _safe_print(f"[report] failed to open charts with chrome: {exc}", err=True)
+        opened = 0
+        for url in clean:
+            try:
+                if webbrowser.open_new_tab(url):
+                    opened += 1
+                time.sleep(0.12)
+            except Exception:
+                pass
+        return opened
+
     def _chart_wrapper_response(chart_url: str, command: str) -> bytes:
         safe_url = html.escape(str(chart_url), quote=True)
         safe_command = html.escape(str(command))
@@ -375,15 +398,15 @@ def main() -> int:
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
                     payload = json.loads(raw or "{}")
                     commands = [str(c or "").strip() for c in payload.get("commands", []) if str(c or "").strip()]
-                    seen = set()
-                    opened = 0
+                    seen = []
+                    seen_keys = set()
                     for command in commands:
-                        if command in seen:
+                        if command in seen_keys:
                             continue
-                        seen.add(command)
-                        url = f"http://{args.host}:{args.port}/chart?command={quote(command, safe='')}"
-                        if webbrowser.open(url):
-                            opened += 1
+                        seen_keys.add(command)
+                        seen.append(command)
+                    urls = [f"http://{args.host}:{args.port}/chart?command={quote(command, safe='')}" for command in seen]
+                    opened = _open_chart_urls(urls)
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "opened": opened, "requested": len(seen)}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": str(exc)}).encode("utf-8"))
