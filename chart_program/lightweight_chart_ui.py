@@ -456,7 +456,7 @@ class LightweightChartLevelSelectorUI:
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
     .layout {{ display: grid; grid-template-columns: 1fr 380px; height: 100vh; }}
-    .main {{ padding: 14px; min-width: 0; }}
+    .main {{ padding: 14px 0 14px 14px; min-width: 0; }}
     h3 {{ margin: 0 0 10px 0; }}
     button {{ background: #1f2937; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; font-weight: 700; }}
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
@@ -658,7 +658,7 @@ class LightweightChartLevelSelectorUI:
   const chart = LightweightCharts.createChart($('chart'), {{
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
     grid: {{ vertLines: {{ color: '#1f2937' }}, horzLines: {{ color: '#1f2937' }} }},
-    rightPriceScale: {{ borderColor: '#334155', scaleMargins: {{top:0.08, bottom:0.12}} }},
+    rightPriceScale: {{ borderColor: '#334155', minimumWidth: 78, entireTextOnly: true, scaleMargins: {{top:0.08, bottom:0.12}} }},
     timeScale: {{ visible: true, timeVisible: true, secondsVisible: false, borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
       const d = typeof time === 'string' ? new Date(time + 'T00:00:00Z') : new Date(Date.UTC(time.year, time.month - 1, time.day));
       return d.getUTCMonth() === 0 ? String(d.getUTCFullYear()) : d.toLocaleString('en-US', {{month:'short', timeZone:'UTC'}});
@@ -738,6 +738,7 @@ class LightweightChartLevelSelectorUI:
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
   window.addEventListener('resize', () => requestAnimationFrame(drawCloud));
   const dynamicSeries = [];
+  const levelSeries = new Map();
   let previewSeries = null;
   let fibPreviewSeries = [];
   let previewFrame = null;
@@ -748,7 +749,7 @@ class LightweightChartLevelSelectorUI:
   let suppressViewportCapture = false;
   const safeRemoveSeries = (series) => {{ try {{ if (series) chart.removeSeries(series); }} catch(e) {{ console.warn('removeSeries failed', e); }} }};
   const clearPreviews = () => {{ safeRemoveSeries(previewSeries); previewSeries = null; while(fibPreviewSeries.length) safeRemoveSeries(fibPreviewSeries.pop()); if (previewFrame) cancelAnimationFrame(previewFrame); if (fibPreviewFrame) cancelAnimationFrame(fibPreviewFrame); previewFrame = null; fibPreviewFrame = null; pendingPreview = null; pendingFibPreviewTime = null; }};
-  const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); clearPreviews(); }};
+  const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); levelSeries.clear(); clearPreviews(); }};
   const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false, rightLabel=false, legendKey=null, onDelete=null, autoscale=true) => {{
     if (legend && title) addLegend(title, color, legendKey, onDelete);
     if (legendKey && hiddenLegendKeys.has(legendKey)) return null;
@@ -1552,10 +1553,17 @@ class LightweightChartLevelSelectorUI:
       const deleteFn = deleteSelectedLevel(field);
       if (field === 'line_cross_value') {{ addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`, deleteFn); return; }}
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
-      addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
-      if (field === 'entry') addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
+      if (series) levelSeries.set(field, series);
+      if (field === 'entry') {{
+        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+        if (entrySeries) levelSeries.set('entry-point', entrySeries);
+      }}
     }});
-    (levels.__half_points__ || []).forEach((pt, i) => addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false));
+    (levels.__half_points__ || []).forEach((pt, i) => {{
+      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
+      if (series) levelSeries.set(`half:${{i}}`, series);
+    }});
     const seenFibLegend = new Set();
     let wedgeLegendAdded = false;
     drawnObjects.forEach(obj => {{
@@ -1751,6 +1759,46 @@ class LightweightChartLevelSelectorUI:
     requestAnimationFrame(drawCloud);
   }}
 
+  function forgetLevelSeries(key) {{
+    const series = levelSeries.get(key);
+    if (series) safeRemoveSeries(series);
+    levelSeries.delete(key);
+  }}
+
+  function refreshLevelSeries(field) {{
+    forgetLevelSeries(field);
+    if (field === 'entry') forgetLevelSeries('entry-point');
+    const pt = levelPoints[field];
+    if (!pt) {{ updatePanel(); requestAnimationFrame(drawCloud); return; }}
+    const levelColors = {{high:'#d946ef', low:'#14b8a6', entry:'#22c55e', stop_loss:'#ef4444', check_zr_value_fibo_or_elevation:'#f59e0b', line_cross_value:'#3b82f6'}};
+    const deleteFn = deleteSelectedLevel(field);
+    if (field === 'line_cross_value') {{
+      addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`, deleteFn);
+    }} else {{
+      const base = nearest(pt.date);
+      const x0 = dateAtIndex(base.idx - 5);
+      const x1 = dateAtIndex(base.idx + 5);
+      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
+      if (series) levelSeries.set(field, series);
+      if (field === 'entry') {{
+        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+        if (entrySeries) levelSeries.set('entry-point', entrySeries);
+      }}
+    }}
+    updatePanel();
+    requestAnimationFrame(drawCloud);
+  }}
+
+  function refreshHalfSeries() {{
+    [...levelSeries.keys()].filter(k => String(k).startsWith('half:')).forEach(forgetLevelSeries);
+    (levels.__half_points__ || []).forEach((pt, i) => {{
+      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
+      if (series) levelSeries.set(`half:${{i}}`, series);
+    }});
+    updatePanel();
+    requestAnimationFrame(drawCloud);
+  }}
+
   chart.subscribeClick(param => {{
     if (Date.now() < suppressChartClickUntil) return;
     if (!param || !param.point) return;
@@ -1768,8 +1816,8 @@ class LightweightChartLevelSelectorUI:
       drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibLineColor, group_id:gid}});
       fibAnchor=null; clearPreviews(); render(); return;
     }}
-    if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; render(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; render(); return; }}
-    if (activeTool === 'level' && activeField) {{ const row = nearest(time); let selected = price, plot = price; if (activeField === 'high' || activeField === 'low') {{ selected = roundPrice(activeField === 'high' ? row.high : row.low); plot = selected; }} levels[activeField] = selected; levelPoints[activeField] = {{price:selected, plot_price:plot, date:row.time}}; if (activeField === 'stop_loss') levels.__half_points__ = []; render(); }}
+    if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; refreshHalfSeries(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; refreshHalfSeries(); refreshLevelSeries('stop_loss'); return; }}
+    if (activeTool === 'level' && activeField) {{ const row = nearest(time); let selected = price, plot = price; if (activeField === 'high' || activeField === 'low') {{ selected = roundPrice(activeField === 'high' ? row.high : row.low); plot = selected; }} levels[activeField] = selected; levelPoints[activeField] = {{price:selected, plot_price:plot, date:row.time}}; if (activeField === 'stop_loss') {{ levels.__half_points__ = []; refreshHalfSeries(); }} refreshLevelSeries(activeField); }}
   }});
 
   chart.subscribeCrosshairMove(param => {{
