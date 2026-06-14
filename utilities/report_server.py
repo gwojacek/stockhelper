@@ -495,6 +495,11 @@ def main() -> int:
                         command = str((item or {}).get("command") or item or "").strip()
                         if command:
                             rc, result = _run_chart_command(command, group)
+                            if rc == 0 and result and result.get("url"):
+                                try:
+                                    webbrowser.open_new_tab(str(result["url"]))
+                                except Exception:
+                                    pass
                             opened.append({"command": command, "ok": rc == 0, **(result or {})})
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "opened": opened}).encode("utf-8"))
                 except Exception as exc:
