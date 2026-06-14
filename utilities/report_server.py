@@ -15,7 +15,7 @@ import time
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
 REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v9"
@@ -276,6 +276,25 @@ def main() -> int:
         handler.end_headers()
         handler.wfile.write(body)
 
+    def _chart_wrapper_response(chart_url: str, command: str) -> bytes:
+        safe_url = html.escape(str(chart_url), quote=True)
+        safe_command = html.escape(str(command))
+        return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>StockHelper chart</title>
+<style>html,body,iframe{{margin:0;width:100%;height:100%;border:0;background:#0f172a}}.fallback{{position:fixed;left:12px;bottom:12px;z-index:2;font-family:sans-serif;background:rgba(15,23,42,.88);color:#e5e7eb;padding:8px 10px;border-radius:8px}}.fallback a{{color:#93c5fd}}</style>
+</head><body>
+<iframe src="{safe_url}" title="StockHelper chart"></iframe>
+<div class="fallback">Chart: {safe_command} · <a href="{safe_url}">open raw chart server</a></div>
+</body></html>""".encode("utf-8")
+
+    def _send_chart_wrapper(handler, chart_url: str, command: str) -> None:
+        body = _chart_wrapper_response(chart_url, command)
+        handler.send_response(200)
+        handler.send_header("Content-Type", "text/html; charset=utf-8")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
     class _Handler(SimpleHTTPRequestHandler):
         def __init__(self, *h_args, **h_kwargs):
             super().__init__(*h_args, directory=str(root), **h_kwargs)
@@ -324,6 +343,9 @@ def main() -> int:
                     rc, payload = _run_chart_command(command)
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
+                        if parsed.path == "/chart":
+                            _send_chart_wrapper(self, str(payload["url"]), command)
+                            return
                         self.send_response(303)
                         self.send_header("Location", str(payload["url"]))
                         self.end_headers()
@@ -346,6 +368,25 @@ def main() -> int:
                     self.send_response(200 if ok else 500); self.end_headers(); self.wfile.write(json.dumps({"ok": ok}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/open-chart-links":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    commands = [str(c or "").strip() for c in payload.get("commands", []) if str(c or "").strip()]
+                    seen = set()
+                    opened = 0
+                    for command in commands:
+                        if command in seen:
+                            continue
+                        seen.add(command)
+                        url = f"http://{args.host}:{args.port}/chart?command={quote(command, safe='')}"
+                        if webbrowser.open(url):
+                            opened += 1
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "opened": opened, "requested": len(seen)}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": str(exc)}).encode("utf-8"))
                 return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)
