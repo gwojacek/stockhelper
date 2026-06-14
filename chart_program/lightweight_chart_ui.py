@@ -435,7 +435,6 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap {{ position: relative; height: calc(100vh - 320px); min-height: 300px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: crosshair; }}
     #chart-wrap.drawing-hover {{ cursor: grab; }}
     #chart-wrap.drawing-editing {{ cursor: grabbing; }}
-    #date-axis-fallback {{ position:absolute; left:0; right:0; bottom:0; height:24px; z-index:4; pointer-events:none; display:flex; justify-content:space-between; padding:3px 10px; font:11px ui-monospace,monospace; color:#cbd5e1; background:linear-gradient(transparent,rgba(15,23,42,.78)); }}
     .quick-chart-panel {{ margin:12px 0; border:1px solid #334155; border-radius:10px; padding:10px; background:#111827; }}
     .quick-chart-panel h4 {{ margin:0 0 8px; color:#facc15; }}
     .quick-chart-panel .group-title {{ margin-top:8px; font-size:12px; color:#93c5fd; font-weight:800; }}
@@ -492,7 +491,7 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="chart-legend"></div>
-      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="date-axis-fallback"></div></div>
+      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -694,16 +693,17 @@ class LightweightChartLevelSelectorUI:
     let hitMode = null;
     const obj = [...drawnObjects].reverse().find(o => {{ hitMode = (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') ? objectHit(o, pt) : null; return !!hitMode; }});
     if (obj) {{ freezeDrawingScale(); drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').classList.add('drawing-editing'); $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
-  }});
+  }}, true);
   $('chart-wrap').addEventListener('pointermove', (ev) => {{
     if (!drawingDrag || drawingDrag.id !== ev.pointerId) return;
     const pt = pointerTimePrice(ev); if (!Number.isFinite(pt.price)) return;
     ev.preventDefault(); ev.stopImmediatePropagation();
     editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; render(); try {{ if (drawingPriceRange) rightPriceScale()?.setVisibleRange?.(drawingPriceRange); }} catch(e) {{}} ev.preventDefault();
-  }});
+  }}, true);
   const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); drawingDrag = null; restoreDrawingScale(); }} }};
-  $('chart-wrap').addEventListener('pointerup', endDrawingDrag);
-  $('chart-wrap').addEventListener('pointercancel', endDrawingDrag);
+  $('chart-wrap').addEventListener('pointerup', endDrawingDrag, true);
+  $('chart-wrap').addEventListener('pointercancel', endDrawingDrag, true);
+  $('chart-wrap').addEventListener('wheel', (ev) => {{ if (drawingDrag) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, {{capture:true, passive:false}});
   $('chart-wrap').addEventListener('pointermove', (ev) => {{ if (drawingDrag) return; const pt = pointerTimePrice(ev); const hovering = [...drawnObjects].reverse().some(o => (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') && objectHit(o, pt)); $('chart-wrap').classList.toggle('drawing-hover', hovering); }});
   $('chart-wrap').addEventListener('pointerleave', () => $('chart-wrap').classList.remove('drawing-hover'));
   $('chart-wrap').addEventListener('pointerdown', (ev) => {{
@@ -740,8 +740,6 @@ class LightweightChartLevelSelectorUI:
   candleSeries.setData(P.ohlc);
   if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
-  function updateFallbackDateAxis() {{ const el=$('date-axis-fallback'); if(!el||!P.ohlc.length)return; const first=P.ohlc[0].time, last=P.futureSlots?.length?P.futureSlots[P.futureSlots.length-1]:P.ohlc[P.ohlc.length-1].time; el.innerHTML=`<span>${{first}}</span><span>${{P.ohlc[Math.floor(P.ohlc.length/2)]?.time||''}}</span><span>${{last}}</span>`; }}
-  updateFallbackDateAxis();
   if (chart.timeScale().subscribeVisibleLogicalRangeChange) chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCloud));
   window.addEventListener('resize', () => requestAnimationFrame(drawCloud));
   const dynamicSeries = [];
