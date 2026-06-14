@@ -346,6 +346,18 @@ class LightweightChartLevelSelectorUI:
             const price = state.yMax - i * ((state.yMax - state.yMin) / 4);
             ctx.fillText(price.toFixed(Math.abs(price) < 1 ? 4 : 2), state.width - 58, y + 4);
           }
+          const data = candleData();
+          if (data.length) {
+            const axisY = state.height - 22;
+            ctx.beginPath(); ctx.moveTo(54, axisY); ctx.lineTo(state.width - 70, axisY); ctx.stroke();
+            const steps = Math.min(5, data.length);
+            for (let i = 0; i < steps; i++) {
+              const idx = steps === 1 ? 0 : Math.round((i / (steps - 1)) * (data.length - 1));
+              const x = xForIndex(idx);
+              const label = String(data[idx]?.time || '').slice(5, 10);
+              ctx.fillText(label, x - 14, axisY + 14);
+            }
+          }
         }
         function draw() {
           if (!ctx) return;
@@ -640,7 +652,7 @@ class LightweightChartLevelSelectorUI:
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
     grid: {{ vertLines: {{ color: '#1f2937' }}, horzLines: {{ color: '#1f2937' }} }},
     rightPriceScale: {{ borderColor: '#334155', scaleMargins: {{top:0.08, bottom:0.12}} }},
-    timeScale: {{ borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
+    timeScale: {{ visible: true, timeVisible: true, secondsVisible: false, borderColor: '#334155', rightOffset: 18, tickMarkFormatter: (time) => {{
       const d = typeof time === 'string' ? new Date(time + 'T00:00:00Z') : new Date(Date.UTC(time.year, time.month - 1, time.day));
       return d.getUTCMonth() === 0 ? String(d.getUTCFullYear()) : d.toLocaleString('en-US', {{month:'short', timeZone:'UTC'}});
     }} }},
@@ -891,16 +903,41 @@ class LightweightChartLevelSelectorUI:
   function drawWedgeTouchPoints(ctx) {{
     drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge').forEach(obj => {{
       const points = wedgeTouchPoints(obj);
-      const fill = String(obj.label || '').toLowerCase().includes('upper') ? '#fbbf24' : '#e879f9';
+      const anchorFill = obj.color || (String(obj.label || '').toLowerCase().includes('upper') ? '#dc2626' : '#2563eb');
       points.forEach(pt => {{
         const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pt.time) : null;
         const y = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pt.value) : null;
         if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+        if (pt.anchor) {{
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.beginPath();
+          ctx.moveTo(0, -7);
+          ctx.lineTo(7, 0);
+          ctx.lineTo(0, 7);
+          ctx.lineTo(-7, 0);
+          ctx.closePath();
+          ctx.fillStyle = anchorFill;
+          ctx.strokeStyle = '#f8fafc';
+          ctx.lineWidth = 2;
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(-4, 0);
+          ctx.lineTo(4, 0);
+          ctx.moveTo(0, -4);
+          ctx.lineTo(0, 4);
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          ctx.restore();
+          return;
+        }}
         ctx.beginPath();
-        ctx.arc(x, y, pt.anchor ? 5.2 : 4.4, 0, Math.PI * 2);
-        ctx.fillStyle = fill;
+        ctx.arc(x, y, 3.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#fbbf24';
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.1;
         ctx.fill();
         ctx.stroke();
       }});
@@ -937,23 +974,13 @@ class LightweightChartLevelSelectorUI:
       if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
       ctx.save();
       if (pt.auto_wedge) {{
-        ctx.translate(x, y);
         ctx.beginPath();
-        ctx.moveTo(0, -9);
-        ctx.lineTo(9, 0);
-        ctx.lineTo(0, 9);
-        ctx.lineTo(-9, 0);
-        ctx.closePath();
-        ctx.fillStyle = '#f97316';
+        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#a855f7';
         ctx.strokeStyle = '#f8fafc';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.4;
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#111827';
-        ctx.font = 'bold 12px ui-sans-serif, system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('↯', 0, 0.5);
         ctx.restore();
         return;
       }}
@@ -1020,6 +1047,21 @@ class LightweightChartLevelSelectorUI:
     return x0 && x1 && Number.isFinite(y0) && Number.isFinite(y1) ? {{x0, y0, x1, y1}} : null;
   }}
 
+  function lineDisplayValues(obj) {{
+    if (!obj) return null;
+    if (isWedgeLineObject(obj)) {{
+      const xs = Array.isArray(obj.x) && obj.x.length >= 2 ? obj.x : null;
+      const ys = Array.isArray(obj.y) && obj.y.length >= 2 ? obj.y : null;
+      if (xs && ys) {{
+        const last = Math.min(xs.length, ys.length) - 1;
+        const x0 = String(xs[0]).slice(0, 10), x1 = String(xs[last]).slice(0, 10);
+        const y0 = Number(ys[0]), y1 = Number(ys[last]);
+        if (x0 && x1 && Number.isFinite(y0) && Number.isFinite(y1)) return {{x0, y0, x1, y1}};
+      }}
+    }}
+    return lineEndpointValues(obj);
+  }}
+
   function isEditableLineObject(obj) {{
     if (!obj || obj.type === 'fib' || obj.type === 'fib-boundary') return false;
     return obj.type === 'line' || isWedgeLineObject(obj);
@@ -1030,15 +1072,36 @@ class LightweightChartLevelSelectorUI:
     return `obj:${{obj.id || obj.label || ''}}`;
   }}
 
-  function setLineEndpointValues(obj, x0, y0, x1, y1) {{
+  function dateRatio(x0, x1, x) {{
+    const t0 = new Date(String(x0).slice(0, 10) + 'T00:00:00Z').getTime();
+    const t1 = new Date(String(x1).slice(0, 10) + 'T00:00:00Z').getTime();
+    const t = new Date(String(x).slice(0, 10) + 'T00:00:00Z').getTime();
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || !Number.isFinite(t) || t1 === t0) return 0;
+    return (t - t0) / (t1 - t0);
+  }}
+
+  function projectedLineValue(x0, y0, x1, y1, x) {{
+    return Number(y0) + (Number(y1) - Number(y0)) * dateRatio(x0, x1, x);
+  }}
+
+  function setLineEndpointValues(obj, x0, y0, x1, y1, mode='both') {{
     x0 = String(x0).slice(0, 10);
     x1 = String(x1).slice(0, 10);
     y0 = roundPrice(Number(y0));
     y1 = roundPrice(Number(y1));
     if (isWedgeLineObject(obj)) {{
       const side = wedgeSide(obj);
-      y0 = candleExtremeForDate(x0, side, y0);
-      y1 = candleExtremeForDate(x1, side, y1);
+      const anchorsX = Array.isArray(obj.anchor_x) ? obj.anchor_x.map(x => String(x).slice(0, 10)) : [];
+      const anchorsY = Array.isArray(obj.anchor_y) ? obj.anchor_y.map(Number) : [];
+      if (mode === 'start') {{
+        y0 = candleExtremeForDate(x0, side, y0);
+        if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
+        obj.anchor_x = [x0, anchorsX[1] || x1];
+        obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
+      }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
+        obj.anchor_x = [x0, x1];
+        obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
+      }}
     }}
     if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return;
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
@@ -1050,19 +1113,15 @@ class LightweightChartLevelSelectorUI:
       obj.x1 = x1;
       obj.y1 = y1;
     }}
-    if (isWedgeLineObject(obj)) {{
-      obj.anchor_x = [x0, x1];
-      obj.anchor_y = [y0, y1];
-    }}
   }}
 
   function editableLineData(obj) {{
-    const pts = lineEndpointValues(obj);
+    const pts = lineDisplayValues(obj);
     return pts ? normalizeLineData([{{time:pts.x0, value:pts.y0}}, {{time:pts.x1, value:pts.y1}}]) : [];
   }}
 
   function lineObjectPoints(obj) {{
-    const pts = lineEndpointValues(obj);
+    const pts = lineDisplayValues(obj);
     if (!pts) return null;
     const start = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
     const end = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y1) : null}};
@@ -1110,11 +1169,22 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function beginLineObjectDrag(ev) {{
+    if (activeTool !== 'level' || activeField) return false;
     const hit = hitTestLineObject(ev);
     if (!hit) return false;
     const date = pointDateFromEvent(ev), price = pointPriceFromEvent(ev);
     if (!date || !Number.isFinite(price)) return false;
-    lineObjectDrag = {{id:ev.pointerId, ...hit, startDate:date, startPrice:price, original:{{...hit.points}}}};
+    lineObjectDrag = {{
+      id:ev.pointerId,
+      ...hit,
+      startDate:date,
+      startPrice:price,
+      original:{{...hit.points}},
+      originalAnchors:{{
+        x:Array.isArray(hit.obj.anchor_x) ? [...hit.obj.anchor_x] : null,
+        y:Array.isArray(hit.obj.anchor_y) ? [...hit.obj.anchor_y] : null,
+      }},
+    }};
     $('chart-wrap').classList.add('drawing-object');
     $('chart-wrap').setPointerCapture?.(ev.pointerId);
     try {{ chart.applyOptions?.({{handleScroll:false, handleScale:false}}); }} catch(e) {{}}
@@ -1131,13 +1201,17 @@ class LightweightChartLevelSelectorUI:
     const obj = lineObjectDrag.obj;
     const o = lineObjectDrag.original;
     if (lineObjectDrag.mode === 'start') {{
-      setLineEndpointValues(obj, date, price, o.x1, o.y1);
+      setLineEndpointValues(obj, date, price, o.x1, o.y1, 'start');
     }} else if (lineObjectDrag.mode === 'end') {{
-      setLineEndpointValues(obj, o.x0, o.y0, date, price);
+      setLineEndpointValues(obj, o.x0, o.y0, date, price, 'end');
     }} else {{
       const dDays = dayDelta(lineObjectDrag.startDate, date);
       const dPrice = price - lineObjectDrag.startPrice;
-      setLineEndpointValues(obj, dateShiftDays(o.x0, dDays), o.y0 + dPrice, dateShiftDays(o.x1, dDays), o.y1 + dPrice);
+      if (isWedgeLineObject(obj) && Array.isArray(lineObjectDrag.originalAnchors.x) && Array.isArray(lineObjectDrag.originalAnchors.y)) {{
+        obj.anchor_x = lineObjectDrag.originalAnchors.x.map(d => dateShiftDays(d, dDays));
+        obj.anchor_y = lineObjectDrag.originalAnchors.y.map(v => roundPrice(Number(v) + dPrice));
+      }}
+      setLineEndpointValues(obj, dateShiftDays(o.x0, dDays), o.y0 + dPrice, dateShiftDays(o.x1, dDays), o.y1 + dPrice, 'move');
     }}
     ev.preventDefault();
     ev.stopPropagation();
@@ -1175,7 +1249,7 @@ class LightweightChartLevelSelectorUI:
       const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
       if (idx >= 0) return Number(obj.y[idx]);
     }}
-    const endpoints = lineEndpointValues(obj);
+    const endpoints = lineDisplayValues(obj);
     const x0 = endpoints ? endpoints.x0 : String(obj.x0 || '').slice(0, 10), x1 = endpoints ? endpoints.x1 : String(obj.x1 || '').slice(0, 10);
     const y0 = endpoints ? Number(endpoints.y0) : Number(obj.y0), y1 = endpoints ? Number(endpoints.y1) : Number(obj.y1);
     if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return null;
