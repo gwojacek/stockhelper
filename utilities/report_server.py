@@ -201,6 +201,7 @@ def main() -> int:
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
         env["STOCKHELPER_REPORT_SERVER_URL"] = f"http://{args.host}:{args.port}"
+        env["STOCKHELPER_CHART_COMMAND"] = command
         if chart_group:
             env["STOCKHELPER_CHART_GROUP_JSON"] = json.dumps(chart_group, ensure_ascii=False)
         _safe_print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}")
@@ -290,13 +291,20 @@ def main() -> int:
         into quick-chart metadata.
         """
         ref = handler.headers.get("Referer", "")
-        if not ref or not command:
+        if not command:
             return None
         try:
-            parsed_ref = urlparse(ref)
-            rel_path = parsed_ref.path.lstrip("/")
-            report_path = (root / rel_path).resolve()
-            if not str(report_path).startswith(str(root)) or report_path.suffix.lower() != ".html" or not report_path.exists():
+            report_path = None
+            if ref:
+                parsed_ref = urlparse(ref)
+                rel_path = parsed_ref.path.lstrip("/")
+                candidate = (root / rel_path).resolve()
+                if str(candidate).startswith(str(root)) and candidate.suffix.lower() == ".html" and candidate.exists():
+                    report_path = candidate
+            if report_path is None:
+                candidates = sorted((root / "chart_program" / "data" / "all_insturments_search" / "allsearch").glob("*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
+                report_path = next((p for p in candidates if command in p.read_text(encoding="utf-8", errors="ignore")), None)
+            if report_path is None:
                 return None
             text = report_path.read_text(encoding="utf-8", errors="replace")
             needle = html.escape(command, quote=True)
@@ -366,6 +374,11 @@ def main() -> int:
                 if group_id == "last":
                     group_id = LAST_CHART_GROUP_ID
                 payload = CHART_GROUPS.get(group_id) if group_id else None
+                if payload is None:
+                    command = (qs.get("command", [""])[0] or "").strip()
+                    payload = _chart_group_from_referer(self, command) if command else None
+                    if payload:
+                        CHART_GROUPS[str(payload.get("id"))] = payload
                 self.send_response(200 if payload else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload or {"ok": False, "error": "missing group"}).encode("utf-8")); return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)

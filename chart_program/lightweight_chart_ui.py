@@ -231,6 +231,7 @@ class LightweightChartLevelSelectorUI:
             "sourceProvider": self.source_provider,
             "reportLaunched": os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1",
             "reportServerUrl": os.environ.get("STOCKHELPER_REPORT_SERVER_URL", ""),
+            "chartCommand": os.environ.get("STOCKHELPER_CHART_COMMAND", ""),
             "futureSlots": self._future_time_slots(),
             "chartGroup": self._chart_group_payload(),
             "pricePrecision": self._precision_for_price(),
@@ -623,6 +624,7 @@ class LightweightChartLevelSelectorUI:
   let suppressChartClickUntil = 0;
   let drawingDrag = null;
   let drawingPriceRange = null;
+  let drawingRenderFrame = null;
   function applyVerticalPan() {{
     verticalPan = clamp(verticalPan, -0.30, 0.30);
     const margins = {{top:clamp(0.08 + verticalPan, 0.01, 0.50), bottom:clamp(0.12 - verticalPan, 0.01, 0.50)}};
@@ -692,15 +694,15 @@ class LightweightChartLevelSelectorUI:
     const pt = pointerTimePrice(ev);
     let hitMode = null;
     const obj = [...drawnObjects].reverse().find(o => {{ hitMode = (o.type === 'line' || o.type === 'wedge' || o.group_id === 'auto-wedge') ? objectHit(o, pt) : null; return !!hitMode; }});
-    if (obj) {{ freezeDrawingScale(); drawingDrag = {{id:ev.pointerId, obj, last:pt, mode:hitMode, moved:false}}; $('chart-wrap').classList.add('drawing-editing'); $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
+    if (obj) {{ freezeDrawingScale(); drawingDrag = {{id:ev.pointerId, obj, key:drawingObjectKey(obj), last:pt, mode:hitMode, moved:false}}; $('chart-wrap').classList.add('drawing-editing'); $('chart-wrap').setPointerCapture?.(ev.pointerId); ev.preventDefault(); ev.stopImmediatePropagation(); return; }}
   }}, true);
   $('chart-wrap').addEventListener('pointermove', (ev) => {{
     if (!drawingDrag || drawingDrag.id !== ev.pointerId) return;
     const pt = pointerTimePrice(ev); if (!Number.isFinite(pt.price)) return;
     ev.preventDefault(); ev.stopImmediatePropagation();
-    editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; render(); try {{ if (drawingPriceRange) rightPriceScale()?.setVisibleRange?.(drawingPriceRange); }} catch(e) {{}} ev.preventDefault();
+    editObject(drawingDrag.obj, drawingDrag.last, pt, drawingDrag.mode); drawingDrag.last = pt; drawingDrag.moved = true; suppressChartClickUntil = Date.now() + 300; const ds = objectSeriesByKey.get(drawingDrag.key); if (ds) {{ try {{ ds.setData(normalizeLineData(lineDataForObject(drawingDrag.obj))); }} catch(e) {{}} requestAnimationFrame(drawCloud); }} else if (!drawingRenderFrame) {{ drawingRenderFrame = requestAnimationFrame(() => {{ drawingRenderFrame = null; render(); }}); }} try {{ if (drawingPriceRange) rightPriceScale()?.setVisibleRange?.(drawingPriceRange); }} catch(e) {{}} ev.preventDefault();
   }}, true);
-  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); drawingDrag = null; restoreDrawingScale(); }} }};
+  const endDrawingDrag = (ev) => {{ if (drawingDrag && drawingDrag.id === ev.pointerId) {{ $('chart-wrap').releasePointerCapture?.(ev.pointerId); $('chart-wrap').classList.remove('drawing-editing'); const changed = drawingDrag.moved; drawingDrag = null; restoreDrawingScale(); if (changed) render(); }} }};
   $('chart-wrap').addEventListener('pointerup', endDrawingDrag, true);
   $('chart-wrap').addEventListener('pointercancel', endDrawingDrag, true);
   $('chart-wrap').addEventListener('wheel', (ev) => {{ if (drawingDrag) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, {{capture:true, passive:false}});
@@ -750,10 +752,11 @@ class LightweightChartLevelSelectorUI:
   let pendingPreview = null;
   let pendingFibPreviewTime = null;
   const hiddenLegendKeys = new Set();
+  const objectSeriesByKey = new Map();
   let suppressViewportCapture = false;
   const safeRemoveSeries = (series) => {{ try {{ if (series) chart.removeSeries(series); }} catch(e) {{ console.warn('removeSeries failed', e); }} }};
   const clearPreviews = () => {{ safeRemoveSeries(previewSeries); previewSeries = null; while(fibPreviewSeries.length) safeRemoveSeries(fibPreviewSeries.pop()); if (previewFrame) cancelAnimationFrame(previewFrame); if (fibPreviewFrame) cancelAnimationFrame(fibPreviewFrame); previewFrame = null; fibPreviewFrame = null; pendingPreview = null; pendingFibPreviewTime = null; }};
-  const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); clearPreviews(); }};
+  const removeDynamic = () => {{ while(dynamicSeries.length) safeRemoveSeries(dynamicSeries.pop()); objectSeriesByKey.clear(); clearPreviews(); }};
   const addLine = (data, color, width=1.4, style=LightweightCharts.LineStyle.Solid, title='', legend=true, pointMarkers=false, rightLabel=false, legendKey=null, onDelete=null) => {{
     if (legend && title) addLegend(title, color, legendKey, onDelete);
     if (legendKey && hiddenLegendKeys.has(legendKey)) return null;
@@ -1112,6 +1115,16 @@ class LightweightChartLevelSelectorUI:
     return Number(label.replace('%', '')) / 100;
   }}
 
+  function drawingObjectKey(obj) {{
+    const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
+    return isWedge ? `wedge:${{obj.id || obj.label || 'auto'}}` : `obj:${{obj.id || obj.label || 'manual'}}`;
+  }}
+
+  function lineDataForObject(obj) {{
+    if (Array.isArray(obj.x) && Array.isArray(obj.y)) return obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}}));
+    return [{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:String(obj.x1).slice(0,10), value:Number(obj.y1)}}];
+  }}
+
   function render() {{
     const viewport = captureViewport();
     removeDynamic();
@@ -1141,7 +1154,7 @@ class LightweightChartLevelSelectorUI:
       const color = isFib ? fibColor(fibRatioValue(obj)) : (isFibBoundary ? fibLineColor : (obj.color || P.lineColors.gold));
       const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
       const fibKey = (isFib || isFibBoundary) ? `fib-group:${{obj.group_id || obj.id}}` : null;
-      const objKey = isWedge ? `wedge:${{obj.id || obj.label || Math.random()}}` : ((isFib || isFibBoundary) ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
+      const objKey = (isFib || isFibBoundary) ? fibKey : drawingObjectKey(obj);
       const deleteFn = (isFib || isFibBoundary) ? (() => {{ drawnObjects = drawnObjects.filter(o => o.group_id !== obj.group_id); hiddenLegendKeys.delete(fibKey); }}) : (isWedge ? (() => {{ drawnObjects = drawnObjects.filter(o => o !== obj); hiddenLegendKeys.delete(objKey); }}) : (() => {{ drawnObjects = drawnObjects.filter(o => o.id !== obj.id); hiddenLegendKeys.delete(objKey); }}));
       let objectLegend = '';
       let showLegend = false;
@@ -1162,10 +1175,10 @@ class LightweightChartLevelSelectorUI:
       }}
       const seriesTitle = isFib ? (fibPercentLabel(obj) || objectLegend) : objectLegend;
       if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
-        addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
+        const series = addLine(lineDataForObject(obj), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn); if (series && !isFib && !isFibBoundary) objectSeriesByKey.set(objKey, series);
       }} else {{
         const x1 = isFib ? extendFuture(obj.x1, 720) : String(obj.x1).slice(0,10);
-        addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn);
+        const series = addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn); if (series && !isFib && !isFibBoundary) objectSeriesByKey.set(objKey, series);
       }}
     }});
     updatePanel();
@@ -1226,14 +1239,14 @@ class LightweightChartLevelSelectorUI:
   async function renderQuickChartPanel() {{
     const panel = $('quick-chart-panel');
     let group = P.chartGroup || {{}}; let charts = Array.isArray(group.charts) ? group.charts : [];
-    if (!charts.length && P.reportServerUrl) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=last'); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
+    if (!charts.length && P.reportServerUrl) {{ try {{ const resp = await fetch(P.reportServerUrl.replace(new RegExp('/$'), '') + '/chart-group?id=last' + (P.chartCommand ? '&command=' + encodeURIComponent(P.chartCommand) : '')); const data = await resp.json(); if (data && Array.isArray(data.charts)) {{ group = data; charts = data.charts; P.chartGroup = data; }} }} catch(e) {{}} }}
     if (!panel) return;
     if (!charts.length) {{ if (P.reportLaunched) {{ panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4><div class="muted">No chart group metadata received from the report. Reopen from a report 📊 group.</div>'; panel.style.display='block'; }} return; }}
     const bySection = new Map();
     charts.forEach(ch => {{ const key = ch.section || ch.source || group.title || 'Report group'; if(!bySection.has(key)) bySection.set(key, []); bySection.get(key).push(ch); }});
     panel.innerHTML = '<h4>⭐ Quick charts from 📊</h4>' + [...bySection.entries()].map(([section,items]) => `<div class="group-title">${{section}}</div>` + items.map(ch => `<button type="button" data-cmd="${{String(ch.command||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}}">${{ch.label || ch.ticker || ch.command}}</button>`).join('')).join('');
     panel.style.display = 'block';
-    panel.querySelectorAll('button[data-cmd]').forEach(b => b.onclick = () => {{ const base=P.reportServerUrl||''; const url=(base?base:'') + '/open-chart?command=' + encodeURIComponent(b.dataset.cmd || '') + (P.chartGroup?.id ? '&group=' + encodeURIComponent(P.chartGroup.id) : ''); window.open(url, '_blank'); }});
+    panel.querySelectorAll('button[data-cmd]').forEach(b => b.onclick = () => {{ b.textContent = 'Loading… ' + b.textContent; const base=P.reportServerUrl||''; const url=(base?base:'') + '/open-chart?command=' + encodeURIComponent(b.dataset.cmd || '') + (P.chartGroup?.id ? '&group=' + encodeURIComponent(P.chartGroup.id) : ''); window.location.href = url; }});
   }}
   renderQuickChartPanel();
 
