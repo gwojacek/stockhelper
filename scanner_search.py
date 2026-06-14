@@ -2971,6 +2971,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
 
                 upper_structural_contacts = _structural_contacts(upper_contacts, upper_exact_contacts, "upper")
                 lower_structural_contacts = _structural_contacts(lower_contacts, lower_exact_contacts, "lower")
+                upper_exact_count = _clustered_contact_count(upper_exact_contacts)
+                lower_exact_count = _clustered_contact_count(lower_exact_contacts)
                 up_count = len(upper_structural_contacts)
                 lo_count = len(lower_structural_contacts)
                 if lo_count < 2:
