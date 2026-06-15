@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import html
 import json
 import os
@@ -10,15 +11,16 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import uuid
 import threading
 import time
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v9"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v13"
 
 
 def main() -> int:
@@ -75,12 +77,19 @@ def main() -> int:
     console_stderr_path = ""
     console_log_path = os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG", "")
     console_log = None
+    chart_groups: dict[str, dict] = {}
+    chart_group_lock = threading.Lock()
     if console_log_path:
         try:
             Path(console_log_path).parent.mkdir(parents=True, exist_ok=True)
             console_log = open(console_log_path, "a", buffering=1, encoding="utf-8", errors="replace")
         except Exception:
             console_log = None
+
+
+    def _clean_group_text(value: object) -> str:
+        text = str(value or "").strip()
+        return text.encode("utf-8", "ignore").decode("utf-8", "ignore")
 
     def _set_console_targets(stdout_path: str = "", stderr_path: str = "") -> bool:
         nonlocal console_out, close_console_out, console_err, close_console_err, console_stdout_path, console_stderr_path
@@ -189,7 +198,8 @@ def main() -> int:
     def _is_report_chart_command(argv: list[str]) -> bool:
         return len(argv) >= 3 and Path(argv[1]).name == "run" and argv[2] in {"-c", "--chart"}
 
-    def _run_chart_command(command: str) -> tuple[int, dict]:
+    def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
+        original_command = command
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
         if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
@@ -197,6 +207,21 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
+        if group_id:
+            with chart_group_lock:
+                group_data = chart_groups.get(group_id, {})
+            group_items = group_data.get("items") or []
+            if group_items:
+                env["STOCKHELPER_CHART_GROUP_JSON"] = json.dumps(
+                    {
+                        "id": group_id,
+                        "label": str(group_data.get("label") or "Quick charts from group btn"),
+                        "items": group_items,
+                        "current": original_command,
+                        "reportServer": f"http://{args.host}:{args.port}",
+                    },
+                    ensure_ascii=False,
+                )
         _safe_print(f"[report] running chart command: {' '.join(shlex.quote(a) for a in argv)}")
 
         if _is_report_chart_command(argv):
@@ -318,7 +343,8 @@ def main() -> int:
                 if not command:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
                 try:
-                    rc, payload = _run_chart_command(command)
+                    group_id = (qs.get("group", [""])[0] or "").strip()
+                    rc, payload = _run_chart_command(command, group_id)
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
                         self.send_response(303)
@@ -356,6 +382,70 @@ def main() -> int:
                     payload = {"ok": False, "error": str(exc), "command": command}
                     _safe_print(f"[report] chart command failed: {exc}", err=True)
                     self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
+                return
+            if parsed.path == "/chart-group":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    group_label = _clean_group_text(payload.get("label") or "Quick charts from group btn")
+                    raw_items = payload.get("items") or []
+                    items = []
+                    for item in raw_items:
+                        if not isinstance(item, dict):
+                            continue
+                        command = _clean_group_text(item.get("command") or "")
+                        if not command:
+                            continue
+                        label = _clean_group_text(item.get("label") or command)
+                        section = _clean_group_text(item.get("section") or "")
+                        items.append({"command": command, "label": label, "section": section})
+                    if not items:
+                        self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing commands"}).encode("utf-8")); return
+                    group_id = uuid.uuid4().hex
+                    with chart_group_lock:
+                        chart_groups[group_id] = {"label": group_label, "items": items}
+                    first_command = items[0]["command"]
+                    first_url = f"/open-chart?command={quote(first_command, safe="")}&group={quote(group_id, safe="")}"
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "group": group_id, "url": first_url}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/open-charts":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    commands = [c.strip() for c in payload.get("commands") or [] if isinstance(c, str) and c.strip()]
+                    open_in_browser = bool(payload.get("open", True))
+                    group_id = str(payload.get("group") or "").strip()
+
+                    def _run_grouped_chart(command: str) -> dict:
+                        try:
+                            rc, result = _run_chart_command(command, group_id)
+                            return {"command": command, "ok": rc == 0, **(result or {})}
+                        except Exception as exc:
+                            _safe_print(f"[report] grouped chart command failed: {exc}", err=True)
+                            return {"command": command, "ok": False, "error": str(exc)}
+
+                    results = [None] * len(commands)
+                    if commands:
+                        workers = min(len(commands), 8)
+                        with ThreadPoolExecutor(max_workers=workers) as executor:
+                            futures = {executor.submit(_run_grouped_chart, command): idx for idx, command in enumerate(commands)}
+                            for future in as_completed(futures):
+                                results[futures[future]] = future.result()
+                    results = [r for r in results if r is not None]
+                    opened = 0
+                    if open_in_browser:
+                        for result in results:
+                            if result.get("ok") and result.get("url"):
+                                webbrowser.open_new_tab(str(result["url"]))
+                                opened += 1
+                    urls = [str(r.get("url", "")) if r.get("ok") and r.get("url") else "" for r in results]
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"opened": opened, "urls": urls, "results": results}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
             if parsed.path == "/open-links":
                 try:
