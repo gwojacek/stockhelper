@@ -1247,13 +1247,25 @@ class LightweightChartLevelSelectorUI:
     return pts ? normalizeLineData([{{time:pts.x0, value:pts.y0}}, {{time:pts.x1, value:pts.y1}}]) : [];
   }}
 
+  function clampLineHandlePoint(pt) {{
+    const wrap = $('chart-wrap');
+    const w = wrap ? wrap.clientWidth : 0;
+    const h = wrap ? wrap.clientHeight : 0;
+    if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y) || !w || !h) return pt;
+    const pad = 16;
+    const x = Math.min(Math.max(pt.x, pad), Math.max(pad, w - pad));
+    const y = Math.min(Math.max(pt.y, pad), Math.max(pad, h - pad));
+    return {{...pt, actualX:pt.x, actualY:pt.y, offscreen:x !== pt.x || y !== pt.y, x, y}};
+  }}
+
   function lineObjectPoints(obj) {{
     const pts = lineDisplayValues(obj);
     if (!pts) return null;
-    const start = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
-    const end = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y1) : null}};
-    if (start.x === null || end.x === null || start.y === null || end.y === null) return null;
-    return {{start, end, values:pts}};
+    const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
+    const endActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y1) : null}};
+    if (startActual.x === null || endActual.x === null || startActual.y === null || endActual.y === null) return null;
+    if (!Number.isFinite(startActual.x) || !Number.isFinite(startActual.y) || !Number.isFinite(endActual.x) || !Number.isFinite(endActual.y)) return null;
+    return {{start:clampLineHandlePoint(startActual), end:clampLineHandlePoint(endActual), actualStart:startActual, actualEnd:endActual, values:pts}};
   }}
 
   function distanceToSegment(px, py, ax, ay, bx, by) {{
