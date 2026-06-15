@@ -3134,18 +3134,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     side: str,
                 ) -> list[int]:
                     # The two anchors are always real touches.  After anchors,
-                    # a candle counts only when the wedge boundary is touched by
-                    # a visible local wick extreme.  That keeps "touches" aligned
-                    # with the dots drawn on the chart without counting random
-                    # candles that simply travel inside the wedge.
-                    exact = set(exact_contacts)
-                    structural: list[int] = []
-                    for idx in sorted(set(contacts)):
-                        if idx in upper_anchor_indices or idx in lower_anchor_indices:
-                            structural.append(idx)
-                        elif idx in exact or _is_local_extreme(idx, side, radius=2):
-                            structural.append(idx)
-                    return _clustered_contact_indices(structural)
+                    # count any candle whose wick or body reaches through the
+                    # boundary and then closes back inside the wedge. Adjacent
+                    # touch candles still collapse into a single visual contact.
+                    return _clustered_contact_indices(sorted(set(contacts)))
 
                 upper_structural_contacts = _structural_contacts(upper_contacts, upper_exact_contacts, "upper")
                 lower_structural_contacts = _structural_contacts(lower_contacts, lower_exact_contacts, "lower")
@@ -3154,11 +3146,12 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 up_count = len(upper_structural_contacts)
                 lo_count = len(lower_structural_contacts)
                 if breakout_idx is not None:
-                    # A valid breakout needs the breakout-side structure to be
-                    # confirmed by at least three pre-breakout touches on one
-                    # line; having three touches on both lines is better, but not
-                    # mandatory. Both lines must still have their two anchors.
-                    if min(up_count, lo_count) < 2 or max(up_count, lo_count) < 3:
+                    # A valid breakout needs the broken boundary to have at
+                    # least three pre-breakout touches. Both lines must still
+                    # have their two anchors; having three touches on both lines
+                    # is better, but not mandatory.
+                    breakout_side_count = up_count if breakout_direction == "long" else lo_count
+                    if min(up_count, lo_count) < 2 or breakout_side_count < 3:
                         continue
                 elif up_count < 2 or lo_count < 2:
                     # Unbroken wedges are watchlist candidates once both lines

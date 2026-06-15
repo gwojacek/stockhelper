@@ -902,17 +902,15 @@ class LightweightChartLevelSelectorUI:
       if (!Number.isFinite(extreme)) continue;
       const lineValue = Number(p0.value) + slope * (idx - idx0);
       if (!Number.isFinite(lineValue)) continue;
-      const localFrom = Math.max(0, idx - 2);
-      const localTo = Math.min(realCandles.length - 1, idx + 2);
-      let localExtreme = true;
-      for (let j = localFrom; j <= localTo; j += 1) {{
-        const other = side === 'upper' ? Number(realCandles[j].high) : Number(realCandles[j].low);
-        if (!Number.isFinite(other)) continue;
-        if (side === 'upper' && extreme < other) localExtreme = false;
-        if (side === 'lower' && extreme > other) localExtreme = false;
-      }}
       const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
-      if (localExtreme && Math.abs(extreme - lineValue) <= tolerance) {{
+      const open = Number(c.open);
+      const close = Number(c.close);
+      const bodyHigh = Math.max(open, close);
+      const bodyLow = Math.min(open, close);
+      const touched = side === 'upper'
+        ? (Number(c.high) >= lineValue - tolerance && close <= lineValue + tolerance) || (bodyHigh >= lineValue - tolerance && bodyLow <= lineValue + tolerance)
+        : (Number(c.low) <= lineValue + tolerance && close >= lineValue - tolerance) || (bodyLow <= lineValue + tolerance && bodyHigh >= lineValue - tolerance);
+      if (touched) {{
         touchCandidates.push({{time, value: roundPrice(extreme), anchor:false, upper:isUpper, lower:isLower, idx}});
       }}
     }}
