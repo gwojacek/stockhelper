@@ -3090,7 +3090,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             invalid = True
                             break
                         continue
-                    if i not in upper_anchor_indices and closes[i] <= up + close_eps:
+                    if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
                         upper_exact_tol = min(exact_tol, upper_touch_tol)
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
@@ -3098,7 +3098,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             upper_contacts.append(i)
                         elif highs[i] >= up - upper_touch_tol:
                             upper_contacts.append(i)
-                    if i not in lower_anchor_indices and closes[i] >= lo - close_eps:
+                    if i not in lower_anchor_indices and i > max(lower_anchor_indices) and closes[i] >= lo - close_eps:
                         lower_touch_tol = min(tol, _post_anchor_touch_tolerance(lo))
                         lower_exact_tol = min(exact_tol, lower_touch_tol)
                         if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= lower_exact_tol:

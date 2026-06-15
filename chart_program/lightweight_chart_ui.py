@@ -888,7 +888,8 @@ class LightweightChartLevelSelectorUI:
     const slope = (Number(p1.value) - Number(p0.value)) / (idx1 - idx0);
     const anchorTimes = new Set(points.map(p => p.time));
     const touchCandidates = [];
-    const start = Math.min(idx0, idx1);
+    // Extra touchpoints are only valid after the two anchors define the line.
+    const start = Math.max(idx0, idx1);
     const end = realCandles.length - 1;
     const avgRangeRows = realCandles.slice(Math.max(0, end - 29), end + 1)
       .map(c => Number(c.high) - Number(c.low))
