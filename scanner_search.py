@@ -2712,6 +2712,11 @@ def _wedge_probable_stop_touched_after_breakout(
     return False
 
 
+def _post_anchor_touch_tolerance_static(price: float) -> float:
+    pip = 0.0001 if abs(float(price)) < 1 else 0.01
+    return max(pip * 5, abs(float(price)) * 0.0005)
+
+
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     # Touches separated only by glued/adjacent candles count as one contact;
     # a new contact requires at least one full non-touching candle between them.
@@ -2740,6 +2745,128 @@ def _clustered_contact_indices(indices: list[int], max_gap: int = 1) -> list[int
         prev = idx
     return reps
 
+
+def _scanner_session_path_for_ticker(ticker: str) -> Path:
+    stem = re.sub(r"\.(WA|PL)$", "", str(ticker), flags=re.IGNORECASE).strip()
+    return STATE_DATA_DIR / "sessions" / f"{stem}.json"
+
+
+def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return None
+    wedges = [obj for obj in objects if isinstance(obj, dict) and (obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge")]
+    if len(wedges) < 2:
+        return None
+    upper = next((obj for obj in wedges if "upper" in str(obj.get("label", "")).lower()), wedges[0])
+    lower = next((obj for obj in wedges if "lower" in str(obj.get("label", "")).lower() and obj is not upper), None)
+    if lower is None:
+        lower = next((obj for obj in wedges if obj is not upper), None)
+    if lower is None:
+        return None
+    return upper, lower
+
+
+def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
+    anchor_x = obj.get("anchor_x")
+    anchor_y = obj.get("anchor_y")
+    if isinstance(anchor_x, list) and isinstance(anchor_y, list) and len(anchor_x) >= 2 and len(anchor_y) >= 2:
+        try:
+            return (str(anchor_x[0]), float(anchor_y[0])), (str(anchor_x[1]), float(anchor_y[1]))
+        except Exception:
+            return None
+    try:
+        return (str(obj["x0"]), float(obj["y0"])), (str(obj["x1"]), float(obj["y1"]))
+    except Exception:
+        return None
+
+
+def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeScanResult | None:
+    pair = _manual_wedge_objects_for_ticker(ticker)
+    if pair is None:
+        return None
+    upper_raw = _manual_wedge_anchor(pair[0])
+    lower_raw = _manual_wedge_anchor(pair[1])
+    if upper_raw is None or lower_raw is None:
+        return None
+    required = {"Date", "Open", "High", "Low", "Close"}
+    if df is None or df.empty or not required.issubset(df.columns):
+        return None
+    w = df.copy()
+    w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
+    for col in ["Open", "High", "Low", "Close"]:
+        w[col] = pd.to_numeric(w[col], errors="coerce")
+    w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
+    date_to_idx = {str(pd.to_datetime(dt).date()): i for i, dt in enumerate(w["Date"])}
+
+    def _idx_anchor(raw: tuple[str, float]) -> tuple[int, float] | None:
+        try:
+            key = str(pd.to_datetime(raw[0]).date())
+        except Exception:
+            return None
+        idx = date_to_idx.get(key)
+        return None if idx is None else (idx, float(raw[1]))
+
+    up0 = _idx_anchor(upper_raw[0]); up1 = _idx_anchor(upper_raw[1])
+    lo0 = _idx_anchor(lower_raw[0]); lo1 = _idx_anchor(lower_raw[1])
+    if up0 is None or up1 is None or lo0 is None or lo1 is None or up0[0] == up1[0] or lo0[0] == lo1[0]:
+        return None
+    upper_a, upper_b = up0, up1
+    lower_a, lower_b = lo0, lo1
+    highs = w["High"].astype(float).to_numpy(); lows = w["Low"].astype(float).to_numpy(); closes = w["Close"].astype(float).to_numpy()
+    end = len(w) - 1
+    first_validation = max(min(up0[0], up1[0]), min(lo0[0], lo1[0]))
+    tol = max(float(pd.Series(highs[first_validation:end + 1] - lows[first_validation:end + 1]).tail(30).mean()) * 0.18, abs(float(closes[end])) * 0.004)
+    close_eps = max(tol * 0.02, abs(float(closes[end])) * 1e-6)
+    upper_contacts = [up0[0], up1[0]]; lower_contacts = [lo0[0], lo1[0]]
+    breakout_idx = None; breakout_direction = "-"
+    for i in range(first_validation, end + 1):
+        up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
+        if lo >= up:
+            return None
+        if closes[i] > up + close_eps or closes[i] < lo - close_eps:
+            direction = "long" if closes[i] > up + close_eps else "short"
+            if i < end - 5:
+                return None
+            if breakout_idx is None:
+                breakout_idx = i; breakout_direction = direction
+                continue
+            if direction != breakout_direction:
+                return None
+        if breakout_idx is not None:
+            if _wedge_probable_stop_touched_after_breakout(i, breakout_idx, breakout_direction, upper_a, upper_b, lower_a, lower_b, highs, lows, close_eps):
+                return None
+            continue
+        if closes[i] <= up + close_eps and highs[i] >= up - min(tol, _post_anchor_touch_tolerance_static(up)):
+            upper_contacts.append(i)
+        if closes[i] >= lo - close_eps and lows[i] <= lo + min(tol, _post_anchor_touch_tolerance_static(lo)):
+            lower_contacts.append(i)
+    if breakout_idx is not None:
+        return None
+    up_count = _clustered_contact_count(upper_contacts); lo_count = _clustered_contact_count(lower_contacts)
+    if up_count < 3 or lo_count < 3:
+        return None
+    width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
+    width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
+    last_close = float(closes[end])
+    upper_start, upper_end = sorted([upper_a, upper_b], key=lambda x: x[0])
+    lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
+    def _fmt(i: int) -> str: return str(pd.to_datetime(w["Date"].iloc[i]).date())
+    return WedgeScanResult(
+        ticker=ticker, start_date=_fmt(first_validation), end_date=_fmt(end), duration_days=end - first_validation + 1,
+        upper_start_date=_fmt(upper_start[0]), upper_start_price=round(float(upper_start[1]), 5), upper_end_date=_fmt(upper_end[0]), upper_end_price=round(float(upper_end[1]), 5),
+        lower_start_date=_fmt(lower_start[0]), lower_start_price=round(float(lower_start[1]), 5), lower_end_date=_fmt(lower_end[0]), lower_end_price=round(float(lower_end[1]), 5),
+        upper_touches=up_count, lower_touches=lo_count, width_start_pct=round(width_start / max(abs(last_close), 1e-9) * 100, 2), width_end_pct=round(width_end / max(abs(last_close), 1e-9) * 100, 2),
+        slope_pct_per_day=round(abs(((upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])) - ((lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0]))) / max(abs(last_close), 1e-9) * 100, 4),
+        slope_strength="manual", fit_quality=100.0, recent_proximity_pct=100.0, compression_pct=round(max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0)), 1), score=1000000.0, current_close=last_close,
+    )
 
 def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     """Detect an unbroken descending wedge ending at the latest candle.
@@ -2779,10 +2906,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
 
     def _post_anchor_touch_tolerance(price: float) -> float:
         # After the two strict anchor touches, count only candles whose relevant
-        # wick extreme is within a few pips of the wedge line.  This avoids
-        # treating candles merely located between wedge boundaries as touches.
-        pip = 0.0001 if abs(float(price)) < 1 else 0.01
-        return max(pip * 5, abs(float(price)) * 0.0005)
+        # wick reaches the wedge line.  Wicks that pass through the line are
+        # still touches as long as the candle closes back inside the wedge.
+        return _post_anchor_touch_tolerance_static(price)
 
     for length in range(min(180, n), 44, -5):
         start = n - length
@@ -2967,7 +3093,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
                             upper_exact_contacts.append(i)
                             upper_contacts.append(i)
-                        elif abs(highs[i] - up) <= upper_touch_tol:
+                        elif highs[i] >= up - upper_touch_tol:
                             upper_contacts.append(i)
                     if i not in lower_anchor_indices and closes[i] >= lo - close_eps:
                         lower_touch_tol = min(tol, _post_anchor_touch_tolerance(lo))
@@ -2975,7 +3101,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= lower_exact_tol:
                             lower_exact_contacts.append(i)
                             lower_contacts.append(i)
-                        elif abs(lows[i] - lo) <= lower_touch_tol:
+                        elif lows[i] <= lo + lower_touch_tol:
                             lower_contacts.append(i)
                 if invalid:
                     continue
@@ -3024,9 +3150,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_exact_count = _clustered_contact_count(lower_exact_contacts)
                 up_count = len(upper_structural_contacts)
                 lo_count = len(lower_structural_contacts)
-                if lo_count < 2:
-                    continue
-                if not ((up_count >= 3 and lo_count >= 2) or (up_count >= 2 and lo_count >= 3)):
+                if up_count < 3 or lo_count < 3:
                     continue
                 last_close = float(closes[end])
                 width_start_pct = width_start / max(abs(last_close), 1e-9) * 100.0
@@ -3912,7 +4036,7 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
-            wedge = _find_falling_wedge_setup(df)
+            wedge = _find_manual_unbroken_wedge_setup(df, ticker) or _find_falling_wedge_setup(df)
             if wedge:
                 wedge.ticker = ticker
                 wedge.latest_candle_date = latest_candle_date
