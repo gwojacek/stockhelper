@@ -2851,7 +2851,10 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     if breakout_idx is not None:
         return None
     up_count = _clustered_contact_count(upper_contacts); lo_count = _clustered_contact_count(lower_contacts)
-    if up_count < 3 or lo_count < 3:
+    # Manual saved wedges are allowed to remain unbroken watchlist wedges with
+    # only the two anchor touches on each side. Breakout handling is left to the
+    # automatic scanner after price leaves the manually saved wedge.
+    if up_count < 2 or lo_count < 2:
         return None
     width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
     width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
@@ -3150,7 +3153,16 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_exact_count = _clustered_contact_count(lower_exact_contacts)
                 up_count = len(upper_structural_contacts)
                 lo_count = len(lower_structural_contacts)
-                if up_count < 3 or lo_count < 3:
+                if breakout_idx is not None:
+                    # A valid breakout needs the breakout-side structure to be
+                    # confirmed by at least three pre-breakout touches on one
+                    # line; having three touches on both lines is better, but not
+                    # mandatory. Both lines must still have their two anchors.
+                    if min(up_count, lo_count) < 2 or max(up_count, lo_count) < 3:
+                        continue
+                elif up_count < 2 or lo_count < 2:
+                    # Unbroken wedges are watchlist candidates once both lines
+                    # have at least their two anchor points.
                     continue
                 last_close = float(closes[end])
                 width_start_pct = width_start / max(abs(last_close), 1e-9) * 100.0

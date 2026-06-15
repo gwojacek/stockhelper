@@ -793,7 +793,21 @@ def run_level_selector(raw_args=None):
             "data_symbol": fetch_info.get("symbol"),
             "data_name": fetch_info.get("name"),
             "data_fallback_reason": fetch_info.get("fallback_reason"),
-            "message": f"No changes saved (Finish was not clicked). Downloaded data was cached: {data_path}",
+            "message": f"Session changes saved. Finish was not clicked, so config/chart files were not updated. Downloaded data was cached: {data_path}",
+        }
+
+    required_position_fields = ("high", "low", "entry", "stop_loss")
+    if any(selected.get(field) in (None, "") for field in required_position_fields):
+        return {
+            "instrument_type": instrument_type,
+            "config_path": None,
+            "data_path": str(data_path),
+            "chart_path": None,
+            "data_source": fetch_info.get("source"),
+            "data_symbol": fetch_info.get("symbol"),
+            "data_name": fetch_info.get("name"),
+            "data_fallback_reason": fetch_info.get("fallback_reason"),
+            "message": "Session changes saved. Position levels were incomplete, so config/chart files were not updated.",
         }
 
     stock_cfd_selected = bool(selected.get("__stock_cfd_mode__")) and (instrument_type == "stock" or cfd_forced)
