@@ -1281,10 +1281,19 @@ class LightweightChartLevelSelectorUI:
   function updateDraggedObjectSeries() {{
     if (!lineObjectDrag) return;
     const series = objectSeries.get(lineObjectDrag.obj);
+    const viewport = lineObjectDrag.viewport;
     if (series) {{
       try {{ series.setData(editableLineData(lineObjectDrag.obj)); }} catch(e) {{ console.warn('line drag update failed', e); }}
     }}
-    requestAnimationFrame(drawCloud);
+    if (viewport && chart.timeScale().setVisibleLogicalRange) {{
+      try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('line drag viewport restore failed', e); }}
+    }}
+    requestAnimationFrame(() => {{
+      if (viewport && chart.timeScale().setVisibleLogicalRange) {{
+        try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('line drag viewport restore failed', e); }}
+      }}
+      drawCloud();
+    }});
   }}
 
   function scheduleDraggedObjectSeriesUpdate() {{
@@ -1307,6 +1316,7 @@ class LightweightChartLevelSelectorUI:
       startDate:date,
       startPrice:price,
       original:{{...hit.points}},
+      viewport:captureViewport(),
       originalSlopeSign:Math.sign(Number(hit.points.y1) - Number(hit.points.y0)),
       originalAnchors:{{
         x:Array.isArray(hit.obj.anchor_x) ? [...hit.obj.anchor_x] : null,
@@ -1361,6 +1371,7 @@ class LightweightChartLevelSelectorUI:
     ev.stopPropagation();
     ev.stopImmediatePropagation?.();
     applyWedgeDerivedLevels();
+    ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     updatePanel();
     requestAnimationFrame(drawCloud);
     return true;
@@ -1406,18 +1417,26 @@ class LightweightChartLevelSelectorUI:
 
   function applyWedgeDerivedLevels() {{
     const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
-    if (!wedges.length) return;
+    if (!wedges.length) {{
+      if (levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge) {{ delete levels.high; delete levelPoints.high; delete levels.__wedge_auto_high__; }}
+      if (levels.__wedge_auto_low__ || levelPoints.low?.auto_wedge) {{ delete levels.low; delete levelPoints.low; delete levels.__wedge_auto_low__; }}
+      return;
+    }}
     const upper = wedges.find(obj => String(obj.label || '').toLowerCase().includes('upper'));
     const lower = wedges.find(obj => String(obj.label || '').toLowerCase().includes('lower'));
     const upperAnchor = firstAnchorPoint(upper || wedges[0]);
     const lowerAnchor = firstAnchorPoint(lower || wedges[1]);
-    if (upperAnchor && levels.high == null) {{
+    const highIsAuto = levels.high == null || levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge;
+    if (upperAnchor && highIsAuto) {{
       levels.high = upperAnchor.price;
-      levelPoints.high = {{price:upperAnchor.price, plot_price:upperAnchor.price, date:upperAnchor.date}};
+      levels.__wedge_auto_high__ = true;
+      levelPoints.high = {{price:upperAnchor.price, plot_price:upperAnchor.price, date:upperAnchor.date, auto_wedge:true}};
     }}
-    if (lowerAnchor && levels.low == null) {{
+    const lowIsAuto = levels.low == null || levels.__wedge_auto_low__ || levelPoints.low?.auto_wedge;
+    if (lowerAnchor && lowIsAuto) {{
       levels.low = lowerAnchor.price;
-      levelPoints.low = {{price:lowerAnchor.price, plot_price:lowerAnchor.price, date:lowerAnchor.date}};
+      levels.__wedge_auto_low__ = true;
+      levelPoints.low = {{price:lowerAnchor.price, plot_price:lowerAnchor.price, date:lowerAnchor.date, auto_wedge:true}};
     }}
     const candidates = [];
     wedges.forEach(obj => {{
@@ -1726,6 +1745,8 @@ class LightweightChartLevelSelectorUI:
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
     drawnObjects = initialScannerDrawnObjects.map(deepClone);
+    if (levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge) {{ delete levels.high; delete levelPoints.high; delete levels.__wedge_auto_high__; }}
+    if (levels.__wedge_auto_low__ || levelPoints.low?.auto_wedge) {{ delete levels.low; delete levelPoints.low; delete levels.__wedge_auto_low__; }}
     if (levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge) {{ delete levels.line_cross_value; delete levelPoints.line_cross_value; delete levels.__wedge_auto_line_cross__; }}
     if (levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge) {{ delete levels.stop_loss; delete levelPoints.stop_loss; delete levels.__wedge_auto_stop_loss__; }}
     hiddenLegendKeys.clear();
