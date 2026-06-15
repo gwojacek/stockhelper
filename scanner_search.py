@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
 from importlib import util
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -2680,6 +2680,38 @@ def _wedge_line_value(idx: int, anchor_a: tuple[int, float], anchor_b: tuple[int
     return float(ya) + (float(yb) - float(ya)) * ((idx - ia) / (ib - ia))
 
 
+def _wedge_probable_stop_touched_after_breakout(
+    i: int,
+    breakout_idx: int | None,
+    breakout_direction: str,
+    upper_a: tuple[int, float],
+    upper_b: tuple[int, float],
+    lower_a: tuple[int, float],
+    lower_b: tuple[int, float],
+    highs: Sequence[float],
+    lows: Sequence[float],
+    eps: float = 0.0,
+) -> bool:
+    """Return True when a post-breakout candle touches the midpoint stop.
+
+    Wedge charts use the midpoint between the upper and lower wedge lines on
+    the breakout candle as the probable stop loss.  A later wick touch burns the
+    setup, so the scanner should reject this anchor set and keep searching for a
+    fresher wedge.
+    """
+    if breakout_idx is None or i <= breakout_idx:
+        return False
+    breakout_upper = _wedge_line_value(breakout_idx, upper_a, upper_b)
+    breakout_lower = _wedge_line_value(breakout_idx, lower_a, lower_b)
+    probable_stop = (breakout_upper + breakout_lower) / 2.0
+    stop_eps = max(float(eps), abs(probable_stop) * 1e-6)
+    if breakout_direction == "long":
+        return float(lows[i]) <= probable_stop + stop_eps
+    if breakout_direction == "short":
+        return float(highs[i]) >= probable_stop - stop_eps
+    return False
+
+
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     # Touches separated only by glued/adjacent candles count as one contact;
     # a new contact requires at least one full non-touching candle between them.
@@ -2870,6 +2902,20 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         return True
                     return breakout_direction == direction
 
+                def _breakout_stop_loss_touched(i: int) -> bool:
+                    return _wedge_probable_stop_touched_after_breakout(
+                        i,
+                        breakout_idx,
+                        breakout_direction,
+                        upper_a,
+                        upper_b,
+                        lower_a,
+                        lower_b,
+                        highs,
+                        lows,
+                        close_eps,
+                    )
+
                 # Each boundary must remain valid from its own first anchor. If
                 # price closed beyond an anchor line earlier than the latest
                 # five candles, this candidate was already broken and another
@@ -2911,6 +2957,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         invalid = True
                         break
                     if breakout_idx is not None:
+                        if _breakout_stop_loss_touched(i):
+                            invalid = True
+                            break
                         continue
                     if i not in upper_anchor_indices and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
@@ -3050,7 +3099,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     slope_strength = "moderate"
                 else:
                     slope_strength = "mild"
-                slope_bonus = {"mild": 0.90, "moderate": 1.05, "strong": 1.20, "very strong": 1.35}[slope_strength]
+                # Do not let steepness dominate anchor selection. A leaner upper
+                # boundary with valid extreme anchors and wick touches is a better
+                # scanner match than a steeper line that only wins because of slope.
+                slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
                 score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality)
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
