@@ -907,6 +907,8 @@ class LightweightChartLevelSelectorUI:
       const close = Number(c.close);
       const bodyHigh = Math.max(open, close);
       const bodyLow = Math.min(open, close);
+      const breakoutClose = side === 'upper' ? close > lineValue + tolerance : close < lineValue - tolerance;
+      if (breakoutClose) break;
       const touched = side === 'upper'
         ? (Number(c.high) >= lineValue - tolerance && close <= lineValue + tolerance) || (bodyHigh >= lineValue - tolerance && bodyLow <= lineValue + tolerance)
         : (Number(c.low) <= lineValue + tolerance && close >= lineValue - tolerance) || (bodyLow <= lineValue + tolerance && bodyHigh >= lineValue - tolerance);

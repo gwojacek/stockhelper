@@ -612,8 +612,64 @@ def run_level_selector(raw_args=None):
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
 
+
+    def _saved_wedge_is_unbroken() -> bool:
+        objects = existing.get("drawn_objects") if isinstance(existing, dict) else None
+        if not isinstance(objects, list) or df.empty:
+            return False
+        wedges = [obj for obj in objects if isinstance(obj, dict) and (obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge")]
+        if len(wedges) < 2:
+            return False
+        upper = next((obj for obj in wedges if "upper" in str(obj.get("label", "")).lower()), wedges[0])
+        lower = next((obj for obj in wedges if "lower" in str(obj.get("label", "")).lower() and obj is not upper), None)
+        if lower is None:
+            lower = next((obj for obj in wedges if obj is not upper), None)
+        if lower is None:
+            return False
+
+        def _anchors(obj):
+            ax = obj.get("anchor_x")
+            ay = obj.get("anchor_y")
+            if isinstance(ax, list) and isinstance(ay, list) and len(ax) >= 2 and len(ay) >= 2:
+                return (str(ax[0])[:10], float(ay[0])), (str(ax[1])[:10], float(ay[1]))
+            return (str(obj.get("x0"))[:10], float(obj.get("y0"))), (str(obj.get("x1"))[:10], float(obj.get("y1")))
+
+        try:
+            up0, up1 = _anchors(upper)
+            lo0, lo1 = _anchors(lower)
+        except Exception:
+            return False
+        dates = [str(pd.to_datetime(d).date()) for d in df["Date"]]
+        idx_by_date = {d: i for i, d in enumerate(dates)}
+        if up0[0] not in idx_by_date or up1[0] not in idx_by_date or lo0[0] not in idx_by_date or lo1[0] not in idx_by_date:
+            return False
+        upper_a = (idx_by_date[up0[0]], up0[1]); upper_b = (idx_by_date[up1[0]], up1[1])
+        lower_a = (idx_by_date[lo0[0]], lo0[1]); lower_b = (idx_by_date[lo1[0]], lo1[1])
+        if upper_a[0] == upper_b[0] or lower_a[0] == lower_b[0]:
+            return False
+
+        def _line(idx: int, a: tuple[int, float], b: tuple[int, float]) -> float:
+            return float(a[1]) + (float(b[1]) - float(a[1])) * ((idx - a[0]) / (b[0] - a[0]))
+
+        closes = pd.to_numeric(df["Close"], errors="coerce").to_numpy()
+        start_idx = max(min(upper_a[0], upper_b[0]), min(lower_a[0], lower_b[0]))
+        for idx in range(start_idx, len(df)):
+            close = closes[idx]
+            if pd.isna(close):
+                continue
+            up = _line(idx, upper_a, upper_b)
+            lo = _line(idx, lower_a, lower_b)
+            eps = max(abs(float(close)) * 1e-6, 1e-9)
+            if close > up + eps or close < lo - eps:
+                return False
+        return True
+
     if args.wedge_lines:
         try:
+            if _saved_wedge_is_unbroken():
+                print("[chart] kept saved manual wedge lines (unbroken)")
+                raise StopIteration
+
             def _parse_wedge_point(raw: str | None) -> tuple[pd.Timestamp, float] | None:
                 if not raw or "," not in raw:
                     return None
@@ -735,6 +791,8 @@ def run_level_selector(raw_args=None):
                     {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge"},
                 ]
                 print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
+        except StopIteration:
+            pass
         except Exception as exc:
             print(f"[chart] auto-wedge preload failed: {exc}")
 
