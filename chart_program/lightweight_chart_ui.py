@@ -1420,6 +1420,16 @@ class LightweightChartLevelSelectorUI:
     return {{date:String(ax).slice(0, 10), price:roundPrice(Number(ay))}};
   }}
 
+
+
+  function wedgeExtremePoint(obj, side) {{
+    const points = wedgeTouchPoints(obj || {{}}).filter(pt => Number.isFinite(Number(pt.value)));
+    if (!points.length) return firstAnchorPoint(obj);
+    const sorted = points.slice().sort((a, b) => side === 'lower' ? Number(a.value) - Number(b.value) : Number(b.value) - Number(a.value));
+    const pt = sorted[0];
+    return {{date:String(pt.time).slice(0, 10), price:roundPrice(Number(pt.value))}};
+  }}
+
   function lastAnchorDate(obj) {{
     const dates = (Array.isArray(obj?.anchor_x) && obj.anchor_x.length ? obj.anchor_x : [obj?.x0, obj?.x1])
       .map(x => String(x || '').slice(0, 10))
@@ -1437,8 +1447,8 @@ class LightweightChartLevelSelectorUI:
     }}
     const upper = wedges.find(obj => String(obj.label || '').toLowerCase().includes('upper'));
     const lower = wedges.find(obj => String(obj.label || '').toLowerCase().includes('lower'));
-    const upperAnchor = firstAnchorPoint(upper || wedges[0]);
-    const lowerAnchor = firstAnchorPoint(lower || wedges[1]);
+    const upperAnchor = wedgeExtremePoint(upper || wedges[0], 'upper');
+    const lowerAnchor = wedgeExtremePoint(lower || wedges[1], 'lower');
     const highIsAuto = levels.high == null || levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge;
     if (upperAnchor && highIsAuto) {{
       levels.high = upperAnchor.price;
