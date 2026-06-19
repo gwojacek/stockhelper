@@ -583,7 +583,7 @@ class LightweightChartLevelSelectorUI:
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
-  let activeField = seq.some(k => levels[k] != null) ? null : 'high';
+  let activeField = null;
   let activeTool = 'level';
   let lineAnchor = null;
   let fibAnchor = null;
@@ -888,7 +888,8 @@ class LightweightChartLevelSelectorUI:
     const slope = (Number(p1.value) - Number(p0.value)) / (idx1 - idx0);
     const anchorTimes = new Set(points.map(p => p.time));
     const touchCandidates = [];
-    const start = Math.min(idx0, idx1);
+    // Extra touchpoints are only valid after the two anchors define the line.
+    const start = Math.max(idx0, idx1);
     const end = realCandles.length - 1;
     const avgRangeRows = realCandles.slice(Math.max(0, end - 29), end + 1)
       .map(c => Number(c.high) - Number(c.low))
@@ -902,17 +903,17 @@ class LightweightChartLevelSelectorUI:
       if (!Number.isFinite(extreme)) continue;
       const lineValue = Number(p0.value) + slope * (idx - idx0);
       if (!Number.isFinite(lineValue)) continue;
-      const localFrom = Math.max(0, idx - 2);
-      const localTo = Math.min(realCandles.length - 1, idx + 2);
-      let localExtreme = true;
-      for (let j = localFrom; j <= localTo; j += 1) {{
-        const other = side === 'upper' ? Number(realCandles[j].high) : Number(realCandles[j].low);
-        if (!Number.isFinite(other)) continue;
-        if (side === 'upper' && extreme < other) localExtreme = false;
-        if (side === 'lower' && extreme > other) localExtreme = false;
-      }}
       const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
-      if (localExtreme && Math.abs(extreme - lineValue) <= tolerance) {{
+      const open = Number(c.open);
+      const close = Number(c.close);
+      const bodyHigh = Math.max(open, close);
+      const bodyLow = Math.min(open, close);
+      const breakoutClose = side === 'upper' ? close > lineValue + tolerance : close < lineValue - tolerance;
+      if (breakoutClose) break;
+      const touched = side === 'upper'
+        ? (Number(c.high) >= lineValue - tolerance && close <= lineValue + tolerance) || (bodyHigh >= lineValue - tolerance && bodyLow <= lineValue + tolerance)
+        : (Number(c.low) <= lineValue + tolerance && close >= lineValue - tolerance) || (bodyLow <= lineValue + tolerance && bodyHigh >= lineValue - tolerance);
+      if (touched) {{
         touchCandidates.push({{time, value: roundPrice(extreme), anchor:false, upper:isUpper, lower:isLower, idx}});
       }}
     }}
@@ -1419,6 +1420,16 @@ class LightweightChartLevelSelectorUI:
     return {{date:String(ax).slice(0, 10), price:roundPrice(Number(ay))}};
   }}
 
+
+
+  function wedgeExtremePoint(obj, side) {{
+    const points = wedgeTouchPoints(obj || {{}}).filter(pt => Number.isFinite(Number(pt.value)));
+    if (!points.length) return firstAnchorPoint(obj);
+    const sorted = points.slice().sort((a, b) => side === 'lower' ? Number(a.value) - Number(b.value) : Number(b.value) - Number(a.value));
+    const pt = sorted[0];
+    return {{date:String(pt.time).slice(0, 10), price:roundPrice(Number(pt.value))}};
+  }}
+
   function lastAnchorDate(obj) {{
     const dates = (Array.isArray(obj?.anchor_x) && obj.anchor_x.length ? obj.anchor_x : [obj?.x0, obj?.x1])
       .map(x => String(x || '').slice(0, 10))
@@ -1436,8 +1447,8 @@ class LightweightChartLevelSelectorUI:
     }}
     const upper = wedges.find(obj => String(obj.label || '').toLowerCase().includes('upper'));
     const lower = wedges.find(obj => String(obj.label || '').toLowerCase().includes('lower'));
-    const upperAnchor = firstAnchorPoint(upper || wedges[0]);
-    const lowerAnchor = firstAnchorPoint(lower || wedges[1]);
+    const upperAnchor = wedgeExtremePoint(upper || wedges[0], 'upper');
+    const lowerAnchor = wedgeExtremePoint(lower || wedges[1], 'lower');
     const highIsAuto = levels.high == null || levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge;
     if (upperAnchor && highIsAuto) {{
       levels.high = upperAnchor.price;
@@ -1751,7 +1762,7 @@ class LightweightChartLevelSelectorUI:
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
-  $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField='high'; render(); applyInstrumentControls(); }};
+  $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('reset-scanner-drawings').onclick = () => {{

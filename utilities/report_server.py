@@ -232,7 +232,12 @@ def main() -> int:
                 env["STOCKHELPER_CHART_NO_AUTO_OPEN"] = "1"
                 proc = _start_process(argv, env)
                 chart_url = ""
-                for _ in range(80):
+                # Chart startup can take longer than a few seconds when the
+                # command has to import scanner modules or refresh/load a local
+                # symbol before the lightweight UI writes its URL. Keep the
+                # report request alive long enough to receive that URL instead
+                # of falling through to a short proc.wait timeout.
+                for _ in range(300):
                     try:
                         chart_url = Path(url_path).read_text(encoding="utf-8").strip()
                     except Exception:
@@ -267,7 +272,11 @@ def main() -> int:
                     return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
                 rc = proc.poll()
                 if rc is None:
-                    rc = proc.wait(timeout=5)
+                    try:
+                        rc = proc.wait(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        _safe_print(f"[report] chart command still running before UI url, pid={proc.pid}")
+                        return 1, {"ok": False, "error": "chart command is still starting and did not publish a UI URL yet", "pid": proc.pid}
                 _safe_print(f"[report] chart command exited before UI url, exit={rc}")
                 return int(rc or 1), {"ok": False, "error": f"chart command exited before UI url (exit {rc})"}
             finally:
