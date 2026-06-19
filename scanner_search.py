@@ -2975,7 +2975,11 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
 
         upper_anchor1_candidates: list[int] = [high_abs]
         upper_anchor1_latest = min(end - 12, start + int(length * 0.72))
-        for j in range(max(start + 2, high_abs + 5), upper_anchor1_latest + 1):
+        for j in range(start + 2, upper_anchor1_latest + 1):
+            if j == high_abs:
+                continue
+            if highs[j] > highs[high_abs] * 1.000001:
+                continue
             if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
                 upper_anchor1_candidates.append(j)
         # Do not force a blow-off high to be the first upper anchor.  Longer,
@@ -2995,9 +2999,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     upper_anchor2_candidates.append(j)
             upper_anchor2_candidates = sorted(
                 upper_anchor2_candidates,
-                key=lambda j: (abs((end - j) - max(12, (end - uh1) // 4)), -float(highs[j]), j),
+                key=lambda j: (-float(highs[j]), abs((end - j) - max(12, (end - uh1) // 4)), j),
             )
-            upper_anchor_pairs.extend((uh1, uh2) for uh2 in upper_anchor2_candidates[:16])
+            upper_anchor_pairs.extend((uh1, uh2) for uh2 in upper_anchor2_candidates[:32])
         if not upper_anchor_pairs:
             continue
 
