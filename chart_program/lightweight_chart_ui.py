@@ -906,16 +906,17 @@ class LightweightChartLevelSelectorUI:
       if (!Number.isFinite(extreme)) continue;
       const lineValue = Number(endpoint.y0) + slope * (idx - idx0);
       if (!Number.isFinite(lineValue)) continue;
-      const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
-      const open = Number(c.open);
+      const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.025, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
       const close = Number(c.close);
-      const bodyHigh = Math.max(open, close);
-      const bodyLow = Math.min(open, close);
       const breakoutClose = side === 'upper' ? close > lineValue + tolerance : close < lineValue - tolerance;
       if (breakoutClose) break;
+      // A visual wedge touch must be at the candle's actual top/bottom wick.
+      // Do not count candles where the line merely passes through the body or
+      // through the middle of a long wick; those made debug anchors appear on
+      // candles that did not really touch the trendline.
       const touched = side === 'upper'
-        ? (Number(c.high) >= lineValue - tolerance && close <= lineValue + tolerance) || (bodyHigh >= lineValue - tolerance && bodyLow <= lineValue + tolerance)
-        : (Number(c.low) <= lineValue + tolerance && close >= lineValue - tolerance) || (bodyLow <= lineValue + tolerance && bodyHigh >= lineValue - tolerance);
+        ? Math.abs(Number(c.high) - lineValue) <= tolerance && close <= lineValue + tolerance
+        : Math.abs(Number(c.low) - lineValue) <= tolerance && close >= lineValue - tolerance;
       if (touched) {{
         const localLeft = Math.max(0, idx - 1);
         const localRight = Math.min(realCandles.length - 1, idx + 1);
@@ -936,7 +937,7 @@ class LightweightChartLevelSelectorUI:
     const firstAnchor = points.find(pt => pt.local_extreme) || points[0];
     const secondAnchor = firstAnchor ? (points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1 && pt.local_extreme) || points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1)) : null;
     [firstAnchor, secondAnchor].filter(Boolean).forEach(pt => {{ pt.anchor = true; pt.computed_anchor = true; }});
-    return (points.length ? points : fallbackAnchors).sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+    return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
   }}
 
   function wedgeDebugSnapshot() {{
