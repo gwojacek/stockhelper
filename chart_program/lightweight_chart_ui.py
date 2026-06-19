@@ -984,16 +984,20 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push(`Breakout: ${{breakout ? `${{breakout.time}} ${{breakout.direction}} via ${{breakout.line}} line @ ${{fmt(breakout.value)}} (close ${{fmt(breakout.close)}})` : '-'}}`);
     lines.push('');
-    lines.push('Candles from oldest wedge point to latest:');
-    lines.push('Date,Open,High,Low,Close,UpperLine,LowerLine,Inside,UpperTouch,LowerTouch');
     const upperTouchDates = new Set(upperTouches.map(pt => pt.time));
     const lowerTouchDates = new Set(lowerTouches.map(pt => pt.time));
-    const fromIdx = Number.isFinite(oldestIdx) ? Math.max(0, oldestIdx) : 0;
-    realCandles.slice(fromIdx).forEach(row => {{
+    const touchedDates = new Set([...upperTouchDates, ...lowerTouchDates]);
+    lines.push('Touched candles only:');
+    lines.push('Date,Open,High,Low,Close,UpperLine,LowerLine,Inside,TouchSide');
+    realCandles.filter(row => touchedDates.has(row.time)).forEach(row => {{
       const up = upper ? lineValueForDate(upper, row.time) : null;
       const lo = lower ? lineValueForDate(lower, row.time) : null;
       const insideUpper = !Number.isFinite(up) || Number(row.close) <= up;
       const insideLower = !Number.isFinite(lo) || Number(row.close) >= lo;
+      const touchSide = [
+        upperTouchDates.has(row.time) ? 'upper' : '',
+        lowerTouchDates.has(row.time) ? 'lower' : '',
+      ].filter(Boolean).join('+');
       lines.push([
         row.time,
         fmt(row.open),
@@ -1003,8 +1007,7 @@ class LightweightChartLevelSelectorUI:
         Number.isFinite(up) ? fmt(up) : '',
         Number.isFinite(lo) ? fmt(lo) : '',
         insideUpper && insideLower ? 'yes' : 'no',
-        upperTouchDates.has(row.time) ? 'yes' : '',
-        lowerTouchDates.has(row.time) ? 'yes' : '',
+        touchSide,
       ].join(','));
     }});
     return lines.join('\\n');
