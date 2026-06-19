@@ -876,26 +876,24 @@ class LightweightChartLevelSelectorUI:
     const side = wedgeSide(obj);
     const isUpper = side === 'upper';
     const isLower = side === 'lower';
-    const anchors = Array.isArray(obj.anchor_x) ? obj.anchor_x : [];
-    const points = anchors.map((x, i) => {{
+    const endpoint = lineDisplayValues(obj);
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)));
+    const byTimeIndex = new Map(realCandles.map((c, idx) => [String(c.time).slice(0, 10), idx]));
+    const fallbackAnchors = (Array.isArray(obj.anchor_x) ? obj.anchor_x : []).map((x, i) => {{
       const time = String(x).slice(0, 10);
       const raw = Number((obj.anchor_y || [])[i]);
       const value = candleExtremeForDate(time, side, raw);
-      return {{time, value, anchor:true, upper:isUpper, lower:isLower, idx: ohlc.findIndex(c => c.time === time)}};
+      return {{time, value, anchor:true, computed_anchor:false, upper:isUpper, lower:isLower, idx: byTimeIndex.get(time) ?? ohlc.findIndex(c => c.time === time)}};
     }}).filter(p => p.time && Number.isFinite(p.value));
-    if (!side || points.length < 2) return points;
-    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)));
-    const byTimeIndex = new Map(realCandles.map((c, idx) => [String(c.time).slice(0, 10), idx]));
-    const p0 = points[0];
-    const p1 = points[points.length - 1];
-    const idx0 = byTimeIndex.get(p0.time);
-    const idx1 = byTimeIndex.get(p1.time);
-    if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return points;
-    const slope = (Number(p1.value) - Number(p0.value)) / (idx1 - idx0);
-    const anchorTimes = new Set(points.map(p => p.time));
+    if (!side || !endpoint) return fallbackAnchors;
+    const e0 = nearest(endpoint.x0);
+    const e1 = nearest(endpoint.x1);
+    const idx0 = Number(e0?.idx);
+    const idx1 = Number(e1?.idx);
+    if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return fallbackAnchors;
+    const slope = (Number(endpoint.y1) - Number(endpoint.y0)) / (idx1 - idx0);
     const touchCandidates = [];
-    // Extra touchpoints are only valid after the two anchors define the line.
-    const start = Math.max(idx0, idx1);
+    const start = Math.min(idx0, idx1);
     const end = realCandles.length - 1;
     const avgRangeRows = realCandles.slice(Math.max(0, end - 29), end + 1)
       .map(c => Number(c.high) - Number(c.low))
@@ -904,10 +902,9 @@ class LightweightChartLevelSelectorUI:
     for (let idx = start; idx <= end; idx += 1) {{
       const c = realCandles[idx];
       const time = String(c.time).slice(0, 10);
-      if (anchorTimes.has(time)) continue;
       const extreme = side === 'upper' ? Number(c.high) : Number(c.low);
       if (!Number.isFinite(extreme)) continue;
-      const lineValue = Number(p0.value) + slope * (idx - idx0);
+      const lineValue = Number(endpoint.y0) + slope * (idx - idx0);
       if (!Number.isFinite(lineValue)) continue;
       const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
       const open = Number(c.open);
@@ -920,16 +917,26 @@ class LightweightChartLevelSelectorUI:
         ? (Number(c.high) >= lineValue - tolerance && close <= lineValue + tolerance) || (bodyHigh >= lineValue - tolerance && bodyLow <= lineValue + tolerance)
         : (Number(c.low) <= lineValue + tolerance && close >= lineValue - tolerance) || (bodyLow <= lineValue + tolerance && bodyHigh >= lineValue - tolerance);
       if (touched) {{
-        touchCandidates.push({{time, value: roundPrice(extreme), anchor:false, upper:isUpper, lower:isLower, idx}});
+        const localLeft = Math.max(0, idx - 1);
+        const localRight = Math.min(realCandles.length - 1, idx + 1);
+        const localRows = realCandles.slice(localLeft, localRight + 1);
+        const localExtreme = side === 'upper'
+          ? Number(c.high) >= Math.max(...localRows.map(r => Number(r.high)))
+          : Number(c.low) <= Math.min(...localRows.map(r => Number(r.low)));
+        touchCandidates.push({{time, value: roundPrice(extreme), line_value:roundPrice(lineValue), anchor:false, computed_anchor:false, upper:isUpper, lower:isLower, idx, local_extreme:localExtreme}});
       }}
     }}
     let lastIdx = null;
+    const points = [];
     touchCandidates.forEach(pt => {{
       if (lastIdx !== null && pt.idx - lastIdx <= 1) return;
       points.push(pt);
       lastIdx = pt.idx;
     }});
-    return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+    const firstAnchor = points.find(pt => pt.local_extreme) || points[0];
+    const secondAnchor = firstAnchor ? (points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1 && pt.local_extreme) || points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1)) : null;
+    [firstAnchor, secondAnchor].filter(Boolean).forEach(pt => {{ pt.anchor = true; pt.computed_anchor = true; }});
+    return (points.length ? points : fallbackAnchors).sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
   }}
 
   function wedgeDebugSnapshot() {{
@@ -952,10 +959,10 @@ class LightweightChartLevelSelectorUI:
       const anchors = touches.filter(pt => pt.anchor);
       lines.push('');
       lines.push(`${{String(obj.label || 'Wedge line')}} [${{side}}]`);
-      lines.push(`  anchors: ${{anchors.map(pt => `${{pt.time}} @ ${{fmt(pt.value)}}`).join(' | ') || '-'}}`);
+      lines.push(`  anchors: ${{anchors.map(pt => `${{pt.time}} @ ${{fmt(pt.value)}}${{pt.computed_anchor ? ' (auto)' : ''}}`).join(' | ') || '-'}}`);
       lines.push(`  touches: ${{touches.length}}`);
       touches.forEach((pt, i) => {{
-        lines.push(`    ${{String(i + 1).padStart(2, '0')}}. ${{pt.time}} @ ${{fmt(pt.value)}}${{pt.anchor ? ' (anchor)' : ''}}`);
+        lines.push(`    ${{String(i + 1).padStart(2, '0')}}. ${{pt.time}} @ ${{fmt(pt.value)}}${{pt.line_value != null ? ` line=${{fmt(pt.line_value)}}` : ''}}${{pt.anchor ? (pt.computed_anchor ? ' (auto anchor)' : ' (anchor)') : ''}}`);
       }});
     }});
 
