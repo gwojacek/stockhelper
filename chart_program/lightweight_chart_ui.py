@@ -891,7 +891,6 @@ class LightweightChartLevelSelectorUI:
     const idx0 = Number(e0?.idx);
     const idx1 = Number(e1?.idx);
     if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return fallbackAnchors;
-    const slope = (Number(endpoint.y1) - Number(endpoint.y0)) / (idx1 - idx0);
     const touchCandidates = [];
     const start = Math.min(idx0, idx1);
     const end = realCandles.length - 1;
@@ -904,7 +903,7 @@ class LightweightChartLevelSelectorUI:
       const time = String(c.time).slice(0, 10);
       const extreme = side === 'upper' ? Number(c.high) : Number(c.low);
       if (!Number.isFinite(extreme)) continue;
-      const lineValue = Number(endpoint.y0) + slope * (idx - idx0);
+      const lineValue = lineValueForDate(obj, time);
       if (!Number.isFinite(lineValue)) continue;
       const closeTolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
       const touchTolerance = Math.max(Math.abs(lineValue) * 0.00025, Math.abs(lineValue) < 1 ? 0.00025 : 0.0025);
