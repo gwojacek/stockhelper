@@ -3048,8 +3048,6 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_contacts = [low_abs, lh2]
                 breakout_idx: int | None = None
                 breakout_direction = "-"
-                stop_probe_idx: int | None = None
-                stop_probe_direction = "-"
                 invalid = False
                 width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
                 width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
@@ -3139,30 +3137,6 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             invalid = True
                             break
                         continue
-                    if stop_probe_idx is not None:
-                        if _wedge_probable_stop_touched_after_breakout(
-                            i,
-                            stop_probe_idx,
-                            stop_probe_direction,
-                            upper_a,
-                            upper_b,
-                            lower_a,
-                            lower_b,
-                            highs,
-                            lows,
-                            close_eps,
-                        ):
-                            # A wick-only breakout that later reaches the probable
-                            # midpoint stop still burns this wedge line. Keep
-                            # scanning other anchor sets so an adjusted wedge can win.
-                            invalid = True
-                            break
-                    elif i > max(upper_anchor_indices) and highs[i] > up + close_eps:
-                        stop_probe_idx = i
-                        stop_probe_direction = "long"
-                    elif i > max(lower_anchor_indices) and lows[i] < lo - close_eps:
-                        stop_probe_idx = i
-                        stop_probe_direction = "short"
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
                         upper_exact_tol = min(exact_tol, upper_touch_tol)
