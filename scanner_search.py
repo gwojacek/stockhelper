@@ -2939,6 +2939,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     closes = w["Close"].astype(float).to_numpy()
     dates = w["Date"]
     n = len(w)
+    global_high = max(float(pd.Series(highs).max()), 1e-9)
+
 
     def _fmt_date(i: int) -> str:
         return str(pd.to_datetime(dates.iloc[i]).date())
@@ -3005,9 +3007,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if lower_b[0] < lower_a[0]:
                     lower_slope = (lower_a[1] - lower_b[1]) / (lower_a[0] - lower_b[0])
                 # Falling wedges must converge. The lower boundary is allowed to
-                # be flat or slightly rising when that best describes current
-                # price compression; reject only aggressively rising lower lines.
-                if lower_slope > abs(upper_slope) * 0.35:
+                # be flat or rising when that best describes current price
+                # compression (triangle-like wedges). Reject only lower lines
+                # rising faster than the falling upper line can reasonably close.
+                if lower_slope > abs(upper_slope) * 1.10:
                     continue
                 # Upper line must fall faster than lower line so the wedge narrows.
                 if upper_slope >= lower_slope:
@@ -3264,12 +3267,18 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # modest touch-count advantage. A broader/older wedge with 3
                 # clean touches should beat a tiny 4-touch wedge.
                 size_preference = 1.0 + min(1.25, duration_months / 5.0) + min(0.55, width_start_pct / 80.0)
+                upper_anchor_height_bonus = 1.0 + min(0.55, max(0.0, (upper_a[1] / global_high) - 0.92) * 6.0)
                 lower_line_shape_bonus = 1.0
-                if breakout_direction == "long" and lower_slope < 0:
-                    # After a long breakout, prefer an adjusted/leaner bottom
-                    # boundary over a wide downward lower line that creates an
-                    # economically poor stop-loss distance.
-                    lower_line_shape_bonus = 0.72
+                if breakout_direction == "long":
+                    if lower_slope < 0:
+                        # After a long breakout, prefer an adjusted/leaner bottom
+                        # boundary over a wide downward lower line that creates an
+                        # economically poor stop-loss distance.
+                        lower_line_shape_bonus = 0.68
+                    else:
+                        # A flat/rising lower boundary uses the same bottom but
+                        # tightens the probable stop after a long breakout.
+                        lower_line_shape_bonus = 1.18
                 exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
                 proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
                 compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
@@ -3289,7 +3298,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # scanner match than a steeper line that only wins because of slope.
                 slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * lower_line_shape_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * lower_line_shape_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line
