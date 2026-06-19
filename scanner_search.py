@@ -3165,12 +3165,17 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 duration_months = duration / 21.0
                 compression_pct = max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0))
 
-                recent_from = max(first_validation, end - 35)
+                # For active breakouts, grade wedge fit using the candles before
+                # the breakout instead of the post-breakout run-up. Otherwise a
+                # successful move away from the wedge makes proximity look bad
+                # and can hide fresh breakouts such as PXM before the 5-day window.
+                quality_end = max(first_validation, (breakout_idx - 1) if breakout_idx is not None else end)
+                recent_from = max(first_validation, quality_end - 35)
                 recent_widths: list[float] = []
                 recent_upper_gaps: list[float] = []
                 recent_lower_gaps: list[float] = []
                 recent_min_gaps: list[float] = []
-                for k in range(recent_from, end + 1):
+                for k in range(recent_from, quality_end + 1):
                     up_k = _wedge_line_value(k, upper_a, upper_b)
                     lo_k = _wedge_line_value(k, lower_a, lower_b)
                     width_k = max(up_k - lo_k, 1e-9)
@@ -3183,9 +3188,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
                 median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
                 median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
-                current_width = max(_wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b), 1e-9)
-                current_upper_gap = max(0.0, _wedge_line_value(end, upper_a, upper_b) - highs[end]) / current_width
-                current_lower_gap = max(0.0, lows[end] - _wedge_line_value(end, lower_a, lower_b)) / current_width
+                current_width = max(_wedge_line_value(quality_end, upper_a, upper_b) - _wedge_line_value(quality_end, lower_a, lower_b), 1e-9)
+                current_upper_gap = max(0.0, _wedge_line_value(quality_end, upper_a, upper_b) - highs[quality_end]) / current_width
+                current_lower_gap = max(0.0, lows[quality_end] - _wedge_line_value(quality_end, lower_a, lower_b)) / current_width
                 # Prefer wedges whose active boundaries are both close enough to
                 # current price to be realistically breakable soon. A top line far
                 # above price or a bottom line far below price is less actionable.
@@ -3203,17 +3208,21 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # follows the active structure. A useful wedge has recent price
                 # compression near both trendlines, especially the upper line.
                 if (
-                    median_upper_gap > 0.62
-                    or median_lower_gap > 0.50
-                    or median_min_gap > 0.42
-                    or last_upper_contact_age > 75
-                    or last_lower_contact_age > 55
-                    or width_end_pct > 28.0
-                    or breakout_potential_quality < 0.18
+                    median_upper_gap > (0.76 if breakout_idx is not None else 0.62)
+                    or median_lower_gap > (0.68 if breakout_idx is not None else 0.50)
+                    or median_min_gap > (0.50 if breakout_idx is not None else 0.42)
+                    or last_upper_contact_age > (110 if breakout_idx is not None else 75)
+                    or last_lower_contact_age > (85 if breakout_idx is not None else 55)
+                    or width_end_pct > (40.0 if breakout_idx is not None else 28.0)
+                    or (breakout_idx is None and breakout_potential_quality < 0.18)
                 ):
                     continue
 
                 touch_quality = min(1.0, (up_count + lo_count) / 7.0) * (0.75 + 0.25 * min(up_count, lo_count) / max(up_count, lo_count))
+                # Prefer the larger valid wedge when a small wedge has only a
+                # modest touch-count advantage. A broader/older wedge with 3
+                # clean touches should beat a tiny 4-touch wedge.
+                size_preference = 1.0 + min(1.25, duration_months / 5.0) + min(0.55, width_start_pct / 80.0)
                 exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
                 proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
                 compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
@@ -3233,7 +3242,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # scanner match than a steeper line that only wins because of slope.
                 slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality)
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line
