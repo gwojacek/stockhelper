@@ -1998,9 +1998,12 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
                 "retest pattern",
             )
         )
+        pattern_context = "retest_pattern" in context or "retest pattern" in context
         risk_text = "-"
         if risk_context:
             risk = 0
+            if pattern_context:
+                risk += 1
             if chikou_is_confirming:
                 risk += 1
             if (not is_short and kumo_twist == "green") or (is_short and kumo_twist == "red"):

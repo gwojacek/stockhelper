@@ -120,7 +120,35 @@ def test_chikou_metric_uses_direction_arrow_and_contextual_risk():
     short_metrics = scanner_search._ichimoku_extra_metrics(df_under, "below", "deep_retest_pattern")
 
     assert short_metrics["chikou_confirmation"] == "↓ under"
-    assert short_metrics["ichimoku_risk"] == "2%"
+    assert short_metrics["ichimoku_risk"] == "3%"
+
+
+def test_retest_pattern_adds_one_risk_without_green_kumo_bonus():
+    rows = []
+    for idx in range(60):
+        rows.append(
+            {
+                "Open": 100.0,
+                "High": 106.0,
+                "Low": 94.0,
+                "Close": 100.0,
+                "tenkan": 96.0,
+                "kijun": 100.0,
+                "cloud_top": 125.0,
+                "cloud_bottom": 115.0,
+                "span_a": 100.0,
+                "span_b": 101.0,
+            }
+        )
+    df = pd.DataFrame(rows)
+    df.loc[len(df) - 27, "Close"] = 90.0
+    df.loc[len(df) - 1, "Close"] = 120.0
+
+    metrics = scanner_search._ichimoku_extra_metrics(df, "above", "medium_retest_pattern")
+
+    assert metrics["chikou_confirmation"] == "↑ over"
+    assert metrics["kumo_twist"] == "red"
+    assert metrics["ichimoku_risk"] == "2%"
 
 def test_ichimoku_status_distinguishes_over_from_kijun_touch():
     df_over = pd.DataFrame([
