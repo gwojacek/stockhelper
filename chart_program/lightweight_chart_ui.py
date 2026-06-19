@@ -511,6 +511,10 @@ class LightweightChartLevelSelectorUI:
     #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-start; gap:5px 12px; margin:0 auto 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
+    #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
+    #wedge-debug-panel.open {{ display:block; }}
+    #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
+    #wedge-debug-panel .muted {{ color:#94a3b8; }}
   </style>
 </head>
 <body>
@@ -561,6 +565,8 @@ class LightweightChartLevelSelectorUI:
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
+      <button id="wedge-debug-btn" style="margin-top:8px;width:100%;padding:10px;background:#7c3aed;color:white;border:none;border-radius:8px">Copy wedge debug</button>
+      <div id="wedge-debug-panel"></div>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
         <h4>⭐ Quick charts from 📊</h4>
@@ -924,6 +930,99 @@ class LightweightChartLevelSelectorUI:
       lastIdx = pt.idx;
     }});
     return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+  }}
+
+  function wedgeDebugSnapshot() {{
+    const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+    const upper = wedges.find(obj => wedgeSide(obj) === 'upper') || null;
+    const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
+    const lines = [];
+    lines.push(`WEDGE DEBUG: ${{P.symbol || ''}}`);
+    lines.push(`Generated: ${{new Date().toISOString()}}`);
+    if (!wedges.length) {{
+      lines.push('No wedge lines on chart.');
+      return lines.join('\\n');
+    }}
+    const touchMap = new Map();
+    wedges.forEach(obj => {{
+      const side = wedgeSide(obj) || 'line';
+      const touches = wedgeTouchPoints(obj);
+      touchMap.set(obj, touches);
+      const anchors = touches.filter(pt => pt.anchor);
+      lines.push('');
+      lines.push(`${{String(obj.label || 'Wedge line')}} [${{side}}]`);
+      lines.push(`  anchors: ${{anchors.map(pt => `${{pt.time}} @ ${{fmt(pt.value)}}`).join(' | ') || '-'}}`);
+      lines.push(`  touches: ${{touches.length}}`);
+      touches.forEach((pt, i) => {{
+        lines.push(`    ${{String(i + 1).padStart(2, '0')}}. ${{pt.time}} @ ${{fmt(pt.value)}}${{pt.anchor ? ' (anchor)' : ''}}`);
+      }});
+    }});
+
+    const upperTouches = upper ? (touchMap.get(upper) || wedgeTouchPoints(upper)) : [];
+    const lowerTouches = lower ? (touchMap.get(lower) || wedgeTouchPoints(lower)) : [];
+    const oldestIdx = Math.min(
+      ...[...upperTouches, ...lowerTouches]
+        .map(pt => Number(pt.idx))
+        .filter(Number.isFinite)
+    );
+    let breakout = null;
+    realCandles.forEach((row, idx) => {{
+      if (breakout || (Number.isFinite(oldestIdx) && idx <= oldestIdx)) return;
+      const up = upper ? lineValueForDate(upper, row.time) : null;
+      const lo = lower ? lineValueForDate(lower, row.time) : null;
+      if (Number.isFinite(up) && Number(row.close) > up) breakout = {{time:row.time, direction:'long', line:'upper', value:roundPrice(up), close:roundPrice(row.close)}};
+      if (!breakout && Number.isFinite(lo) && Number(row.close) < lo) breakout = {{time:row.time, direction:'short', line:'lower', value:roundPrice(lo), close:roundPrice(row.close)}};
+    }});
+    lines.push('');
+    lines.push(`Breakout: ${{breakout ? `${{breakout.time}} ${{breakout.direction}} via ${{breakout.line}} line @ ${{fmt(breakout.value)}} (close ${{fmt(breakout.close)}})` : '-'}}`);
+    lines.push('');
+    lines.push('Candles from oldest wedge point to latest:');
+    lines.push('Date,Open,High,Low,Close,UpperLine,LowerLine,Inside,UpperTouch,LowerTouch');
+    const upperTouchDates = new Set(upperTouches.map(pt => pt.time));
+    const lowerTouchDates = new Set(lowerTouches.map(pt => pt.time));
+    const fromIdx = Number.isFinite(oldestIdx) ? Math.max(0, oldestIdx) : 0;
+    realCandles.slice(fromIdx).forEach(row => {{
+      const up = upper ? lineValueForDate(upper, row.time) : null;
+      const lo = lower ? lineValueForDate(lower, row.time) : null;
+      const insideUpper = !Number.isFinite(up) || Number(row.close) <= up;
+      const insideLower = !Number.isFinite(lo) || Number(row.close) >= lo;
+      lines.push([
+        row.time,
+        fmt(row.open),
+        fmt(row.high),
+        fmt(row.low),
+        fmt(row.close),
+        Number.isFinite(up) ? fmt(up) : '',
+        Number.isFinite(lo) ? fmt(lo) : '',
+        insideUpper && insideLower ? 'yes' : 'no',
+        upperTouchDates.has(row.time) ? 'yes' : '',
+        lowerTouchDates.has(row.time) ? 'yes' : '',
+      ].join(','));
+    }});
+    return lines.join('\\n');
+  }}
+
+  function updateWedgeDebugPanel(message = '') {{
+    const panel = $('wedge-debug-panel');
+    if (!panel || !panel.classList.contains('open')) return;
+    const text = wedgeDebugSnapshot();
+    panel.textContent = message ? `${{message}}\\n\\n${{text}}` : text;
+  }}
+
+  async function copyWedgeDebug() {{
+    const panel = $('wedge-debug-panel');
+    const text = wedgeDebugSnapshot();
+    if (panel) {{
+      panel.classList.add('open');
+      panel.textContent = text;
+    }}
+    try {{
+      await navigator.clipboard.writeText(text);
+      updateWedgeDebugPanel('Copied wedge debug to clipboard.');
+    }} catch (err) {{
+      updateWedgeDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
+    }}
   }}
 
   function drawWedgeTouchPoints(ctx) {{
@@ -1306,6 +1405,7 @@ class LightweightChartLevelSelectorUI:
         try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('line drag viewport restore failed', e); }}
       }}
       drawCloud();
+      updateWedgeDebugPanel();
     }});
   }}
 
@@ -1664,6 +1764,7 @@ class LightweightChartLevelSelectorUI:
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
       picker.add(new Option(`${{obj.label || 'OBJ'}} (${{String(obj.id || idx).slice(0,8)}})`, obj.id || `obj-index:${{idx}}`));
     }});
+    updateWedgeDebugPanel();
   }}
 
   function applyInstrumentControls() {{
@@ -1765,6 +1866,7 @@ class LightweightChartLevelSelectorUI:
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('wedge-debug-btn').onclick = () => copyWedgeDebug();
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
     drawnObjects = initialScannerDrawnObjects.map(deepClone);
