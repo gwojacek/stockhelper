@@ -11,7 +11,13 @@ try:
 except Exception:
     tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
-from chart_program.chart_loader import COMMODITY_STOOQ_MAP, CSV_DATA_DIR, STATE_DATA_DIR
+from chart_program.chart_loader import COMMODITY_STOOQ_MAP
+try:
+    from chart_program.chart_loader import CSV_DATA_DIR, STATE_DATA_DIR
+except ImportError:
+    _RUN_PROJECT_ROOT = Path(__file__).resolve().parent
+    CSV_DATA_DIR = _RUN_PROJECT_ROOT / "chart_program" / "data"
+    STATE_DATA_DIR = _RUN_PROJECT_ROOT / "chart_program" / "data" / "state"
 from scanner_search import COMMODITIES_SEARCH_TICKERS
 PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
@@ -1250,6 +1256,9 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         raw_kijun = _source_metric(row, "ichimoku_status")
         kijun = _kijun_label(raw_kijun)
         note = _readable_breakout_note(raw_status, raw_kijun)
+        latest_pattern = _source_metric(row, "latest_retest_pattern")
+        if latest_pattern != "-" and note in {"-", "inside cloud", "touched cloud"}:
+            note = latest_pattern
         info = {
             "cloud_side": _cloud_side_label(row),
             "kijun": kijun,
@@ -1701,6 +1710,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _color_ichimoku_status(val: str) -> str:
         txt = str(val or "")
         norm = txt.strip().lower()
+        if "pattern" in norm:
+            return f"<span style='color:#16a34a;font-weight:800'>{html.escape(txt)}</span>"
         if "inside the cloud" in norm:
             return f"<span style='color:#b45309;font-weight:700'>{html.escape(txt)}</span>"
         if "unsuccessful breakout to the other side" in norm:

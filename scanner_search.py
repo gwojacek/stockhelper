@@ -1600,7 +1600,13 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                 result.latest_retest_date = "-"
                 result.latest_retest_pattern = "-"
             result.ichimoku_status = _ichimoku_status(enriched, result.side)
-            _apply_ichimoku_extra_metrics(result, _ichimoku_extra_metrics(enriched, result.side, result.ichimoku_status or ""))
+            has_latest_pattern = bool(result.latest_retest_pattern and result.latest_retest_pattern != "-")
+            metric_context = result.ichimoku_status or ""
+            if has_latest_pattern:
+                metric_context = f"{metric_context} retest_pattern"
+                if result.ichimoku_status and "pattern" not in result.ichimoku_status.lower():
+                    result.ichimoku_status = f"{result.ichimoku_status} - PATTERN!"
+            _apply_ichimoku_extra_metrics(result, _ichimoku_extra_metrics(enriched, result.side, metric_context))
             result.latest_candle_date = latest_candle_date
             result.expected_latest_session_date = expected_latest_session_date
             if instrument == "stock":
