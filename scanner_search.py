@@ -1527,6 +1527,42 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
     return df, csv_path, meta
+
+def _ichimoku_latest_pattern_still_active(df: pd.DataFrame, pattern_date: str | None, side: str, *, max_days: int = 3) -> bool:
+    if not pattern_date or pattern_date == "-" or df is None or df.empty:
+        return False
+    try:
+        pdate = pd.to_datetime(pattern_date).date()
+    except Exception:
+        return False
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    matches = df.loc[dates.dt.date == pdate]
+    if matches.empty:
+        return False
+    latest = dates.dropna().max()
+    if pd.isna(latest) or (latest.date() - pdate).days > max_days:
+        return False
+    pattern_row = matches.iloc[-1]
+    after = df.loc[dates.dt.date > pdate]
+    if after.empty:
+        return True
+    if side == "above":
+        floor = float(pd.to_numeric(pd.Series([pattern_row.get("Low")]), errors="coerce").iloc[0])
+        lows = pd.to_numeric(after["Low"], errors="coerce")
+        return not bool((lows < floor).any())
+    ceiling = float(pd.to_numeric(pd.Series([pattern_row.get("High")]), errors="coerce").iloc[0])
+    highs = pd.to_numeric(after["High"], errors="coerce")
+    return not bool((highs > ceiling).any())
+
+
+def _ichimoku_pattern_status_label(status: str) -> str:
+    low = (status or "").lower()
+    if "inside" in low and "cloud" in low:
+        return "Inside the cloud - PATTERN!"
+    if "touch" in low and "cloud" in low:
+        return "Touched the Cloud - PATTERN"
+    return status
+
 def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current_datetime: datetime | None = None) -> tuple[str, ScanResult | None, FlipResult | None, str | None, str]:
     if group_name == "forex":
         instrument = "forex"
@@ -1600,12 +1636,11 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                 result.latest_retest_date = "-"
                 result.latest_retest_pattern = "-"
             result.ichimoku_status = _ichimoku_status(enriched, result.side)
-            has_latest_pattern = bool(result.latest_retest_pattern and result.latest_retest_pattern != "-")
+            active_latest_pattern = bool(result.latest_retest_pattern and result.latest_retest_pattern != "-") and _ichimoku_latest_pattern_still_active(enriched, result.latest_retest_date, result.side)
             metric_context = result.ichimoku_status or ""
-            if has_latest_pattern:
+            if active_latest_pattern:
                 metric_context = f"{metric_context} retest_pattern"
-                if result.ichimoku_status and "pattern" not in result.ichimoku_status.lower():
-                    result.ichimoku_status = f"{result.ichimoku_status} - PATTERN!"
+                result.ichimoku_status = _ichimoku_pattern_status_label(result.ichimoku_status or "")
             _apply_ichimoku_extra_metrics(result, _ichimoku_extra_metrics(enriched, result.side, metric_context))
             result.latest_candle_date = latest_candle_date
             result.expected_latest_session_date = expected_latest_session_date
@@ -3229,6 +3264,12 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # modest touch-count advantage. A broader/older wedge with 3
                 # clean touches should beat a tiny 4-touch wedge.
                 size_preference = 1.0 + min(1.25, duration_months / 5.0) + min(0.55, width_start_pct / 80.0)
+                lower_line_shape_bonus = 1.0
+                if breakout_direction == "long" and lower_slope < 0:
+                    # After a long breakout, prefer an adjusted/leaner bottom
+                    # boundary over a wide downward lower line that creates an
+                    # economically poor stop-loss distance.
+                    lower_line_shape_bonus = 0.72
                 exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
                 proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
                 compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
@@ -3248,7 +3289,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # scanner match than a steeper line that only wins because of slope.
                 slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * lower_line_shape_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line

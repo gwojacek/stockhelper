@@ -1257,7 +1257,9 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         kijun = _kijun_label(raw_kijun)
         note = _readable_breakout_note(raw_status, raw_kijun)
         latest_pattern = _source_metric(row, "latest_retest_pattern")
-        if latest_pattern != "-" and note in {"-", "inside cloud", "touched cloud"}:
+        latest_pattern_date = _source_metric(row, "latest_retest_date")
+        active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
+        if active_latest_pattern and note in {"-", "inside cloud", "touched cloud"}:
             note = latest_pattern
         info = {
             "cloud_side": _cloud_side_label(row),
@@ -1316,7 +1318,10 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
 
     def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         row, info = item
-        return _is_fresh_retest_window(row) and _short_retest_trigger(row, info)
+        latest_pattern = _source_metric(row, "latest_retest_pattern")
+        latest_pattern_date = _source_metric(row, "latest_retest_date")
+        active_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
+        return (_is_fresh_retest_window(row) or active_pattern) and _short_retest_trigger(row, info)
 
     def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item

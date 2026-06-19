@@ -488,7 +488,7 @@ class ChartLevelSelectorUI:
         is_stock = original_is_stock and not stock_cfd_on
         stock_cfd_spread_label = "Spread (price units; pips = spread / 0.01)" if stock_cfd_on else "Spread multiplier (spread = Multiplier * pip_value)"
         has_saved_levels = any((self.values or {}).get(field) is not None for field in SELECTION_SEQUENCE)
-        initial_active_field = None if has_saved_levels else "high"
+        initial_active_field = None
         is_commodity = self.instrument_type == "commodity"
         index_like_tokens = ("^", "DE40", "US500", "US100", "US30", "JP225", "WIG20", "UK100", "EU50", "DAX", "CAC", "AEX", "SMI", "IBEX")
         source_ticker_upper = (self.source_ticker or "").upper()
