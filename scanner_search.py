@@ -2932,8 +2932,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
     if len(w) < 55:
         return None
-    if len(w) > 240:
-        w = w.tail(240).reset_index(drop=True)
+    if len(w) > 420:
+        w = w.tail(420).reset_index(drop=True)
 
     best: WedgeScanResult | None = None
     highs = w["High"].astype(float).to_numpy()
@@ -2959,7 +2959,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         # still touches as long as the candle closes back inside the wedge.
         return _post_anchor_touch_tolerance_static(price)
 
-    for length in range(min(180, n), 44, -5):
+    for length in range(min(360, n), 44, -5):
         start = n - length
         end = n - 1
         seg_high = highs[start : end + 1]

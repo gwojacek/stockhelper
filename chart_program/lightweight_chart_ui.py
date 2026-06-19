@@ -969,6 +969,12 @@ class LightweightChartLevelSelectorUI:
 
     const upperTouches = upper ? (touchMap.get(upper) || wedgeTouchPoints(upper)) : [];
     const lowerTouches = lower ? (touchMap.get(lower) || wedgeTouchPoints(lower)) : [];
+    const activeBreakoutIdx = Math.max(
+      ...[...upperTouches, ...lowerTouches]
+        .filter(pt => pt.anchor)
+        .map(pt => Number(pt.idx))
+        .filter(Number.isFinite)
+    );
     const oldestIdx = Math.min(
       ...[...upperTouches, ...lowerTouches]
         .map(pt => Number(pt.idx))
@@ -976,7 +982,7 @@ class LightweightChartLevelSelectorUI:
     );
     let breakout = null;
     realCandles.forEach((row, idx) => {{
-      if (breakout || (Number.isFinite(oldestIdx) && idx <= oldestIdx)) return;
+      if (breakout || (Number.isFinite(activeBreakoutIdx) && idx <= activeBreakoutIdx)) return;
       const up = upper ? lineValueForDate(upper, row.time) : null;
       const lo = lower ? lineValueForDate(lower, row.time) : null;
       if (Number.isFinite(up) && Number(row.close) > up) breakout = {{time:row.time, direction:'long', line:'upper', value:roundPrice(up), close:roundPrice(row.close)}};
