@@ -906,17 +906,18 @@ class LightweightChartLevelSelectorUI:
       if (!Number.isFinite(extreme)) continue;
       const lineValue = Number(endpoint.y0) + slope * (idx - idx0);
       if (!Number.isFinite(lineValue)) continue;
-      const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.025, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
+      const closeTolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
+      const touchTolerance = Math.max(Math.abs(lineValue) * 0.00025, Math.abs(lineValue) < 1 ? 0.00025 : 0.0025);
       const close = Number(c.close);
-      const breakoutClose = side === 'upper' ? close > lineValue + tolerance : close < lineValue - tolerance;
+      const breakoutClose = side === 'upper' ? close > lineValue + closeTolerance : close < lineValue - closeTolerance;
       if (breakoutClose) break;
-      // A visual wedge touch must be at the candle's actual top/bottom wick.
-      // Do not count candles where the line merely passes through the body or
-      // through the middle of a long wick; those made debug anchors appear on
-      // candles that did not really touch the trendline.
+      // Preserve the scanner's touch definition: the relevant wick must reach
+      // or pierce the trendline and the candle must close back inside.  Do not
+      // count body-only intersections or candles that remain under/over the
+      // line without the wick actually reaching it.
       const touched = side === 'upper'
-        ? Math.abs(Number(c.high) - lineValue) <= tolerance && close <= lineValue + tolerance
-        : Math.abs(Number(c.low) - lineValue) <= tolerance && close >= lineValue - tolerance;
+        ? Number(c.high) >= lineValue - touchTolerance && close <= lineValue + closeTolerance
+        : Number(c.low) <= lineValue + touchTolerance && close >= lineValue - closeTolerance;
       if (touched) {{
         const localLeft = Math.max(0, idx - 1);
         const localRight = Math.min(realCandles.length - 1, idx + 1);
