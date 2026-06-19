@@ -3348,7 +3348,25 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     breakout_date=_fmt_date(breakout_idx) if breakout_idx is not None else "-",
                     breakout_direction=breakout_direction,
                 )
-                if best is None or cand.score > best.score:
+                def _candidate_beats_best(candidate: WedgeScanResult, current: WedgeScanResult | None) -> bool:
+                    if current is None:
+                        return True
+                    candidate_touches = candidate.upper_touches + candidate.lower_touches
+                    current_touches = current.upper_touches + current.lower_touches
+                    same_state = (candidate.breakout_direction or "-") == (current.breakout_direction or "-")
+                    comparable_touches = candidate_touches >= current_touches - 1
+                    comparable_duration = candidate.duration_days >= current.duration_days * 0.55
+                    materially_tighter = candidate.width_end_pct <= current.width_end_pct * 0.78
+                    oversized_current = current.width_end_pct > 30.0 or current.width_start_pct > 95.0
+                    if same_state and comparable_touches and comparable_duration and materially_tighter:
+                        # If a valid alternative exists, prefer the economically
+                        # tighter wedge over an oversized one even when the wide
+                        # wedge has a slightly higher raw score. If no such
+                        # alternative appears, the wide wedge can still remain best.
+                        return candidate.score >= current.score * (0.72 if oversized_current else 0.86)
+                    return candidate.score > current.score
+
+                if _candidate_beats_best(cand, best):
                     best = cand
     return best
 
