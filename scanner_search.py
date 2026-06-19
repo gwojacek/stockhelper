@@ -3131,6 +3131,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         break
                     if breakout_idx is not None:
                         if _breakout_stop_loss_touched(i):
+                            # This breakout's probable SL was reached, so the
+                            # candidate is burnt. Reject only this anchor set and
+                            # keep searching so later/leaner adjusted lines can win.
                             invalid = True
                             break
                         continue
@@ -3204,6 +3207,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 last_close = float(closes[end])
                 width_start_pct = width_start / max(abs(last_close), 1e-9) * 100.0
                 width_end_pct = width_end / max(abs(last_close), 1e-9) * 100.0
+                width_ratio = width_start / max(width_end, 1e-9)
                 slope_pct = abs(upper_slope - lower_slope) / max(abs(last_close), 1e-9) * 100.0
                 duration = end - first_validation + 1
                 duration_months = duration / 21.0
@@ -3258,6 +3262,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     or last_upper_contact_age > (110 if breakout_idx is not None else 75)
                     or last_lower_contact_age > (85 if breakout_idx is not None else 55)
                     or width_end_pct > (40.0 if breakout_idx is not None else 28.0)
+                    or width_start_pct > (130.0 if breakout_idx is not None else 95.0)
+                    or width_ratio > (8.0 if breakout_idx is not None else 5.5)
                     or (breakout_idx is None and breakout_potential_quality < 0.18)
                 ):
                     continue
@@ -3267,7 +3273,15 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # modest touch-count advantage. A broader/older wedge with 3
                 # clean touches should beat a tiny 4-touch wedge.
                 size_preference = 1.0 + min(1.25, duration_months / 5.0) + min(0.55, width_start_pct / 80.0)
-                upper_anchor_height_bonus = 1.0 + min(0.55, max(0.0, (upper_a[1] / global_high) - 0.92) * 6.0)
+                higher_high_width_ok = width_start_pct <= (105.0 if breakout_idx is not None else 82.0) and width_end_pct <= (34.0 if breakout_idx is not None else 24.0) and width_ratio <= (6.0 if breakout_idx is not None else 4.5)
+                upper_anchor_height_bonus = 1.0
+                if higher_high_width_ok:
+                    # Prefer a higher possible top anchor only when it does not
+                    # turn the setup into an economically oversized wedge.
+                    upper_anchor_height_bonus += min(0.55, max(0.0, (upper_a[1] / global_high) - 0.92) * 6.0)
+                economical_width_penalty = 1.0
+                if width_start_pct > (95.0 if breakout_idx is not None else 72.0):
+                    economical_width_penalty = 0.82
                 lower_line_shape_bonus = 1.0
                 if breakout_direction == "long":
                     if lower_slope < 0:
@@ -3298,7 +3312,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # scanner match than a steeper line that only wins because of slope.
                 slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * lower_line_shape_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the upper line
