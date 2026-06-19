@@ -2973,13 +2973,35 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         if high_abs > start + int(length * 0.45):
             continue
 
-        upper_anchor2_candidates: list[int] = []
-        for j in range(high_abs + 5, end - 4):
-            if highs[j] >= highs[high_abs]:
+        upper_anchor1_candidates: list[int] = [high_abs]
+        upper_anchor1_latest = min(end - 12, start + int(length * 0.62))
+        for j in range(start + 2, upper_anchor1_latest + 1):
+            if j == high_abs:
                 continue
             if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
-                upper_anchor2_candidates.append(j)
-        if not upper_anchor2_candidates:
+                upper_anchor1_candidates.append(j)
+        # Keep the absolute top eligible, but also try other early swing highs.
+        # A single blow-off wick can otherwise force an ultra-wide wedge whose
+        # stop loss is not playable even when a lower, touch-rich top line fits.
+        upper_anchor1_candidates = sorted(
+            set(upper_anchor1_candidates),
+            key=lambda j: (0 if j == high_abs else 1, -(end - j), -float(highs[j])),
+        )[:18]
+
+        upper_anchor_pairs: list[tuple[int, int]] = []
+        for uh1 in upper_anchor1_candidates:
+            upper_anchor2_candidates: list[int] = []
+            for j in range(uh1 + 5, end - 4):
+                if highs[j] >= highs[uh1]:
+                    continue
+                if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
+                    upper_anchor2_candidates.append(j)
+            upper_anchor2_candidates = sorted(
+                upper_anchor2_candidates,
+                key=lambda j: (abs((end - j) - max(12, (end - uh1) // 3)), -float(highs[j]), j),
+            )
+            upper_anchor_pairs.extend((uh1, uh2) for uh2 in upper_anchor2_candidates[:18])
+        if not upper_anchor_pairs:
             continue
 
         lower_anchor2_candidates: list[int] = []
@@ -2996,8 +3018,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         # historical lows; the absolute lowest low is still always one anchor.
         lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
 
-        for uh2 in upper_anchor2_candidates[:14]:
-            upper_a = (high_abs, float(highs[high_abs]))
+        for uh1, uh2 in upper_anchor_pairs:
+            upper_a = (uh1, float(highs[uh1]))
             upper_b = (uh2, float(highs[uh2]))
             upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
             if upper_slope >= 0:
@@ -3042,12 +3064,12 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if not _anchors_uninterrupted(lower_a, lower_b, "lower"):
                     continue
 
-                first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
-                upper_anchor_indices = {high_abs, uh2}
+                first_validation = max(min(uh1, uh2), min(low_abs, lh2))
+                upper_anchor_indices = {uh1, uh2}
                 lower_anchor_indices = {low_abs, lh2}
-                upper_exact_contacts = [high_abs, uh2]
+                upper_exact_contacts = [uh1, uh2]
                 lower_exact_contacts = [low_abs, lh2]
-                upper_contacts = [high_abs, uh2]
+                upper_contacts = [uh1, uh2]
                 lower_contacts = [low_abs, lh2]
                 breakout_idx: int | None = None
                 breakout_direction = "-"
@@ -3282,9 +3304,16 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # Prefer a higher possible top anchor only when it does not
                     # turn the setup into an economically oversized wedge.
                     upper_anchor_height_bonus += min(0.55, max(0.0, (upper_a[1] / global_high) - 0.92) * 6.0)
+                if upper_a[0] != high_abs and upper_a[1] >= global_high * 0.82:
+                    # A slightly lower top anchor is often preferable when it
+                    # converts an otherwise valid but unusably wide wedge into a
+                    # tighter line with repeated wick/body touches.
+                    upper_anchor_height_bonus += 0.10
                 economical_width_penalty = 1.0
                 if width_start_pct > (95.0 if breakout_idx is not None else 72.0):
                     economical_width_penalty = 0.82
+                if width_start_pct > (75.0 if breakout_idx is not None else 58.0) or width_end_pct > (27.0 if breakout_idx is not None else 20.0):
+                    economical_width_penalty *= 0.82
                 lower_line_shape_bonus = 1.0
                 if breakout_direction == "long":
                     if lower_slope < 0:
@@ -3318,10 +3347,11 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
-                # not tolerance contacts. For display/export, keep the upper line
-                # anchored from the highest high, and start the lower line from its
-                # first chronological anchor so the bottom boundary is drawn from
-                # the first visible contact rather than the second.
+                # not tolerance contacts. For display/export, keep the selected
+                # upper swing-high anchor (not necessarily the absolute high), and
+                # start the lower line from its first chronological anchor so the
+                # bottom boundary is drawn from the first visible contact rather
+                # than the second.
                 upper_start, upper_end = upper_a, upper_b
                 lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
                 cand = WedgeScanResult(
