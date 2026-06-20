@@ -2988,7 +2988,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         upper_anchor1_candidates = sorted(
             set(upper_anchor1_candidates),
             key=lambda j: (0 if j == high_abs else 1, -float(highs[j]), j),
-        )[:18]
+        )[:12]
         upper_anchor_pairs: list[tuple[int, int]] = []
         for uh1 in upper_anchor1_candidates:
             upper_anchor2_candidates: list[int] = []
@@ -3001,23 +3001,41 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 upper_anchor2_candidates,
                 key=lambda j: (-float(highs[j]), abs((end - j) - max(12, (end - uh1) // 4)), j),
             )
-            upper_anchor_pairs.extend((uh1, uh2) for uh2 in upper_anchor2_candidates[:32])
+            upper_anchor_pairs.extend((uh1, uh2) for uh2 in upper_anchor2_candidates[:12])
+        upper_anchor_pairs = sorted(
+            set(upper_anchor_pairs),
+            key=lambda pair: (0 if pair[0] == high_abs else 1, -float(highs[pair[0]]), -float(highs[pair[1]]), pair[1]),
+        )[:24]
         if not upper_anchor_pairs:
             continue
 
-        lower_anchor2_candidates: list[int] = []
-        for j in range(start + 2, end - 2):
+        lower_anchor1_candidates: list[int] = [low_abs]
+        lower_anchor1_latest = min(end - 12, start + int(length * 0.82))
+        for j in range(start + 2, lower_anchor1_latest + 1):
             if j == low_abs:
                 continue
-            if abs(j - low_abs) < 5:
-                continue
-            if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1] and lows[j] > lows[low_abs]:
-                lower_anchor2_candidates.append(j)
-        if not lower_anchor2_candidates:
+            if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
+                lower_anchor1_candidates.append(j)
+        lower_anchor1_candidates = sorted(
+            set(lower_anchor1_candidates),
+            key=lambda j: (0 if j == low_abs else 1, abs(end - j), float(lows[j])),
+        )[:12]
+        lower_anchor_pairs: list[tuple[int, int]] = []
+        for lh1 in lower_anchor1_candidates:
+            lower_anchor2_candidates: list[int] = []
+            for j in range(lh1 + 5, end - 2):
+                if lows[j] <= lows[lh1]:
+                    continue
+                if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
+                    lower_anchor2_candidates.append(j)
+            lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
+            lower_anchor_pairs.extend((lh1, lh2) for lh2 in lower_anchor2_candidates[:12])
+        lower_anchor_pairs = sorted(
+            set(lower_anchor_pairs),
+            key=lambda pair: (abs(end - pair[1]), 0 if pair[0] == low_abs else 1, pair[0]),
+        )[:24]
+        if not lower_anchor_pairs:
             continue
-        # Prefer active lower anchors near current price action over distant
-        # historical lows; the absolute lowest low is still always one anchor.
-        lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
 
         for uh1, uh2 in upper_anchor_pairs:
             upper_a = (uh1, float(highs[uh1]))
@@ -3025,13 +3043,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
             upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
             if upper_slope >= 0:
                 continue
-            for lh2 in lower_anchor2_candidates[:40]:
-                # Use the lowest low as one exact lower anchor, as requested.
-                lower_a = (low_abs, float(lows[low_abs]))
+            for lh1, lh2 in lower_anchor_pairs:
+                lower_a = (lh1, float(lows[lh1]))
                 lower_b = (lh2, float(lows[lh2]))
                 lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
-                if lower_b[0] < lower_a[0]:
-                    lower_slope = (lower_a[1] - lower_b[1]) / (lower_a[0] - lower_b[0])
                 # Falling wedges must converge. The lower boundary is allowed to
                 # be flat or rising when that best describes current price
                 # compression (triangle-like wedges). Reject only lower lines
@@ -3065,13 +3080,13 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if not _anchors_uninterrupted(lower_a, lower_b, "lower"):
                     continue
 
-                first_validation = max(min(uh1, uh2), min(low_abs, lh2))
+                first_validation = max(min(uh1, uh2), min(lh1, lh2))
                 upper_anchor_indices = {uh1, uh2}
-                lower_anchor_indices = {low_abs, lh2}
+                lower_anchor_indices = {lh1, lh2}
                 upper_exact_contacts = [uh1, uh2]
-                lower_exact_contacts = [low_abs, lh2]
+                lower_exact_contacts = [lh1, lh2]
                 upper_contacts = [uh1, uh2]
-                lower_contacts = [low_abs, lh2]
+                lower_contacts = [lh1, lh2]
                 breakout_idx: int | None = None
                 breakout_direction = "-"
                 invalid = False
@@ -3126,7 +3141,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             break
                 if invalid:
                     continue
-                for i in range(min(low_abs, lh2), end + 1):
+                for i in range(min(lh1, lh2), end + 1):
                     if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
                         if i < end - 5:
                             invalid = True
