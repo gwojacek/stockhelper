@@ -3001,10 +3001,15 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 upper_anchor2_candidates,
                 key=lambda j: (-float(highs[j]), abs((end - j) - max(12, (end - uh1) // 4)), j),
             )
-            upper_anchor_pairs.extend((uh1, uh2) for uh2 in upper_anchor2_candidates[:12])
+            active_upper_anchor2_candidates = sorted(
+                upper_anchor2_candidates,
+                key=lambda j: (abs(end - j), -float(highs[j]), j),
+            )
+            selected_upper_anchor2 = list(dict.fromkeys(upper_anchor2_candidates[:8] + active_upper_anchor2_candidates[:8]))
+            upper_anchor_pairs.extend((uh1, uh2) for uh2 in selected_upper_anchor2)
         upper_anchor_pairs = sorted(
             set(upper_anchor_pairs),
-            key=lambda pair: (0 if pair[0] == high_abs else 1, -float(highs[pair[0]]), -float(highs[pair[1]]), pair[1]),
+            key=lambda pair: (0 if pair[0] == high_abs else 1, min(abs(end - pair[1]), 80), -float(highs[pair[0]]), -float(highs[pair[1]]), pair[1]),
         )[:24]
         if not upper_anchor_pairs:
             continue
