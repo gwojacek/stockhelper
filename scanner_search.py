@@ -3015,7 +3015,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
             continue
 
         lower_anchor1_candidates: list[int] = [low_abs]
-        lower_anchor1_latest = min(end - 12, start + int(length * 0.82))
+        lower_anchor1_latest = min(end - 8, start + int(length * 0.95))
         for j in range(start + 2, lower_anchor1_latest + 1):
             if j == low_abs:
                 continue
@@ -3033,12 +3033,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     continue
                 if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
                     lower_anchor2_candidates.append(j)
-            lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
-            lower_anchor_pairs.extend((lh1, lh2) for lh2 in lower_anchor2_candidates[:12])
+            active_lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
+            low_lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (float(lows[j]), abs(end - j), j))
+            selected_lower_anchor2 = list(dict.fromkeys(active_lower_anchor2_candidates[:8] + low_lower_anchor2_candidates[:8]))
+            lower_anchor_pairs.extend((lh1, lh2) for lh2 in selected_lower_anchor2)
         lower_anchor_pairs = sorted(
             set(lower_anchor_pairs),
-            key=lambda pair: (abs(end - pair[1]), 0 if pair[0] == low_abs else 1, pair[0]),
-        )[:24]
+            key=lambda pair: (min(abs(end - pair[1]), 80), 0 if pair[0] == low_abs else 1, float(lows[pair[1]]), pair[0]),
+        )[:72]
         if not lower_anchor_pairs:
             continue
 
