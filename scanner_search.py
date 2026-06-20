@@ -3420,6 +3420,16 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         # wedge is clearly oversized. If no alternative appears,
                         # the wide wedge can still remain best.
                         return oversized_current or candidate.score >= current.score * 0.86
+                    much_longer_with_better_upper = (
+                        same_state
+                        and candidate.duration_days >= current.duration_days * 2.2
+                        and candidate.upper_touches >= current.upper_touches + 2
+                        and candidate.lower_touches >= current.lower_touches
+                        and candidate.width_start_pct <= max(current.width_start_pct * 1.35, current.width_start_pct + 12.0)
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.35, current.width_end_pct + 6.0)
+                    )
+                    if much_longer_with_better_upper:
+                        return candidate.score >= current.score * 0.55
                     return candidate.score > current.score
 
                 if _candidate_beats_best(cand, best):
