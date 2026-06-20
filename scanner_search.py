@@ -3255,7 +3255,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 width_end_pct = width_end / max(abs(last_close), 1e-9) * 100.0
                 width_ratio = width_start / max(width_end, 1e-9)
                 slope_pct = abs(upper_slope - lower_slope) / max(abs(last_close), 1e-9) * 100.0
-                duration = end - first_validation + 1
+                formation_start = min(upper_a[0], upper_b[0], lower_a[0], lower_b[0])
+                duration = end - formation_start + 1
                 duration_months = duration / 21.0
                 compression_pct = max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0))
 
@@ -3373,7 +3374,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
                 cand = WedgeScanResult(
                     ticker="",
-                    start_date=_fmt_date(first_validation),
+                    start_date=_fmt_date(formation_start),
                     end_date=_fmt_date(end),
                     duration_days=duration,
                     upper_start_date=_fmt_date(upper_start[0]),
