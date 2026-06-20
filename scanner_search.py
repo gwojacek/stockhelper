@@ -3430,6 +3430,28 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     )
                     if much_longer_with_better_upper:
                         return candidate.score >= current.score * 0.55
+                    same_active_structure_longer_top = (
+                        same_state
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_end_date == current.lower_end_date
+                        and candidate.duration_days >= current.duration_days * 2.2
+                        and candidate.upper_touches >= current.upper_touches
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.50, current.width_end_pct + 7.0)
+                    )
+                    if same_active_structure_longer_top:
+                        return candidate.score >= current.score * 0.25
+                    current_same_active_structure_longer_top = (
+                        same_state
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_end_date == current.lower_end_date
+                        and current.duration_days >= candidate.duration_days * 2.2
+                        and current.upper_touches >= candidate.upper_touches
+                        and current.width_end_pct <= max(candidate.width_end_pct * 1.50, candidate.width_end_pct + 7.0)
+                    )
+                    if current_same_active_structure_longer_top:
+                        return False
                     return candidate.score > current.score
 
                 if _candidate_beats_best(cand, best):
