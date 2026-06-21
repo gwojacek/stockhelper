@@ -56,9 +56,45 @@
     "checked_at": "2026-06-12T09:45:25.092054+00:00",
     "result": "stale"
   },
+  "commodities:2026-06-13:post1945": {
+    "checked_at": "2026-06-13T18:14:14.974309+00:00",
+    "result": "fresh"
+  },
   "commodities:2026-06-13:pre1945": {
     "checked_at": "2026-06-13T07:39:38.827839+00:00",
     "result": "fresh"
+  },
+  "commodities:2026-06-14:post1945": {
+    "checked_at": "2026-06-14T19:05:01.762850+00:00",
+    "result": "fresh"
+  },
+  "commodities:2026-06-14:pre1945": {
+    "checked_at": "2026-06-14T08:26:09.005444+00:00",
+    "result": "fresh"
+  },
+  "commodities:2026-06-15:pre1945": {
+    "checked_at": "2026-06-15T16:25:16.085756+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-16:pre1945": {
+    "checked_at": "2026-06-16T15:35:19.410146+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-18:post1945": {
+    "checked_at": "2026-06-18T21:34:57.519061+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-19:pre1945": {
+    "checked_at": "2026-06-19T13:03:03.854548+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-21:post1945": {
+    "checked_at": "2026-06-21T20:46:53.049673+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-21:pre1945": {
+    "checked_at": "2026-06-21T08:29:26.596113+00:00",
+    "result": "stale"
   },
   "dax40": {
     "last_remote_check": "2026-05-28T16:58:39.959472+02:00"
@@ -71,6 +107,30 @@
   },
   "single": {
     "last_remote_check": "2026-05-28T09:33:02.917602+02:00"
+  },
+  "stooq_bulk:2026-06-13": {
+    "checked_at": "2026-06-13T18:13:12.790366+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-14": {
+    "checked_at": "2026-06-14T08:25:09.733751+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-15": {
+    "checked_at": "2026-06-15T06:57:58.215823+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-16": {
+    "checked_at": "2026-06-16T15:33:29.913301+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-18": {
+    "checked_at": "2026-06-18T21:33:16.216090+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-19": {
+    "checked_at": "2026-06-19T13:01:42.479715+00:00",
+    "result": "bulk"
   },
   "wig": {
     "last_remote_check": "2026-05-28T16:57:52.510319+02:00"

@@ -9,5 +9,83 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (110.52)",
+      "x0": "2026-06-15",
+      "x1": "2034-05-05",
+      "y0": 110.52,
+      "y1": 110.52,
+      "price": 110.52,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (91.05171)",
+      "x0": "2026-03-19",
+      "x1": "2034-05-05",
+      "y0": 91.05171,
+      "y1": 91.05171,
+      "price": 91.05171,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (85.03795)",
+      "x0": "2026-02-23",
+      "x1": "2034-05-05",
+      "y0": 85.03795,
+      "y1": 85.03795,
+      "price": 85.03795,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (79.02419)",
+      "x0": "2026-01-28",
+      "x1": "2034-05-05",
+      "y0": 79.02419,
+      "y1": 79.02419,
+      "price": 79.02419,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (59.5559)",
+      "x0": "2025-10-29",
+      "x1": "2034-05-05",
+      "y0": 59.5559,
+      "y1": 59.5559,
+      "price": 59.5559,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2025-10-29",
+      "x1": "2026-06-15",
+      "y0": 59.5559,
+      "y1": 110.52,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
 }
