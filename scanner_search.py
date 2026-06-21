@@ -3436,18 +3436,26 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         and candidate.lower_start_date == current.lower_start_date
                         and candidate.lower_end_date == current.lower_end_date
                         and candidate.duration_days >= current.duration_days * 2.2
-                        and candidate.upper_touches >= current.upper_touches
+                        and candidate.upper_touches >= current.upper_touches - 1
+                        and candidate.width_start_pct <= max(current.width_start_pct * 1.60, current.width_start_pct + 24.0)
                         and candidate.width_end_pct <= max(current.width_end_pct * 1.50, current.width_end_pct + 7.0)
                     )
                     if same_active_structure_longer_top:
-                        return candidate.score >= current.score * 0.25
+                        # When two valid candidates share the same active lower
+                        # boundary and the same recent upper anchor, prefer the
+                        # one that starts from the older/higher top.  The regular
+                        # fit/width filters above already reject artificial wide
+                        # wedges, so do not let raw score keep the scanner pinned
+                        # to a tiny late fragment of the same structure.
+                        return True
                     current_same_active_structure_longer_top = (
                         same_state
                         and candidate.upper_end_date == current.upper_end_date
                         and candidate.lower_start_date == current.lower_start_date
                         and candidate.lower_end_date == current.lower_end_date
                         and current.duration_days >= candidate.duration_days * 2.2
-                        and current.upper_touches >= candidate.upper_touches
+                        and current.upper_touches >= candidate.upper_touches - 1
+                        and current.width_start_pct <= max(candidate.width_start_pct * 1.60, candidate.width_start_pct + 24.0)
                         and current.width_end_pct <= max(candidate.width_end_pct * 1.50, candidate.width_end_pct + 7.0)
                     )
                     if current_same_active_structure_longer_top:
