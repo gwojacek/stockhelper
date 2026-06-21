@@ -529,6 +529,7 @@ class LightweightChartLevelSelectorUI:
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
+        <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">Find new wedge</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -1616,6 +1617,106 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
 
+  function wedgeLineThroughExtremeObjects(candidate) {{
+    const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.high)) && Number.isFinite(Number(r.low)));
+    const dateForIdx = (idx) => rows[Math.max(0, Math.min(rows.length - 1, idx))]?.time;
+    const lineAt = (a, b, idx) => a.price + (b.price - a.price) * ((idx - a.idx) / Math.max(1, b.idx - a.idx));
+    const maxIdx = rows.length - 1;
+    const projection = Math.max(80, Math.abs(candidate.upper.b.idx - candidate.upper.a.idx) * 2, Math.abs(candidate.lower.b.idx - candidate.lower.a.idx) * 2);
+    let endIdx = maxIdx + projection;
+    const us = (candidate.upper.b.price - candidate.upper.a.price) / Math.max(1, candidate.upper.b.idx - candidate.upper.a.idx);
+    const ls = (candidate.lower.b.price - candidate.lower.a.price) / Math.max(1, candidate.lower.b.idx - candidate.lower.a.idx);
+    const denom = us - ls;
+    if (Math.abs(denom) > 1e-9) {{
+      const ui = candidate.upper.a.price - us * candidate.upper.a.idx;
+      const li = candidate.lower.a.price - ls * candidate.lower.a.idx;
+      const cross = Math.ceil((li - ui) / denom);
+      if (cross > maxIdx) endIdx = Math.max(endIdx, cross + 5);
+    }}
+    endIdx = Math.min(endIdx, maxIdx + Math.max(rows.length, 180));
+    const make = (side, color, label, id, line) => {{
+      const first = Math.min(line.a.idx, line.b.idx);
+      const x = [], y = [];
+      for (let idx = first; idx <= endIdx; idx++) {{
+        let time = idx <= maxIdx ? dateForIdx(idx) : addDays(dateForIdx(maxIdx), idx - maxIdx);
+        x.push(time);
+        y.push(roundPrice(lineAt(line.a, line.b, idx)));
+      }}
+      const anchorX = [dateForIdx(line.a.idx), dateForIdx(line.b.idx)];
+      const anchorY = [roundPrice(line.a.price), roundPrice(line.b.price)];
+      // Force the generated polyline sample at the second anchor to equal the candle extreme exactly.
+      const secondPos = x.indexOf(anchorX[1]);
+      if (secondPos >= 0) y[secondPos] = anchorY[1];
+      return {{id, type:'wedge', label, x, y, x0:x[0], x1:x[x.length - 1], y0:y[0], y1:y[y.length - 1], anchor_x:anchorX, anchor_y:anchorY, price:y[y.length - 1], color, group_id:'auto-wedge'}};
+    }};
+    return [
+      make('upper', '#dc2626', 'Falling wedge upper', 'auto-wedge-upper', candidate.upper),
+      make('lower', '#2563eb', 'Falling wedge lower', 'auto-wedge-lower', candidate.lower),
+    ];
+  }}
+
+  function findAlternativeWedgeCandidate() {{
+    const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.high)) && Number.isFinite(Number(r.low)) && Number.isFinite(Number(r.close)));
+    if (rows.length < 55) return null;
+    const wedges = drawnObjects.filter(isWedgeLineObject);
+    const upperObj = wedges.find(o => wedgeSide(o) === 'upper');
+    const lowerObj = wedges.find(o => wedgeSide(o) === 'lower');
+    if (!upperObj || !lowerObj) return null;
+    const idxByTime = new Map(rows.map((r, i) => [String(r.time).slice(0,10), i]));
+    const anchorIdx = (obj, pos) => idxByTime.get(String((obj.anchor_x || [])[pos] || '').slice(0,10));
+    const curStart = Math.min(anchorIdx(upperObj, 0) ?? rows.length, anchorIdx(lowerObj, 0) ?? rows.length);
+    const curUpperSecond = anchorIdx(upperObj, 1);
+    const curLowerSecond = anchorIdx(lowerObj, 1);
+    const hi = i => Number(rows[i].high), lo = i => Number(rows[i].low), cl = i => Number(rows[i].close);
+    const isHigh = i => i > 0 && i < rows.length - 1 && hi(i) >= hi(i - 1) && hi(i) >= hi(i + 1);
+    const isLow = i => i > 0 && i < rows.length - 1 && lo(i) <= lo(i - 1) && lo(i) <= lo(i + 1);
+    const tol = Math.max(...rows.slice(-30).map(r => Number(r.high) - Number(r.low)).filter(Number.isFinite), Math.abs(cl(rows.length - 1)) * 0.004) * 0.20;
+    const end = rows.length - 1;
+    const scoreCurrent = Math.max(1, end - curStart);
+    const upperSeconds = [...new Set([curUpperSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isHigh(i))])].filter(Number.isFinite);
+    const lowerSeconds = [...new Set([curLowerSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isLow(i))])].filter(Number.isFinite);
+    let best = null;
+    for (const u2 of upperSeconds) for (const l2 of lowerSeconds) {{
+      const u1s = [];
+      for (let i = Math.max(1, u2 - 260); i <= u2 - 5; i++) if (isHigh(i) && hi(i) > hi(u2)) u1s.push(i);
+      const l1s = [];
+      for (let i = Math.max(1, l2 - 260); i <= l2 - 5; i++) if (isLow(i) && lo(i) < lo(l2)) l1s.push(i);
+      for (const u1 of u1s) for (const l1 of l1s) {{
+        const us = (hi(u2) - hi(u1)) / (u2 - u1), ls = (lo(l2) - lo(l1)) / (l2 - l1);
+        if (!(us < 0) || us >= ls || ls > Math.abs(us) * 1.10) continue;
+        const line = (a, av, b, bv, i) => av + (bv - av) * ((i - a) / (b - a));
+        let invalid = false, upperTouches = 2, lowerTouches = 2;
+        const first = Math.min(u1, l1);
+        for (let i = first; i <= end; i++) {{
+          const up = line(u1, hi(u1), u2, hi(u2), i), low = line(l1, lo(l1), l2, lo(l2), i);
+          if (low >= up || (cl(i) > up + tol * 0.1 && i < end - 5) || (cl(i) < low - tol * 0.1 && i < end - 5)) {{ invalid = true; break; }}
+          if (i > u2 && hi(i) >= up - tol && cl(i) <= up + tol * 0.1) upperTouches++;
+          if (i > l2 && lo(i) <= low + tol && cl(i) >= low - tol * 0.1) lowerTouches++;
+        }}
+        if (invalid || upperTouches < 2 || lowerTouches < 2) continue;
+        const duration = end - first;
+        if (duration <= scoreCurrent * 1.15 && hi(u1) <= candleExtremeForDate((upperObj.anchor_x || [])[0], 'upper', 0) && lo(l1) >= candleExtremeForDate((lowerObj.anchor_x || [])[0], 'lower', Infinity)) continue;
+        const widthStart = line(u1, hi(u1), u2, hi(u2), first) - line(l1, lo(l1), l2, lo(l2), first);
+        const widthEnd = line(u1, hi(u1), u2, hi(u2), end) - line(l1, lo(l1), l2, lo(l2), end);
+        if (widthStart <= 0 || widthEnd <= 0 || widthEnd >= widthStart * 0.95) continue;
+        const score = duration * 10 + widthStart + (upperTouches + lowerTouches) * 15 + Math.max(0, hi(u1) - hi(u2)) + Math.max(0, lo(l2) - lo(l1));
+        if (!best || score > best.score) best = {{score, upper:{{a:{{idx:u1, price:hi(u1)}}, b:{{idx:u2, price:hi(u2)}}}}, lower:{{a:{{idx:l1, price:lo(l1)}}, b:{{idx:l2, price:lo(l2)}}}}}};
+      }}
+    }}
+    return best;
+  }}
+
+  function findNewWedge() {{
+    const candidate = findAlternativeWedgeCandidate();
+    if (!candidate) {{ updateWedgeDebugPanel('No larger valid alternative wedge found.'); return; }}
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(wedgeLineThroughExtremeObjects(candidate));
+    applyWedgeDerivedLevels();
+    ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
+    render();
+    updateWedgeDebugPanel('Found and loaded a larger valid wedge alternative. Save & Close to keep it for future allsearch calculations.');
+  }}
+
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const wrap = $('chart-wrap');
@@ -1763,6 +1864,8 @@ class LightweightChartLevelSelectorUI:
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+    const findNewWedgeBtn = $('find-new-wedge');
+    if (findNewWedgeBtn) findNewWedgeBtn.style.display = drawnObjects.some(isWedgeLineObject) ? 'block' : 'none';
     const seenFib = new Set();
     drawnObjects.forEach((obj, idx) => {{
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
@@ -1871,6 +1974,7 @@ class LightweightChartLevelSelectorUI:
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('wedge-debug-btn').onclick = () => copyWedgeDebug();
+  $('find-new-wedge').onclick = () => findNewWedge();
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
     drawnObjects = initialScannerDrawnObjects.map(deepClone);

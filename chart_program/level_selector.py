@@ -782,6 +782,12 @@ def run_level_selector(raw_args=None):
                     indexes = list(range(first_idx, end_idx + 1))
                     x_vals = [str(pd.to_datetime(_date_for_index(i)).date()) for i in indexes]
                     y_vals = [round(_line_price_at_index(p0, p1, i), 5) for i in indexes]
+                    # Keep both anchor candles glued to their true chart extremes.
+                    # This avoids any visual rift at the second anchor after the
+                    # line has been sampled/extended for chart rendering.
+                    for anchor_idx, anchor_price in ((i0, p0[1]), (i1, p1[1])):
+                        if anchor_idx in indexes:
+                            y_vals[indexes.index(anchor_idx)] = round(float(anchor_price), 5)
                     return x_vals, y_vals
 
                 upper_x, upper_y = _line_object_points(up0, up1)
