@@ -1096,8 +1096,31 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 
+def _stooq_browser_backend() -> str:
+    return os.getenv("STOCKHELPER_STOOQ_BROWSER", "playwright").strip().lower()
+
+
 def _open_page(playwright, interactive: bool = False):
-    browser = playwright.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
+    headless = not interactive
+    slow_mo = 150 if interactive else 0
+    backend = _stooq_browser_backend()
+    if backend in {"cloak", "cloakbrowser"}:
+        try:
+            from cloakbrowser import launch as cloak_launch
+        except ImportError as exc:
+            raise RuntimeError(
+                "STOCKHELPER_STOOQ_BROWSER=cloak requires CloakBrowser. "
+                "Install it with `pip install cloakbrowser` or `poetry add cloakbrowser`, "
+                "then run `python -m cloakbrowser install`."
+            ) from exc
+        browser = cloak_launch(headless=headless, slow_mo=slow_mo)
+    elif backend in {"", "playwright", "chromium"}:
+        browser = playwright.chromium.launch(headless=headless, slow_mo=slow_mo)
+    else:
+        raise ValueError(
+            f"Unsupported STOCKHELPER_STOOQ_BROWSER={backend!r}; "
+            "expected 'playwright' or 'cloak'."
+        )
     page = browser.new_page()
     return browser, page
 

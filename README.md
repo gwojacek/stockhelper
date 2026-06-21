@@ -107,6 +107,9 @@ stockhelper/
 ```bash
 poetry install
 poetry run playwright install chromium
+# Optional: stealth Chromium fallback for Stooq commodity web/table flows
+poetry run pip install cloakbrowser
+poetry run python -m cloakbrowser install
 ```
 
 Use `poetry run ...` for commands, or activate the Poetry environment first:
@@ -124,6 +127,9 @@ python -m venv .venv
 source .venv/bin/activate
 pip install colorama dash flask numpy pandas plotly tabulate tenacity playwright yfinance opencv-python easyocr
 python -m playwright install chromium
+# Optional: stealth Chromium fallback for Stooq commodity web/table flows
+pip install cloakbrowser
+python -m cloakbrowser install
 ```
 
 ### Optional/system dependencies
@@ -154,6 +160,7 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_STOOQ_DEBUG` | `1` | Enables verbose Stooq scraper/debug logging. Also enabled by `python run --search-debug ...`. |
 | `STOCKHELPER_STOOQ_CAPTCHA_DEBUG` | `1` | Prints extra CAPTCHA OCR/debug details and writes CAPTCHA debug screenshots. |
 | `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS` | `5` | Number of OCR CAPTCHA attempts before giving up/falling back. Default in code is `5`. |
+| `STOCKHELPER_STOOQ_BROWSER` | `cloak` | Optional browser backend for Stooq web/table flows. Default is Playwright Chromium; set to `cloak` after installing CloakBrowser with `pip install cloakbrowser` and `python -m cloakbrowser install`. |
 | `STOCKHELPER_STOOQ_MAX_RUNTIME_S` | `900` | Watchdog timeout for Stooq web scraping. Code enforces at least 30 seconds. |
 | `STOCKHELPER_COMMODITIES_WORKERS` | `2` | Worker count for bounded parallel commodity Stooq web scans. Default is `2`; increase only when Stooq is stable. |
 | `STOCKHELPER_COMMODITIES_SEQUENTIAL` | `1` | Forces commodity scans to single-threaded Stooq web fetching. Useful when VPN/CAPTCHA prompts are noisy. |
