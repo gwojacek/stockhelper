@@ -2585,10 +2585,10 @@ def run_ichimoku_search(target: str) -> int:
             max_workers = min(max(1, workers_override), len(rest))
         elif group_name == "commodities":
             try:
-                commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "4"))
+                commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "6"))
             except ValueError:
-                commodity_workers = 4
-            max_workers = min(max(3, commodity_workers), len(rest))
+                commodity_workers = 6
+            max_workers = min(max(4, commodity_workers), len(rest))
         else:
             max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers, bounded queue).")
