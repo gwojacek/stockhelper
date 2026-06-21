@@ -511,6 +511,10 @@ class LightweightChartLevelSelectorUI:
     #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-start; gap:5px 12px; margin:0 auto 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
+    #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
+    #wedge-debug-panel.open {{ display:block; }}
+    #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
+    #wedge-debug-panel .muted {{ color:#94a3b8; }}
   </style>
 </head>
 <body>
@@ -561,6 +565,8 @@ class LightweightChartLevelSelectorUI:
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
       <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
+      <button id="wedge-debug-btn" style="margin-top:8px;width:100%;padding:10px;background:#7c3aed;color:white;border:none;border-radius:8px">Copy wedge debug</button>
+      <div id="wedge-debug-panel"></div>
       <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
         <h4>⭐ Quick charts from 📊</h4>
@@ -870,26 +876,23 @@ class LightweightChartLevelSelectorUI:
     const side = wedgeSide(obj);
     const isUpper = side === 'upper';
     const isLower = side === 'lower';
-    const anchors = Array.isArray(obj.anchor_x) ? obj.anchor_x : [];
-    const points = anchors.map((x, i) => {{
+    const endpoint = lineDisplayValues(obj);
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)));
+    const byTimeIndex = new Map(realCandles.map((c, idx) => [String(c.time).slice(0, 10), idx]));
+    const fallbackAnchors = (Array.isArray(obj.anchor_x) ? obj.anchor_x : []).map((x, i) => {{
       const time = String(x).slice(0, 10);
       const raw = Number((obj.anchor_y || [])[i]);
       const value = candleExtremeForDate(time, side, raw);
-      return {{time, value, anchor:true, upper:isUpper, lower:isLower, idx: ohlc.findIndex(c => c.time === time)}};
+      return {{time, value, anchor:true, computed_anchor:false, upper:isUpper, lower:isLower, idx: byTimeIndex.get(time) ?? ohlc.findIndex(c => c.time === time)}};
     }}).filter(p => p.time && Number.isFinite(p.value));
-    if (!side || points.length < 2) return points;
-    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)));
-    const byTimeIndex = new Map(realCandles.map((c, idx) => [String(c.time).slice(0, 10), idx]));
-    const p0 = points[0];
-    const p1 = points[points.length - 1];
-    const idx0 = byTimeIndex.get(p0.time);
-    const idx1 = byTimeIndex.get(p1.time);
-    if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return points;
-    const slope = (Number(p1.value) - Number(p0.value)) / (idx1 - idx0);
-    const anchorTimes = new Set(points.map(p => p.time));
+    if (!side || !endpoint) return fallbackAnchors;
+    const e0 = nearest(endpoint.x0);
+    const e1 = nearest(endpoint.x1);
+    const idx0 = Number(e0?.idx);
+    const idx1 = Number(e1?.idx);
+    if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return fallbackAnchors;
     const touchCandidates = [];
-    // Extra touchpoints are only valid after the two anchors define the line.
-    const start = Math.max(idx0, idx1);
+    const start = Math.min(idx0, idx1);
     const end = realCandles.length - 1;
     const avgRangeRows = realCandles.slice(Math.max(0, end - 29), end + 1)
       .map(c => Number(c.high) - Number(c.low))
@@ -898,32 +901,145 @@ class LightweightChartLevelSelectorUI:
     for (let idx = start; idx <= end; idx += 1) {{
       const c = realCandles[idx];
       const time = String(c.time).slice(0, 10);
-      if (anchorTimes.has(time)) continue;
       const extreme = side === 'upper' ? Number(c.high) : Number(c.low);
       if (!Number.isFinite(extreme)) continue;
-      const lineValue = Number(p0.value) + slope * (idx - idx0);
+      const lineValue = lineValueForDate(obj, time);
       if (!Number.isFinite(lineValue)) continue;
-      const tolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
-      const open = Number(c.open);
+      const closeTolerance = Math.max(Math.abs(lineValue) * 0.0005, avgRange * 0.08, Math.abs(lineValue) < 1 ? 0.0005 : 0.005);
+      const touchTolerance = Math.max(Math.abs(lineValue) * 0.00025, Math.abs(lineValue) < 1 ? 0.00025 : 0.0025);
       const close = Number(c.close);
-      const bodyHigh = Math.max(open, close);
-      const bodyLow = Math.min(open, close);
-      const breakoutClose = side === 'upper' ? close > lineValue + tolerance : close < lineValue - tolerance;
+      const breakoutClose = side === 'upper' ? close > lineValue + closeTolerance : close < lineValue - closeTolerance;
       if (breakoutClose) break;
+      // Preserve the scanner's touch definition: the relevant wick must reach
+      // or pierce the trendline and the candle must close back inside.  Do not
+      // count body-only intersections or candles that remain under/over the
+      // line without the wick actually reaching it.
       const touched = side === 'upper'
-        ? (Number(c.high) >= lineValue - tolerance && close <= lineValue + tolerance) || (bodyHigh >= lineValue - tolerance && bodyLow <= lineValue + tolerance)
-        : (Number(c.low) <= lineValue + tolerance && close >= lineValue - tolerance) || (bodyLow <= lineValue + tolerance && bodyHigh >= lineValue - tolerance);
+        ? Number(c.high) >= lineValue - touchTolerance && close <= lineValue + closeTolerance
+        : Number(c.low) <= lineValue + touchTolerance && close >= lineValue - closeTolerance;
       if (touched) {{
-        touchCandidates.push({{time, value: roundPrice(extreme), anchor:false, upper:isUpper, lower:isLower, idx}});
+        const localLeft = Math.max(0, idx - 1);
+        const localRight = Math.min(realCandles.length - 1, idx + 1);
+        const localRows = realCandles.slice(localLeft, localRight + 1);
+        const localExtreme = side === 'upper'
+          ? Number(c.high) >= Math.max(...localRows.map(r => Number(r.high)))
+          : Number(c.low) <= Math.min(...localRows.map(r => Number(r.low)));
+        touchCandidates.push({{time, value: roundPrice(extreme), line_value:roundPrice(lineValue), anchor:false, computed_anchor:false, upper:isUpper, lower:isLower, idx, local_extreme:localExtreme}});
       }}
     }}
     let lastIdx = null;
+    const points = [];
     touchCandidates.forEach(pt => {{
       if (lastIdx !== null && pt.idx - lastIdx <= 1) return;
       points.push(pt);
       lastIdx = pt.idx;
     }});
+    const firstAnchor = points.find(pt => pt.local_extreme) || points[0];
+    const secondAnchor = firstAnchor ? (points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1 && pt.local_extreme) || points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1)) : null;
+    [firstAnchor, secondAnchor].filter(Boolean).forEach(pt => {{ pt.anchor = true; pt.computed_anchor = true; }});
     return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+  }}
+
+  function wedgeDebugSnapshot() {{
+    const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+    const upper = wedges.find(obj => wedgeSide(obj) === 'upper') || null;
+    const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
+    const lines = [];
+    lines.push(`WEDGE DEBUG: ${{P.symbol || ''}}`);
+    lines.push(`Generated: ${{new Date().toISOString()}}`);
+    if (!wedges.length) {{
+      lines.push('No wedge lines on chart.');
+      return lines.join('\\n');
+    }}
+    const touchMap = new Map();
+    wedges.forEach(obj => {{
+      const side = wedgeSide(obj) || 'line';
+      const touches = wedgeTouchPoints(obj);
+      touchMap.set(obj, touches);
+      const anchors = touches.filter(pt => pt.anchor);
+      lines.push('');
+      lines.push(`${{String(obj.label || 'Wedge line')}} [${{side}}]`);
+      lines.push(`  anchors: ${{anchors.map(pt => `${{pt.time}} @ ${{fmt(pt.value)}}${{pt.computed_anchor ? ' (auto)' : ''}}`).join(' | ') || '-'}}`);
+      lines.push(`  touches: ${{touches.length}}`);
+      touches.forEach((pt, i) => {{
+        lines.push(`    ${{String(i + 1).padStart(2, '0')}}. ${{pt.time}} @ ${{fmt(pt.value)}}${{pt.line_value != null ? ` line=${{fmt(pt.line_value)}}` : ''}}${{pt.anchor ? (pt.computed_anchor ? ' (auto anchor)' : ' (anchor)') : ''}}`);
+      }});
+    }});
+
+    const upperTouches = upper ? (touchMap.get(upper) || wedgeTouchPoints(upper)) : [];
+    const lowerTouches = lower ? (touchMap.get(lower) || wedgeTouchPoints(lower)) : [];
+    const activeBreakoutIdx = Math.max(
+      ...[...upperTouches, ...lowerTouches]
+        .filter(pt => pt.anchor)
+        .map(pt => Number(pt.idx))
+        .filter(Number.isFinite)
+    );
+    const oldestIdx = Math.min(
+      ...[...upperTouches, ...lowerTouches]
+        .map(pt => Number(pt.idx))
+        .filter(Number.isFinite)
+    );
+    let breakout = null;
+    realCandles.forEach((row, idx) => {{
+      if (breakout || (Number.isFinite(activeBreakoutIdx) && idx <= activeBreakoutIdx)) return;
+      const up = upper ? lineValueForDate(upper, row.time) : null;
+      const lo = lower ? lineValueForDate(lower, row.time) : null;
+      if (Number.isFinite(up) && Number(row.close) > up) breakout = {{time:row.time, direction:'long', line:'upper', value:roundPrice(up), close:roundPrice(row.close)}};
+      if (!breakout && Number.isFinite(lo) && Number(row.close) < lo) breakout = {{time:row.time, direction:'short', line:'lower', value:roundPrice(lo), close:roundPrice(row.close)}};
+    }});
+    lines.push('');
+    lines.push(`Breakout: ${{breakout ? `${{breakout.time}} ${{breakout.direction}} via ${{breakout.line}} line @ ${{fmt(breakout.value)}} (close ${{fmt(breakout.close)}})` : '-'}}`);
+    lines.push('');
+    const upperTouchDates = new Set(upperTouches.map(pt => pt.time));
+    const lowerTouchDates = new Set(lowerTouches.map(pt => pt.time));
+    const touchedDates = new Set([...upperTouchDates, ...lowerTouchDates]);
+    lines.push('Touched candles only:');
+    lines.push('Date,Open,High,Low,Close,UpperLine,LowerLine,Inside,TouchSide');
+    realCandles.filter(row => touchedDates.has(row.time)).forEach(row => {{
+      const up = upper ? lineValueForDate(upper, row.time) : null;
+      const lo = lower ? lineValueForDate(lower, row.time) : null;
+      const insideUpper = !Number.isFinite(up) || Number(row.close) <= up;
+      const insideLower = !Number.isFinite(lo) || Number(row.close) >= lo;
+      const touchSide = [
+        upperTouchDates.has(row.time) ? 'upper' : '',
+        lowerTouchDates.has(row.time) ? 'lower' : '',
+      ].filter(Boolean).join('+');
+      lines.push([
+        row.time,
+        fmt(row.open),
+        fmt(row.high),
+        fmt(row.low),
+        fmt(row.close),
+        Number.isFinite(up) ? fmt(up) : '',
+        Number.isFinite(lo) ? fmt(lo) : '',
+        insideUpper && insideLower ? 'yes' : 'no',
+        touchSide,
+      ].join(','));
+    }});
+    return lines.join('\\n');
+  }}
+
+  function updateWedgeDebugPanel(message = '') {{
+    const panel = $('wedge-debug-panel');
+    if (!panel || !panel.classList.contains('open')) return;
+    const text = wedgeDebugSnapshot();
+    panel.textContent = message ? `${{message}}\\n\\n${{text}}` : text;
+  }}
+
+  async function copyWedgeDebug() {{
+    const panel = $('wedge-debug-panel');
+    const text = wedgeDebugSnapshot();
+    if (panel) {{
+      panel.classList.add('open');
+      panel.textContent = text;
+    }}
+    try {{
+      await navigator.clipboard.writeText(text);
+      updateWedgeDebugPanel('Copied wedge debug to clipboard.');
+    }} catch (err) {{
+      updateWedgeDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
+    }}
   }}
 
   function drawWedgeTouchPoints(ctx) {{
@@ -938,31 +1054,18 @@ class LightweightChartLevelSelectorUI:
           ctx.save();
           ctx.translate(x, y);
           ctx.beginPath();
-          ctx.moveTo(0, -7);
-          ctx.lineTo(7, 0);
-          ctx.lineTo(0, 7);
-          ctx.lineTo(-7, 0);
-          ctx.closePath();
+          ctx.arc(0, 0, 6.2, 0, Math.PI * 2);
           ctx.shadowColor = 'rgba(0,0,0,.55)';
-          ctx.shadowBlur = 5;
-          ctx.fillStyle = '#f8fafc';
+          ctx.shadowBlur = 3;
+          ctx.fillStyle = 'rgba(15,23,42,.35)';
           ctx.strokeStyle = '#f8fafc';
-          ctx.lineWidth = 2;
-          ctx.fill();
+          ctx.lineWidth = 1.6;
           ctx.stroke();
           ctx.shadowBlur = 0;
           ctx.beginPath();
-          ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
-          ctx.fillStyle = anchorFill;
+          ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
+          ctx.fillStyle = '#a855f7';
           ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(-4, 0);
-          ctx.lineTo(4, 0);
-          ctx.moveTo(0, -4);
-          ctx.lineTo(0, 4);
-          ctx.strokeStyle = '#0f172a';
-          ctx.lineWidth = 1.4;
-          ctx.stroke();
           ctx.restore();
           return;
         }}
@@ -1306,6 +1409,7 @@ class LightweightChartLevelSelectorUI:
         try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('line drag viewport restore failed', e); }}
       }}
       drawCloud();
+      updateWedgeDebugPanel();
     }});
   }}
 
@@ -1664,6 +1768,7 @@ class LightweightChartLevelSelectorUI:
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
       picker.add(new Option(`${{obj.label || 'OBJ'}} (${{String(obj.id || idx).slice(0,8)}})`, obj.id || `obj-index:${{idx}}`));
     }});
+    updateWedgeDebugPanel();
   }}
 
   function applyInstrumentControls() {{
@@ -1765,6 +1870,7 @@ class LightweightChartLevelSelectorUI:
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('wedge-debug-btn').onclick = () => copyWedgeDebug();
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
     drawnObjects = initialScannerDrawnObjects.map(deepClone);

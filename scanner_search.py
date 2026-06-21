@@ -2932,8 +2932,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
     if len(w) < 55:
         return None
-    if len(w) > 240:
-        w = w.tail(240).reset_index(drop=True)
+    if len(w) > 420:
+        w = w.tail(420).reset_index(drop=True)
 
     best: WedgeScanResult | None = None
     highs = w["High"].astype(float).to_numpy()
@@ -2959,7 +2959,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         # still touches as long as the candle closes back inside the wedge.
         return _post_anchor_touch_tolerance_static(price)
 
-    for length in range(min(180, n), 44, -5):
+    for length in range(min(360, n), 44, -5):
         start = n - length
         end = n - 1
         seg_high = highs[start : end + 1]
@@ -2973,42 +2973,87 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         if high_abs > start + int(length * 0.45):
             continue
 
-        upper_anchor2_candidates: list[int] = []
-        for j in range(high_abs + 5, end - 4):
-            if highs[j] >= highs[high_abs]:
+        upper_anchor1_candidates: list[int] = [high_abs]
+        upper_anchor1_latest = min(end - 12, start + int(length * 0.72))
+        for j in range(start + 2, upper_anchor1_latest + 1):
+            if j == high_abs:
+                continue
+            if highs[j] > highs[high_abs] * 1.000001:
                 continue
             if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
-                upper_anchor2_candidates.append(j)
-        if not upper_anchor2_candidates:
+                upper_anchor1_candidates.append(j)
+        # Do not force a blow-off high to be the first upper anchor.  Longer,
+        # still-descending wedges can be more useful when a later swing high
+        # creates the active line and keeps recent price near the boundary.
+        upper_anchor1_candidates = sorted(
+            set(upper_anchor1_candidates),
+            key=lambda j: (0 if j == high_abs else 1, -float(highs[j]), j),
+        )[:12]
+        upper_anchor_pairs: list[tuple[int, int]] = []
+        for uh1 in upper_anchor1_candidates:
+            upper_anchor2_candidates: list[int] = []
+            for j in range(uh1 + 5, end - 4):
+                if highs[j] >= highs[uh1]:
+                    continue
+                if highs[j] >= highs[j - 1] and highs[j] >= highs[j + 1]:
+                    upper_anchor2_candidates.append(j)
+            upper_anchor2_candidates = sorted(
+                upper_anchor2_candidates,
+                key=lambda j: (-float(highs[j]), abs((end - j) - max(12, (end - uh1) // 4)), j),
+            )
+            active_upper_anchor2_candidates = sorted(
+                upper_anchor2_candidates,
+                key=lambda j: (abs(end - j), -float(highs[j]), j),
+            )
+            selected_upper_anchor2 = list(dict.fromkeys(upper_anchor2_candidates[:8] + active_upper_anchor2_candidates[:8]))
+            upper_anchor_pairs.extend((uh1, uh2) for uh2 in selected_upper_anchor2)
+        upper_anchor_pairs = sorted(
+            set(upper_anchor_pairs),
+            key=lambda pair: (0 if pair[0] == high_abs else 1, min(abs(end - pair[1]), 80), -float(highs[pair[0]]), -float(highs[pair[1]]), pair[1]),
+        )[:24]
+        if not upper_anchor_pairs:
             continue
 
-        lower_anchor2_candidates: list[int] = []
-        for j in range(start + 2, end - 2):
+        lower_anchor1_candidates: list[int] = [low_abs]
+        lower_anchor1_latest = min(end - 8, start + int(length * 0.95))
+        for j in range(start + 2, lower_anchor1_latest + 1):
             if j == low_abs:
                 continue
-            if abs(j - low_abs) < 5:
-                continue
-            if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1] and lows[j] > lows[low_abs]:
-                lower_anchor2_candidates.append(j)
-        if not lower_anchor2_candidates:
+            if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
+                lower_anchor1_candidates.append(j)
+        lower_anchor1_candidates = sorted(
+            set(lower_anchor1_candidates),
+            key=lambda j: (0 if j == low_abs else 1, abs(end - j), float(lows[j])),
+        )[:12]
+        lower_anchor_pairs: list[tuple[int, int]] = []
+        for lh1 in lower_anchor1_candidates:
+            lower_anchor2_candidates: list[int] = []
+            for j in range(lh1 + 5, end - 2):
+                if lows[j] <= lows[lh1]:
+                    continue
+                if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
+                    lower_anchor2_candidates.append(j)
+            active_lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
+            low_lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (float(lows[j]), abs(end - j), j))
+            selected_lower_anchor2 = list(dict.fromkeys(active_lower_anchor2_candidates[:8] + low_lower_anchor2_candidates[:8]))
+            lower_anchor_pairs.extend((lh1, lh2) for lh2 in selected_lower_anchor2)
+        lower_anchor_pairs = sorted(
+            set(lower_anchor_pairs),
+            key=lambda pair: (min(abs(end - pair[1]), 80), 0 if pair[0] == low_abs else 1, float(lows[pair[1]]), pair[0]),
+        )[:72]
+        if not lower_anchor_pairs:
             continue
-        # Prefer active lower anchors near current price action over distant
-        # historical lows; the absolute lowest low is still always one anchor.
-        lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
 
-        for uh2 in upper_anchor2_candidates[:14]:
-            upper_a = (high_abs, float(highs[high_abs]))
+        for uh1, uh2 in upper_anchor_pairs:
+            upper_a = (uh1, float(highs[uh1]))
             upper_b = (uh2, float(highs[uh2]))
             upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
             if upper_slope >= 0:
                 continue
-            for lh2 in lower_anchor2_candidates[:40]:
-                # Use the lowest low as one exact lower anchor, as requested.
-                lower_a = (low_abs, float(lows[low_abs]))
+            for lh1, lh2 in lower_anchor_pairs:
+                lower_a = (lh1, float(lows[lh1]))
                 lower_b = (lh2, float(lows[lh2]))
                 lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
-                if lower_b[0] < lower_a[0]:
-                    lower_slope = (lower_a[1] - lower_b[1]) / (lower_a[0] - lower_b[0])
                 # Falling wedges must converge. The lower boundary is allowed to
                 # be flat or rising when that best describes current price
                 # compression (triangle-like wedges). Reject only lower lines
@@ -3042,13 +3087,13 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if not _anchors_uninterrupted(lower_a, lower_b, "lower"):
                     continue
 
-                first_validation = max(min(high_abs, uh2), min(low_abs, lh2))
-                upper_anchor_indices = {high_abs, uh2}
-                lower_anchor_indices = {low_abs, lh2}
-                upper_exact_contacts = [high_abs, uh2]
-                lower_exact_contacts = [low_abs, lh2]
-                upper_contacts = [high_abs, uh2]
-                lower_contacts = [low_abs, lh2]
+                first_validation = max(min(uh1, uh2), min(lh1, lh2))
+                upper_anchor_indices = {uh1, uh2}
+                lower_anchor_indices = {lh1, lh2}
+                upper_exact_contacts = [uh1, uh2]
+                lower_exact_contacts = [lh1, lh2]
+                upper_contacts = [uh1, uh2]
+                lower_contacts = [lh1, lh2]
                 breakout_idx: int | None = None
                 breakout_direction = "-"
                 invalid = False
@@ -3103,7 +3148,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             break
                 if invalid:
                     continue
-                for i in range(min(low_abs, lh2), end + 1):
+                for i in range(min(lh1, lh2), end + 1):
                     if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
                         if i < end - 5:
                             invalid = True
@@ -3212,7 +3257,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 width_end_pct = width_end / max(abs(last_close), 1e-9) * 100.0
                 width_ratio = width_start / max(width_end, 1e-9)
                 slope_pct = abs(upper_slope - lower_slope) / max(abs(last_close), 1e-9) * 100.0
-                duration = end - first_validation + 1
+                formation_start = min(upper_a[0], upper_b[0], lower_a[0], lower_b[0])
+                duration = end - formation_start + 1
                 duration_months = duration / 21.0
                 compression_pct = max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0))
 
@@ -3264,6 +3310,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     or median_min_gap > (0.50 if breakout_idx is not None else 0.42)
                     or last_upper_contact_age > (110 if breakout_idx is not None else 75)
                     or last_lower_contact_age > (85 if breakout_idx is not None else 55)
+                    or (breakout_direction == "short" and last_upper_contact_age > 70)
                     or width_end_pct > (40.0 if breakout_idx is not None else 28.0)
                     or width_start_pct > (130.0 if breakout_idx is not None else 95.0)
                     or width_ratio > (8.0 if breakout_idx is not None else 5.5)
@@ -3282,6 +3329,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # Prefer a higher possible top anchor only when it does not
                     # turn the setup into an economically oversized wedge.
                     upper_anchor_height_bonus += min(0.55, max(0.0, (upper_a[1] / global_high) - 0.92) * 6.0)
+                if upper_a[0] != high_abs and last_upper_contact_age <= 35:
+                    upper_anchor_height_bonus += 0.18
                 economical_width_penalty = 1.0
                 if width_start_pct > (95.0 if breakout_idx is not None else 72.0):
                     economical_width_penalty = 0.82
@@ -3318,15 +3367,16 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
-                # not tolerance contacts. For display/export, keep the upper line
-                # anchored from the highest high, and start the lower line from its
-                # first chronological anchor so the bottom boundary is drawn from
-                # the first visible contact rather than the second.
+                # not tolerance contacts. For display/export, keep the selected
+                # upper swing-high anchor (not necessarily the absolute high), and
+                # start the lower line from its first chronological anchor so the
+                # bottom boundary is drawn from the first visible contact rather
+                # than the second.
                 upper_start, upper_end = upper_a, upper_b
                 lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
                 cand = WedgeScanResult(
                     ticker="",
-                    start_date=_fmt_date(first_validation),
+                    start_date=_fmt_date(formation_start),
                     end_date=_fmt_date(end),
                     duration_days=duration,
                     upper_start_date=_fmt_date(upper_start[0]),
@@ -3370,6 +3420,46 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         # wedge is clearly oversized. If no alternative appears,
                         # the wide wedge can still remain best.
                         return oversized_current or candidate.score >= current.score * 0.86
+                    much_longer_with_better_upper = (
+                        same_state
+                        and candidate.duration_days >= current.duration_days * 2.2
+                        and candidate.upper_touches >= current.upper_touches + 2
+                        and candidate.lower_touches >= current.lower_touches
+                        and candidate.width_start_pct <= max(current.width_start_pct * 1.35, current.width_start_pct + 12.0)
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.35, current.width_end_pct + 6.0)
+                    )
+                    if much_longer_with_better_upper:
+                        return candidate.score >= current.score * 0.55
+                    same_active_structure_longer_top = (
+                        same_state
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_end_date == current.lower_end_date
+                        and candidate.duration_days >= current.duration_days * 2.2
+                        and candidate.upper_touches >= current.upper_touches - 1
+                        and candidate.width_start_pct <= max(current.width_start_pct * 1.60, current.width_start_pct + 24.0)
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.50, current.width_end_pct + 7.0)
+                    )
+                    if same_active_structure_longer_top:
+                        # When two valid candidates share the same active lower
+                        # boundary and the same recent upper anchor, prefer the
+                        # one that starts from the older/higher top.  The regular
+                        # fit/width filters above already reject artificial wide
+                        # wedges, so do not let raw score keep the scanner pinned
+                        # to a tiny late fragment of the same structure.
+                        return True
+                    current_same_active_structure_longer_top = (
+                        same_state
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_end_date == current.lower_end_date
+                        and current.duration_days >= candidate.duration_days * 2.2
+                        and current.upper_touches >= candidate.upper_touches - 1
+                        and current.width_start_pct <= max(candidate.width_start_pct * 1.60, candidate.width_start_pct + 24.0)
+                        and current.width_end_pct <= max(candidate.width_end_pct * 1.50, candidate.width_end_pct + 7.0)
+                    )
+                    if current_same_active_structure_longer_top:
+                        return False
                     return candidate.score > current.score
 
                 if _candidate_beats_best(cand, best):
