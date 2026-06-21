@@ -1132,15 +1132,29 @@ def _page_is_blank_or_without_captcha_and_rows(page) -> bool:
     return len(body_text) < 300 or _page_has_rate_limit_or_captcha(page)
 
 
-def _vpn_pause_and_reload_stooq_page(page, url: str, symbol: str, reason: str) -> None:
-    print(
-        f"[stooq-web] {reason} for {symbol}. Change VPN if needed, then press Enter to retry before opening inspector.",
-        flush=True,
-    )
+def _blank_page_auto_retry_count() -> int:
     try:
-        input("[stooq-web] VPN changed / ready to retry? Press Enter to continue...")
-    except EOFError:
-        print("[stooq-web] non-interactive input; retrying page once before inspector.", flush=True)
+        return max(1, int(os.getenv("STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES", "5")))
+    except ValueError:
+        return 5
+
+
+def _vpn_pause_and_reload_stooq_page(page, url: str, symbol: str, reason: str) -> None:
+    if os.getenv("STOCKHELPER_STOOQ_BLANK_PROMPT", "0") == "1":
+        print(
+            f"[stooq-web] {reason} for {symbol}. Change VPN if needed, then press Enter to retry before opening inspector.",
+            flush=True,
+        )
+        try:
+            input("[stooq-web] VPN changed / ready to retry? Press Enter to continue...")
+        except EOFError:
+            print("[stooq-web] non-interactive input; retrying page once before inspector.", flush=True)
+    else:
+        print(
+            f"[stooq-web] {reason} for {symbol}; auto-retrying without VPN prompt "
+            "(set STOCKHELPER_STOOQ_BLANK_PROMPT=1 to pause).",
+            flush=True,
+        )
     try:
         page.goto(url, wait_until="domcontentloaded")
     except Exception:
@@ -1204,10 +1218,45 @@ def _retry_blank_page_with_vpn_before_inspector(page, url: str, symbol: str, rea
             if _try_solve_stooq_captcha(page, symbol):
                 return True
             return _page_has_history_rows(page)
-        _vpn_pause_and_reload_stooq_page(page, url, symbol, reason)
-        if _try_solve_stooq_captcha(page, symbol):
+        attempts = _blank_page_auto_retry_count() if os.getenv("STOCKHELPER_STOOQ_BLANK_PROMPT", "0") != "1" else 1
+        for attempt in range(1, max(1, attempts) + 1):
+            if attempts > 1:
+                print(f"[stooq-web] {reason} for {symbol}; automatic blank-page retry ({attempt}/{attempts}).", flush=True)
+            _vpn_pause_and_reload_stooq_page(page, url, symbol, reason)
+            if _try_solve_stooq_captcha(page, symbol):
+                return True
+            if _page_has_history_rows(page):
+                return True
+            if _page_has_captcha_image(page) or not _page_is_blank_or_without_captcha_and_rows(page):
+                return False
+        return False
+
+
+def _retry_blocked_page_before_inspector(page, url: str, symbol: str, reason: str) -> bool:
+    """Reload CAPTCHA/limit pages a few times before falling back to inspector."""
+    attempts = _blank_page_auto_retry_count()
+    for attempt in range(1, max(1, attempts) + 1):
+        if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page):
             return True
-        return _page_has_history_rows(page)
+        if not _page_has_rate_limit_or_captcha(page) and not _page_has_captcha_image(page):
+            return False
+        print(f"[stooq-web] {reason} for {symbol}; automatic pre-inspector retry ({attempt}/{attempts}).", flush=True)
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+        except Exception:
+            try:
+                page.reload(wait_until="domcontentloaded")
+            except Exception:
+                continue
+        try:
+            _accept_consent_if_present(page, first_page=True)
+        except Exception:
+            pass
+        try:
+            _wait_for_table_or_limit_with_retry(page, retries=3)
+        except Exception:
+            pass
+    return _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page)
 
 def _switch_to_inspector_for_captcha(
     playwright,
@@ -1245,6 +1294,12 @@ def _switch_to_inspector_for_captcha(
         blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
         if blank_or_no_rows and not captcha_image_visible:
             print(f"[stooq-web] blank/no-table page persisted for {symbol}; opening inspector on second failure.", flush=True)
+
+    if blocked or captcha_image_visible:
+        if _retry_blocked_page_before_inspector(page, url, symbol, "Stooq CAPTCHA/limit page before inspector"):
+            return browser, page, False
+        blocked = _page_has_rate_limit_or_captcha(page)
+        captcha_image_visible = _page_has_captcha_image(page)
 
     if _try_solve_stooq_captcha(page, symbol):
         return browser, page, False

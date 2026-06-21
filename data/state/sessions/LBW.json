@@ -1,0 +1,91 @@
+{
+  "high": 12.24,
+  "low": 7.23,
+  "entry": 10.38,
+  "stop_loss": 9.76,
+  "capital": 241000,
+  "symbol": "LBW.WA",
+  "name": "LBW",
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (15.27)",
+      "x0": "2026-06-02",
+      "x1": "2034-05-04",
+      "y0": 15.27,
+      "y1": 15.27,
+      "price": 15.27,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (12.4432)",
+      "x0": "2026-05-19",
+      "x1": "2034-05-04",
+      "y0": 12.4432,
+      "y1": 12.4432,
+      "price": 12.4432,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (11.57)",
+      "x0": "2026-05-15",
+      "x1": "2034-05-04",
+      "y0": 11.57,
+      "y1": 11.57,
+      "price": 11.57,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (10.6968)",
+      "x0": "2026-05-12",
+      "x1": "2034-05-04",
+      "y0": 10.6968,
+      "y1": 10.6968,
+      "price": 10.6968,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (7.87)",
+      "x0": "2026-04-27",
+      "x1": "2034-05-04",
+      "y0": 7.87,
+      "y1": 7.87,
+      "price": 7.87,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-04-27",
+      "x1": "2026-06-02",
+      "y0": 7.87,
+      "y1": 15.27,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}

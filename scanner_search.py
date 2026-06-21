@@ -911,6 +911,39 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         return 0
 
 
+def _commodity_csv_health_check(members: Sequence[str]) -> None:
+    try:
+        min_rows = max(1, int(os.getenv("STOCKHELPER_COMMODITIES_MIN_ROWS", "250")))
+    except ValueError:
+        min_rows = 250
+    print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
+    ok_count = 0
+    warn_count = 0
+    for ticker in members:
+        raw = (ticker or "").strip().upper()
+        csv_path = local_csv_path_for_symbol(raw, "commodity")
+        if not csv_path.exists():
+            mapped = str(COMMODITY_STOOQ_MAP.get(raw, raw)).upper()
+            csv_path = local_csv_path_for_symbol(mapped, "commodity")
+        try:
+            if not csv_path.exists():
+                raise FileNotFoundError(str(csv_path))
+            df = pd.read_csv(csv_path, usecols=lambda col: col in {"Date"})
+            rows = len(df)
+            dates = pd.to_datetime(df.get("Date"), errors="coerce").dropna() if "Date" in df.columns else pd.Series(dtype="datetime64[ns]")
+            latest = dates.max().date().isoformat() if not dates.empty else "-"
+            status = "OK" if rows >= min_rows else "WARN"
+            if status == "OK":
+                ok_count += 1
+            else:
+                warn_count += 1
+            print(f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, csv={csv_path}")
+        except Exception as exc:
+            warn_count += 1
+            print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
+    print(f"[commodity-check] summary: ok={ok_count}, warn={warn_count}, total={len(members)}")
+
+
 
 def _business_day_gap_after_local(local_latest: date, remote_latest: date) -> int:
     if remote_latest <= local_latest:
@@ -2552,10 +2585,10 @@ def run_ichimoku_search(target: str) -> int:
             max_workers = min(max(1, workers_override), len(rest))
         elif group_name == "commodities":
             try:
-                commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "2"))
+                commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "6"))
             except ValueError:
-                commodity_workers = 2
-            max_workers = min(max(2, commodity_workers), len(rest))
+                commodity_workers = 6
+            max_workers = min(max(4, commodity_workers), len(rest))
         else:
             max_workers = min(6, max(2, (os.cpu_count() or 4) // 2), len(rest))
         print(f"[search] no rate-limit on probe -> parallel mode ({max_workers} workers, bounded queue).")
@@ -2683,6 +2716,8 @@ def run_ichimoku_search(target: str) -> int:
     print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
     if error_samples:
         print(f"[search] error samples: {'; '.join(error_samples)}")
+    if group_name == "commodities":
+        _commodity_csv_health_check(members)
 
     links_flip = _print_flip_results_with_links(flip_results)
 
