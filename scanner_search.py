@@ -2927,12 +2927,10 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
             upper_contacts.append(i)
         if closes[i] >= lo - close_eps and lows[i] <= lo + min(tol, _post_anchor_touch_tolerance_static(lo)):
             lower_contacts.append(i)
-    if breakout_idx is not None:
-        return None
     up_count = _clustered_contact_count(upper_contacts); lo_count = _clustered_contact_count(lower_contacts)
-    # Manual saved wedges are allowed to remain unbroken watchlist wedges with
-    # only the two anchor touches on each side. Breakout handling is left to the
-    # automatic scanner after price leaves the manually saved wedge.
+    # Manual saved wedges remain authoritative while unbroken, and after a
+    # breakout/breakdown for up to five candles unless the probable midpoint SL
+    # was touched inside that period.
     if up_count < 2 or lo_count < 2:
         return None
     width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
@@ -2948,6 +2946,7 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
         upper_touches=up_count, lower_touches=lo_count, width_start_pct=round(width_start / max(abs(last_close), 1e-9) * 100, 2), width_end_pct=round(width_end / max(abs(last_close), 1e-9) * 100, 2),
         slope_pct_per_day=round(abs(((upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])) - ((lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0]))) / max(abs(last_close), 1e-9) * 100, 4),
         slope_strength="manual", fit_quality=100.0, recent_proximity_pct=100.0, compression_pct=round(max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0)), 1), score=1000000.0, current_close=last_close,
+        breakout_date=_fmt(breakout_idx) if breakout_idx is not None else "-", breakout_direction=breakout_direction,
     )
 
 def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:

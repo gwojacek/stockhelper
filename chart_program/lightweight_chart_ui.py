@@ -529,7 +529,7 @@ class LightweightChartLevelSelectorUI:
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
-        <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">Find new wedge</button>
+        <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -592,6 +592,7 @@ class LightweightChartLevelSelectorUI:
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
+  let wedgeRouletteNoAlternative = false;
   let lineAnchor = null;
   let fibAnchor = null;
   let halfAnchor = null;
@@ -1644,9 +1645,8 @@ class LightweightChartLevelSelectorUI:
       }}
       const anchorX = [dateForIdx(line.a.idx), dateForIdx(line.b.idx)];
       const anchorY = [roundPrice(line.a.price), roundPrice(line.b.price)];
-      // Force the generated polyline sample at the second anchor to equal the candle extreme exactly.
-      const secondPos = x.indexOf(anchorX[1]);
-      if (secondPos >= 0) y[secondPos] = anchorY[1];
+      // Force generated polyline samples at anchors to equal candle extremes exactly.
+      [0, 1].forEach(i => {{ const pos = x.indexOf(anchorX[i]); if (pos >= 0) y[pos] = anchorY[i]; }});
       return {{id, type:'wedge', label, x, y, x0:x[0], x1:x[x.length - 1], y0:y[0], y1:y[y.length - 1], anchor_x:anchorX, anchor_y:anchorY, price:y[y.length - 1], color, group_id:'auto-wedge'}};
     }};
     return [
@@ -1706,9 +1706,26 @@ class LightweightChartLevelSelectorUI:
     return best;
   }}
 
+  function restoreScannerWedgeFromRoulette() {{
+    if (!initialScannerDrawnObjects.length) return false;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(initialScannerDrawnObjects.map(deepClone));
+    wedgeRouletteNoAlternative = false;
+    applyWedgeDerivedLevels();
+    ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
+    render();
+    updateWedgeDebugPanel('Restored the original scanner wedge.');
+    return true;
+  }}
+
   function findNewWedge() {{
     const candidate = findAlternativeWedgeCandidate();
-    if (!candidate) {{ updateWedgeDebugPanel('No larger valid alternative wedge found.'); return; }}
+    if (!candidate) {{
+      if (wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
+      wedgeRouletteNoAlternative = true;
+      updateWedgeDebugPanel('No larger valid alternative wedge found. Click 🎲 Find new wedge again to restore the scanner wedge.');
+      return;
+    }}
+    wedgeRouletteNoAlternative = false;
     drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(wedgeLineThroughExtremeObjects(candidate));
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);

@@ -613,7 +613,7 @@ def run_level_selector(raw_args=None):
             print(f"[chart] auto-fibo preload failed: {exc}")
 
 
-    def _saved_wedge_is_unbroken() -> bool:
+    def _saved_wedge_is_active() -> bool:
         objects = existing.get("drawn_objects") if isinstance(existing, dict) else None
         if not isinstance(objects, list) or df.empty:
             return False
@@ -652,7 +652,11 @@ def run_level_selector(raw_args=None):
             return float(a[1]) + (float(b[1]) - float(a[1])) * ((idx - a[0]) / (b[0] - a[0]))
 
         closes = pd.to_numeric(df["Close"], errors="coerce").to_numpy()
+        highs = pd.to_numeric(df["High"], errors="coerce").to_numpy()
+        lows = pd.to_numeric(df["Low"], errors="coerce").to_numpy()
         start_idx = max(min(upper_a[0], upper_b[0]), min(lower_a[0], lower_b[0]))
+        breakout_idx = None
+        breakout_direction = None
         for idx in range(start_idx, len(df)):
             close = closes[idx]
             if pd.isna(close):
@@ -661,13 +665,29 @@ def run_level_selector(raw_args=None):
             lo = _line(idx, lower_a, lower_b)
             eps = max(abs(float(close)) * 1e-6, 1e-9)
             if close > up + eps or close < lo - eps:
-                return False
+                direction = "long" if close > up + eps else "short"
+                if idx < len(df) - 6:
+                    return False
+                if breakout_idx is None:
+                    breakout_idx = idx
+                    breakout_direction = direction
+                elif direction != breakout_direction:
+                    return False
+            if breakout_idx is not None and idx > breakout_idx:
+                breakout_up = _line(breakout_idx, upper_a, upper_b)
+                breakout_lo = _line(breakout_idx, lower_a, lower_b)
+                probable_stop = (breakout_up + breakout_lo) / 2.0
+                stop_eps = max(abs(float(probable_stop)) * 1e-6, eps)
+                if breakout_direction == "long" and not pd.isna(lows[idx]) and float(lows[idx]) <= probable_stop + stop_eps:
+                    return False
+                if breakout_direction == "short" and not pd.isna(highs[idx]) and float(highs[idx]) >= probable_stop - stop_eps:
+                    return False
         return True
 
     if args.wedge_lines:
         try:
-            if _saved_wedge_is_unbroken():
-                print("[chart] kept saved manual wedge lines (unbroken)")
+            if _saved_wedge_is_active():
+                print("[chart] kept saved manual wedge lines (active/recent breakout)")
                 raise StopIteration
 
             def _parse_wedge_point(raw: str | None) -> tuple[pd.Timestamp, float] | None:
