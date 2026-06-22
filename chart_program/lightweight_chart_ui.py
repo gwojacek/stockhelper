@@ -477,7 +477,7 @@ class LightweightChartLevelSelectorUI:
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
     .side {{ border-left: 1px solid #1f2937; padding: 16px; background: #0b1220; overflow-y: auto; }}
     label {{ display: block; margin-top: 8px; }}
-    input, select {{ width: 100%; color: black; background: white; font-size: 16px; padding: 6px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }}
+    input, select, textarea {{ width: 100%; color: black; background: white; font-size: 16px; padding: 6px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }}
     input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
@@ -571,6 +571,17 @@ class LightweightChartLevelSelectorUI:
       <button id="delete-object" style="display:none">Delete selected object</button>
       <button id="calculate-btn" class="side-action-btn" style="background:#16a34a">Calculate position</button>
       <button id="wedge-debug-btn" class="side-action-btn" style="background:#7c3aed">📋 Wedge Information</button>
+      <button id="journal-toggle-btn" class="side-action-btn" style="background:#f59e0b">🧾 Add journal entry</button>
+      <div id="journal-panel" style="display:none;margin-top:10px;padding:10px;border:1px solid #334155;border-radius:10px;background:#111827">
+        <h4 style="margin:0 0 8px 0;color:#fde68a">Transaction journal</h4>
+        <label>Technique</label><select id="journal-technique"><option>Ichimoku</option><option>Fibo</option><option>Kliny</option><option>Manual</option></select>
+        <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000 PLN" />
+        <label>Pattern</label><input id="journal-pattern" placeholder="e.g. bearish_hammer / wedge breakout" />
+        <label>Touches</label><input id="journal-touches" placeholder="e.g. 3" />
+        <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
+        <div id="journal-preview" style="white-space:pre-wrap;background:#020617;border:1px solid #334155;border-radius:8px;padding:8px;margin-top:8px;color:#dbeafe"></div>
+        <button id="journal-save-btn" class="side-action-btn" style="background:#ea580c">Save journal + screenshot</button>
+      </div>
       <div id="wedge-debug-panel"></div>
       <button id="finish-btn" class="side-action-btn" style="background:#2563eb">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
@@ -2229,6 +2240,57 @@ class LightweightChartLevelSelectorUI:
     if (activeTool === 'fib' && fibAnchor && time) updateFibPreview(time);
   }});
 
+
+  function journalPayload() {{
+    const preview = [
+      'Instrument: ' + P.symbol,
+      'Technique: ' + (($('journal-technique') && $('journal-technique').value) || ''),
+      'Direction: ' + (($('position-type') && $('position-type').value) || ''),
+      'Amount: ' + (($('journal-amount') && $('journal-amount').value) || ''),
+      'Entry: ' + (levels.entry || ''),
+      'Stop loss: ' + (levels.stop_loss || ''),
+      'Take profit/check: ' + (levels.check_zr_value_fibo_or_elevation || ''),
+      'Pattern: ' + (($('journal-pattern') && $('journal-pattern').value) || ''),
+      'Touches: ' + (($('journal-touches') && $('journal-touches').value) || ''),
+      '',
+      (($('journal-notes') && $('journal-notes').value) || '')
+    ].join('\n');
+    if ($('journal-preview')) $('journal-preview').textContent = preview;
+    return {{
+      symbol: P.symbol,
+      sourceTicker: P.sourceTicker || '',
+      instrumentType: P.instrumentType || '',
+      technique: (($('journal-technique') && $('journal-technique').value) || ''),
+      direction: (($('position-type') && $('position-type').value) || ''),
+      amount: (($('journal-amount') && $('journal-amount').value) || ''),
+      entry: levels.entry || '',
+      stop_loss: levels.stop_loss || '',
+      take_profit: levels.check_zr_value_fibo_or_elevation || '',
+      line_cross_value: levels.line_cross_value || '',
+      high: levels.high || '',
+      low: levels.low || '',
+      pattern: (($('journal-pattern') && $('journal-pattern').value) || ''),
+      touches: (($('journal-touches') && $('journal-touches').value) || ''),
+      notes: (($('journal-notes') && $('journal-notes').value) || ''),
+      preview,
+      levels: collectLevelsForSave(false)
+    }};
+  }}
+  function bindJournal() {{
+    const toggle = $('journal-toggle-btn');
+    if (!toggle) return;
+    toggle.onclick = () => {{ const p = $('journal-panel'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; journalPayload(); }};
+    ['journal-technique','journal-amount','journal-pattern','journal-touches','journal-notes','position-type'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', journalPayload); if(el) el.addEventListener('change', journalPayload); }});
+    const save = $('journal-save-btn');
+    if (save) save.onclick = async () => {{
+      const payload = journalPayload();
+      try {{ payload.screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{}}
+      const resp = await fetch('/journal-entry', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload)}});
+      const data = await resp.json();
+      $('result-box').textContent = data.ok ? ('Journal saved: ' + data.id) : ('Journal save failed: ' + (data.error || resp.status));
+    }};
+  }}
+
   function collectLevelsForSave(finished=false) {{
     const stockCfdMode = !!levels.__stock_cfd_mode__;
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
@@ -2312,6 +2374,7 @@ class LightweightChartLevelSelectorUI:
     if (resp.ok) {{ $('result-box').textContent = 'Saved. Closing app...'; setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250); }}
   }};
 
+  bindJournal();
   setInterval(() => fetch('/heartbeat', {{method:'POST', keepalive:true}}).catch(()=>{{}}), 1000);
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
@@ -2475,6 +2538,16 @@ class LightweightChartLevelSelectorUI:
             payload = request.get_json(silent=True) or {}
             levels = payload.get("levels") or {}
             return jsonify(self._position_calculation_payload(levels))
+
+        @app.route("/journal-entry", methods=["POST"])
+        def _journal_entry():
+            payload = request.get_json(silent=True) or {}
+            try:
+                from journal import save_entry
+                entry = save_entry(payload)
+                return jsonify({"ok": True, "id": entry.get("id")})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
 
         @app.route("/finish", methods=["POST"])
         def _finish():
