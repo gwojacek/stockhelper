@@ -597,6 +597,7 @@ class LightweightChartLevelSelectorUI:
   let activeField = null;
   let activeTool = 'level';
   let wedgeRouletteNoAlternative = false;
+  const wedgeRouletteSeen = {{both:new Set(), upper:new Set(), lower:new Set()}};
   let lineAnchor = null;
   let fibAnchor = null;
   let halfAnchor = null;
@@ -1742,9 +1743,11 @@ class LightweightChartLevelSelectorUI:
     const tol = Math.max(...rows.slice(-30).map(r => Number(r.high) - Number(r.low)).filter(Number.isFinite), Math.abs(cl(rows.length - 1)) * 0.004) * 0.20;
     const end = rows.length - 1;
     const scoreCurrent = Math.max(1, end - curStart);
-    const upperSeconds = side === 'lower' ? [curUpperSecond].filter(Number.isFinite) : [...new Set([curUpperSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isHigh(i))])].filter(Number.isFinite);
-    const lowerSeconds = side === 'upper' ? [curLowerSecond].filter(Number.isFinite) : [...new Set([curLowerSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isLow(i))])].filter(Number.isFinite);
-    let best = null;
+    const currentSignature = [curUpperFirst, curUpperSecond, curLowerFirst, curLowerSecond].join('|');
+    const sigFor = (u1, u2, l1, l2) => [u1, u2, l1, l2].join('|');
+    const upperSeconds = side === 'lower' ? [curUpperSecond].filter(Number.isFinite) : [...new Set([curUpperSecond, ...Array.from({{length:Math.min(45, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isHigh(i))])].filter(i => Number.isFinite(i) && isHigh(i));
+    const lowerSeconds = side === 'upper' ? [curLowerSecond].filter(Number.isFinite) : [...new Set([curLowerSecond, ...Array.from({{length:Math.min(45, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isLow(i))])].filter(i => Number.isFinite(i) && isLow(i));
+    const candidates = [];
     for (const u2 of upperSeconds) for (const l2 of lowerSeconds) {{
       const u1s = side === 'lower' && Number.isFinite(curUpperFirst) ? [curUpperFirst] : [];
       if (side !== 'lower') for (let i = Math.max(1, u2 - 260); i <= u2 - 5; i++) if (isHigh(i) && hi(i) > hi(u2)) u1s.push(i);
@@ -1768,17 +1771,31 @@ class LightweightChartLevelSelectorUI:
         const widthStart = line(u1, hi(u1), u2, hi(u2), first) - line(l1, lo(l1), l2, lo(l2), first);
         const widthEnd = line(u1, hi(u1), u2, hi(u2), end) - line(l1, lo(l1), l2, lo(l2), end);
         if (widthStart <= 0 || widthEnd <= 0 || widthEnd >= widthStart * 0.95) continue;
+        const signature = sigFor(u1, u2, l1, l2);
+        if (signature === currentSignature) continue;
+        const changedSecondIsExtreme = (side === 'lower' || isHigh(u2)) && (side === 'upper' || isLow(l2));
+        if (!changedSecondIsExtreme) continue;
+        const biggerThanCurrent = duration > scoreCurrent * 1.02;
         const score = duration * 10 + widthStart + (upperTouches + lowerTouches) * 15 + Math.max(0, hi(u1) - hi(u2)) + Math.max(0, lo(l2) - lo(l1));
-        if (!best || score > best.score) best = {{score, upper:{{a:{{idx:u1, price:hi(u1)}}, b:{{idx:u2, price:hi(u2)}}}}, lower:{{a:{{idx:l1, price:lo(l1)}}, b:{{idx:l2, price:lo(l2)}}}}}};
+        candidates.push({{signature, biggerThanCurrent, score, duration, upper:{{a:{{idx:u1, price:hi(u1)}}, b:{{idx:u2, price:hi(u2)}}}}, lower:{{a:{{idx:l1, price:lo(l1)}}, b:{{idx:l2, price:lo(l2)}}}}}});
       }}
     }}
-    return best;
+    candidates.sort((a, b) => (Number(b.biggerThanCurrent) - Number(a.biggerThanCurrent)) || (b.duration - a.duration) || (b.score - a.score));
+    const seen = wedgeRouletteSeen[side] || wedgeRouletteSeen.both;
+    let chosen = candidates.find(c => !seen.has(c.signature));
+    if (!chosen && candidates.length) {{
+      seen.clear();
+      chosen = candidates[0];
+    }}
+    if (chosen) seen.add(chosen.signature);
+    return chosen || null;
   }}
 
   function restoreScannerWedgeFromRoulette() {{
     if (!initialScannerDrawnObjects.length) return false;
     drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(initialScannerDrawnObjects.map(deepClone));
     wedgeRouletteNoAlternative = false;
+    Object.values(wedgeRouletteSeen).forEach(s => s.clear());
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
@@ -1799,7 +1816,8 @@ class LightweightChartLevelSelectorUI:
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
-    updateWedgeDebugPanel('Found and loaded a larger valid wedge alternative. Save & Close to keep it for future allsearch calculations.');
+    const sizeText = candidate.biggerThanCurrent ? 'larger' : 'smaller';
+    updateWedgeDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
   }}
 
 
@@ -2106,6 +2124,8 @@ class LightweightChartLevelSelectorUI:
     if (levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge) {{ delete levels.line_cross_value; delete levelPoints.line_cross_value; delete levels.__wedge_auto_line_cross__; }}
     if (levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge) {{ delete levels.stop_loss; delete levelPoints.stop_loss; delete levels.__wedge_auto_stop_loss__; }}
     hiddenLegendKeys.clear();
+    wedgeRouletteNoAlternative = false;
+    Object.values(wedgeRouletteSeen).forEach(s => s.clear());
     lineAnchor=fibAnchor=halfAnchor=null;
     applyWedgeDerivedLevels();
     render();
