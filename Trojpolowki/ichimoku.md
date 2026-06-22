@@ -1,6 +1,6 @@
 # Trójpolówki — Ichimoku
 
-Updated from allsearch: 2026-06-21 22:53:48
+Updated from allsearch: 2026-06-22 11:55:39
 
 Legenda:
 - ☁️ Cloud/retest/breakout rows have priority and appear in the third column.
@@ -15,4 +15,5 @@ Legenda:
 
 | 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |
 |---|---|---|---|
-| **🛢️ COFFEE ↗️ long (6.5m)**<br>Kijun: over<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=kc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |  | **🛢️ SOYOIL 👀 watch (5.2m)**<br>⚪ risk: - · ⬇️ Chikou under · 🟢 kumo<br>➕ Tenkan_in_☁: yes · dyn high · cloud normal<br>➖ 🔴 TK cross bearish<br>🏷️ inside cloud · [🔗 stooq](https://stooq.pl/q/a2/?s=zl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | **🛢️ COCOA 🔁 retest (1.4m)**<br>🟡 risk: 2% · ⬇️ Chikou under · 🟢 kumo<br>➕ dyn aggressive · cloud normal<br>➖ 🔴 TK cross bearish · Tenkan_in_☁: no<br>🏷️ breakout confirmed · [🔗 stooq](https://stooq.pl/q/a2/?s=cc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |
+| **🇩🇪 HFG.DE ↘️ short (10.3m)**<br>Kijun: under<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=hfg.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | **🇩🇪 SHL.DE ↘️ short (5.0m)**<br>Kijun: touched<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=shl.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |  | **🇩🇪 RWE.DE 🔁 retest (0.8m)**<br>⚪ risk: - · ⬆️ Chikou over · 🔴 kumo<br>➕ 🔴 TK cross bearish<br>➖ Tenkan_in_☁: no · dyn slow · cloud shallow<br>🏷️ returned to cloud, waiting · [🔗 stooq](https://stooq.pl/q/a2/?s=rwe.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |
+| **🇩🇪 LIN.DE ↗️ long (5.2m)**<br>Kijun: over<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=lin.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | **🇩🇪 RHM.DE ↘️ short (3.9m)**<br>Kijun: touched<br>🏷️ - · [🔗 stooq](https://stooq.pl/q/a2/?s=rhm.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) |  |  |

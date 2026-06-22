@@ -826,5 +826,48 @@
       "color": "#2563eb",
       "group_id": "auto-wedge"
     }
-  ]
+  ],
+  "high": 285.5,
+  "__wedge_auto_high__": true,
+  "low": 143.3,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 151.08,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "short",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 156.9,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 255000,
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 285.5,
+      "plot_price": 285.5,
+      "date": "2025-10-16",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 143.3,
+      "plot_price": 143.3,
+      "date": "2026-03-27",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 151.08,
+      "plot_price": 151.08,
+      "date": "2026-06-12",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 156.9,
+      "plot_price": 156.9,
+      "date": "2026-06-12",
+      "auto_wedge": true
+    }
+  }
 }
