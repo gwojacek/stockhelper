@@ -615,15 +615,6 @@ class LightweightChartLevelSelectorUI:
     P.ohlc.forEach((r, idx) => {{ const d = Math.abs(new Date(r.time).getTime() - target); if (d < dist) {{ best = {{...r, idx}}; dist = d; }} }});
     return best;
   }};
-  const logicalIndexForTime = (time) => {{
-    const key = String(time || '').slice(0, 10);
-    const exact = ohlcWithFuture.findIndex(r => String(r?.time || '').slice(0, 10) === key);
-    if (exact >= 0) return exact;
-    const near = nearest(key);
-    if (near && Number.isFinite(Number(near.idx))) return Number(near.idx);
-    const last = P.ohlc[P.ohlc.length - 1]?.time || key;
-    return Math.max(0, P.ohlc.length - 1) + Math.max(0, dayDelta(last, key));
-  }};
   const addDays = (date, days) => {{ const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }};
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
@@ -1306,15 +1297,6 @@ class LightweightChartLevelSelectorUI:
     return Number(y0) + (Number(y1) - Number(y0)) * dateRatio(x0, x1, x);
   }}
 
-  function wedgeLogicalLineValue(anchors, time) {{
-    if (!anchors) return null;
-    const i0 = logicalIndexForTime(anchors.x0);
-    const i1 = logicalIndexForTime(anchors.x1);
-    const ix = logicalIndexForTime(time);
-    if (!Number.isFinite(i0) || !Number.isFinite(i1) || !Number.isFinite(ix) || i0 === i1) return Number(anchors.y0);
-    return Number(anchors.y0) + (Number(anchors.y1) - Number(anchors.y0)) * ((ix - i0) / (i1 - i0));
-  }}
-
   function setLineEndpointValues(obj, x0, y0, x1, y1, mode='both') {{
     x0 = String(x0).slice(0, 10);
     x1 = String(x1).slice(0, 10);
@@ -1378,11 +1360,12 @@ class LightweightChartLevelSelectorUI:
     if (!anchors) return [];
     const display = lineDisplayValues(obj) || anchors;
     const endTime = display.x1 || anchors.x1;
-    const endValue = wedgeLogicalLineValue(anchors, endTime);
+    const endValue = projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, endTime);
     // Render wedge boundaries as one straight segment. The second anchor is
     // deliberately not inserted as a series vertex, because even a tiny logical
-    // projection mismatch creates a visible kink after that anchor. All wedge
-    // calculations still use the exact two anchor extremes via wedgeLogicalLineValue().
+    // projection mismatch creates a visible kink after that anchor. The endpoint
+    // is projected from the two anchors in the same date coordinate space used by
+    // the chart renderer, so the unbroken straight segment crosses anchor #2.
     return normalizeLineData([
       {{time:anchors.x0, value:anchors.y0}},
       {{time:endTime, value:roundPrice(endValue)}},
@@ -1540,8 +1523,8 @@ class LightweightChartLevelSelectorUI:
   function lineValueForDate(obj, time) {{
     if (!obj) return null;
     if (isWedgeLineObject(obj)) {{
-      const wedgeValue = wedgeLogicalLineValue(lineEndpointValues(obj), time);
-      if (Number.isFinite(wedgeValue)) return wedgeValue;
+      const anchors = lineEndpointValues(obj);
+      if (anchors) return projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, time);
     }}
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
       const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
