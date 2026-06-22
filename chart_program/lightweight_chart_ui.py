@@ -495,6 +495,7 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
+    .side-action-btn {{ margin-top:8px;width:100%;padding:10px;color:white;border:none;border-radius:8px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
@@ -568,10 +569,10 @@ class LightweightChartLevelSelectorUI:
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
-      <button id="wedge-debug-btn" style="margin-top:8px;width:100%;padding:10px;background:#7c3aed;color:white;border:none;border-radius:8px">Copy wedge debug</button>
+      <button id="calculate-btn" class="side-action-btn" style="background:#16a34a">Calculate position</button>
+      <button id="wedge-debug-btn" class="side-action-btn" style="background:#7c3aed">📋 Wedge Information</button>
       <div id="wedge-debug-panel"></div>
-      <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
+      <button id="finish-btn" class="side-action-btn" style="background:#2563eb">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
         <h4>⭐ Quick charts from 📊</h4>
         <div id="chart-group-label" class="chart-group-label"></div>
@@ -1034,6 +1035,11 @@ class LightweightChartLevelSelectorUI:
 
   async function copyWedgeDebug() {{
     const panel = $('wedge-debug-panel');
+    if (panel?.classList.contains('open')) {{
+      panel.classList.remove('open');
+      panel.textContent = '';
+      return;
+    }}
     const text = wedgeDebugSnapshot();
     if (panel) {{
       panel.classList.add('open');
@@ -1228,6 +1234,10 @@ class LightweightChartLevelSelectorUI:
     const raw = ts.coordinateToTime ? ts.coordinateToTime(x) : null;
     if (typeof raw === 'string') return raw.slice(0, 10);
     if (raw && Number.isFinite(raw.year)) return `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}`;
+    if (x > rect.width) {{
+      const extraCandles = Math.min(120, Math.max(5, Math.round((x - rect.width) / 7)));
+      return addDays(P.ohlc[P.ohlc.length - 1]?.time || nearest(null).time, extraCandles);
+    }}
     return nearest(null).time;
   }}
 
@@ -1322,13 +1332,9 @@ class LightweightChartLevelSelectorUI:
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
       }} else if (mode === 'end' && anchorsX[0] && Number.isFinite(anchorsY[0])) {{
-        x1 = nearest(x1).time;
         if (compareTime(x1, anchorsX[0]) <= 0) x1 = dateAtIndex(Math.min(P.ohlc.length - 1, nearest(anchorsX[0]).idx + 1));
-        y1 = candleExtremeForDate(x1, side, y1);
         x0 = anchorsX[0];
         y0 = anchorsY[0];
-        obj.anchor_x = [x0, x1];
-        obj.anchor_y = [y0, y1];
       }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
         obj.anchor_x = [x0, x1];
         obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
@@ -1416,12 +1422,12 @@ class LightweightChartLevelSelectorUI:
         const raw = chart.timeScale().coordinateToTime ? chart.timeScale().coordinateToTime(endX) : null;
         endTime = typeof raw === 'string' ? raw.slice(0, 10) : (raw && Number.isFinite(raw.year) ? `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}` : addDays(P.ohlc[P.ohlc.length - 1]?.time || anchors.x1, 5));
       }}
-      let endY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, endTime)) : null;
+      let endY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
       const anchor2 = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null}};
       if (!Number.isFinite(endX) || !Number.isFinite(endY)) {{ endX = anchor2.x; endY = anchor2.y; endTime = anchors.x1; }}
       const endActual = {{x:endX, y:endY}};
       if (![startActual.x, startActual.y, endActual.x, endActual.y].every(Number.isFinite)) return null;
-      const values = {{x0:anchors.x0, y0:anchors.y0, x1:endTime, y1:projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, endTime)}};
+      const values = {{x0:anchors.x0, y0:anchors.y0, x1:endTime, y1:display.y1}};
       return {{start:clampLineHandlePoint(startActual), end:clampLineHandlePoint(endActual), actualStart:startActual, actualEnd:endActual, values}};
     }}
     const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
@@ -1561,8 +1567,8 @@ class LightweightChartLevelSelectorUI:
   function lineValueForDate(obj, time) {{
     if (!obj) return null;
     if (isWedgeLineObject(obj)) {{
-      const anchors = lineEndpointValues(obj);
-      if (anchors) return projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, time);
+      const display = lineDisplayValues(obj);
+      if (display) return projectedLineValue(display.x0, display.y0, display.x1, display.y1, time);
     }}
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
       const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
@@ -1800,9 +1806,12 @@ class LightweightChartLevelSelectorUI:
       const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null;
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
       if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
-      const slope = (y1 - y0) / (x1 - x0);
       const display = lineDisplayValues(obj) || anchors;
-      let endX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
+      const displayEndY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
+      const endSourceX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
+      const endSourceY = Number.isFinite(displayEndY) ? displayEndY : y1;
+      const slope = Number.isFinite(endSourceX) && endSourceX !== x0 ? (endSourceY - y0) / (endSourceX - x0) : (y1 - y0) / (x1 - x0);
+      let endX = endSourceX;
       if (!Number.isFinite(endX)) endX = $('chart-wrap').clientWidth || x1;
       const leftX = Math.max(0, Math.min(x0, x1));
       const rightX = Math.max(leftX, endX);
