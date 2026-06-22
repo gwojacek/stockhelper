@@ -796,15 +796,13 @@ def run_level_selector(raw_args=None):
                         end_idx = max(common_wedge_end_idx or fallback_end_idx, fallback_end_idx)
                     else:
                         end_idx = second_idx
-                    # Build a polyline on every trading/index step. With Plotly
-                    # rangebreaks this avoids calendar-time interpolation drift and
-                    # keeps the auto line glued to the same candles at every zoom.
-                    indexes = list(range(first_idx, end_idx + 1))
+                    # Store only collinear points: both real candle anchors plus
+                    # the right-side extension.  This keeps wedge drawings visually
+                    # straight while still forcing the second anchor to sit exactly
+                    # on the candle extreme (no sampled polyline drift).
+                    indexes = sorted(dict.fromkeys([first_idx, second_idx, end_idx]))
                     x_vals = [str(pd.to_datetime(_date_for_index(i)).date()) for i in indexes]
                     y_vals = [round(_line_price_at_index(p0, p1, i), 5) for i in indexes]
-                    # Keep both anchor candles glued to their true chart extremes.
-                    # This avoids any visual rift at the second anchor after the
-                    # line has been sampled/extended for chart rendering.
                     for anchor_idx, anchor_price in ((i0, p0[1]), (i1, p1[1])):
                         if anchor_idx in indexes:
                             y_vals[indexes.index(anchor_idx)] = round(float(anchor_price), 5)

@@ -615,6 +615,15 @@ class LightweightChartLevelSelectorUI:
     P.ohlc.forEach((r, idx) => {{ const d = Math.abs(new Date(r.time).getTime() - target); if (d < dist) {{ best = {{...r, idx}}; dist = d; }} }});
     return best;
   }};
+  const logicalIndexForTime = (time) => {{
+    const key = String(time || '').slice(0, 10);
+    const exact = ohlcWithFuture.findIndex(r => String(r?.time || '').slice(0, 10) === key);
+    if (exact >= 0) return exact;
+    const near = nearest(key);
+    if (near && Number.isFinite(Number(near.idx))) return Number(near.idx);
+    const last = P.ohlc[P.ohlc.length - 1]?.time || key;
+    return Math.max(0, P.ohlc.length - 1) + Math.max(0, dayDelta(last, key));
+  }};
   const addDays = (date, days) => {{ const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }};
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
@@ -1261,14 +1270,16 @@ class LightweightChartLevelSelectorUI:
   function lineDisplayValues(obj) {{
     if (!obj) return null;
     if (isWedgeLineObject(obj)) {{
+      const anchors = lineEndpointValues(obj);
       const xs = Array.isArray(obj.x) && obj.x.length >= 2 ? obj.x : null;
       const ys = Array.isArray(obj.y) && obj.y.length >= 2 ? obj.y : null;
-      if (xs && ys) {{
+      if (anchors && xs && ys) {{
         const last = Math.min(xs.length, ys.length) - 1;
-        const x0 = String(xs[0]).slice(0, 10), x1 = String(xs[last]).slice(0, 10);
-        const y0 = Number(ys[0]), y1 = Number(ys[last]);
-        if (x0 && x1 && Number.isFinite(y0) && Number.isFinite(y1)) return {{x0, y0, x1, y1}};
+        const x1 = String(xs[last]).slice(0, 10);
+        const y1 = Number(ys[last]);
+        if (x1 && Number.isFinite(y1)) return {{x0:anchors.x0, y0:anchors.y0, x1, y1}};
       }}
+      if (anchors) return anchors;
     }}
     return lineEndpointValues(obj);
   }}
@@ -1293,6 +1304,15 @@ class LightweightChartLevelSelectorUI:
 
   function projectedLineValue(x0, y0, x1, y1, x) {{
     return Number(y0) + (Number(y1) - Number(y0)) * dateRatio(x0, x1, x);
+  }}
+
+  function wedgeLogicalLineValue(anchors, time) {{
+    if (!anchors) return null;
+    const i0 = logicalIndexForTime(anchors.x0);
+    const i1 = logicalIndexForTime(anchors.x1);
+    const ix = logicalIndexForTime(time);
+    if (!Number.isFinite(i0) || !Number.isFinite(i1) || !Number.isFinite(ix) || i0 === i1) return Number(anchors.y0);
+    return Number(anchors.y0) + (Number(anchors.y1) - Number(anchors.y0)) * ((ix - i0) / (i1 - i0));
   }}
 
   function setLineEndpointValues(obj, x0, y0, x1, y1, mode='both') {{
@@ -1351,6 +1371,19 @@ class LightweightChartLevelSelectorUI:
   function editableLineData(obj) {{
     const pts = lineDisplayValues(obj);
     return pts ? normalizeLineData([{{time:pts.x0, value:pts.y0}}, {{time:pts.x1, value:pts.y1}}]) : [];
+  }}
+
+  function straightWedgeLineData(obj) {{
+    const anchors = lineEndpointValues(obj);
+    if (!anchors) return [];
+    const display = lineDisplayValues(obj) || anchors;
+    const endTime = display.x1 || anchors.x1;
+    const endValue = wedgeLogicalLineValue(anchors, endTime);
+    return normalizeLineData([
+      {{time:anchors.x0, value:anchors.y0}},
+      {{time:anchors.x1, value:anchors.y1}},
+      {{time:endTime, value:roundPrice(endValue)}},
+    ]);
   }}
 
   function clampLineHandlePoint(pt) {{
@@ -1503,6 +1536,10 @@ class LightweightChartLevelSelectorUI:
 
   function lineValueForDate(obj, time) {{
     if (!obj) return null;
+    if (isWedgeLineObject(obj)) {{
+      const wedgeValue = wedgeLogicalLineValue(lineEndpointValues(obj), time);
+      if (Number.isFinite(wedgeValue)) return wedgeValue;
+    }}
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
       const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
       if (idx >= 0) return Number(obj.y[idx]);
@@ -1636,17 +1673,11 @@ class LightweightChartLevelSelectorUI:
     }}
     endIdx = Math.min(endIdx, maxIdx + Math.max(rows.length, 180));
     const make = (side, color, label, id, line) => {{
-      const first = Math.min(line.a.idx, line.b.idx);
-      const x = [], y = [];
-      for (let idx = first; idx <= endIdx; idx++) {{
-        let time = idx <= maxIdx ? dateForIdx(idx) : addDays(dateForIdx(maxIdx), idx - maxIdx);
-        x.push(time);
-        y.push(roundPrice(lineAt(line.a, line.b, idx)));
-      }}
       const anchorX = [dateForIdx(line.a.idx), dateForIdx(line.b.idx)];
       const anchorY = [roundPrice(line.a.price), roundPrice(line.b.price)];
-      // Force generated polyline samples at anchors to equal candle extremes exactly.
-      [0, 1].forEach(i => {{ const pos = x.indexOf(anchorX[i]); if (pos >= 0) y[pos] = anchorY[i]; }});
+      const endTime = endIdx <= maxIdx ? dateForIdx(endIdx) : addDays(dateForIdx(maxIdx), endIdx - maxIdx);
+      const x = [anchorX[0], anchorX[1], endTime];
+      const y = [anchorY[0], anchorY[1], roundPrice(lineAt(line.a, line.b, endIdx))];
       return {{id, type:'wedge', label, x, y, x0:x[0], x1:x[x.length - 1], y0:y[0], y1:y[y.length - 1], anchor_x:anchorX, anchor_y:anchorY, price:y[y.length - 1], color, group_id:'auto-wedge'}};
     }};
     return [
@@ -1857,8 +1888,10 @@ class LightweightChartLevelSelectorUI:
       }}
       const seriesTitle = isFib ? (fibPercentLabel(obj) || objectLegend) : objectLegend;
       let series = null;
-      if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
-        series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
+      if (isWedge) {{
+        series = addLine(straightWedgeLineData(obj), color, 3, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
+      }} else if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
+        series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isFib ? 1.2 : 2, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
       }} else {{
         const x1 = isFib ? extendFuture(obj.x1, 720) : String(obj.x1).slice(0,10);
         series = addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
