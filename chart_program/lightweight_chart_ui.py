@@ -467,9 +467,9 @@ class LightweightChartLevelSelectorUI:
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
     #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
-    .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:15px; height:15px; padding:0 3px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:10px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:2px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
+    .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:12px; height:12px; padding:0 2px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:1.5px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
     .chart-icon.anchor {{ color:#f8fafc; background:#111827; border-color:#f8fafc; text-shadow:0 1px 2px #000; }}
-    .chart-icon.touch {{ color:#0f172a; background:#fbbf24; border-color:#0f172a; width:10px; min-width:10px; height:10px; padding:0; }}
+    .chart-icon.touch {{ color:#0f172a; background:#fbbf24; border-color:#0f172a; width:7px; min-width:7px; height:7px; padding:0; }}
     .chart-icon.cross {{ color:#f8fafc; background:#a855f7; border-color:#f8fafc; }}
     .chart-icon.end {{ color:#0f172a; background:#f8fafc; }}
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
@@ -1065,28 +1065,28 @@ class LightweightChartLevelSelectorUI:
           ctx.save();
           ctx.translate(x, y);
           ctx.beginPath();
-          ctx.arc(0, 0, 6.2, 0, Math.PI * 2);
+          ctx.arc(0, 0, 4.6, 0, Math.PI * 2);
           ctx.shadowColor = 'rgba(0,0,0,.55)';
           ctx.shadowBlur = 3;
           ctx.fillStyle = 'rgba(15,23,42,.35)';
           ctx.strokeStyle = '#f8fafc';
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.2;
           ctx.stroke();
           ctx.shadowBlur = 0;
           ctx.beginPath();
-          ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
+          ctx.arc(0, 0, 1.7, 0, Math.PI * 2);
           ctx.fillStyle = '#a855f7';
           ctx.fill();
           ctx.restore();
           return;
         }}
         ctx.beginPath();
-        ctx.arc(x, y, 3.6, 0, Math.PI * 2);
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
         ctx.shadowColor = 'rgba(0,0,0,.55)';
         ctx.shadowBlur = 4;
         ctx.fillStyle = '#fbbf24';
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = 0.9;
         ctx.fill();
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -1149,7 +1149,7 @@ class LightweightChartLevelSelectorUI:
       ctx.save();
       if (pt.auto_wedge) {{
         ctx.beginPath();
-        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
         ctx.fillStyle = '#a855f7';
         ctx.strokeStyle = '#f8fafc';
         ctx.lineWidth = 1.4;
@@ -1170,7 +1170,7 @@ class LightweightChartLevelSelectorUI:
       ctx.strokeStyle = '#f8fafc';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.arc(x, y, 4.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.beginPath();
@@ -1188,8 +1188,8 @@ class LightweightChartLevelSelectorUI:
     const layer = $('icon-overlay');
     if (!layer || x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
     const pad = 12;
-    const axisPadX = 44;
-    const axisPadY = 28;
+    const axisPadX = 78;
+    const axisPadY = 44;
     const maxX = Math.max(pad, (layer.clientWidth || 0) - axisPadX);
     const maxY = Math.max(pad, (layer.clientHeight || 0) - axisPadY);
     x = clamp(Number(x), pad, maxX);
@@ -1404,8 +1404,10 @@ class LightweightChartLevelSelectorUI:
     const h = wrap ? wrap.clientHeight : 0;
     if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y) || !w || !h) return pt;
     const pad = 16;
-    const x = Math.min(Math.max(pt.x, pad), Math.max(pad, w - pad));
-    const y = Math.min(Math.max(pt.y, pad), Math.max(pad, h - pad));
+    const axisPadX = 78;
+    const axisPadY = 44;
+    const x = Math.min(Math.max(pt.x, pad), Math.max(pad, w - axisPadX));
+    const y = Math.min(Math.max(pt.y, pad), Math.max(pad, h - axisPadY));
     return {{...pt, actualX:pt.x, actualY:pt.y, offscreen:x !== pt.x || y !== pt.y, x, y}};
   }}
 
@@ -1915,15 +1917,15 @@ class LightweightChartLevelSelectorUI:
       const deleteFn = deleteSelectedLevel(field);
       if (field === 'line_cross_value') {{ addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`, deleteFn); return; }}
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
-      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
+      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 1.15, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
       if (series) levelSeries.set(field, series);
       if (field === 'entry') {{
-        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 1.35, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
         if (entrySeries) levelSeries.set('entry-point', entrySeries);
       }}
     }});
     (levels.__half_points__ || []).forEach((pt, i) => {{
-      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
+      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 1.15, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
       if (series) levelSeries.set(`half:${{i}}`, series);
     }});
     const seenFibLegend = new Set();
@@ -2153,10 +2155,10 @@ class LightweightChartLevelSelectorUI:
       const base = nearest(pt.date);
       const x0 = dateAtIndex(base.idx - 5);
       const x1 = dateAtIndex(base.idx + 5);
-      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
+      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 1.15, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
       if (series) levelSeries.set(field, series);
       if (field === 'entry') {{
-        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 1.35, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
         if (entrySeries) levelSeries.set('entry-point', entrySeries);
       }}
     }}
@@ -2167,7 +2169,7 @@ class LightweightChartLevelSelectorUI:
   function refreshHalfSeries() {{
     [...levelSeries.keys()].filter(k => String(k).startsWith('half:')).forEach(forgetLevelSeries);
     (levels.__half_points__ || []).forEach((pt, i) => {{
-      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
+      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 1.15, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
       if (series) levelSeries.set(`half:${{i}}`, series);
     }});
     updatePanel();
