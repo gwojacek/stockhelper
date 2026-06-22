@@ -1321,10 +1321,14 @@ class LightweightChartLevelSelectorUI:
         if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
-      }} else if (mode === 'end' && anchorsX[0] && anchorsX[1] && Number.isFinite(anchorsY[0]) && Number.isFinite(anchorsY[1])) {{
-        y1 = roundPrice(projectedLineValue(anchorsX[0], anchorsY[0], anchorsX[1], anchorsY[1], x1));
+      }} else if (mode === 'end' && anchorsX[0] && Number.isFinite(anchorsY[0])) {{
+        x1 = nearest(x1).time;
+        if (compareTime(x1, anchorsX[0]) <= 0) x1 = dateAtIndex(Math.min(P.ohlc.length - 1, nearest(anchorsX[0]).idx + 1));
+        y1 = candleExtremeForDate(x1, side, y1);
         x0 = anchorsX[0];
         y0 = anchorsY[0];
+        obj.anchor_x = [x0, x1];
+        obj.anchor_y = [y0, y1];
       }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
         obj.anchor_x = [x0, x1];
         obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
@@ -1403,13 +1407,21 @@ class LightweightChartLevelSelectorUI:
       if (!anchors) return null;
       const display = lineDisplayValues(obj) || anchors;
       const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null}};
-      let endX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
-      let endY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, display.x1)) : null;
+      const wrap = $('chart-wrap');
+      const maxVisibleX = Math.max(24, (wrap?.clientWidth || 0) - 24);
+      let endTime = display.x1;
+      let endX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(endTime) : null;
+      if (!Number.isFinite(endX) || endX > maxVisibleX) {{
+        endX = maxVisibleX;
+        const raw = chart.timeScale().coordinateToTime ? chart.timeScale().coordinateToTime(endX) : null;
+        endTime = typeof raw === 'string' ? raw.slice(0, 10) : (raw && Number.isFinite(raw.year) ? `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}` : addDays(P.ohlc[P.ohlc.length - 1]?.time || anchors.x1, 5));
+      }}
+      let endY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, endTime)) : null;
       const anchor2 = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null}};
-      if (!Number.isFinite(endX) || !Number.isFinite(endY)) {{ endX = anchor2.x; endY = anchor2.y; }}
+      if (!Number.isFinite(endX) || !Number.isFinite(endY)) {{ endX = anchor2.x; endY = anchor2.y; endTime = anchors.x1; }}
       const endActual = {{x:endX, y:endY}};
       if (![startActual.x, startActual.y, endActual.x, endActual.y].every(Number.isFinite)) return null;
-      const values = {{x0:anchors.x0, y0:anchors.y0, x1:display.x1, y1:projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, display.x1)}};
+      const values = {{x0:anchors.x0, y0:anchors.y0, x1:endTime, y1:projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, endTime)}};
       return {{start:clampLineHandlePoint(startActual), end:clampLineHandlePoint(endActual), actualStart:startActual, actualEnd:endActual, values}};
     }}
     const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
@@ -1740,7 +1752,7 @@ class LightweightChartLevelSelectorUI:
         }}
         if (invalid || upperTouches < 2 || lowerTouches < 2) continue;
         const duration = end - first;
-        if (duration <= scoreCurrent * 1.15 && hi(u1) <= candleExtremeForDate((upperObj.anchor_x || [])[0], 'upper', 0) && lo(l1) >= candleExtremeForDate((lowerObj.anchor_x || [])[0], 'lower', Infinity)) continue;
+        if (side === 'both' && duration <= scoreCurrent * 1.15 && hi(u1) <= candleExtremeForDate((upperObj.anchor_x || [])[0], 'upper', 0) && lo(l1) >= candleExtremeForDate((lowerObj.anchor_x || [])[0], 'lower', Infinity)) continue;
         const widthStart = line(u1, hi(u1), u2, hi(u2), first) - line(l1, lo(l1), l2, lo(l2), first);
         const widthEnd = line(u1, hi(u1), u2, hi(u2), end) - line(l1, lo(l1), l2, lo(l2), end);
         if (widthStart <= 0 || widthEnd <= 0 || widthEnd >= widthStart * 0.95) continue;
