@@ -7,9 +7,9 @@ It helps you:
 - calculate position size, engaged capital, potential loss, and risk/reward for configured setups;
 - work with stocks, forex pairs, commodities, and CFD/index-like instruments;
 - download/cache daily market data from Stooq, Yahoo Finance, and Stooq web/table fallbacks;
-- scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations;
+- scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations with improved 5.0 anchor scoring and alternate-wedge review;
 - generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists plus a dedicated Kliny tab from the latest allsearch data;
-- open an interactive chart tool, select price levels, save/update config files, and export chart snapshots;
+- open an interactive chart tool, select price levels, inspect/import/edit wedge lines, save/update config files, and export chart snapshots;
 - generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, and chart images.
 
 The project is practical and config-driven: most workflows start from a ticker/config slug, write reusable files under `configs/`, cache market data under `data/`, and save reports under `chart_program/data/`.
@@ -56,11 +56,11 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.
-- **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, touch/contact metrics, and chart commands that preload wedge lines.
+- **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, stricter wick/contact validation, improved anchor scoring, and chart commands that preload wedge lines.
 - **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
-- **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, and chart snapshots.
+- **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, and chart snapshots.
 - **Reports and artifacts**:
   - Markdown scanner reports in `chart_program/data/search/ichimoku/` and `chart_program/data/search/fibo/`;
   - Trójpolówki Markdown watchlists in `Trojpolowki/fibo.md` and `Trojpolowki/ichimoku.md`;
@@ -464,7 +464,7 @@ python run -allsearch all
 - The HTML report renders both 3P files as tabs, not as separate links; every 3P column and top-choice block has a `📊` StockHelper chart-open control, plus compact Stooq and Google-Sheets copy icons next to instruments. Grouped `📊` controls open one chart first and then show the rest of that button's instruments in the chart sidebar as quick buttons grouped by the originating section/source.
 - Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, deeper Fibo pullbacks, and the strongest falling-wedge setups are prioritized.
 - The `🔻 Kliny` tab groups falling wedges by market, keeps Stooq/StockHelper/Google-Sheets-copy controls next to each table, marks statuses as `⏳ unbroken` or `🚀 breakout`, and shows `Breakout date` plus `Breakout direction` (`long` for upper-line breakout, `short` for lower-line breakdown).
-- Falling-wedge scanner rows are written at the end of Fibo markdown under `WYNIKI KLINY OPADAJĄCE`; wedges must pass the same Avg10d liquidity threshold used by Fibonacci formations, and the wedge tables include `Avg10d PLN`. A wedge remains valid only while no candle closes outside its boundaries, except for an accepted breakout/breakdown on the latest candle or within the last 5 candles, which becomes the absolute top-choice wedge case. Touch counts are based on anchor candles plus separate local-extreme wick contacts on the wedge boundary, matching the chart markers: larger anchor dots and smaller colored touch dots. The report keeps wedge table columns compact (months, touches, slope, breakout, size, score) and does not show fit/proximity/compression columns.
+- Falling-wedge scanner rows are written at the end of Fibo markdown under `WYNIKI KLINY OPADAJĄCE`; wedges must pass the same Avg10d liquidity threshold used by Fibonacci formations, and the wedge tables include `Avg10d PLN`. A wedge remains valid only while no candle closes outside its boundaries, except for an accepted breakout/breakdown on the latest candle or within the last 5 candles, which becomes the absolute top-choice wedge case. Touch counts are based on anchor candles plus separate local-extreme wick contacts on the wedge boundary, matching the chart markers: larger anchor dots and smaller colored touch dots. In 5.0, wedge scoring favors longer structures with stronger boundary touches, active anchors, and exact wick-contact debug markers; report chart links can also expose alternate wedge candidates in the chart UI. The report keeps wedge table columns compact (months, touches, slope, breakout, size, score) and does not show fit/proximity/compression columns.
 - WYNIKI 2 Ichimoku includes `Mies. respektu przed wybiciem`, showing how long the prior cloud side was respected before the breakout.
 - Freshness probing samples up to five random instruments per run (instead of always the first five) so an interrupted refresh does not keep checking the same already-updated symbols on the next run.
 
