@@ -462,6 +462,7 @@ class LightweightChartLevelSelectorUI:
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
+    .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
     #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
@@ -530,6 +531,8 @@ class LightweightChartLevelSelectorUI:
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
         <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
+        <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line">↑</button>
+        <button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line">↓</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -1178,6 +1181,11 @@ class LightweightChartLevelSelectorUI:
   function addDomChartIcon(x, y, cls, text, color=null) {{
     const layer = $('icon-overlay');
     if (!layer || x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const pad = 12;
+    const maxX = Math.max(pad, (layer.clientWidth || 0) - pad);
+    const maxY = Math.max(pad, (layer.clientHeight || 0) - pad);
+    x = clamp(Number(x), pad, maxX);
+    y = clamp(Number(y), pad, maxY);
     const icon = document.createElement('span');
     icon.className = `chart-icon ${{cls || ''}}`;
     icon.textContent = text;
@@ -1672,7 +1680,7 @@ class LightweightChartLevelSelectorUI:
     ];
   }}
 
-  function findAlternativeWedgeCandidate() {{
+  function findAlternativeWedgeCandidate(side='both') {{
     const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.high)) && Number.isFinite(Number(r.low)) && Number.isFinite(Number(r.close)));
     if (rows.length < 55) return null;
     const wedges = drawnObjects.filter(isWedgeLineObject);
@@ -1682,7 +1690,9 @@ class LightweightChartLevelSelectorUI:
     const idxByTime = new Map(rows.map((r, i) => [String(r.time).slice(0,10), i]));
     const anchorIdx = (obj, pos) => idxByTime.get(String((obj.anchor_x || [])[pos] || '').slice(0,10));
     const curStart = Math.min(anchorIdx(upperObj, 0) ?? rows.length, anchorIdx(lowerObj, 0) ?? rows.length);
+    const curUpperFirst = anchorIdx(upperObj, 0);
     const curUpperSecond = anchorIdx(upperObj, 1);
+    const curLowerFirst = anchorIdx(lowerObj, 0);
     const curLowerSecond = anchorIdx(lowerObj, 1);
     const hi = i => Number(rows[i].high), lo = i => Number(rows[i].low), cl = i => Number(rows[i].close);
     const isHigh = i => i > 0 && i < rows.length - 1 && hi(i) >= hi(i - 1) && hi(i) >= hi(i + 1);
@@ -1690,14 +1700,14 @@ class LightweightChartLevelSelectorUI:
     const tol = Math.max(...rows.slice(-30).map(r => Number(r.high) - Number(r.low)).filter(Number.isFinite), Math.abs(cl(rows.length - 1)) * 0.004) * 0.20;
     const end = rows.length - 1;
     const scoreCurrent = Math.max(1, end - curStart);
-    const upperSeconds = [...new Set([curUpperSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isHigh(i))])].filter(Number.isFinite);
-    const lowerSeconds = [...new Set([curLowerSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isLow(i))])].filter(Number.isFinite);
+    const upperSeconds = side === 'lower' ? [curUpperSecond].filter(Number.isFinite) : [...new Set([curUpperSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isHigh(i))])].filter(Number.isFinite);
+    const lowerSeconds = side === 'upper' ? [curLowerSecond].filter(Number.isFinite) : [...new Set([curLowerSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isLow(i))])].filter(Number.isFinite);
     let best = null;
     for (const u2 of upperSeconds) for (const l2 of lowerSeconds) {{
-      const u1s = [];
-      for (let i = Math.max(1, u2 - 260); i <= u2 - 5; i++) if (isHigh(i) && hi(i) > hi(u2)) u1s.push(i);
-      const l1s = [];
-      for (let i = Math.max(1, l2 - 260); i <= l2 - 5; i++) if (isLow(i) && lo(i) < lo(l2)) l1s.push(i);
+      const u1s = side === 'lower' && Number.isFinite(curUpperFirst) ? [curUpperFirst] : [];
+      if (side !== 'lower') for (let i = Math.max(1, u2 - 260); i <= u2 - 5; i++) if (isHigh(i) && hi(i) > hi(u2)) u1s.push(i);
+      const l1s = side === 'upper' && Number.isFinite(curLowerFirst) ? [curLowerFirst] : [];
+      if (side !== 'upper') for (let i = Math.max(1, l2 - 260); i <= l2 - 5; i++) if (isLow(i) && lo(i) < lo(l2)) l1s.push(i);
       for (const u1 of u1s) for (const l1 of l1s) {{
         const us = (hi(u2) - hi(u1)) / (u2 - u1), ls = (lo(l2) - lo(l1)) / (l2 - l1);
         if (!(us < 0) || us >= ls || ls > Math.abs(us) * 1.10) continue;
@@ -1734,12 +1744,12 @@ class LightweightChartLevelSelectorUI:
     return true;
   }}
 
-  function findNewWedge() {{
-    const candidate = findAlternativeWedgeCandidate();
+  function findNewWedge(side='both') {{
+    const candidate = findAlternativeWedgeCandidate(side);
     if (!candidate) {{
       if (wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
       wedgeRouletteNoAlternative = true;
-      updateWedgeDebugPanel('No larger valid alternative wedge found. Click 🎲 Find new wedge again to restore the scanner wedge.');
+      updateWedgeDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. Click 🎲 Find new wedge again to restore the scanner wedge.`);
       return;
     }}
     wedgeRouletteNoAlternative = false;
@@ -1925,8 +1935,10 @@ class LightweightChartLevelSelectorUI:
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+    const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
     const findNewWedgeBtn = $('find-new-wedge');
-    if (findNewWedgeBtn) findNewWedgeBtn.style.display = drawnObjects.some(isWedgeLineObject) ? 'block' : 'none';
+    if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
+    ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
     const seenFib = new Set();
     drawnObjects.forEach((obj, idx) => {{
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
@@ -2035,7 +2047,9 @@ class LightweightChartLevelSelectorUI:
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('wedge-debug-btn').onclick = () => copyWedgeDebug();
-  $('find-new-wedge').onclick = () => findNewWedge();
+  $('find-new-wedge').onclick = () => findNewWedge('both');
+  $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
+  $('find-new-lower-wedge').onclick = () => findNewWedge('lower');
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
     drawnObjects = initialScannerDrawnObjects.map(deepClone);
