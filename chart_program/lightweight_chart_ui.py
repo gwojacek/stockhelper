@@ -1321,6 +1321,10 @@ class LightweightChartLevelSelectorUI:
         if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
+      }} else if (mode === 'end' && anchorsX[0] && anchorsX[1] && Number.isFinite(anchorsY[0]) && Number.isFinite(anchorsY[1])) {{
+        y1 = roundPrice(projectedLineValue(anchorsX[0], anchorsY[0], anchorsX[1], anchorsY[1], x1));
+        x0 = anchorsX[0];
+        y0 = anchorsY[0];
       }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
         obj.anchor_x = [x0, x1];
         obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
@@ -1394,6 +1398,20 @@ class LightweightChartLevelSelectorUI:
   function lineObjectPoints(obj) {{
     const pts = lineDisplayValues(obj);
     if (!pts) return null;
+    if (isWedgeLineObject(obj)) {{
+      const anchors = lineEndpointValues(obj);
+      if (!anchors) return null;
+      const display = lineDisplayValues(obj) || anchors;
+      const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null}};
+      let endX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
+      let endY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, display.x1)) : null;
+      const anchor2 = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null}};
+      if (!Number.isFinite(endX) || !Number.isFinite(endY)) {{ endX = anchor2.x; endY = anchor2.y; }}
+      const endActual = {{x:endX, y:endY}};
+      if (![startActual.x, startActual.y, endActual.x, endActual.y].every(Number.isFinite)) return null;
+      const values = {{x0:anchors.x0, y0:anchors.y0, x1:display.x1, y1:projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, display.x1)}};
+      return {{start:clampLineHandlePoint(startActual), end:clampLineHandlePoint(endActual), actualStart:startActual, actualEnd:endActual, values}};
+    }}
     const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
     const endActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y1) : null}};
     if (startActual.x === null || endActual.x === null || startActual.y === null || endActual.y === null) return null;
@@ -1747,9 +1765,9 @@ class LightweightChartLevelSelectorUI:
   function findNewWedge(side='both') {{
     const candidate = findAlternativeWedgeCandidate(side);
     if (!candidate) {{
-      if (wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
+      if (side === 'both' && wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
       wedgeRouletteNoAlternative = true;
-      updateWedgeDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. Click 🎲 Find new wedge again to restore the scanner wedge.`);
+      updateWedgeDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. ${{side === 'both' ? 'Click 🎲 Find new wedge again to restore the scanner wedge.' : 'Current wedge was left unchanged.'}}`);
       return;
     }}
     wedgeRouletteNoAlternative = false;
@@ -1771,8 +1789,11 @@ class LightweightChartLevelSelectorUI:
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
       if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
       const slope = (y1 - y0) / (x1 - x0);
+      const display = lineDisplayValues(obj) || anchors;
+      let endX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
+      if (!Number.isFinite(endX)) endX = $('chart-wrap').clientWidth || x1;
       const leftX = Math.max(0, Math.min(x0, x1));
-      const rightX = Math.max($('chart-wrap').clientWidth || 0, x0, x1);
+      const rightX = Math.max(leftX, endX);
       ctx.save();
       ctx.strokeStyle = obj.color || '#facc15';
       ctx.lineWidth = 3;
