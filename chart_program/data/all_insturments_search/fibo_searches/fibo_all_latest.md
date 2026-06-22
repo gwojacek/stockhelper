@@ -1,7 +1,7 @@
 FIBO ALL COMBO REPORT
 
 
-■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 🛢️ COMMODITIES ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 🇩🇪 DAX ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 
 
 Źródło danych CSV instrumentów: /home/jacek/PycharmProjects/stockhelper/data/csv

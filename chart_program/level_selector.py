@@ -613,7 +613,7 @@ def run_level_selector(raw_args=None):
             print(f"[chart] auto-fibo preload failed: {exc}")
 
 
-    def _saved_wedge_is_unbroken() -> bool:
+    def _saved_wedge_is_active() -> bool:
         objects = existing.get("drawn_objects") if isinstance(existing, dict) else None
         if not isinstance(objects, list) or df.empty:
             return False
@@ -652,7 +652,11 @@ def run_level_selector(raw_args=None):
             return float(a[1]) + (float(b[1]) - float(a[1])) * ((idx - a[0]) / (b[0] - a[0]))
 
         closes = pd.to_numeric(df["Close"], errors="coerce").to_numpy()
+        highs = pd.to_numeric(df["High"], errors="coerce").to_numpy()
+        lows = pd.to_numeric(df["Low"], errors="coerce").to_numpy()
         start_idx = max(min(upper_a[0], upper_b[0]), min(lower_a[0], lower_b[0]))
+        breakout_idx = None
+        breakout_direction = None
         for idx in range(start_idx, len(df)):
             close = closes[idx]
             if pd.isna(close):
@@ -661,13 +665,29 @@ def run_level_selector(raw_args=None):
             lo = _line(idx, lower_a, lower_b)
             eps = max(abs(float(close)) * 1e-6, 1e-9)
             if close > up + eps or close < lo - eps:
-                return False
+                direction = "long" if close > up + eps else "short"
+                if idx < len(df) - 6:
+                    return False
+                if breakout_idx is None:
+                    breakout_idx = idx
+                    breakout_direction = direction
+                elif direction != breakout_direction:
+                    return False
+            if breakout_idx is not None and idx > breakout_idx:
+                breakout_up = _line(breakout_idx, upper_a, upper_b)
+                breakout_lo = _line(breakout_idx, lower_a, lower_b)
+                probable_stop = (breakout_up + breakout_lo) / 2.0
+                stop_eps = max(abs(float(probable_stop)) * 1e-6, eps)
+                if breakout_direction == "long" and not pd.isna(lows[idx]) and float(lows[idx]) <= probable_stop + stop_eps:
+                    return False
+                if breakout_direction == "short" and not pd.isna(highs[idx]) and float(highs[idx]) >= probable_stop - stop_eps:
+                    return False
         return True
 
     if args.wedge_lines:
         try:
-            if _saved_wedge_is_unbroken():
-                print("[chart] kept saved manual wedge lines (unbroken)")
+            if _saved_wedge_is_active():
+                print("[chart] kept saved manual wedge lines (active/recent breakout)")
                 raise StopIteration
 
             def _parse_wedge_point(raw: str | None) -> tuple[pd.Timestamp, float] | None:
@@ -776,19 +796,23 @@ def run_level_selector(raw_args=None):
                         end_idx = max(common_wedge_end_idx or fallback_end_idx, fallback_end_idx)
                     else:
                         end_idx = second_idx
-                    # Build a polyline on every trading/index step. With Plotly
-                    # rangebreaks this avoids calendar-time interpolation drift and
-                    # keeps the auto line glued to the same candles at every zoom.
-                    indexes = list(range(first_idx, end_idx + 1))
+                    # Store only collinear points: both real candle anchors plus
+                    # the right-side extension.  This keeps wedge drawings visually
+                    # straight while still forcing the second anchor to sit exactly
+                    # on the candle extreme (no sampled polyline drift).
+                    indexes = sorted(dict.fromkeys([first_idx, second_idx, end_idx]))
                     x_vals = [str(pd.to_datetime(_date_for_index(i)).date()) for i in indexes]
                     y_vals = [round(_line_price_at_index(p0, p1, i), 5) for i in indexes]
+                    for anchor_idx, anchor_price in ((i0, p0[1]), (i1, p1[1])):
+                        if anchor_idx in indexes:
+                            y_vals[indexes.index(anchor_idx)] = round(float(anchor_price), 5)
                     return x_vals, y_vals
 
                 upper_x, upper_y = _line_object_points(up0, up1)
                 lower_x, lower_y = _line_object_points(lo0, lo1)
                 existing["drawn_objects"] = [
-                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x": upper_x, "y": upper_y, "x0": upper_x[0], "x1": upper_x[-1], "y0": upper_y[0], "y1": upper_y[-1], "anchor_x": [str(up0[0].date()), str(up1[0].date())], "anchor_y": [round(float(up0[1]), 5), round(float(up1[1]), 5)], "price": upper_y[-1], "color": "#dc2626", "group_id": "auto-wedge"},
-                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x": upper_x, "y": upper_y, "x0": upper_x[0], "x1": upper_x[-1], "y0": upper_y[0], "y1": upper_y[-1], "anchor_x": [str(up0[0].date()), str(up1[0].date())], "anchor_y": [round(float(up0[1]), 5), round(float(up1[1]), 5)], "price": upper_y[-1], "color": "#dc2626", "group_id": "auto-wedge", "free_extension": False},
+                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge", "free_extension": False},
                 ]
                 print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
         except StopIteration:

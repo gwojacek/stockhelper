@@ -462,13 +462,14 @@ class LightweightChartLevelSelectorUI:
     button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
+    .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
     #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
     #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
-    .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:15px; height:15px; padding:0 3px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:10px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:2px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
+    .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:12px; height:12px; padding:0 2px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:1.5px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
     .chart-icon.anchor {{ color:#f8fafc; background:#111827; border-color:#f8fafc; text-shadow:0 1px 2px #000; }}
-    .chart-icon.touch {{ color:#0f172a; background:#fbbf24; border-color:#0f172a; width:10px; min-width:10px; height:10px; padding:0; }}
+    .chart-icon.touch {{ color:#0f172a; background:#fbbf24; border-color:#0f172a; width:7px; min-width:7px; height:7px; padding:0; }}
     .chart-icon.cross {{ color:#f8fafc; background:#a855f7; border-color:#f8fafc; }}
     .chart-icon.end {{ color:#0f172a; background:#f8fafc; }}
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
@@ -494,6 +495,7 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
+    .side-action-btn {{ margin-top:8px;width:100%;padding:10px;color:white;border:none;border-radius:8px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
@@ -529,6 +531,9 @@ class LightweightChartLevelSelectorUI:
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
+        <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
+        <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line">↑</button>
+        <button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line">↓</button>
         <span>Line color:</span>
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
@@ -564,10 +569,10 @@ class LightweightChartLevelSelectorUI:
       <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
       <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
       <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="calculate-btn" style="margin-top:16px;width:100%;padding:10px;background:#16a34a;color:white;border:none;border-radius:8px">Calculate position</button>
-      <button id="wedge-debug-btn" style="margin-top:8px;width:100%;padding:10px;background:#7c3aed;color:white;border:none;border-radius:8px">Copy wedge debug</button>
+      <button id="calculate-btn" class="side-action-btn" style="background:#16a34a">Calculate position</button>
+      <button id="wedge-debug-btn" class="side-action-btn" style="background:#7c3aed">📋 Wedge Information</button>
       <div id="wedge-debug-panel"></div>
-      <button id="finish-btn" style="margin-top:8px;width:100%;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px">Save &amp; Close</button>
+      <button id="finish-btn" class="side-action-btn" style="background:#2563eb">Save &amp; Close</button>
       <div id="chart-group-nav" class="chart-group-nav">
         <h4>⭐ Quick charts from 📊</h4>
         <div id="chart-group-label" class="chart-group-label"></div>
@@ -591,6 +596,7 @@ class LightweightChartLevelSelectorUI:
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
+  let wedgeRouletteNoAlternative = false;
   let lineAnchor = null;
   let fibAnchor = null;
   let halfAnchor = null;
@@ -1029,6 +1035,11 @@ class LightweightChartLevelSelectorUI:
 
   async function copyWedgeDebug() {{
     const panel = $('wedge-debug-panel');
+    if (panel?.classList.contains('open')) {{
+      panel.classList.remove('open');
+      panel.textContent = '';
+      return;
+    }}
     const text = wedgeDebugSnapshot();
     if (panel) {{
       panel.classList.add('open');
@@ -1054,28 +1065,28 @@ class LightweightChartLevelSelectorUI:
           ctx.save();
           ctx.translate(x, y);
           ctx.beginPath();
-          ctx.arc(0, 0, 6.2, 0, Math.PI * 2);
+          ctx.arc(0, 0, 4.6, 0, Math.PI * 2);
           ctx.shadowColor = 'rgba(0,0,0,.55)';
           ctx.shadowBlur = 3;
           ctx.fillStyle = 'rgba(15,23,42,.35)';
           ctx.strokeStyle = '#f8fafc';
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.2;
           ctx.stroke();
           ctx.shadowBlur = 0;
           ctx.beginPath();
-          ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
+          ctx.arc(0, 0, 1.7, 0, Math.PI * 2);
           ctx.fillStyle = '#a855f7';
           ctx.fill();
           ctx.restore();
           return;
         }}
         ctx.beginPath();
-        ctx.arc(x, y, 3.6, 0, Math.PI * 2);
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
         ctx.shadowColor = 'rgba(0,0,0,.55)';
         ctx.shadowBlur = 4;
         ctx.fillStyle = '#fbbf24';
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = 0.9;
         ctx.fill();
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -1138,7 +1149,7 @@ class LightweightChartLevelSelectorUI:
       ctx.save();
       if (pt.auto_wedge) {{
         ctx.beginPath();
-        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
         ctx.fillStyle = '#a855f7';
         ctx.strokeStyle = '#f8fafc';
         ctx.lineWidth = 1.4;
@@ -1159,7 +1170,7 @@ class LightweightChartLevelSelectorUI:
       ctx.strokeStyle = '#f8fafc';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.arc(x, y, 4.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.beginPath();
@@ -1176,6 +1187,13 @@ class LightweightChartLevelSelectorUI:
   function addDomChartIcon(x, y, cls, text, color=null) {{
     const layer = $('icon-overlay');
     if (!layer || x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const pad = 12;
+    const axisPadX = 78;
+    const axisPadY = 44;
+    const maxX = Math.max(pad, (layer.clientWidth || 0) - axisPadX);
+    const maxY = Math.max(pad, (layer.clientHeight || 0) - axisPadY);
+    x = clamp(Number(x), pad, maxX);
+    y = clamp(Number(y), pad, maxY);
     const icon = document.createElement('span');
     icon.className = `chart-icon ${{cls || ''}}`;
     icon.textContent = text;
@@ -1218,6 +1236,10 @@ class LightweightChartLevelSelectorUI:
     const raw = ts.coordinateToTime ? ts.coordinateToTime(x) : null;
     if (typeof raw === 'string') return raw.slice(0, 10);
     if (raw && Number.isFinite(raw.year)) return `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}`;
+    if (x > rect.width) {{
+      const extraCandles = Math.min(120, Math.max(5, Math.round((x - rect.width) / 7)));
+      return addDays(P.ohlc[P.ohlc.length - 1]?.time || nearest(null).time, extraCandles);
+    }}
     return nearest(null).time;
   }}
 
@@ -1259,14 +1281,17 @@ class LightweightChartLevelSelectorUI:
   function lineDisplayValues(obj) {{
     if (!obj) return null;
     if (isWedgeLineObject(obj)) {{
+      const anchors = lineEndpointValues(obj);
       const xs = Array.isArray(obj.x) && obj.x.length >= 2 ? obj.x : null;
       const ys = Array.isArray(obj.y) && obj.y.length >= 2 ? obj.y : null;
-      if (xs && ys) {{
+      if (anchors && xs && ys) {{
         const last = Math.min(xs.length, ys.length) - 1;
-        const x0 = String(xs[0]).slice(0, 10), x1 = String(xs[last]).slice(0, 10);
-        const y0 = Number(ys[0]), y1 = Number(ys[last]);
-        if (x0 && x1 && Number.isFinite(y0) && Number.isFinite(y1)) return {{x0, y0, x1, y1}};
+        const x1 = String(xs[last]).slice(0, 10);
+        const rawY1 = Number(ys[last]);
+        const y1 = obj.free_extension ? rawY1 : projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, x1);
+        if (x1 && Number.isFinite(y1)) return {{x0:anchors.x0, y0:anchors.y0, x1, y1}};
       }}
+      if (anchors) return anchors;
     }}
     return lineEndpointValues(obj);
   }}
@@ -1309,6 +1334,11 @@ class LightweightChartLevelSelectorUI:
         if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
+      }} else if (mode === 'end' && anchorsX[0] && Number.isFinite(anchorsY[0])) {{
+        if (compareTime(x1, anchorsX[0]) <= 0) x1 = dateAtIndex(Math.min(P.ohlc.length - 1, nearest(anchorsX[0]).idx + 1));
+        x0 = anchorsX[0];
+        y0 = anchorsY[0];
+        obj.free_extension = true;
       }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
         obj.anchor_x = [x0, x1];
         obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
@@ -1351,20 +1381,61 @@ class LightweightChartLevelSelectorUI:
     return pts ? normalizeLineData([{{time:pts.x0, value:pts.y0}}, {{time:pts.x1, value:pts.y1}}]) : [];
   }}
 
+  function straightWedgeLineData(obj) {{
+    const anchors = lineEndpointValues(obj);
+    if (!anchors) return [];
+    const display = lineDisplayValues(obj) || anchors;
+    const endTime = display.x1 || anchors.x1;
+    const endValue = projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, endTime);
+    // Render wedge boundaries as one straight segment. The second anchor is
+    // deliberately not inserted as a series vertex, because even a tiny logical
+    // projection mismatch creates a visible kink after that anchor. The endpoint
+    // is projected from the two anchors in the same date coordinate space used by
+    // the chart renderer, so the unbroken straight segment crosses anchor #2.
+    return normalizeLineData([
+      {{time:anchors.x0, value:anchors.y0}},
+      {{time:endTime, value:roundPrice(endValue)}},
+    ]);
+  }}
+
   function clampLineHandlePoint(pt) {{
     const wrap = $('chart-wrap');
     const w = wrap ? wrap.clientWidth : 0;
     const h = wrap ? wrap.clientHeight : 0;
     if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y) || !w || !h) return pt;
     const pad = 16;
-    const x = Math.min(Math.max(pt.x, pad), Math.max(pad, w - pad));
-    const y = Math.min(Math.max(pt.y, pad), Math.max(pad, h - pad));
+    const axisPadX = 78;
+    const axisPadY = 44;
+    const x = Math.min(Math.max(pt.x, pad), Math.max(pad, w - axisPadX));
+    const y = Math.min(Math.max(pt.y, pad), Math.max(pad, h - axisPadY));
     return {{...pt, actualX:pt.x, actualY:pt.y, offscreen:x !== pt.x || y !== pt.y, x, y}};
   }}
 
   function lineObjectPoints(obj) {{
     const pts = lineDisplayValues(obj);
     if (!pts) return null;
+    if (isWedgeLineObject(obj)) {{
+      const anchors = lineEndpointValues(obj);
+      if (!anchors) return null;
+      const display = lineDisplayValues(obj) || anchors;
+      const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null}};
+      const wrap = $('chart-wrap');
+      const maxVisibleX = Math.max(24, (wrap?.clientWidth || 0) - 24);
+      let endTime = display.x1;
+      let endX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(endTime) : null;
+      if (!Number.isFinite(endX) || endX > maxVisibleX) {{
+        endX = maxVisibleX;
+        const raw = chart.timeScale().coordinateToTime ? chart.timeScale().coordinateToTime(endX) : null;
+        endTime = typeof raw === 'string' ? raw.slice(0, 10) : (raw && Number.isFinite(raw.year) ? `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}` : addDays(P.ohlc[P.ohlc.length - 1]?.time || anchors.x1, 5));
+      }}
+      let endY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
+      const anchor2 = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null}};
+      if (!Number.isFinite(endX) || !Number.isFinite(endY)) {{ endX = anchor2.x; endY = anchor2.y; endTime = anchors.x1; }}
+      const endActual = {{x:endX, y:endY}};
+      if (![startActual.x, startActual.y, endActual.x, endActual.y].every(Number.isFinite)) return null;
+      const values = {{x0:anchors.x0, y0:anchors.y0, x1:endTime, y1:display.y1}};
+      return {{start:clampLineHandlePoint(startActual), end:clampLineHandlePoint(endActual), actualStart:startActual, actualEnd:endActual, values}};
+    }}
     const startActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x0) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y0) : null}};
     const endActual = {{x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(pts.x1) : null, y: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(pts.y1) : null}};
     if (startActual.x === null || endActual.x === null || startActual.y === null || endActual.y === null) return null;
@@ -1501,6 +1572,10 @@ class LightweightChartLevelSelectorUI:
 
   function lineValueForDate(obj, time) {{
     if (!obj) return null;
+    if (isWedgeLineObject(obj)) {{
+      const display = lineDisplayValues(obj);
+      if (display) return projectedLineValue(display.x0, display.y0, display.x1, display.y1, time);
+    }}
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
       const idx = obj.x.map(x => String(x).slice(0, 10)).indexOf(String(time).slice(0, 10));
       if (idx >= 0) return Number(obj.y[idx]);
@@ -1616,6 +1691,148 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
 
+  function wedgeLineThroughExtremeObjects(candidate) {{
+    const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.high)) && Number.isFinite(Number(r.low)));
+    const dateForIdx = (idx) => rows[Math.max(0, Math.min(rows.length - 1, idx))]?.time;
+    const lineAt = (a, b, idx) => a.price + (b.price - a.price) * ((idx - a.idx) / Math.max(1, b.idx - a.idx));
+    const maxIdx = rows.length - 1;
+    const projection = Math.max(80, Math.abs(candidate.upper.b.idx - candidate.upper.a.idx) * 2, Math.abs(candidate.lower.b.idx - candidate.lower.a.idx) * 2);
+    let endIdx = maxIdx + projection;
+    const us = (candidate.upper.b.price - candidate.upper.a.price) / Math.max(1, candidate.upper.b.idx - candidate.upper.a.idx);
+    const ls = (candidate.lower.b.price - candidate.lower.a.price) / Math.max(1, candidate.lower.b.idx - candidate.lower.a.idx);
+    const denom = us - ls;
+    if (Math.abs(denom) > 1e-9) {{
+      const ui = candidate.upper.a.price - us * candidate.upper.a.idx;
+      const li = candidate.lower.a.price - ls * candidate.lower.a.idx;
+      const cross = Math.ceil((li - ui) / denom);
+      if (cross > maxIdx) endIdx = Math.max(endIdx, cross + 5);
+    }}
+    endIdx = Math.min(endIdx, maxIdx + Math.max(rows.length, 180));
+    const make = (side, color, label, id, line) => {{
+      const anchorX = [dateForIdx(line.a.idx), dateForIdx(line.b.idx)];
+      const anchorY = [roundPrice(line.a.price), roundPrice(line.b.price)];
+      const endTime = endIdx <= maxIdx ? dateForIdx(endIdx) : addDays(dateForIdx(maxIdx), endIdx - maxIdx);
+      const x = [anchorX[0], anchorX[1], endTime];
+      const y = [anchorY[0], anchorY[1], roundPrice(lineAt(line.a, line.b, endIdx))];
+      return {{id, type:'wedge', label, x, y, x0:x[0], x1:x[x.length - 1], y0:y[0], y1:y[y.length - 1], anchor_x:anchorX, anchor_y:anchorY, price:y[y.length - 1], color, group_id:'auto-wedge', free_extension:false}};
+    }};
+    return [
+      make('upper', '#dc2626', 'Falling wedge upper', 'auto-wedge-upper', candidate.upper),
+      make('lower', '#2563eb', 'Falling wedge lower', 'auto-wedge-lower', candidate.lower),
+    ];
+  }}
+
+  function findAlternativeWedgeCandidate(side='both') {{
+    const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.high)) && Number.isFinite(Number(r.low)) && Number.isFinite(Number(r.close)));
+    if (rows.length < 55) return null;
+    const wedges = drawnObjects.filter(isWedgeLineObject);
+    const upperObj = wedges.find(o => wedgeSide(o) === 'upper');
+    const lowerObj = wedges.find(o => wedgeSide(o) === 'lower');
+    if (!upperObj || !lowerObj) return null;
+    const idxByTime = new Map(rows.map((r, i) => [String(r.time).slice(0,10), i]));
+    const anchorIdx = (obj, pos) => idxByTime.get(String((obj.anchor_x || [])[pos] || '').slice(0,10));
+    const curStart = Math.min(anchorIdx(upperObj, 0) ?? rows.length, anchorIdx(lowerObj, 0) ?? rows.length);
+    const curUpperFirst = anchorIdx(upperObj, 0);
+    const curUpperSecond = anchorIdx(upperObj, 1);
+    const curLowerFirst = anchorIdx(lowerObj, 0);
+    const curLowerSecond = anchorIdx(lowerObj, 1);
+    const hi = i => Number(rows[i].high), lo = i => Number(rows[i].low), cl = i => Number(rows[i].close);
+    const isHigh = i => i > 0 && i < rows.length - 1 && hi(i) >= hi(i - 1) && hi(i) >= hi(i + 1);
+    const isLow = i => i > 0 && i < rows.length - 1 && lo(i) <= lo(i - 1) && lo(i) <= lo(i + 1);
+    const tol = Math.max(...rows.slice(-30).map(r => Number(r.high) - Number(r.low)).filter(Number.isFinite), Math.abs(cl(rows.length - 1)) * 0.004) * 0.20;
+    const end = rows.length - 1;
+    const scoreCurrent = Math.max(1, end - curStart);
+    const upperSeconds = side === 'lower' ? [curUpperSecond].filter(Number.isFinite) : [...new Set([curUpperSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isHigh(i))])].filter(Number.isFinite);
+    const lowerSeconds = side === 'upper' ? [curLowerSecond].filter(Number.isFinite) : [...new Set([curLowerSecond, ...Array.from({{length:Math.min(35, end)}}, (_, k) => end - 3 - k).filter(i => i > 5 && isLow(i))])].filter(Number.isFinite);
+    let best = null;
+    for (const u2 of upperSeconds) for (const l2 of lowerSeconds) {{
+      const u1s = side === 'lower' && Number.isFinite(curUpperFirst) ? [curUpperFirst] : [];
+      if (side !== 'lower') for (let i = Math.max(1, u2 - 260); i <= u2 - 5; i++) if (isHigh(i) && hi(i) > hi(u2)) u1s.push(i);
+      const l1s = side === 'upper' && Number.isFinite(curLowerFirst) ? [curLowerFirst] : [];
+      if (side !== 'upper') for (let i = Math.max(1, l2 - 260); i <= l2 - 5; i++) if (isLow(i) && lo(i) < lo(l2)) l1s.push(i);
+      for (const u1 of u1s) for (const l1 of l1s) {{
+        const us = (hi(u2) - hi(u1)) / (u2 - u1), ls = (lo(l2) - lo(l1)) / (l2 - l1);
+        if (!(us < 0) || us >= ls || ls > Math.abs(us) * 1.10) continue;
+        const line = (a, av, b, bv, i) => av + (bv - av) * ((i - a) / (b - a));
+        let invalid = false, upperTouches = 2, lowerTouches = 2;
+        const first = Math.min(u1, l1);
+        for (let i = first; i <= end; i++) {{
+          const up = line(u1, hi(u1), u2, hi(u2), i), low = line(l1, lo(l1), l2, lo(l2), i);
+          if (low >= up || (cl(i) > up + tol * 0.1 && i < end - 5) || (cl(i) < low - tol * 0.1 && i < end - 5)) {{ invalid = true; break; }}
+          if (i > u2 && hi(i) >= up - tol && cl(i) <= up + tol * 0.1) upperTouches++;
+          if (i > l2 && lo(i) <= low + tol && cl(i) >= low - tol * 0.1) lowerTouches++;
+        }}
+        if (invalid || upperTouches < 2 || lowerTouches < 2) continue;
+        const duration = end - first;
+        if (side === 'both' && duration <= scoreCurrent * 1.15 && hi(u1) <= candleExtremeForDate((upperObj.anchor_x || [])[0], 'upper', 0) && lo(l1) >= candleExtremeForDate((lowerObj.anchor_x || [])[0], 'lower', Infinity)) continue;
+        const widthStart = line(u1, hi(u1), u2, hi(u2), first) - line(l1, lo(l1), l2, lo(l2), first);
+        const widthEnd = line(u1, hi(u1), u2, hi(u2), end) - line(l1, lo(l1), l2, lo(l2), end);
+        if (widthStart <= 0 || widthEnd <= 0 || widthEnd >= widthStart * 0.95) continue;
+        const score = duration * 10 + widthStart + (upperTouches + lowerTouches) * 15 + Math.max(0, hi(u1) - hi(u2)) + Math.max(0, lo(l2) - lo(l1));
+        if (!best || score > best.score) best = {{score, upper:{{a:{{idx:u1, price:hi(u1)}}, b:{{idx:u2, price:hi(u2)}}}}, lower:{{a:{{idx:l1, price:lo(l1)}}, b:{{idx:l2, price:lo(l2)}}}}}};
+      }}
+    }}
+    return best;
+  }}
+
+  function restoreScannerWedgeFromRoulette() {{
+    if (!initialScannerDrawnObjects.length) return false;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(initialScannerDrawnObjects.map(deepClone));
+    wedgeRouletteNoAlternative = false;
+    applyWedgeDerivedLevels();
+    ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
+    render();
+    updateWedgeDebugPanel('Restored the original scanner wedge.');
+    return true;
+  }}
+
+  function findNewWedge(side='both') {{
+    const candidate = findAlternativeWedgeCandidate(side);
+    if (!candidate) {{
+      if (side === 'both' && wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
+      wedgeRouletteNoAlternative = true;
+      updateWedgeDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. ${{side === 'both' ? 'Click 🎲 Find new wedge again to restore the scanner wedge.' : 'Current wedge was left unchanged.'}}`);
+      return;
+    }}
+    wedgeRouletteNoAlternative = false;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(wedgeLineThroughExtremeObjects(candidate));
+    applyWedgeDerivedLevels();
+    ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
+    render();
+    updateWedgeDebugPanel('Found and loaded a larger valid wedge alternative. Save & Close to keep it for future allsearch calculations.');
+  }}
+
+
+  function drawWedgeStraightLines(ctx) {{
+    drawnObjects.filter(obj => isWedgeLineObject(obj) && !hiddenLegendKeys.has(editableObjectLegendKey(obj))).forEach(obj => {{
+      const anchors = lineEndpointValues(obj);
+      if (!anchors) return;
+      const x0 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x0) : null;
+      const x1 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null;
+      const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null;
+      const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
+      if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
+      const display = lineDisplayValues(obj) || anchors;
+      const displayEndY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
+      const endSourceX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
+      const endSourceY = Number.isFinite(displayEndY) ? displayEndY : y1;
+      const slope = Number.isFinite(endSourceX) && endSourceX !== x0 ? (endSourceY - y0) / (endSourceX - x0) : (y1 - y0) / (x1 - x0);
+      let endX = endSourceX;
+      if (!Number.isFinite(endX)) endX = $('chart-wrap').clientWidth || x1;
+      const leftX = Math.max(0, Math.min(x0, x1));
+      const rightX = Math.max(leftX, endX);
+      ctx.save();
+      ctx.strokeStyle = obj.color || '#facc15';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(leftX, y0 + slope * (leftX - x0));
+      ctx.lineTo(rightX, y0 + slope * (rightX - x0));
+      ctx.stroke();
+      ctx.restore();
+    }});
+  }}
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const wrap = $('chart-wrap');
@@ -1629,7 +1846,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
+    if (!levels.__show_ichimoku__) {{ drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -1644,6 +1861,7 @@ class LightweightChartLevelSelectorUI:
       ctx.fillStyle = p1.bull ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
       ctx.fill();
     }}
+    drawWedgeStraightLines(ctx);
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);
     drawLineObjectHandles(ctx);
@@ -1699,15 +1917,15 @@ class LightweightChartLevelSelectorUI:
       const deleteFn = deleteSelectedLevel(field);
       if (field === 'line_cross_value') {{ addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`, levelColors[field] || '#3b82f6', `level:${{field}}`, deleteFn); return; }}
       const base = nearest(pt.date); const x0 = dateAtIndex(base.idx - 5); const x1 = dateAtIndex(base.idx + 5);
-      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
+      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 1.15, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
       if (series) levelSeries.set(field, series);
       if (field === 'entry') {{
-        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 1.35, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
         if (entrySeries) levelSeries.set('entry-point', entrySeries);
       }}
     }});
     (levels.__half_points__ || []).forEach((pt, i) => {{
-      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
+      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 1.15, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
       if (series) levelSeries.set(`half:${{i}}`, series);
     }});
     const seenFibLegend = new Set();
@@ -1739,8 +1957,10 @@ class LightweightChartLevelSelectorUI:
       }}
       const seriesTitle = isFib ? (fibPercentLabel(obj) || objectLegend) : objectLegend;
       let series = null;
-      if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
-        series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isWedge ? 3 : (isFib ? 1.2 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
+      if (isWedge) {{
+        addLegend(seriesTitle, color, objKey, deleteFn);
+      }} else if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
+        series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isFib ? 1.2 : 2, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
       }} else {{
         const x1 = isFib ? extendFuture(obj.x1, 720) : String(obj.x1).slice(0,10);
         series = addLine([{{time:String(obj.x0).slice(0,10), value:Number(obj.y0)}}, {{time:x1, value:Number(obj.y1)}}], color, isFib && String(obj.label || '').includes('61.8%') ? 1.4 : (isFib ? 1.0 : 2), LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
@@ -1763,6 +1983,10 @@ class LightweightChartLevelSelectorUI:
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+    const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
+    const findNewWedgeBtn = $('find-new-wedge');
+    if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
+    ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
     const seenFib = new Set();
     drawnObjects.forEach((obj, idx) => {{
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
@@ -1871,6 +2095,9 @@ class LightweightChartLevelSelectorUI:
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('wedge-debug-btn').onclick = () => copyWedgeDebug();
+  $('find-new-wedge').onclick = () => findNewWedge('both');
+  $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
+  $('find-new-lower-wedge').onclick = () => findNewWedge('lower');
   $('reset-scanner-drawings').onclick = () => {{
     if (!initialScannerDrawnObjects.length) return;
     drawnObjects = initialScannerDrawnObjects.map(deepClone);
@@ -1928,10 +2155,10 @@ class LightweightChartLevelSelectorUI:
       const base = nearest(pt.date);
       const x0 = dateAtIndex(base.idx - 5);
       const x1 = dateAtIndex(base.idx + 5);
-      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 2, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
+      const series = addLine([{{time:x0, value:pt.plot_price ?? pt.price}}, {{time:x1, value:pt.plot_price ?? pt.price}}], levelColors[field] || '#94a3b8', 1.15, LightweightCharts.LineStyle.Solid, `${{labels[field]}}: ${{fmt(pt.price)}}`, true, false, false, `level:${{field}}`, deleteFn, false);
       if (series) levelSeries.set(field, series);
       if (field === 'entry') {{
-        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 2.2, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
+        const entrySeries = addLine([{{time:pt.date, value:pt.price}}], levelColors[field], 1.35, LightweightCharts.LineStyle.Solid, '', false, false, false, 'level:entry-point', null, false);
         if (entrySeries) levelSeries.set('entry-point', entrySeries);
       }}
     }}
@@ -1942,7 +2169,7 @@ class LightweightChartLevelSelectorUI:
   function refreshHalfSeries() {{
     [...levelSeries.keys()].filter(k => String(k).startsWith('half:')).forEach(forgetLevelSeries);
     (levels.__half_points__ || []).forEach((pt, i) => {{
-      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 2, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
+      const series = addLine([{{time:pt.date, value:pt.price}}], '#a855f7', 1.15, LightweightCharts.LineStyle.Solid, 'Half point', true, false, false, `half:${{i}}`, null, false);
       if (series) levelSeries.set(`half:${{i}}`, series);
     }});
     updatePanel();
