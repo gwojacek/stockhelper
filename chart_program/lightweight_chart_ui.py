@@ -1379,9 +1379,12 @@ class LightweightChartLevelSelectorUI:
     const display = lineDisplayValues(obj) || anchors;
     const endTime = display.x1 || anchors.x1;
     const endValue = wedgeLogicalLineValue(anchors, endTime);
+    // Render wedge boundaries as one straight segment. The second anchor is
+    // deliberately not inserted as a series vertex, because even a tiny logical
+    // projection mismatch creates a visible kink after that anchor. All wedge
+    // calculations still use the exact two anchor extremes via wedgeLogicalLineValue().
     return normalizeLineData([
       {{time:anchors.x0, value:anchors.y0}},
-      {{time:anchors.x1, value:anchors.y1}},
       {{time:endTime, value:roundPrice(endValue)}},
     ]);
   }}
