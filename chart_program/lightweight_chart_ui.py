@@ -1751,6 +1751,30 @@ class LightweightChartLevelSelectorUI:
   }}
 
 
+  function drawWedgeStraightLines(ctx) {{
+    drawnObjects.filter(obj => isWedgeLineObject(obj) && !hiddenLegendKeys.has(editableObjectLegendKey(obj))).forEach(obj => {{
+      const anchors = lineEndpointValues(obj);
+      if (!anchors) return;
+      const x0 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x0) : null;
+      const x1 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null;
+      const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null;
+      const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
+      if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
+      const slope = (y1 - y0) / (x1 - x0);
+      const leftX = Math.max(0, Math.min(x0, x1));
+      const rightX = Math.max($('chart-wrap').clientWidth || 0, x0, x1);
+      ctx.save();
+      ctx.strokeStyle = obj.color || '#facc15';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(leftX, y0 + slope * (leftX - x0));
+      ctx.lineTo(rightX, y0 + slope * (rightX - x0));
+      ctx.stroke();
+      ctx.restore();
+    }});
+  }}
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const wrap = $('chart-wrap');
@@ -1764,7 +1788,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
+    if (!levels.__show_ichimoku__) {{ drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -1779,6 +1803,7 @@ class LightweightChartLevelSelectorUI:
       ctx.fillStyle = p1.bull ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
       ctx.fill();
     }}
+    drawWedgeStraightLines(ctx);
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);
     drawLineObjectHandles(ctx);
@@ -1875,7 +1900,7 @@ class LightweightChartLevelSelectorUI:
       const seriesTitle = isFib ? (fibPercentLabel(obj) || objectLegend) : objectLegend;
       let series = null;
       if (isWedge) {{
-        series = addLine(straightWedgeLineData(obj), color, 3, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
+        addLegend(seriesTitle, color, objKey, deleteFn);
       }} else if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
         series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isFib ? 1.2 : 2, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
       }} else {{
