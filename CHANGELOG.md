@@ -2,7 +2,36 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently has four release tags: `1.0`, `2.0`, `3.0`, and `4.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently has five release tags: `1.0`, `2.0`, `3.0`, `4.0`, and `5.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+
+## [5.0] - 2026-06-22
+
+Tag: `5.0`
+Compare: [`4.0...5.0`](https://github.com/gwojacek/stockhelper/compare/4.0...5.0)
+
+### Added
+
+- Added a wedge debug sidebar tool in the chart UI so scanner-loaded falling-wedge candidates can be inspected against their displayed anchors and touch candles.
+- Added manual falling-wedge import/preservation support so user-edited wedge lines survive chart reloads, config updates, and scanner/report launches.
+- Added alternate falling-wedge search/roulette controls, including directional next/previous buttons that cycle through other valid wedge structures directly from the chart.
+- Added regression coverage for DAT.WA falling-wedge anchors and related stop-touch/manual-wedge behavior.
+- Added generated EAT, PXM, and PZU chart/config artifacts from the updated chart workflow.
+
+### Changed
+
+- Reworked falling-wedge detection, scoring, and anchor selection to prefer longer structures, stronger upper-boundary touches, active lower/upper anchors, plateau highs, and older matching upper anchors.
+- Tightened wedge touch and breakout handling with exact wick-contact rules, stop-touch rejection after breakout, stricter contact logic, and debug markers that match the displayed wedge line.
+- Improved chart editing for lines and wedges with DOM overlay icons, reachable endpoint handles, live straight-line wedge boundaries, freeform extension handles, and reduced autoscale/flicker during level selection.
+- Preserved cached candles when saving charts and refreshed latest candles before chart cache loads, reducing stale chart data while avoiding unnecessary cache replacement.
+- Increased commodity Stooq fetch concurrency and automated pre-inspector blank/no-table retry handling for more reliable commodities scans.
+
+### Fixed
+
+- Fixed wedge alternative button cycling so alternate wedge candidates can be selected reliably.
+- Fixed chart icon rendering, drawing-tool toggles, anchor-direction preservation, wedge auto-level behavior, and drag viewport stability.
+- Fixed config matching/resolution edge cases and highlighted the 0.618 Fibonacci ratio more clearly in chart overlays.
+- Hardened report-server/chart startup waits to reduce failures when opening report-linked charts.
+
 
 ## [4.0] - 2026-06-12
 

@@ -1,6 +1,6 @@
 # Chart Program (Standalone)
 
-Interactive chart-based tool for selecting trading levels and generating/updating config files.
+Interactive chart-based tool for selecting trading levels, reviewing scanner-loaded Fibonacci/falling-wedge structures, and generating/updating config files.
 
 ---
 
@@ -72,6 +72,7 @@ Each generated config includes:
   - level selection buttons: `HIGH`, `LOW`, `ENTRY`, `STOP LOSS`, `CHECK_ZR`, `LINE_CROSS`
   - drawing tools: `Line`, `Fib 61.8`, `Half→SL`
   - scanner-preloaded Fibonacci/wedge lines when opened from reports
+  - falling-wedge debug and alternate-candidate controls when scanner metadata is available
   - Ichimoku cloud toggle
 - Right panel:
   - instrument type
@@ -87,6 +88,7 @@ Each generated config includes:
 - You can pan/zoom with mouse and wheel.
 - Line/Fib points are selected via chart clicks.
 - Line tool now shows a live preview after first anchor and before second click.
+- Manual and scanner-loaded wedge lines are preserved across saves/reloads, can be extended with reachable handles, and can be cycled through alternate wedge candidates from the chart.
 - The chart x-range is padded before/after available candles so lines can be drawn beyond the raw candle window.
 - For responsiveness, chart renders only the latest ~**1.5 years** of candles (about 548 days) even if local CSV contains longer history.
 
