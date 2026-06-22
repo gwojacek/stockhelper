@@ -1188,8 +1188,10 @@ class LightweightChartLevelSelectorUI:
     const layer = $('icon-overlay');
     if (!layer || x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return;
     const pad = 12;
-    const maxX = Math.max(pad, (layer.clientWidth || 0) - pad);
-    const maxY = Math.max(pad, (layer.clientHeight || 0) - pad);
+    const axisPadX = 44;
+    const axisPadY = 28;
+    const maxX = Math.max(pad, (layer.clientWidth || 0) - axisPadX);
+    const maxY = Math.max(pad, (layer.clientHeight || 0) - axisPadY);
     x = clamp(Number(x), pad, maxX);
     y = clamp(Number(y), pad, maxY);
     const icon = document.createElement('span');
@@ -1285,7 +1287,8 @@ class LightweightChartLevelSelectorUI:
       if (anchors && xs && ys) {{
         const last = Math.min(xs.length, ys.length) - 1;
         const x1 = String(xs[last]).slice(0, 10);
-        const y1 = Number(ys[last]);
+        const rawY1 = Number(ys[last]);
+        const y1 = obj.free_extension ? rawY1 : projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, x1);
         if (x1 && Number.isFinite(y1)) return {{x0:anchors.x0, y0:anchors.y0, x1, y1}};
       }}
       if (anchors) return anchors;
@@ -1335,6 +1338,7 @@ class LightweightChartLevelSelectorUI:
         if (compareTime(x1, anchorsX[0]) <= 0) x1 = dateAtIndex(Math.min(P.ohlc.length - 1, nearest(anchorsX[0]).idx + 1));
         x0 = anchorsX[0];
         y0 = anchorsY[0];
+        obj.free_extension = true;
       }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
         obj.anchor_x = [x0, x1];
         obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
@@ -1708,7 +1712,7 @@ class LightweightChartLevelSelectorUI:
       const endTime = endIdx <= maxIdx ? dateForIdx(endIdx) : addDays(dateForIdx(maxIdx), endIdx - maxIdx);
       const x = [anchorX[0], anchorX[1], endTime];
       const y = [anchorY[0], anchorY[1], roundPrice(lineAt(line.a, line.b, endIdx))];
-      return {{id, type:'wedge', label, x, y, x0:x[0], x1:x[x.length - 1], y0:y[0], y1:y[y.length - 1], anchor_x:anchorX, anchor_y:anchorY, price:y[y.length - 1], color, group_id:'auto-wedge'}};
+      return {{id, type:'wedge', label, x, y, x0:x[0], x1:x[x.length - 1], y0:y[0], y1:y[y.length - 1], anchor_x:anchorX, anchor_y:anchorY, price:y[y.length - 1], color, group_id:'auto-wedge', free_extension:false}};
     }};
     return [
       make('upper', '#dc2626', 'Falling wedge upper', 'auto-wedge-upper', candidate.upper),

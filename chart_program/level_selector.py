@@ -811,8 +811,8 @@ def run_level_selector(raw_args=None):
                 upper_x, upper_y = _line_object_points(up0, up1)
                 lower_x, lower_y = _line_object_points(lo0, lo1)
                 existing["drawn_objects"] = [
-                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x": upper_x, "y": upper_y, "x0": upper_x[0], "x1": upper_x[-1], "y0": upper_y[0], "y1": upper_y[-1], "anchor_x": [str(up0[0].date()), str(up1[0].date())], "anchor_y": [round(float(up0[1]), 5), round(float(up1[1]), 5)], "price": upper_y[-1], "color": "#dc2626", "group_id": "auto-wedge"},
-                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge"},
+                    {"id": "auto-wedge-upper", "type": "wedge", "label": "Falling wedge upper", "x": upper_x, "y": upper_y, "x0": upper_x[0], "x1": upper_x[-1], "y0": upper_y[0], "y1": upper_y[-1], "anchor_x": [str(up0[0].date()), str(up1[0].date())], "anchor_y": [round(float(up0[1]), 5), round(float(up1[1]), 5)], "price": upper_y[-1], "color": "#dc2626", "group_id": "auto-wedge", "free_extension": False},
+                    {"id": "auto-wedge-lower", "type": "wedge", "label": "Falling wedge lower", "x": lower_x, "y": lower_y, "x0": lower_x[0], "x1": lower_x[-1], "y0": lower_y[0], "y1": lower_y[-1], "anchor_x": [str(lo0[0].date()), str(lo1[0].date())], "anchor_y": [round(float(lo0[1]), 5), round(float(lo1[1]), 5)], "price": lower_y[-1], "color": "#2563eb", "group_id": "auto-wedge", "free_extension": False},
                 ]
                 print("[chart] auto-wedge preloaded: upper/lower falling wedge lines")
         except StopIteration:
