@@ -478,6 +478,7 @@ class LightweightChartLevelSelectorUI:
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
     .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
     .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
+    .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
     .instrument-hero {{ display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
@@ -493,9 +494,14 @@ class LightweightChartLevelSelectorUI:
     #stock-cfd-toggle::after {{ content:''; width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#22c55e,#14b8a6); }}
     .side-card-head {{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }}
+    .manual-card .side-card-head {{ padding-bottom:14px; border-bottom:1px solid rgba(148,163,184,.20); margin-bottom:14px; }}
     .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
+    .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:24px; letter-spacing:-.03em; }}
     label {{ display: block; margin-top: 8px; }}
     input, select, textarea {{ width: 100%; min-height:38px; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 14px; padding: 8px 10px; border-radius: 11px; border: 1px solid #334155; }}
+    .manual-card label {{ color:#cbd5e1; font-size:14px; margin-top:10px; }}
+    .manual-card input,.manual-card select {{ min-height:42px; border-radius:13px; background:rgba(15,23,42,.62); border-color:rgba(96,165,250,.32); }}
+    .manual-card input:focus,.manual-card select:focus {{ outline:none; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(59,130,246,.18), 0 0 24px rgba(59,130,246,.18); }}
     input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
@@ -518,14 +524,16 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:7px;width:100%;padding:9px 10px;color:white;border:none;border-radius:11px;font-size:14px;box-shadow:0 8px 18px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;gap:8px; }}
+    .side-action-btn {{ margin-top:9px;width:100%;padding:10px 12px;color:white;border:none;border-radius:14px;font-size:14px;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:9px; }}
     .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
-    .action-grid .side-action-btn {{ min-height:44px; }}
-    #calculate-btn {{ min-height:44px; background:linear-gradient(135deg,#16a34a,#22c55e) !important; border:1px solid #4ade80; box-shadow:0 10px 22px rgba(22,163,74,.20); }}
-    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.9),rgba(30,41,59,.94)) !important; border:1px solid #c084fc; }}
-    #journal-toggle-btn {{ background:linear-gradient(135deg,rgba(120,53,15,.94),rgba(30,41,59,.94)) !important; border:1px solid #f59e0b; }}
+    .action-grid .side-action-btn {{ min-height:52px; }}
+    #calculate-btn {{ min-height:54px; background:linear-gradient(135deg,#18b572,#2dd4bf) !important; border:1px solid rgba(94,234,212,.75); box-shadow:0 16px 32px rgba(45,212,191,.22); font-size:17px; }}
+    #calculate-btn::after {{ content:'›'; margin-left:auto; font-size:28px; line-height:1; }}
+    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.62),rgba(30,41,59,.78)) !important; border:1px solid #a78bfa; }}
+    #journal-toggle-btn {{ background:linear-gradient(135deg,rgba(120,53,15,.62),rgba(30,41,59,.78)) !important; border:1px solid #fdba74; }}
     #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; font-size:16px; }}
-    #currency-fee-toggle {{ min-height:36px !important;padding:7px 10px !important;font-size:13px !important;border-radius:10px !important; }}
+    #currency-fee-toggle {{ min-height:46px !important;padding:9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between; }}
+    #currency-fee-toggle::after {{ content:''; width:42px; height:22px; border-radius:999px; background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
     #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
     #result-box:empty {{ display:none; }}
     #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
@@ -537,7 +545,9 @@ class LightweightChartLevelSelectorUI:
     #journal-currency-buttons {{ display:grid !important;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:7px; }}
     #journal-currency-buttons button {{ border-radius:999px;padding:8px;background:#111827;color:#bfdbfe;border:1px solid #334155; }}
     #journal-currency-buttons button.active {{ background:linear-gradient(135deg,#2563eb,#06b6d4);color:white;border-color:#93c5fd; }}
-    #journal-preview {{ white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
+    #journal-notes {{ min-height:170px; resize:vertical; }}
+    #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
+    #journal-panel.show-preview #journal-preview {{ display:block; }}
     .manual-card.journal-open > label,.manual-card.journal-open > input,.manual-card.journal-open > select,.manual-card.journal-open > #currency-fee-toggle,.manual-card.journal-open > #object-picker,.manual-card.journal-open > #delete-object,.manual-card.journal-open > #calculate-btn,.manual-card.journal-open > .action-grid,.manual-card.journal-open > #finish-btn,.manual-card.journal-open > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
@@ -626,7 +636,7 @@ class LightweightChartLevelSelectorUI:
         <button id="delete-object" style="display:none">Delete selected object</button>
         <button id="calculate-btn" class="side-action-btn">▦ Calculate position</button>
         <div class="action-grid">
-          <button id="wedge-debug-btn" class="side-action-btn">▥ Wedge information</button>
+          <button id="wedge-debug-btn" class="side-action-btn">ⓘ Wedge information</button>
           <button id="journal-toggle-btn" class="side-action-btn">▤ Add journal entry</button>
         </div>
         <button id="finish-btn" class="side-action-btn">▣ Save &amp; Close</button>
