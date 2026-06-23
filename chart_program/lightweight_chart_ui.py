@@ -455,7 +455,7 @@ class LightweightChartLevelSelectorUI:
   <style>
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
-    .layout {{ display: grid; grid-template-columns: 1fr 380px; height: 100vh; }}
+    .layout {{ display: grid; grid-template-columns: 1fr 430px; height: 100vh; }}
     .main {{ padding: 14px 0 14px 14px; min-width: 0; }}
     h3 {{ margin: 0 0 10px 0; }}
     button {{ background: #1f2937; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; font-weight: 700; }}
@@ -475,9 +475,27 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
-    .side {{ border-left: 1px solid #1f2937; padding: 16px; background: #0b1220; overflow-y: auto; }}
+    .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
+    .side-card {{ margin-bottom:14px; padding:14px; border:1px solid rgba(148,163,184,.28); border-radius:18px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 18px 48px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); }}
+    .instrument-hero {{ display:grid; grid-template-columns:52px 1fr 44px; gap:12px; align-items:center; margin-bottom:12px; }}
+    .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:14px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 12px 32px rgba(14,165,233,.24); font-size:26px; }}
+    .hero-icon {{ width:52px; height:52px; }}
+    .section-icon {{ width:30px; height:30px; font-size:17px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
+    #identity {{ margin:0; font-size:25px; line-height:1.1; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
+    .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:4px; }}
+    .ghost-edit {{ width:44px; height:44px; padding:0; border-radius:12px; background:rgba(15,23,42,.82); border:1px solid #334155; color:#dbeafe; font-size:20px; }}
+    .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; padding-top:12px; border-top:1px solid rgba(148,163,184,.18); }}
+    .meta-field.full {{ grid-column:1 / -1; }}
+    .meta-label,.side-section-title {{ display:flex; align-items:center; gap:8px; color:#b8c7e6; font-weight:800; font-size:13px; margin-bottom:8px; }}
+    .meta-value {{ min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border:1px solid #334155; border-radius:12px; background:rgba(2,6,23,.42); color:#f8fafc; font-size:18px; font-weight:900; }}
+    #source {{ color:#60a5fa; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.03em; }}
+    #stock-cfd-toggle {{ width:100%; min-height:44px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:10px 14px; border-radius:12px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; }}
+    #stock-cfd-toggle::after {{ content:''; width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
+    #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#22c55e,#14b8a6); }}
+    .side-card-head {{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }}
+    .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:18px; }}
     label {{ display: block; margin-top: 8px; }}
-    input, select, textarea {{ width: 100%; color: black; background: white; font-size: 16px; padding: 6px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }}
+    input, select, textarea {{ width: 100%; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid #334155; }}
     input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
@@ -489,13 +507,26 @@ class LightweightChartLevelSelectorUI:
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .chart-group-buttons button {{ padding:6px 8px; border-radius:999px; background:#1f2937; border-color:#475569; color:#e5e7eb; font-size:12px; }}
     .chart-group-buttons button.active {{ background:#2563eb; border-color:#93c5fd; color:white; box-shadow:0 0 0 2px rgba(147,197,253,.22); }}
-    .values {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 8px; white-space: pre-wrap; }}
+    .values {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom: 8px; }}
+    .value-tile {{ min-height:76px; padding:12px; border:1px solid #334155; border-radius:14px; background:rgba(2,6,23,.38); text-align:center; }}
+    .value-tile .value-label {{ color:#aebcda; text-transform:uppercase; font-weight:900; font-size:12px; letter-spacing:.05em; }}
+    .value-tile .value-number {{ margin-top:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:20px; font-weight:900; color:#f8fafc; }}
+    .value-tile.entry .value-number {{ color:#4ade80; }}
+    .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:8px;width:100%;padding:12px;color:white;border:none;border-radius:12px;font-size:15px;box-shadow:0 10px 25px rgba(0,0,0,.22); }}
+    .side-action-btn {{ margin-top:8px;width:100%;padding:14px;color:white;border:none;border-radius:13px;font-size:16px;box-shadow:0 10px 25px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:10px; }}
+    .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
+    .action-grid .side-action-btn {{ min-height:58px; }}
+    #calculate-btn {{ background:linear-gradient(135deg,#16a34a,#22c55e) !important; border:1px solid #4ade80; box-shadow:0 16px 34px rgba(22,163,74,.25); }}
+    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.9),rgba(30,41,59,.94)) !important; border:1px solid #c084fc; }}
+    #journal-toggle-btn {{ background:linear-gradient(135deg,rgba(120,53,15,.94),rgba(30,41,59,.94)) !important; border:1px solid #f59e0b; }}
+    #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; }}
+    #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
+    #result-box:empty {{ display:none; }}
     #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
     #journal-panel h4 {{ display:flex;align-items:center;gap:10px;margin:0 0 12px 0;color:#f8fafc;font-size:18px; }}
     #journal-panel h4::before {{ content:'🧾';display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#0ea5e9,#2563eb);box-shadow:0 0 24px rgba(37,99,235,.35); }}
@@ -563,43 +594,57 @@ class LightweightChartLevelSelectorUI:
       </section>
     </main>
     <aside class="side">
-      <div style="margin-bottom:8px;font-weight:800;font-size:20px;color:#f8fafc" id="identity"></div>
-      <h4 id="instrument-title" style="margin-top:0;margin-bottom:6px;color:#cbd5e1"></h4>
-      <button id="stock-cfd-toggle" style="width:100%;margin-bottom:8px;display:none"></button>
-      <div class="source" id="source"></div>
-      <h4>Selected values</h4>
-      <div id="values-panel" class="values"></div>
-      <h4>Manual inputs</h4>
-      <label id="position-type-label">Position type</label>
-      <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
-      <label>Capital</label><input id="capital" type="number" />
-      <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
-      <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
-      <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
-      <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
-      <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
-      <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="calculate-btn" class="side-action-btn" style="background:#16a34a">Calculate position</button>
-      <button id="wedge-debug-btn" class="side-action-btn" style="background:#7c3aed">📋 Wedge Information</button>
-      <button id="journal-toggle-btn" class="side-action-btn" style="background:#f59e0b">🧾 Add journal entry</button>
-      <div id="journal-panel" style="display:none">
-        <h4>Transaction journal</h4>
-        <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
-        <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
-        <label>Reason</label><select id="journal-reason"></select>
-        <div id="journal-touches-row"><label>Touches</label><input id="journal-touches" placeholder="e.g. 3" /></div>
-        <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
-        <div id="journal-preview"></div>
-        <button id="journal-save-btn" class="side-action-btn" style="background:#ea580c">Save journal + screenshot</button>
-      </div>
-      <div id="wedge-debug-panel"></div>
-      <button id="finish-btn" class="side-action-btn" style="background:#2563eb">Save &amp; Close</button>
+      <section class="side-card instrument-card">
+        <div class="instrument-hero">
+          <div class="hero-icon">↗</div>
+          <div><h2 id="identity"></h2><div class="identity-sub">Name / Ticker</div></div>
+          <button class="ghost-edit" type="button" title="Edit selected values">✎</button>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
+          <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
+          <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span><span>▯</span></div></div>
+        </div>
+      </section>
+      <section class="side-card selected-card">
+        <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4></div>
+        <div id="values-panel" class="values"></div>
+      </section>
+      <section class="side-card manual-card">
+        <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
+        <label id="position-type-label">Position type</label>
+        <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
+        <label>Capital</label><input id="capital" type="number" />
+        <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
+        <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
+        <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
+        <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
+        <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
+        <button id="delete-object" style="display:none">Delete selected object</button>
+        <button id="calculate-btn" class="side-action-btn">▦ Calculate position</button>
+        <div class="action-grid">
+          <button id="wedge-debug-btn" class="side-action-btn">▥ Wedge information</button>
+          <button id="journal-toggle-btn" class="side-action-btn">▤ Add journal entry</button>
+        </div>
+        <button id="finish-btn" class="side-action-btn">▣ Save &amp; Close</button>
+        <div id="journal-panel" style="display:none">
+          <h4>Transaction journal</h4>
+          <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
+          <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
+          <label>Reason</label><select id="journal-reason"></select>
+          <div id="journal-touches-row"><label>Touches</label><input id="journal-touches" placeholder="e.g. 3" /></div>
+          <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
+          <div id="journal-preview"></div>
+          <button id="journal-save-btn" class="side-action-btn" style="background:#ea580c">Save journal + screenshot</button>
+        </div>
+        <div id="wedge-debug-panel"></div>
+        <div id="result-box"></div>
+      </section>
       <div id="chart-group-nav" class="chart-group-nav">
         <h4>⭐ Quick charts from 📊</h4>
         <div id="chart-group-label" class="chart-group-label"></div>
         <div id="chart-group-buttons" class="chart-group-buttons"></div>
       </div>
-      <div id="result-box" style="margin-top:10px"></div>
     </aside>
   </div>
   <script>window.STOCKHELPER_PAYLOAD = {payload};</script>
@@ -2018,7 +2063,7 @@ class LightweightChartLevelSelectorUI:
     $('tool-half').classList.toggle('active', activeTool === 'half');
     $('ichimoku-toggle').classList.toggle('active', !!levels.__show_ichimoku__);
     $('ichimoku-toggle').textContent = `Ichimoku: ${{levels.__show_ichimoku__ ? 'ON' : 'OFF'}}`;
-    $('values-panel').textContent = seq.map(k => `${{labels[k]}}: ${{levels[k] == null ? '--' : fmt(levels[k])}}`).join('\\n');
+    $('values-panel').innerHTML = seq.map(k => `<div class="value-tile ${{k}}"><div class="value-label">${{labels[k]}}</div><div class="value-number">${{levels[k] == null ? '--' : fmt(levels[k])}}</div></div>`).join('');
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
@@ -2041,11 +2086,11 @@ class LightweightChartLevelSelectorUI:
     const sourceUpper = String(P.sourceTicker || '').toUpperCase();
     const symbolUpper = String(P.symbol || '').toUpperCase();
     const indexLike = P.instrumentType === 'commodity' && ['^','DE40','US500','US100','US30','JP225','WIG20','UK100','EU50','DAX','CAC','AEX','SMI','IBEX'].some(t => sourceUpper.includes(t) || symbolUpper.includes(t));
-    $('identity').textContent = `Name/Ticker: ${{P.sourceName || P.symbol}}${{P.sourceTicker ? ` (${{P.sourceTicker}})` : ''}}`;
-    $('instrument-title').textContent = `Instrument: ${{originalIsStock && stockCfdOn ? 'STOCK CFD' : (indexLike ? 'COMMODITY/INDEX' : P.instrumentType.toUpperCase())}}`;
-    $('source').textContent = `SOURCE: ${{P.sourceProvider}}`;
-    $('stock-cfd-toggle').style.display = originalIsStock ? 'block' : 'none';
-    $('stock-cfd-toggle').textContent = `CFD mode: ${{stockCfdOn ? 'ON' : 'OFF'}}`;
+    $('identity').textContent = `${{P.sourceName || P.symbol}}${{P.sourceTicker ? ` (${{P.sourceTicker}})` : ''}}`;
+    $('instrument-title').textContent = `${{originalIsStock && stockCfdOn ? 'STOCK CFD' : (indexLike ? 'COMMODITY/INDEX' : P.instrumentType.toUpperCase())}}`;
+    $('source').textContent = `${{P.sourceProvider}}`;
+    $('stock-cfd-toggle').style.display = originalIsStock ? 'flex' : 'none';
+    $('stock-cfd-toggle').textContent = `${{stockCfdOn ? 'ON' : 'OFF'}}`;
     $('stock-cfd-toggle').classList.toggle('active', stockCfdOn);
     const setFieldState = (id, isDisabled, visible=true) => {{
       const el = $(id), label = $(`${{id}}-label`);
