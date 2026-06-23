@@ -465,6 +465,7 @@ class LightweightChartLevelSelectorUI:
     .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
     #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
+    #chart .tv-lightweight-charts {{ width:100% !important; height:100% !important; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
     #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
     .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:12px; height:12px; padding:0 2px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:1.5px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
@@ -476,25 +477,25 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
     .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
-    .side-card {{ margin-bottom:14px; padding:14px; border:1px solid rgba(148,163,184,.28); border-radius:18px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 18px 48px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04); }}
-    .instrument-hero {{ display:grid; grid-template-columns:52px 1fr; gap:12px; align-items:center; margin-bottom:12px; }}
-    .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:14px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 12px 32px rgba(14,165,233,.24); font-size:26px; }}
-    .hero-icon {{ width:52px; height:52px; }}
-    .section-icon {{ width:30px; height:30px; font-size:17px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
-    #identity {{ margin:0; font-size:25px; line-height:1.1; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
-    .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:4px; }}
-    .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; padding-top:12px; border-top:1px solid rgba(148,163,184,.18); }}
+    .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
+    .instrument-hero {{ display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; }}
+    .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
+    .hero-icon {{ width:42px; height:42px; }}
+    .section-icon {{ width:26px; height:26px; font-size:14px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
+    #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
+    .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
+    .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
-    .meta-label,.side-section-title {{ display:flex; align-items:center; gap:8px; color:#b8c7e6; font-weight:800; font-size:13px; margin-bottom:8px; }}
-    .meta-value {{ min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border:1px solid #334155; border-radius:12px; background:rgba(2,6,23,.42); color:#f8fafc; font-size:18px; font-weight:900; }}
+    .meta-label,.side-section-title {{ display:flex; align-items:center; gap:6px; color:#b8c7e6; font-weight:800; font-size:12px; margin-bottom:6px; }}
+    .meta-value {{ min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid #334155; border-radius:11px; background:rgba(2,6,23,.42); color:#f8fafc; font-size:15px; font-weight:900; }}
     #source {{ color:#f8fafc; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.03em; }}
-    #stock-cfd-toggle {{ width:100%; min-height:44px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:10px 14px; border-radius:12px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; }}
+    #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; }}
     #stock-cfd-toggle::after {{ content:''; width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#22c55e,#14b8a6); }}
-    .side-card-head {{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }}
-    .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:18px; }}
+    .side-card-head {{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }}
+    .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
     label {{ display: block; margin-top: 8px; }}
-    input, select, textarea {{ width: 100%; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid #334155; }}
+    input, select, textarea {{ width: 100%; min-height:38px; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 14px; padding: 8px 10px; border-radius: 11px; border: 1px solid #334155; }}
     input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
@@ -506,10 +507,10 @@ class LightweightChartLevelSelectorUI:
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .chart-group-buttons button {{ padding:6px 8px; border-radius:999px; background:#1f2937; border-color:#475569; color:#e5e7eb; font-size:12px; }}
     .chart-group-buttons button.active {{ background:#2563eb; border-color:#93c5fd; color:white; box-shadow:0 0 0 2px rgba(147,197,253,.22); }}
-    .values {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom: 8px; }}
-    .value-tile {{ min-height:76px; padding:12px; border:1px solid #334155; border-radius:14px; background:rgba(2,6,23,.38); text-align:center; }}
-    .value-tile .value-label {{ color:#aebcda; text-transform:uppercase; font-weight:900; font-size:12px; letter-spacing:.05em; }}
-    .value-tile .value-number {{ margin-top:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:20px; font-weight:900; color:#f8fafc; }}
+    .values {{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom: 4px; }}
+    .value-tile {{ min-height:58px; padding:8px; border:1px solid #334155; border-radius:12px; background:rgba(2,6,23,.38); text-align:center; }}
+    .value-tile .value-label {{ color:#aebcda; text-transform:uppercase; font-weight:900; font-size:11px; letter-spacing:.05em; }}
+    .value-tile .value-number {{ margin-top:5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:17px; font-weight:900; color:#f8fafc; }}
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
@@ -517,13 +518,14 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:8px;width:100%;padding:14px;color:white;border:none;border-radius:13px;font-size:16px;box-shadow:0 10px 25px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:10px; }}
+    .side-action-btn {{ margin-top:7px;width:100%;padding:9px 10px;color:white;border:none;border-radius:11px;font-size:14px;box-shadow:0 8px 18px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;gap:8px; }}
     .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
-    .action-grid .side-action-btn {{ min-height:58px; }}
-    #calculate-btn {{ background:linear-gradient(135deg,#16a34a,#22c55e) !important; border:1px solid #4ade80; box-shadow:0 16px 34px rgba(22,163,74,.25); }}
+    .action-grid .side-action-btn {{ min-height:44px; }}
+    #calculate-btn {{ min-height:44px; background:linear-gradient(135deg,#16a34a,#22c55e) !important; border:1px solid #4ade80; box-shadow:0 10px 22px rgba(22,163,74,.20); }}
     #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.9),rgba(30,41,59,.94)) !important; border:1px solid #c084fc; }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,rgba(120,53,15,.94),rgba(30,41,59,.94)) !important; border:1px solid #f59e0b; }}
-    #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; }}
+    #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; font-size:16px; }}
+    #currency-fee-toggle {{ min-height:36px !important;padding:7px 10px !important;font-size:13px !important;border-radius:10px !important; }}
     #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
     #result-box:empty {{ display:none; }}
     #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
@@ -746,6 +748,18 @@ class LightweightChartLevelSelectorUI:
     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
     localization: {{ priceFormatter: p => fmt(p) }},
   }});
+  function resizeChartToContainer() {{
+    const el = $('chart');
+    if (!el || !chart.applyOptions) return;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) {{
+      try {{ chart.applyOptions({{width: Math.floor(r.width), height: Math.floor(r.height)}}); }} catch(e) {{}}
+      requestAnimationFrame(drawCloud);
+    }}
+  }}
+  if (window.ResizeObserver) new ResizeObserver(resizeChartToContainer).observe($('chart'));
+  window.addEventListener('resize', resizeChartToContainer);
+  requestAnimationFrame(resizeChartToContainer);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   let verticalPan = 0;
   let chartDrag = null;
