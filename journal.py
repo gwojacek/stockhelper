@@ -128,7 +128,7 @@ def html_document(entries: list[dict[str, Any]] | None = None) -> str:
 function closeJournalEntry(btn){{
   const box=btn.closest('.review'); if(!box) return;
   const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,notes:box.querySelector('.notes').value}};
-  const preview=box.querySelector('.preview'); if(preview) preview.textContent=payload.outcome+' @ '+payload.exit_price+'\n'+payload.notes;
+  const preview=box.querySelector('.preview'); if(preview) preview.textContent=payload.outcome+' @ '+payload.exit_price+'\\n'+payload.notes;
   fetch('/journal-close',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}).then(r=>r.json()).then(d=>{{btn.textContent=d.ok?'Saved':'Failed';}}).catch(()=>{{btn.textContent='Failed';}});
 }}
 

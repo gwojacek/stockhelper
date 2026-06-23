@@ -450,7 +450,7 @@ class LightweightChartLevelSelectorUI:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StockHelper Lightweight Chart - {self.symbol}</title>
-  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   {fallback_script}
   <style>
     * {{ box-sizing: border-box; }}
@@ -616,10 +616,7 @@ class LightweightChartLevelSelectorUI:
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
   const ohlc = Array.isArray(P.ohlc) ? P.ohlc : [];
-  // Keep future dates for projected drawing endpoints, but do not feed
-  // whitespace bars into the candlestick series. Some Lightweight Charts
-  // versions reject whitespace objects on candlestick data and abort the rest
-  // of initialization, leaving a blank chart when opened from scanner HTML.
+  const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
 
   const $ = id => document.getElementById(id);
@@ -749,37 +746,10 @@ class LightweightChartLevelSelectorUI:
   window.addEventListener('pointerup', endChartDrag, true);
   window.addEventListener('pointercancel', endChartDrag, true);
   $('chart-wrap').addEventListener('click', (ev) => {{ if (Date.now() < suppressChartClickUntil) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, true);
-  function chartBootError(message, error) {{
-    console.error(message, error || '');
-    const box = $('result-box');
-    if (box) box.textContent = message;
-  }}
-  function addSeriesCompat(kind, opts) {{
-    const legacyName = kind === 'candlestick' ? 'addCandlestickSeries' : 'addLineSeries';
-    const v5Type = kind === 'candlestick' ? LightweightCharts.CandlestickSeries : LightweightCharts.LineSeries;
-    // Prefer the legacy explicit methods when present. Some bundled builds expose
-    // addSeries() but not the constructor constants; calling addSeries(undefined)
-    // aborts chart initialization before any candles or level buttons appear.
-    if (typeof chart[legacyName] === 'function') return chart[legacyName](opts);
-    if (typeof chart.addSeries === 'function' && v5Type) return chart.addSeries(v5Type, opts);
-    throw new Error('Unsupported Lightweight Charts series API for ' + kind);
-  }}
-  const addLineSeries = (opts) => addSeriesCompat('line', opts);
-  const addCandles = (opts) => addSeriesCompat('candlestick', opts);
-  let candleSeries;
-  try {{
-    candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
-  }} catch(e) {{
-    chartBootError('Chart render failed: unsupported Lightweight Charts API. Try refreshing the chart tab.', e);
-    throw e;
-  }}
-  try {{
-    candleSeries.setData(ohlc);
-  }} catch(e) {{
-    console.error('StockHelper candle data failed to render', e, ohlc && ohlc.slice ? ohlc.slice(0, 3) : ohlc);
-    const box = $('result-box');
-    if (box) box.textContent = 'Chart render failed: invalid candle data. Check browser console for details.';
-  }}
+  const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
+  const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
+  const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
+  candleSeries.setData(ohlcWithFuture);
   if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
   requestAnimationFrame(() => {{
@@ -2284,7 +2254,7 @@ class LightweightChartLevelSelectorUI:
       'Touches: ' + (($('journal-touches') && $('journal-touches').value) || ''),
       '',
       (($('journal-notes') && $('journal-notes').value) || '')
-    ].join('\n');
+    ].join('\\n');
     if ($('journal-preview')) $('journal-preview').textContent = preview;
     return {{
       symbol: P.symbol,
