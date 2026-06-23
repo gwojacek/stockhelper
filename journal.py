@@ -224,10 +224,8 @@ def _row(entry: dict[str, Any], number: int = 1) -> str:
     ])
 
 
-def html_document(entries: list[dict[str, Any]] | None = None) -> str:
+def html_fragment(entries: list[dict[str, Any]] | None = None) -> str:
     entries = entries if entries is not None else load_entries()
-    years = sorted({_entry_year(e) for e in entries}, reverse=True)
-    options = "".join(f"<option value='{html.escape(y)}'>{html.escape(y)}</option>" for y in years)
     ordered = sorted(entries, key=lambda e: str(e.get("created_at") or ""), reverse=False)
     card_parts = []
     last_year = None
@@ -237,7 +235,14 @@ def html_document(entries: list[dict[str, Any]] | None = None) -> str:
             card_parts.append(f"<h2 class='year-row' data-year='{html.escape(year)}'>Year {html.escape(year)}</h2>")
             last_year = year
         card_parts.append(_row(entry, idx))
-    cards = "\n".join(card_parts) or "<div class='empty'>No journal entries yet.</div>"
+    return "\n".join(card_parts) or "<div class='empty'>No journal entries yet. Open ./run --journal-html for the live journal view.</div>"
+
+
+def html_document(entries: list[dict[str, Any]] | None = None) -> str:
+    entries = entries if entries is not None else load_entries()
+    years = sorted({_entry_year(e) for e in entries}, reverse=True)
+    options = "".join(f"<option value='{html.escape(y)}'>{html.escape(y)}</option>" for y in years)
+    cards = html_fragment(entries)
     return f"""<!doctype html><html><head><meta charset='utf-8'><title>StockHelper Transaction Journal</title>
 <style>
 :root{{--bg:#f7fbff;--card:#fff;--ink:#10213d;--muted:#64748b;--line:#cbdff5;--blue:#1476f2;--danger:#ef233c}}
