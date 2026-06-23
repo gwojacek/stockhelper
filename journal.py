@@ -168,46 +168,59 @@ def _thumb(path_text: str) -> str:
     return f"<a href='../../{safe}' target='_blank'><img class='thumb' src='../../{safe}' alt='screenshot'></a>"
 
 
-def _row(entry: dict[str, Any]) -> str:
+def _row(entry: dict[str, Any], number: int = 1) -> str:
     def e(v: Any) -> str:
         return html.escape(str(v or ""))
-    review = ""
-    if str(entry.get("status") or "open") == "open":
-        eid = e(entry.get("id"))
-        review = (
-            f"<div class='review noprint' data-id='{eid}'>"
-            "<select class='outcome'><option value='profit'>Profit</option><option value='loss'>Loss</option></select>"
-            "<input class='exit-price' placeholder='sold price / close price'>"
-            "<select class='exit-reason'><option value='manual'>manually</option><option value='stop_loss'>stop loss</option></select>"
-            "<input class='stop-loss-moves' placeholder='stop loss moves count'>"
-            "<textarea class='notes' rows='3' placeholder='Review notes'></textarea>"
-            "<pre class='preview'></pre><button type='button' onclick='closeJournalEntry(this)'>Save review</button></div>"
-        )
+
+    eid = e(entry.get("id"))
+    status = str(entry.get("status") or "open")
     estimated = entry.get("estimated_pl")
     if estimated in (None, ""):
         estimated = _estimate_pl(entry)
     reason = entry.get("reason_label") or entry.get("reason") or entry.get("pattern")
-    eid = e(entry.get("id"))
+    amount = str(entry.get("amount") or "") + (" " + str(entry.get("amount_currency")) if entry.get("amount_currency") else "")
+    thumb_html = _thumb(str(entry.get("screenshot_path") or "")) or "<div class='screen-empty'>No screenshot</div>"
+    close_thumb = _thumb(str(entry.get("close_screenshot_path") or ""))
+    review = ""
+    if status == "open":
+        review = (
+            f"<section class='panel review noprint' data-id='{eid}'>"
+            "<div class='section-title'>Trade / review status</div>"
+            "<select class='outcome'><option value='profit'>↗ Profit</option><option value='loss'>↘ Loss</option></select>"
+            "<div class='section-title'>Price (sold / close price)</div><input class='exit-price' placeholder='close price'>"
+            "<div class='section-title'>Mode</div><select class='exit-reason'><option value='manual'>🛡 Manually</option><option value='stop_loss'>🛑 Stop loss</option></select>"
+            "<div class='section-title'>Stop loss moves count</div><input class='stop-loss-moves' placeholder='0'>"
+            "<div class='section-title'>Review notes</div><textarea class='notes' rows='3' placeholder='Review notes'></textarea>"
+            f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div><div class='kv'><span>Close Price</span><b class='js-close-price'>--</b></div><div class='kv'><span>Setup</span><b>{e(reason)}</b></div>"
+            "<pre class='preview'></pre><button class='btn btn-outline' type='button' onclick='closeJournalEntry(this)'>💾 Save Review</button></section>"
+        )
     edit = (
-        f"<div class='edit noprint' data-id='{eid}'>"
+        f"<section class='panel edit noprint' data-id='{eid}'>"
+        "<div class='section-title'>Modify entry</div>"
         f"<input class='edit-amount' placeholder='amount' value='{e(entry.get('amount'))}'>"
         f"<input class='edit-entry' placeholder='entry' value='{e(entry.get('entry'))}'>"
         f"<input class='edit-reason' placeholder='reason' value='{e(reason)}'>"
         f"<input class='edit-touches' placeholder='touches' value='{e(entry.get('touches'))}'>"
-        f"<textarea class='edit-notes' rows='2' placeholder='notes'>{e(entry.get('notes'))}</textarea>"
-        "<button type='button' onclick='updateJournalEntry(this)'>Update</button>"
-        "<button type='button' onclick='deleteJournalEntry(this)'>Delete</button></div>"
+        f"<textarea class='edit-notes' rows='3' placeholder='notes'>{e(entry.get('notes'))}</textarea>"
+        "<div class='actions'><button class='btn btn-primary' type='button' onclick='updateJournalEntry(this)'>✎ Update</button>"
+        "<button class='btn btn-danger' type='button' onclick='deleteJournalEntry(this)'>🗑 Delete</button></div></section>"
     )
     return "".join([
-        f"<tr data-year='{e(_entry_year(entry))}'>",
-        f"<td>{e(_clean_date(entry.get('created_at')))}</td><td><b>{e(entry.get('symbol') or entry.get('instrument'))}</b></td>",
-        f"<td>{e(entry.get('technique'))}</td><td>{e(entry.get('direction'))}</td><td>{e(str(entry.get('amount') or '') + (' ' + str(entry.get('amount_currency')) if entry.get('amount_currency') else ''))}</td>",
-        f"<td>{e(entry.get('entry'))}</td><td>{e(entry.get('exit_price'))}</td><td>{e(estimated)}</td>",
-        f"<td>{e(entry.get('stop_loss'))}</td><td>{e(entry.get('take_profit'))}</td><td>{e(entry.get('status'))}</td><td>{e(entry.get('outcome'))}</td>",
-        f"<td>{e(reason)}</td><td>{e(entry.get('touches'))}</td><td>{e(entry.get('exit_reason'))}</td><td>{e(entry.get('stop_loss_moves'))}</td>",
-        f"<td><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></td>",
-        f"<td>{_thumb(str(entry.get('screenshot_path') or ''))}{_thumb(str(entry.get('close_screenshot_path') or ''))}{review}{edit}</td>",
-        "</tr>",
+        f"<article class='journal-card' data-year='{e(_entry_year(entry))}'>",
+        f"<header><div class='badge'>#{number}</div><div><h2>{e(entry.get('symbol') or entry.get('instrument'))}</h2><p>{e(_clean_date(entry.get('created_at')))} · {e(entry.get('technique'))} · {e(entry.get('direction'))}</p></div><span class='status {e(status)}'>{e(entry.get('outcome') or status)}</span></header>",
+        "<div class='card-grid'><section class='panel screens'><div class='panel-head'>▧ Screens</div>", thumb_html, close_thumb, "</section>",
+        "<section class='panel facts'>",
+        f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div>",
+        f"<div class='kv'><span>Buy / Entry</span><b>{e(entry.get('entry'))}</b></div>",
+        f"<div class='kv'><span>Sold / Close</span><b>{e(entry.get('exit_price'))}</b></div>",
+        f"<div class='kv'><span>Estimated P/L</span><b>{e(estimated)}</b></div>",
+        f"<div class='kv'><span>Stop loss</span><b>{e(entry.get('stop_loss'))}</b></div>",
+        f"<div class='kv'><span>Reason</span><b>{e(reason)}</b></div>",
+        f"<div class='kv'><span>Touches</span><b>{e(entry.get('touches'))}</b></div>",
+        f"<div class='kv'><span>Exit reason</span><b>{e(entry.get('exit_reason'))}</b></div>",
+        "</section>", review, edit,
+        f"<section class='panel notes'><div class='section-title'>Auto context / notes</div><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></section>",
+        "</div></article>",
     ])
 
 
@@ -215,40 +228,33 @@ def html_document(entries: list[dict[str, Any]] | None = None) -> str:
     entries = entries if entries is not None else load_entries()
     years = sorted({_entry_year(e) for e in entries}, reverse=True)
     options = "".join(f"<option value='{html.escape(y)}'>{html.escape(y)}</option>" for y in years)
-    ordered = sorted(entries, key=lambda e: str(e.get("created_at") or ""), reverse=True)
-    row_parts = []
+    ordered = sorted(entries, key=lambda e: str(e.get("created_at") or ""), reverse=False)
+    card_parts = []
     last_year = None
-    for entry in ordered:
+    for idx, entry in enumerate(ordered, start=1):
         year = _entry_year(entry)
         if year != last_year:
-            row_parts.append(f"<tr class='year-row' data-year='{html.escape(year)}'><th colspan='18'>Year {html.escape(year)}</th></tr>")
+            card_parts.append(f"<h2 class='year-row' data-year='{html.escape(year)}'>Year {html.escape(year)}</h2>")
             last_year = year
-        row_parts.append(_row(entry))
-    rows = "\n".join(row_parts)
+        card_parts.append(_row(entry, idx))
+    cards = "\n".join(card_parts) or "<div class='empty'>No journal entries yet.</div>"
     return f"""<!doctype html><html><head><meta charset='utf-8'><title>StockHelper Transaction Journal</title>
-<style>body{{font-family:Inter,Arial;margin:0 auto;max-width:1500px;padding:18px;background:#f8fafc}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{border:1px solid #e2e8f0;padding:7px;vertical-align:top}}th{{background:#e0f2fe;position:sticky;top:0}}pre{{white-space:pre-wrap;margin:0}}input,select,textarea{{width:100%;margin:3px 0}}.btn{{display:inline-block;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#0f172a;text-decoration:none}}.thumb{{width:180px;max-height:120px;object-fit:contain;display:block;margin:3px 0;border:1px solid #cbd5e1;border-radius:6px;background:#0f172a}}.toolbar{{display:flex;gap:10px;align-items:center;margin:10px 0}}@media print{{.noprint{{display:none}}body{{max-width:none}}.thumb{{width:140px}}}}</style></head><body>
-<h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='window.print()'>Download PDF</button></div>
-<table><thead><tr><th>Date</th><th>Instrument</th><th>Technique</th><th>Dir</th><th>Amount</th><th>Buy/Entry</th><th>Sold/Close</th><th>Estimated P/L</th><th>Stop loss</th><th>Take profit</th><th>Status</th><th>Outcome</th><th>Reason</th><th>Touches</th><th>Exit reason</th><th>SL moves</th><th>Notes</th><th>Screens</th></tr></thead><tbody>{rows}</tbody></table>
+<style>
+:root{{--bg:#f7fbff;--card:#fff;--ink:#10213d;--muted:#64748b;--line:#cbdff5;--blue:#1476f2;--danger:#ef233c}}
+*{{box-sizing:border-box}}body{{font-family:Inter,system-ui,-apple-system,Segoe UI,Arial;margin:0;background:radial-gradient(circle at 20% 0,#eef7ff,#fff 42%,#f8fafc);color:var(--ink);padding:22px}}.shell{{max-width:1180px;margin:0 auto}}h1{{margin:0;font-size:32px}}.top{{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}}.toolbar{{display:flex;gap:10px;align-items:center;flex-wrap:wrap}}select,input,textarea{{width:100%;border:1px solid #b8c9df;border-radius:10px;padding:10px 12px;background:white;color:#1e2f4d;font-size:15px}}.toolbar select{{width:auto;min-width:150px}}.btn{{border:1px solid #bfdbfe;background:white;color:#0f5fd7;border-radius:10px;padding:10px 15px;font-weight:800;cursor:pointer}}.btn-primary{{background:#0876f8;color:white;border-color:#0876f8;box-shadow:0 12px 24px rgba(8,118,248,.22)}}.btn-danger{{color:#ef233c;border-color:#ef233c;background:#fff}}.btn-outline{{background:#f8fbff}}.year-row{{font-size:18px;margin:24px 0 10px;color:#47617f;text-transform:uppercase;letter-spacing:.06em}}.journal-card{{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(31,64,104,.12);margin:0 0 18px;overflow:hidden}}.journal-card>header{{display:flex;align-items:center;gap:14px;padding:18px 20px;background:linear-gradient(180deg,#f0f7ff,#fff);border-bottom:1px solid var(--line)}}.badge{{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#1684ff,#0b4eb8);color:white;font-weight:900;box-shadow:0 12px 28px rgba(20,118,242,.28)}}header h2{{margin:0;font-size:24px}}header p{{margin:3px 0 0;color:var(--muted);font-weight:700}}.status{{margin-left:auto;padding:8px 12px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-weight:900;text-transform:capitalize}}.status.closed{{background:#dcfce7;color:#15803d}}.card-grid{{display:grid;grid-template-columns:360px repeat(2,minmax(240px,1fr));gap:14px;padding:16px}}.panel{{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.82);padding:14px}}.screens{{grid-row:span 2}}.panel-head{{font-size:19px;font-weight:900;margin-bottom:12px}}.thumb{{width:100%;max-height:235px;object-fit:contain;display:block;margin:0 0 10px;border:1px solid #b8c9df;border-radius:10px;background:#0f172a}}.screen-empty{{height:160px;border-radius:10px;background:#eaf2fb;display:grid;place-items:center;color:#64748b;font-weight:800}}.kv{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #dbe7f4}}.kv:last-child{{border-bottom:0}}.kv span,.section-title{{color:#64748b;text-transform:uppercase;letter-spacing:.055em;font-size:12px;font-weight:900}}.kv b{{text-align:right;color:#16284a}}.review,.edit{{display:flex;flex-direction:column;gap:8px}}.actions{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}}pre{{white-space:pre-wrap;margin:8px 0 0;color:#334155;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}}.notes{{grid-column:span 2}}.empty{{padding:32px;border:1px dashed var(--line);border-radius:16px;color:#64748b;background:white}}.toast{{position:fixed;right:18px;bottom:18px;padding:12px 16px;border-radius:12px;background:#10213d;color:white;box-shadow:0 16px 40px rgba(0,0,0,.25);display:none}}@media(max-width:980px){{.card-grid{{grid-template-columns:1fr}}.screens,.notes{{grid-column:auto;grid-row:auto}}.top{{display:block}}}}@media print{{.noprint,.toolbar{{display:none!important}}body{{background:white;padding:0}}.journal-card{{break-inside:avoid;box-shadow:none}}.thumb{{max-height:160px}}}}
+</style></head><body><div class='shell'>
+<div class='top'><div><h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p></div><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='window.print()'>📄 Download PDF</button></div></div>
+{cards}</div><div id='toast' class='toast'></div>
 <script>
-function applyYearFilter(){{const y=document.getElementById('year-filter').value;document.querySelectorAll('tbody tr[data-year]').forEach(r=>r.style.display=(!y||r.dataset.year===y)?'':'none');}}
+function toast(msg){{const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2600);}}
+function api(path,payload){{if(location.protocol==='file:'){{toast('Open journal through ./run --journal-html so update/delete can reach the local server.');return Promise.resolve({{ok:false}});}}return fetch(path,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}).then(async r=>{{let d={{}};try{{d=await r.json();}}catch(e){{}}return {{...d,ok:r.ok&&d.ok!==false}};}});}}
+function applyYearFilter(){{const y=document.getElementById('year-filter').value;document.querySelectorAll('[data-year]').forEach(r=>r.style.display=(!y||r.dataset.year===y)?'':'none');}}
 document.getElementById('year-filter')?.addEventListener('change',applyYearFilter);
-function updateJournalEntry(btn){{
-  const box=btn.closest('.edit'); if(!box) return;
-  const payload={{id:box.dataset.id,amount:box.querySelector('.edit-amount').value,entry:box.querySelector('.edit-entry').value,reason_label:box.querySelector('.edit-reason').value,touches:box.querySelector('.edit-touches').value,notes:box.querySelector('.edit-notes').value}};
-  fetch('/journal-update',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}).then(r=>r.json()).then(d=>{{btn.textContent=d.ok?'Updated':'Failed';}}).catch(()=>{{btn.textContent='Failed';}});
-}}
-function deleteJournalEntry(btn){{
-  const box=btn.closest('.edit'); if(!box || !confirm('Delete this journal entry?')) return;
-  fetch('/journal-delete',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{id:box.dataset.id}})}}).then(r=>r.json()).then(d=>{{if(d.ok){{box.closest('tr').remove();}}else{{btn.textContent='Failed';}}}}).catch(()=>{{btn.textContent='Failed';}});
-}}
-function closeJournalEntry(btn){{
-  const box=btn.closest('.review'); if(!box) return;
-  const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};
-  const preview=box.querySelector('.preview'); if(preview) preview.textContent=payload.outcome+' @ '+payload.exit_price+'\\nreason: '+payload.exit_reason+'\\nSL moves: '+payload.stop_loss_moves+'\\n'+payload.notes;
-  fetch('/journal-close',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}).then(r=>r.json()).then(d=>{{btn.textContent=d.ok?'Saved':'Failed';}}).catch(()=>{{btn.textContent='Failed';}});
-}}
+document.addEventListener('input',e=>{{if(e.target.classList.contains('exit-price')){{const box=e.target.closest('.review');const out=box?.querySelector('.js-close-price');if(out)out.textContent=e.target.value||'--';}}}});
+function updateJournalEntry(btn){{const box=btn.closest('.edit');if(!box)return;const payload={{id:box.dataset.id,amount:box.querySelector('.edit-amount').value,entry:box.querySelector('.edit-entry').value,reason_label:box.querySelector('.edit-reason').value,touches:box.querySelector('.edit-touches').value,notes:box.querySelector('.edit-notes').value}};api('/journal-update',payload).then(d=>toast(d.ok?'Updated':'Update failed'));}}
+function deleteJournalEntry(btn){{const box=btn.closest('.edit');if(!box||!confirm('Delete this journal entry?'))return;api('/journal-delete',{{id:box.dataset.id}}).then(d=>{{if(d.ok){{box.closest('.journal-card').remove();toast('Deleted');}}else toast('Delete failed');}});}}
+function closeJournalEntry(btn){{const box=btn.closest('.review');if(!box)return;const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};const preview=box.querySelector('.preview');if(preview)preview.textContent=payload.outcome+' @ '+payload.exit_price+'\nreason: '+payload.exit_reason+'\nSL moves: '+payload.stop_loss_moves+'\n'+payload.notes;api('/journal-close',payload).then(d=>toast(d.ok?'Review saved':'Review failed'));}}
 </script></body></html>"""
-
 
 def write_html(entries: list[dict[str, Any]] | None = None) -> Path:
     JOURNAL_DIR.mkdir(parents=True, exist_ok=True)

@@ -495,7 +495,17 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:8px;width:100%;padding:10px;color:white;border:none;border-radius:8px; }}
+    .side-action-btn {{ margin-top:8px;width:100%;padding:12px;color:white;border:none;border-radius:12px;font-size:15px;box-shadow:0 10px 25px rgba(0,0,0,.22); }}
+    #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
+    #journal-panel h4 {{ display:flex;align-items:center;gap:10px;margin:0 0 12px 0;color:#f8fafc;font-size:18px; }}
+    #journal-panel h4::before {{ content:'🧾';display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#0ea5e9,#2563eb);box-shadow:0 0 24px rgba(37,99,235,.35); }}
+    #journal-panel label {{ margin-top:11px;color:#b6c7e6;text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:900; }}
+    #journal-panel input,#journal-panel select,#journal-panel textarea {{ margin-top:5px;color:#e5e7eb;background:rgba(15,23,42,.78);border:1px solid #334155;border-radius:12px;padding:10px 12px;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }}
+    #journal-panel input:focus,#journal-panel select:focus,#journal-panel textarea:focus {{ border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.18); }}
+    #journal-currency-buttons {{ display:grid !important;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:7px; }}
+    #journal-currency-buttons button {{ border-radius:999px;padding:8px;background:#111827;color:#bfdbfe;border:1px solid #334155; }}
+    #journal-currency-buttons button.active {{ background:linear-gradient(135deg,#2563eb,#06b6d4);color:white;border-color:#93c5fd; }}
+    #journal-preview {{ white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
@@ -572,14 +582,14 @@ class LightweightChartLevelSelectorUI:
       <button id="calculate-btn" class="side-action-btn" style="background:#16a34a">Calculate position</button>
       <button id="wedge-debug-btn" class="side-action-btn" style="background:#7c3aed">📋 Wedge Information</button>
       <button id="journal-toggle-btn" class="side-action-btn" style="background:#f59e0b">🧾 Add journal entry</button>
-      <div id="journal-panel" style="display:none;margin-top:10px;padding:10px;border:1px solid #334155;border-radius:10px;background:#111827">
-        <h4 style="margin:0 0 8px 0;color:#fde68a">Transaction journal</h4>
+      <div id="journal-panel" style="display:none">
+        <h4>Transaction journal</h4>
         <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
-        <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons" style="display:flex;gap:6px;margin-top:6px"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
+        <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
         <label>Reason</label><select id="journal-reason"></select>
         <div id="journal-touches-row"><label>Touches</label><input id="journal-touches" placeholder="e.g. 3" /></div>
         <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
-        <div id="journal-preview" style="white-space:pre-wrap;background:#020617;border:1px solid #334155;border-radius:8px;padding:8px;margin-top:8px;color:#dbeafe"></div>
+        <div id="journal-preview"></div>
         <button id="journal-save-btn" class="side-action-btn" style="background:#ea580c">Save journal + screenshot</button>
       </div>
       <div id="wedge-debug-panel"></div>
@@ -2346,40 +2356,75 @@ class LightweightChartLevelSelectorUI:
     if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
     if (notes && (force || !notes.dataset.manual || !notes.value.trim())) notes.value = autoJournalNotes();
   }}
-  async function captureJournalScreenshot(calcData=null) {{
-    drawCloud();
+  function journalScreenshotRange() {{
+    const idxs = [];
+    drawnObjects.forEach(obj => {{
+      [...(obj.x || []), obj.x0, obj.x1, obj.time, obj.date].filter(Boolean).forEach(t => {{
+        const row = ohlcByTime.get(String(t).slice(0, 10));
+        if (row && Number.isFinite(row.idx)) idxs.push(row.idx);
+      }});
+    }});
+    ['entry','stop_loss','check_zr_value_fibo_or_elevation','line_cross_value'].forEach(k => {{ if (levels[k] != null && ohlc.length) idxs.push(ohlc.length - 1); }});
+    if (!idxs.length) return null;
+    const pad = Math.max(14, Math.round(ohlc.length * 0.05));
+    return {{from: Math.max(0, Math.min(...idxs) - pad), to: Math.min(Math.max(ohlc.length - 1, 0) + 8, Math.max(...idxs) + pad)}};
+  }}
+  async function withZoomedJournalViewport(fn) {{
+    const ts = chart.timeScale();
+    const previous = ts.getVisibleLogicalRange ? ts.getVisibleLogicalRange() : null;
+    const range = journalScreenshotRange();
+    try {{
+      if (range && ts.setVisibleLogicalRange) ts.setVisibleLogicalRange(range);
+      else if (ts.fitContent) ts.fitContent();
+    }} catch(e) {{ console.warn('journal screenshot zoom failed', e); }}
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    let base = null;
-    try {{ base = chart.takeScreenshot(true, false); }} catch(e) {{ base = null; }}
-    const overlay = $('cloud-overlay');
-    if (!base || !base.width || !base.height) return null;
-    const drawerHeight = calcData && calcData.ok ? 170 : 0;
-    const canvas = document.createElement('canvas');
-    canvas.width = base.width;
-    canvas.height = base.height + drawerHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(base, 0, 0);
-    if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
-    if (drawerHeight) {{
-      const y0 = base.height;
-      const b = calcData.basics || {{}};
-      const currency = calcData.currency || 'PLN';
-      const lines = [
-        `Instrument: ${{calcData.instrument_type || P.instrumentType}}`,
-        `Position: ${{String(calcData.position_type || $('position-type').value || '').toUpperCase()}}`,
-        Number.isFinite(Number(b.entry)) ? `Entry: ${{fmt(Number(b.entry))}}` : '',
-        Number.isFinite(Number(b.stop_loss)) ? `Stop loss: ${{fmt(Number(b.stop_loss))}}` : '',
-        Number.isFinite(Number(b.max_capital)) ? `Max capital: ${{money(b.max_capital, currency)}}` : '',
-        calcData.risk_reward != null ? `Risk/reward: ${{numText(calcData.risk_reward, 2)}}:1` : '',
-        calcData.profit != null ? `Profit: ${{money(calcData.profit, currency)}} (${{numText(calcData.profit_percent, 2)}}%)` : ''
-      ].filter(Boolean);
-      ctx.fillStyle = '#0b1220'; ctx.fillRect(0, y0, canvas.width, drawerHeight);
-      ctx.strokeStyle = '#334155'; ctx.strokeRect(0, y0 + 0.5, canvas.width, drawerHeight - 1);
-      ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 18px Inter, Arial'; ctx.fillText('Position calculation', 16, y0 + 28);
-      ctx.font = '13px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#dbeafe';
-      lines.forEach((line, i) => ctx.fillText(line.slice(0, 180), 16, y0 + 52 + i * 18));
-    }}
-    return canvas.toDataURL('image/png');
+    try {{ return await fn(); }} finally {{ if (previous && ts.setVisibleLogicalRange) requestAnimationFrame(() => {{ try {{ ts.setVisibleLogicalRange(previous); }} catch(e) {{}} requestAnimationFrame(drawCloud); }}); }}
+  }}
+  async function captureJournalScreenshot(calcData=null) {{
+    return withZoomedJournalViewport(async () => {{
+      drawCloud();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      let base = null;
+      try {{ base = chart.takeScreenshot(true, false); }} catch(e) {{ base = null; }}
+      const overlay = $('cloud-overlay');
+      if (!base || !base.width || !base.height) return null;
+      const drawerHeight = calcData && calcData.ok ? 190 : 0;
+      const canvas = document.createElement('canvas');
+      canvas.width = base.width;
+      canvas.height = base.height + drawerHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(base, 0, 0);
+      if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
+      if (drawerHeight) {{
+        const y0 = base.height;
+        const b = calcData.basics || {{}};
+        const currency = calcData.currency || 'PLN';
+        const reasonText = $('journal-reason')?.selectedOptions?.[0]?.textContent || '';
+        const lines = [
+          ['Instrument', calcData.instrument_type || P.instrumentType || P.symbol],
+          ['Position', String(calcData.position_type || $('position-type').value || '').toUpperCase()],
+          ['Entry', Number.isFinite(Number(b.entry)) ? fmt(Number(b.entry)) : ''],
+          ['Stop loss', Number.isFinite(Number(b.stop_loss)) ? fmt(Number(b.stop_loss)) : ''],
+          ['Max capital', Number.isFinite(Number(b.max_capital)) ? money(b.max_capital, currency) : ''],
+          ['Setup', reasonText],
+          ['Risk/reward', calcData.risk_reward != null ? `${{numText(calcData.risk_reward, 2)}}:1` : ''],
+          ['Profit', calcData.profit != null ? `${{money(calcData.profit, currency)}} (${{numText(calcData.profit_percent, 2)}}%)` : '']
+        ].filter(([,v]) => v !== '');
+        const grad = ctx.createLinearGradient(0, y0, canvas.width, y0 + drawerHeight);
+        grad.addColorStop(0, '#071426'); grad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = grad; ctx.fillRect(0, y0, canvas.width, drawerHeight);
+        ctx.strokeStyle = '#38bdf8'; ctx.globalAlpha = .45; ctx.strokeRect(0.5, y0 + 0.5, canvas.width - 1, drawerHeight - 1); ctx.globalAlpha = 1;
+        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 20px Inter, Arial'; ctx.fillText('Position calculation', 18, y0 + 32);
+        ctx.font = '13px ui-monospace, Menlo, monospace';
+        lines.forEach(([k, v], i) => {{
+          const x = 18 + (i % 4) * Math.floor(canvas.width / 4);
+          const y = y0 + 62 + Math.floor(i / 4) * 46;
+          ctx.fillStyle = '#93c5fd'; ctx.fillText(String(k).toUpperCase(), x, y);
+          ctx.fillStyle = '#e5e7eb'; ctx.font = 'bold 15px ui-monospace, Menlo, monospace'; ctx.fillText(String(v).slice(0, 32), x, y + 20); ctx.font = '13px ui-monospace, Menlo, monospace';
+        }});
+      }}
+      return canvas.toDataURL('image/png');
+    }});
   }}
   function journalPayload() {{
     autofillJournal(false);
