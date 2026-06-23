@@ -616,7 +616,10 @@ class LightweightChartLevelSelectorUI:
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
   const ohlc = Array.isArray(P.ohlc) ? P.ohlc : [];
-  const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
+  // Keep future dates for projected drawing endpoints, but do not feed
+  // whitespace bars into the candlestick series. Some Lightweight Charts
+  // versions reject whitespace objects on candlestick data and abort the rest
+  // of initialization, leaving a blank chart when opened from scanner HTML.
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
 
   const $ = id => document.getElementById(id);
@@ -749,7 +752,13 @@ class LightweightChartLevelSelectorUI:
   const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
   const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
   const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
-  candleSeries.setData(ohlcWithFuture);
+  try {{
+    candleSeries.setData(ohlc);
+  }} catch(e) {{
+    console.error('StockHelper candle data failed to render', e, ohlc && ohlc.slice ? ohlc.slice(0, 3) : ohlc);
+    const box = $('result-box');
+    if (box) box.textContent = 'Chart render failed: invalid candle data. Check browser console for details.';
+  }}
   if (typeof candleSeries.applyOptions === 'function') candleSeries.applyOptions({{priceLineColor:'#f8fafc', priceLineWidth:1, priceLineStyle:LightweightCharts.LineStyle.Dotted}});
   chart.timeScale().fitContent();
   requestAnimationFrame(() => {{
