@@ -450,7 +450,7 @@ class LightweightChartLevelSelectorUI:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StockHelper Lightweight Chart - {self.symbol}</title>
-  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
   {fallback_script}
   <style>
     * {{ box-sizing: border-box; }}
@@ -749,9 +749,30 @@ class LightweightChartLevelSelectorUI:
   window.addEventListener('pointerup', endChartDrag, true);
   window.addEventListener('pointercancel', endChartDrag, true);
   $('chart-wrap').addEventListener('click', (ev) => {{ if (Date.now() < suppressChartClickUntil) {{ ev.preventDefault(); ev.stopImmediatePropagation(); }} }}, true);
-  const addLineSeries = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.LineSeries, opts) : chart.addLineSeries(opts);
-  const addCandles = (opts) => chart.addSeries ? chart.addSeries(LightweightCharts.CandlestickSeries, opts) : chart.addCandlestickSeries(opts);
-  const candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
+  function chartBootError(message, error) {{
+    console.error(message, error || '');
+    const box = $('result-box');
+    if (box) box.textContent = message;
+  }}
+  function addSeriesCompat(kind, opts) {{
+    const legacyName = kind === 'candlestick' ? 'addCandlestickSeries' : 'addLineSeries';
+    const v5Type = kind === 'candlestick' ? LightweightCharts.CandlestickSeries : LightweightCharts.LineSeries;
+    // Prefer the legacy explicit methods when present. Some bundled builds expose
+    // addSeries() but not the constructor constants; calling addSeries(undefined)
+    // aborts chart initialization before any candles or level buttons appear.
+    if (typeof chart[legacyName] === 'function') return chart[legacyName](opts);
+    if (typeof chart.addSeries === 'function' && v5Type) return chart.addSeries(v5Type, opts);
+    throw new Error('Unsupported Lightweight Charts series API for ' + kind);
+  }}
+  const addLineSeries = (opts) => addSeriesCompat('line', opts);
+  const addCandles = (opts) => addSeriesCompat('candlestick', opts);
+  let candleSeries;
+  try {{
+    candleSeries = addCandles({{ upColor:'#f8fafc', downColor:'#22d3ee', borderUpColor:'#22d3ee', borderDownColor:'#0891b2', wickUpColor:'#22d3ee', wickDownColor:'#0891b2' }});
+  }} catch(e) {{
+    chartBootError('Chart render failed: unsupported Lightweight Charts API. Try refreshing the chart tab.', e);
+    throw e;
+  }}
   try {{
     candleSeries.setData(ohlc);
   }} catch(e) {{
