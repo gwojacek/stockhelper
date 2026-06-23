@@ -574,9 +574,9 @@ class LightweightChartLevelSelectorUI:
       <button id="journal-toggle-btn" class="side-action-btn" style="background:#f59e0b">🧾 Add journal entry</button>
       <div id="journal-panel" style="display:none;margin-top:10px;padding:10px;border:1px solid #334155;border-radius:10px;background:#111827">
         <h4 style="margin:0 0 8px 0;color:#fde68a">Transaction journal</h4>
-        <label>Technique</label><select id="journal-technique"><option>Ichimoku</option><option>Fibo</option><option>Kliny</option><option>Manual</option></select>
+        <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
         <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000 PLN" />
-        <label>Pattern</label><input id="journal-pattern" placeholder="e.g. bearish_hammer / wedge breakout" />
+        <label>Reason</label><select id="journal-reason"><option value="wedge_breakout">Wedge breakout</option><option value="ichimoku_setup">Ichimoku setup</option><option value="fibo_pullback">Fibo pullback</option><option value="stop_loss_review">Stop loss review</option><option value="manual">Manual</option></select>
         <label>Touches</label><input id="journal-touches" placeholder="e.g. 3" />
         <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
         <div id="journal-preview" style="white-space:pre-wrap;background:#020617;border:1px solid #334155;border-radius:8px;padding:8px;margin-top:8px;color:#dbeafe"></div>
@@ -2241,7 +2241,74 @@ class LightweightChartLevelSelectorUI:
   }});
 
 
+  function activeJournalTechnique() {{
+    if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
+    if (levels.__show_ichimoku__) return 'Ichimoku';
+    return 'Manual';
+  }}
+  function activeJournalReason() {{
+    const tech = activeJournalTechnique();
+    if (tech === 'Kliny') return 'wedge_breakout';
+    if (tech === 'Fibo') return 'fibo_pullback';
+    if (tech === 'Ichimoku') return 'ichimoku_setup';
+    return 'manual';
+  }}
+  function wedgeTouchCount() {{
+    const keys = new Set();
+    drawnObjects.filter(isWedgeLineObject).forEach(obj => wedgeTouchPoints(obj).forEach(pt => keys.add(`${{pt.time}}|${{Number(pt.value).toFixed(6)}}`)));
+    return keys.size;
+  }}
+  function autoJournalNotes() {{
+    const lines = [];
+    lines.push(`Auto context: ${{activeJournalTechnique()}} / ${{($('journal-reason') && $('journal-reason').selectedOptions[0]?.textContent) || ''}}`);
+    lines.push(`Direction: ${{($('position-type') && $('position-type').value) || ''}}`);
+    ['entry','stop_loss','check_zr_value_fibo_or_elevation','line_cross_value','high','low'].forEach(k => {{ if (levels[k] != null) lines.push(`${{labels[k] || k}}: ${{fmt(levels[k])}}`); }});
+    if (drawnObjects.some(isWedgeLineObject)) lines.push(`Wedge touches: ${{wedgeTouchCount()}}`);
+    if (levels.position_calculations?.ok) {{
+      const b = levels.position_calculations.basics || {{}};
+      if (Number.isFinite(Number(b.max_capital))) lines.push(`Calculated capital: ${{money(b.max_capital, levels.position_calculations.currency || 'PLN')}}`);
+      if (levels.position_calculations.risk_reward != null) lines.push(`Risk/reward: ${{numText(levels.position_calculations.risk_reward, 2)}}:1`);
+    }}
+    return lines.join('\\n');
+  }}
+  function autofillJournal(force=false) {{
+    const tech = $('journal-technique'), reason = $('journal-reason'), touches = $('journal-touches'), notes = $('journal-notes');
+    if (tech && (force || !tech.dataset.manual)) tech.value = activeJournalTechnique();
+    if (reason && (force || !reason.dataset.manual)) reason.value = activeJournalReason();
+    if (touches && (force || !touches.dataset.manual) && reason?.value === 'wedge_breakout') touches.value = String(wedgeTouchCount());
+    if (notes && (force || !notes.dataset.manual || !notes.value.trim())) notes.value = autoJournalNotes();
+  }}
+  async function captureJournalScreenshot() {{
+    drawCloud();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    let base = null;
+    try {{ base = chart.takeScreenshot(true, false); }} catch(e) {{ base = null; }}
+    const overlay = $('cloud-overlay');
+    const drawer = $('calc-drawer');
+    if (!base || !base.width || !base.height) return null;
+    const drawerOpen = drawer && drawer.classList.contains('open');
+    const drawerHeight = drawerOpen ? Math.min(360, Math.max(80, Math.ceil(drawer.getBoundingClientRect().height))) : 0;
+    const canvas = document.createElement('canvas');
+    canvas.width = base.width;
+    canvas.height = base.height + drawerHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(base, 0, 0);
+    if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
+    if (drawerHeight) {{
+      const y0 = base.height;
+      ctx.fillStyle = '#0b1220'; ctx.fillRect(0, y0, canvas.width, drawerHeight);
+      ctx.strokeStyle = '#334155'; ctx.strokeRect(0, y0 + 0.5, canvas.width, drawerHeight - 1);
+      ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 18px Inter, Arial'; ctx.fillText('Position calculation', 16, y0 + 28);
+      ctx.font = '13px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#dbeafe';
+      const lines = (drawer.innerText || '').split('\\n').map(x => x.trim()).filter(Boolean).slice(0, 16);
+      lines.forEach((line, i) => ctx.fillText(line.slice(0, 180), 16, y0 + 52 + i * 18));
+    }}
+    return canvas.toDataURL('image/png');
+  }}
   function journalPayload() {{
+    autofillJournal(false);
+    const reasonText = $('journal-reason')?.selectedOptions?.[0]?.textContent || '';
     const preview = [
       'Instrument: ' + P.symbol,
       'Technique: ' + (($('journal-technique') && $('journal-technique').value) || ''),
@@ -2250,7 +2317,7 @@ class LightweightChartLevelSelectorUI:
       'Entry: ' + (levels.entry || ''),
       'Stop loss: ' + (levels.stop_loss || ''),
       'Take profit/check: ' + (levels.check_zr_value_fibo_or_elevation || ''),
-      'Pattern: ' + (($('journal-pattern') && $('journal-pattern').value) || ''),
+      'Reason: ' + reasonText,
       'Touches: ' + (($('journal-touches') && $('journal-touches').value) || ''),
       '',
       (($('journal-notes') && $('journal-notes').value) || '')
@@ -2269,7 +2336,9 @@ class LightweightChartLevelSelectorUI:
       line_cross_value: levels.line_cross_value || '',
       high: levels.high || '',
       low: levels.low || '',
-      pattern: (($('journal-pattern') && $('journal-pattern').value) || ''),
+      reason: (($('journal-reason') && $('journal-reason').value) || ''),
+      reason_label: reasonText,
+      pattern: reasonText,
       touches: (($('journal-touches') && $('journal-touches').value) || ''),
       notes: (($('journal-notes') && $('journal-notes').value) || ''),
       preview,
@@ -2279,12 +2348,16 @@ class LightweightChartLevelSelectorUI:
   function bindJournal() {{
     const toggle = $('journal-toggle-btn');
     if (!toggle) return;
-    toggle.onclick = () => {{ const p = $('journal-panel'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; journalPayload(); }};
-    ['journal-technique','journal-amount','journal-pattern','journal-touches','journal-notes','position-type'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', journalPayload); if(el) el.addEventListener('change', journalPayload); }});
+    toggle.onclick = () => {{ const p = $('journal-panel'); const opening = p.style.display === 'none'; p.style.display = opening ? 'block' : 'none'; if (opening) autofillJournal(false); journalPayload(); }};
+    ['journal-technique','journal-reason','journal-touches','journal-notes'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', () => {{ el.dataset.manual='1'; journalPayload(); }}); if(el) el.addEventListener('change', () => {{ el.dataset.manual='1'; if(id==='journal-reason' && el.value === 'wedge_breakout' && $('journal-touches') && !$('journal-touches').dataset.manual) $('journal-touches').value = String(wedgeTouchCount()); journalPayload(); }}); }});
+    ['journal-amount','position-type'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', journalPayload); if(el) el.addEventListener('change', journalPayload); }});
     const save = $('journal-save-btn');
     if (save) save.onclick = async () => {{
+      const calc = await calculatePosition(true);
+      if (calc && calc.ok) levels.position_calculations = calc;
+      autofillJournal(false);
       const payload = journalPayload();
-      try {{ payload.screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{}}
+      payload.screenshot = await captureJournalScreenshot();
       const resp = await fetch('/journal-entry', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload)}});
       const data = await resp.json();
       $('result-box').textContent = data.ok ? ('Journal saved: ' + data.id) : ('Journal save failed: ' + (data.error || resp.status));
