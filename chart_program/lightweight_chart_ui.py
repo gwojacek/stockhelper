@@ -575,7 +575,7 @@ class LightweightChartLevelSelectorUI:
       <div id="journal-panel" style="display:none;margin-top:10px;padding:10px;border:1px solid #334155;border-radius:10px;background:#111827">
         <h4 style="margin:0 0 8px 0;color:#fde68a">Transaction journal</h4>
         <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
-        <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000 PLN" />
+        <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons" style="display:flex;gap:6px;margin-top:6px"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
         <label>Reason</label><select id="journal-reason"></select>
         <div id="journal-touches-row"><label>Touches</label><input id="journal-touches" placeholder="e.g. 3" /></div>
         <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
@@ -2242,6 +2242,7 @@ class LightweightChartLevelSelectorUI:
 
 
   function activeJournalTechnique() {{
+    if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
     if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
     if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (levels.__show_ichimoku__) return 'Ichimoku';
@@ -2258,20 +2259,11 @@ class LightweightChartLevelSelectorUI:
       ['manual', 'Manual']
     ],
     Ichimoku: [
-      ['ichimoku_cloud_breakout', 'Cloud breakout'],
-      ['ichimoku_kijun_retest', 'Kijun/Tenkan retest'],
-      ['ichimoku_inside_cloud', 'Inside cloud decision'],
-      ['ichimoku_cloud_flip_retest', 'Cloud flip + retest'],
-      ['ichimoku_chikou_confirmation', 'Chikou confirmation'],
-      ['manual', 'Manual']
+      ['ichimoku_cloud_breakout', 'Cloud breakout + candle pattern'],
+      ['ichimoku_retest_pattern', 'Retest + candle pattern']
     ],
     Fibo: [
-      ['fibo_618_touch', '61.8 touch/retest'],
-      ['fibo_golden_pocket', 'Golden pocket pullback'],
-      ['fibo_50_618_pullback', '50–61.8 pullback'],
-      ['fibo_breakout_continuation', 'Fibo continuation breakout'],
-      ['fibo_invalidation', 'Fibo invalidation/stop review'],
-      ['manual', 'Manual']
+      ['fibo_618_pattern', 'Fibo 61.8 + candle pattern']
     ],
     Manual: [
       ['manual', 'Manual'],
@@ -2282,12 +2274,29 @@ class LightweightChartLevelSelectorUI:
   function reasonOptionsForTechnique(tech) {{
     return journalReasonOptions[tech] || journalReasonOptions.Manual;
   }}
+  function candlePatternLabel() {{
+    const last = ohlc[ohlc.length - 1] || {{}};
+    const open = Number(last.open), high = Number(last.high), low = Number(last.low), close = Number(last.close);
+    if (![open, high, low, close].every(Number.isFinite)) return 'candle pattern';
+    const body = Math.abs(close - open);
+    const range = Math.max(0.000001, high - low);
+    const upper = high - Math.max(open, close);
+    const lower = Math.min(open, close) - low;
+    if (lower > body * 2 && upper < range * 0.35) return close >= open ? 'bullish hammer' : 'hammer';
+    if (upper > body * 2 && lower < range * 0.35) return close <= open ? 'bearish shooting star' : 'shooting star';
+    if (body / range < 0.18) return 'doji';
+    return close >= open ? 'bullish candle' : 'bearish candle';
+  }}
+  function reasonLabel(value, label) {{
+    if (String(value).startsWith('ichimoku_') || String(value).startsWith('fibo_')) return label.replace('candle pattern', candlePatternLabel());
+    return label;
+  }}
   function setJournalReasonOptions(tech, preferred=null) {{
     const reason = $('journal-reason');
     if (!reason) return;
     const oldValue = preferred || reason.value;
     const opts = reasonOptionsForTechnique(tech);
-    reason.innerHTML = opts.map(([value, label]) => `<option value="${{value}}">${{label}}</option>`).join('');
+    reason.innerHTML = opts.map(([value, label]) => `<option value="${{value}}">${{reasonLabel(value, label)}}</option>`).join('');
     reason.value = opts.some(([value]) => value === oldValue) ? oldValue : opts[0][0];
   }}
   function activeJournalReason() {{
@@ -2304,17 +2313,24 @@ class LightweightChartLevelSelectorUI:
     if (row) row.style.display = visible ? 'block' : 'none';
     if (touches && !visible && !touches.dataset.manual) touches.value = '';
   }}
-  function wedgeTouchCount() {{
-    const keys = new Set();
-    drawnObjects.filter(isWedgeLineObject).forEach(obj => wedgeTouchPoints(obj).forEach(pt => keys.add(`${{pt.time}}|${{Number(pt.value).toFixed(6)}}`)));
-    return keys.size;
+  function wedgeTouchCountsBySide() {{
+    const counts = {{upper:new Set(), lower:new Set()}};
+    drawnObjects.filter(isWedgeLineObject).forEach(obj => {{
+      const side = wedgeSide(obj) === 'upper' ? 'upper' : 'lower';
+      wedgeTouchPoints(obj).forEach(pt => counts[side].add(`${{pt.time}}|${{Number(pt.value).toFixed(6)}}`));
+    }});
+    return {{upper:counts.upper.size, lower:counts.lower.size}};
+  }}
+  function wedgeTouchCountText() {{
+    const c = wedgeTouchCountsBySide();
+    return `upper ${{c.upper}} / lower ${{c.lower}}`;
   }}
   function autoJournalNotes() {{
     const lines = [];
     lines.push(`Auto context: ${{selectedJournalTechnique()}} / ${{($('journal-reason') && $('journal-reason').selectedOptions[0]?.textContent) || ''}}`);
     lines.push(`Direction: ${{($('position-type') && $('position-type').value) || ''}}`);
     ['entry','stop_loss','check_zr_value_fibo_or_elevation','line_cross_value','high','low'].forEach(k => {{ if (levels[k] != null) lines.push(`${{labels[k] || k}}: ${{fmt(levels[k])}}`); }});
-    if (reasonUsesTouches($('journal-reason')?.value)) lines.push(`Wedge touches: ${{wedgeTouchCount()}}`);
+    if (reasonUsesTouches($('journal-reason')?.value)) lines.push(`Wedge touches: ${{wedgeTouchCountText()}}`);
     if (levels.position_calculations?.ok) {{
       const b = levels.position_calculations.basics || {{}};
       if (Number.isFinite(Number(b.max_capital))) lines.push(`Calculated capital: ${{money(b.max_capital, levels.position_calculations.currency || 'PLN')}}`);
@@ -2327,19 +2343,17 @@ class LightweightChartLevelSelectorUI:
     if (tech && (force || !tech.dataset.manual)) tech.value = activeJournalTechnique();
     setJournalReasonOptions(tech?.value || activeJournalTechnique(), (force || !reason?.dataset.manual) ? activeJournalReason() : reason?.value);
     updateJournalTouchesVisibility();
-    if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = String(wedgeTouchCount());
+    if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
     if (notes && (force || !notes.dataset.manual || !notes.value.trim())) notes.value = autoJournalNotes();
   }}
-  async function captureJournalScreenshot() {{
+  async function captureJournalScreenshot(calcData=null) {{
     drawCloud();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     let base = null;
     try {{ base = chart.takeScreenshot(true, false); }} catch(e) {{ base = null; }}
     const overlay = $('cloud-overlay');
-    const drawer = $('calc-drawer');
     if (!base || !base.width || !base.height) return null;
-    const drawerOpen = drawer && drawer.classList.contains('open');
-    const drawerHeight = drawerOpen ? Math.min(360, Math.max(80, Math.ceil(drawer.getBoundingClientRect().height))) : 0;
+    const drawerHeight = calcData && calcData.ok ? 170 : 0;
     const canvas = document.createElement('canvas');
     canvas.width = base.width;
     canvas.height = base.height + drawerHeight;
@@ -2348,11 +2362,21 @@ class LightweightChartLevelSelectorUI:
     if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
     if (drawerHeight) {{
       const y0 = base.height;
+      const b = calcData.basics || {{}};
+      const currency = calcData.currency || 'PLN';
+      const lines = [
+        `Instrument: ${{calcData.instrument_type || P.instrumentType}}`,
+        `Position: ${{String(calcData.position_type || $('position-type').value || '').toUpperCase()}}`,
+        Number.isFinite(Number(b.entry)) ? `Entry: ${{fmt(Number(b.entry))}}` : '',
+        Number.isFinite(Number(b.stop_loss)) ? `Stop loss: ${{fmt(Number(b.stop_loss))}}` : '',
+        Number.isFinite(Number(b.max_capital)) ? `Max capital: ${{money(b.max_capital, currency)}}` : '',
+        calcData.risk_reward != null ? `Risk/reward: ${{numText(calcData.risk_reward, 2)}}:1` : '',
+        calcData.profit != null ? `Profit: ${{money(calcData.profit, currency)}} (${{numText(calcData.profit_percent, 2)}}%)` : ''
+      ].filter(Boolean);
       ctx.fillStyle = '#0b1220'; ctx.fillRect(0, y0, canvas.width, drawerHeight);
       ctx.strokeStyle = '#334155'; ctx.strokeRect(0, y0 + 0.5, canvas.width, drawerHeight - 1);
       ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 18px Inter, Arial'; ctx.fillText('Position calculation', 16, y0 + 28);
       ctx.font = '13px ui-monospace, Menlo, monospace'; ctx.fillStyle = '#dbeafe';
-      const lines = (drawer.innerText || '').split('\\n').map(x => x.trim()).filter(Boolean).slice(0, 16);
       lines.forEach((line, i) => ctx.fillText(line.slice(0, 180), 16, y0 + 52 + i * 18));
     }}
     return canvas.toDataURL('image/png');
@@ -2364,7 +2388,7 @@ class LightweightChartLevelSelectorUI:
       'Instrument: ' + P.symbol,
       'Technique: ' + (($('journal-technique') && $('journal-technique').value) || ''),
       'Direction: ' + (($('position-type') && $('position-type').value) || ''),
-      'Amount: ' + (($('journal-amount') && $('journal-amount').value) || ''),
+      'Amount: ' + (($('journal-amount') && $('journal-amount').value) || '') + ' ' + (($('journal-currency') && $('journal-currency').value) || 'PLN'),
       'Entry: ' + (levels.entry || ''),
       'Stop loss: ' + (levels.stop_loss || ''),
       'Take profit/check: ' + (levels.check_zr_value_fibo_or_elevation || ''),
@@ -2381,6 +2405,7 @@ class LightweightChartLevelSelectorUI:
       technique: (($('journal-technique') && $('journal-technique').value) || ''),
       direction: (($('position-type') && $('position-type').value) || ''),
       amount: (($('journal-amount') && $('journal-amount').value) || ''),
+      amount_currency: (($('journal-currency') && $('journal-currency').value) || 'PLN'),
       entry: levels.entry || '',
       stop_loss: levels.stop_loss || '',
       take_profit: levels.check_zr_value_fibo_or_elevation || '',
@@ -2400,15 +2425,17 @@ class LightweightChartLevelSelectorUI:
     const toggle = $('journal-toggle-btn');
     if (!toggle) return;
     toggle.onclick = () => {{ const p = $('journal-panel'); const opening = p.style.display === 'none'; p.style.display = opening ? 'block' : 'none'; if (opening) autofillJournal(false); journalPayload(); }};
-    ['journal-technique','journal-reason','journal-touches','journal-notes'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', () => {{ el.dataset.manual='1'; journalPayload(); }}); if(el) el.addEventListener('change', () => {{ el.dataset.manual='1'; if(id==='journal-technique') {{ const reason=$('journal-reason'); if (reason) delete reason.dataset.manual; setJournalReasonOptions(el.value, activeJournalReason()); }} updateJournalTouchesVisibility(); if(id==='journal-reason' && reasonUsesTouches(el.value) && $('journal-touches') && !$('journal-touches').dataset.manual) $('journal-touches').value = String(wedgeTouchCount()); journalPayload(); }}); }});
+    ['journal-technique','journal-reason','journal-touches','journal-notes'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', () => {{ el.dataset.manual='1'; journalPayload(); }}); if(el) el.addEventListener('change', () => {{ el.dataset.manual='1'; if(id==='journal-technique') {{ const reason=$('journal-reason'); if (reason) delete reason.dataset.manual; setJournalReasonOptions(el.value, activeJournalReason()); }} updateJournalTouchesVisibility(); if(id==='journal-reason' && reasonUsesTouches(el.value) && $('journal-touches') && !$('journal-touches').dataset.manual) $('journal-touches').value = wedgeTouchCountText(); journalPayload(); }}); }});
     ['journal-amount','position-type'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', journalPayload); if(el) el.addEventListener('change', journalPayload); }});
+    document.querySelectorAll('#journal-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => {{ $('journal-currency').value = btn.dataset.currency || 'PLN'; document.querySelectorAll('#journal-currency-buttons button').forEach(b => b.classList.toggle('active', b === btn)); journalPayload(); }});
+    document.querySelector('#journal-currency-buttons button[data-currency="PLN"]')?.classList.add('active');
     const save = $('journal-save-btn');
     if (save) save.onclick = async () => {{
-      const calc = await calculatePosition(true);
+      const calc = await calculatePosition(false);
       if (calc && calc.ok) levels.position_calculations = calc;
       autofillJournal(false);
       const payload = journalPayload();
-      payload.screenshot = await captureJournalScreenshot();
+      payload.screenshot = await captureJournalScreenshot(calc);
       const resp = await fetch('/journal-entry', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload)}});
       const data = await resp.json();
       $('result-box').textContent = data.ok ? ('Journal saved: ' + data.id) : ('Journal save failed: ' + (data.error || resp.status));

@@ -517,6 +517,12 @@ def run_level_selector(raw_args=None):
         else:
             os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
+    if args.wedge_lines:
+        existing["__journal_source_technique__"] = "Kliny"
+    elif args.fibo_lines:
+        existing["__journal_source_technique__"] = "Fibo"
+    elif args.ichimoku_mode == "on":
+        existing["__journal_source_technique__"] = "Ichimoku"
 
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
     df = _trim_chart_window(df, max_days=548)

@@ -26,7 +26,7 @@ def _clean_date(value: Any) -> str:
     if not raw:
         return ""
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).strftime("%Y-%m-%d")
     except Exception:
         return raw[:16].replace("T", " ")
 
@@ -131,6 +131,36 @@ def close_entry(entry_id: str, outcome: str, notes: str = "", exit_price: str = 
     return found
 
 
+def update_entry(entry_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    entries = load_entries()
+    found = None
+    allowed = {"amount", "amount_currency", "entry", "exit_price", "reason", "reason_label", "touches", "notes", "review_notes", "outcome", "exit_reason", "stop_loss_moves"}
+    for entry in entries:
+        if str(entry.get("id")) == str(entry_id):
+            for key, value in (updates or {}).items():
+                if key in allowed:
+                    entry[key] = value
+            estimated = _estimate_pl(entry)
+            if estimated is not None:
+                entry["estimated_pl"] = estimated
+            found = entry
+            break
+    if found is not None:
+        _write_entries(entries)
+        write_html(entries)
+    return found
+
+
+def delete_entry(entry_id: str) -> bool:
+    entries = load_entries()
+    kept = [entry for entry in entries if str(entry.get("id")) != str(entry_id)]
+    if len(kept) == len(entries):
+        return False
+    _write_entries(kept)
+    write_html(kept)
+    return True
+
+
 def _thumb(path_text: str) -> str:
     if not path_text:
         return ""
@@ -157,15 +187,26 @@ def _row(entry: dict[str, Any]) -> str:
     if estimated in (None, ""):
         estimated = _estimate_pl(entry)
     reason = entry.get("reason_label") or entry.get("reason") or entry.get("pattern")
+    eid = e(entry.get("id"))
+    edit = (
+        f"<div class='edit noprint' data-id='{eid}'>"
+        f"<input class='edit-amount' placeholder='amount' value='{e(entry.get('amount'))}'>"
+        f"<input class='edit-entry' placeholder='entry' value='{e(entry.get('entry'))}'>"
+        f"<input class='edit-reason' placeholder='reason' value='{e(reason)}'>"
+        f"<input class='edit-touches' placeholder='touches' value='{e(entry.get('touches'))}'>"
+        f"<textarea class='edit-notes' rows='2' placeholder='notes'>{e(entry.get('notes'))}</textarea>"
+        "<button type='button' onclick='updateJournalEntry(this)'>Update</button>"
+        "<button type='button' onclick='deleteJournalEntry(this)'>Delete</button></div>"
+    )
     return "".join([
         f"<tr data-year='{e(_entry_year(entry))}'>",
         f"<td>{e(_clean_date(entry.get('created_at')))}</td><td><b>{e(entry.get('symbol') or entry.get('instrument'))}</b></td>",
-        f"<td>{e(entry.get('technique'))}</td><td>{e(entry.get('direction'))}</td><td>{e(entry.get('amount'))}</td>",
+        f"<td>{e(entry.get('technique'))}</td><td>{e(entry.get('direction'))}</td><td>{e(str(entry.get('amount') or '') + (' ' + str(entry.get('amount_currency')) if entry.get('amount_currency') else ''))}</td>",
         f"<td>{e(entry.get('entry'))}</td><td>{e(entry.get('exit_price'))}</td><td>{e(estimated)}</td>",
         f"<td>{e(entry.get('stop_loss'))}</td><td>{e(entry.get('take_profit'))}</td><td>{e(entry.get('status'))}</td><td>{e(entry.get('outcome'))}</td>",
         f"<td>{e(reason)}</td><td>{e(entry.get('touches'))}</td><td>{e(entry.get('exit_reason'))}</td><td>{e(entry.get('stop_loss_moves'))}</td>",
         f"<td><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></td>",
-        f"<td>{_thumb(str(entry.get('screenshot_path') or ''))}{_thumb(str(entry.get('close_screenshot_path') or ''))}{review}</td>",
+        f"<td>{_thumb(str(entry.get('screenshot_path') or ''))}{_thumb(str(entry.get('close_screenshot_path') or ''))}{review}{edit}</td>",
         "</tr>",
     ])
 
@@ -191,6 +232,15 @@ def html_document(entries: list[dict[str, Any]] | None = None) -> str:
 <script>
 function applyYearFilter(){{const y=document.getElementById('year-filter').value;document.querySelectorAll('tbody tr[data-year]').forEach(r=>r.style.display=(!y||r.dataset.year===y)?'':'none');}}
 document.getElementById('year-filter')?.addEventListener('change',applyYearFilter);
+function updateJournalEntry(btn){{
+  const box=btn.closest('.edit'); if(!box) return;
+  const payload={{id:box.dataset.id,amount:box.querySelector('.edit-amount').value,entry:box.querySelector('.edit-entry').value,reason_label:box.querySelector('.edit-reason').value,touches:box.querySelector('.edit-touches').value,notes:box.querySelector('.edit-notes').value}};
+  fetch('/journal-update',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}).then(r=>r.json()).then(d=>{{btn.textContent=d.ok?'Updated':'Failed';}}).catch(()=>{{btn.textContent='Failed';}});
+}}
+function deleteJournalEntry(btn){{
+  const box=btn.closest('.edit'); if(!box || !confirm('Delete this journal entry?')) return;
+  fetch('/journal-delete',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{id:box.dataset.id}})}}).then(r=>r.json()).then(d=>{{if(d.ok){{box.closest('tr').remove();}}else{{btn.textContent='Failed';}}}}).catch(()=>{{btn.textContent='Failed';}});
+}}
 function closeJournalEntry(btn){{
   const box=btn.closest('.review'); if(!box) return;
   const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};
