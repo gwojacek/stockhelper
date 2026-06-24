@@ -78,13 +78,20 @@ def main() -> int:
     console_stdout_path = ""
     console_stderr_path = ""
     console_log_path = os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG", "")
+    try:
+        console_log_max_bytes = max(1024 * 1024, int(os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG_MAX_BYTES", str(5 * 1024 * 1024))))
+    except Exception:
+        console_log_max_bytes = 5 * 1024 * 1024
     console_log = None
     chart_groups: dict[str, dict] = {}
     chart_group_lock = threading.Lock()
     if console_log_path:
         try:
             Path(console_log_path).parent.mkdir(parents=True, exist_ok=True)
-            console_log = open(console_log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+            # Start each report-server process with a fresh bounded relay log.
+            # The sink process only needs new report/chart output, and append-mode
+            # allowed stale logs to grow without limit across long sessions.
+            console_log = open(console_log_path, "w", buffering=1, encoding="utf-8", errors="replace")
         except Exception:
             console_log = None
 
@@ -142,6 +149,10 @@ def main() -> int:
         _drop_stale_console_targets()
         if console_log is not None:
             try:
+                if console_log.tell() > console_log_max_bytes:
+                    console_log.seek(0)
+                    console_log.truncate(0)
+                    print("[report] console relay log truncated after size cap", file=console_log, flush=True)
                 print(message, file=console_log, flush=True)
             except Exception:
                 pass

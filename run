@@ -699,10 +699,26 @@ def _serve_report_locally(path: Path) -> str | None:
     def _console_log_path(port: int) -> Path:
         return Path(os.environ.get("TMPDIR", "/tmp")) / f"stockhelper_report_console_{console_key}_{port}.log"
 
+    def _trim_stale_console_logs() -> None:
+        tmp = Path(os.environ.get("TMPDIR", "/tmp"))
+        for old in tmp.glob(f"stockhelper_report_console_{console_key}_*.log"):
+            try:
+                if old.stat().st_size > 5 * 1024 * 1024:
+                    old.write_text("", encoding="utf-8")
+            except Exception:
+                pass
+
+    _trim_stale_console_logs()
+
     def _start_console_sink(log_path: Path) -> None:
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            log_path.touch(exist_ok=True)
+            # Keep the relay log bounded. A stale or feedback-looped log should
+            # never be inherited by a fresh report open.
+            if log_path.exists() and log_path.stat().st_size > 5 * 1024 * 1024:
+                log_path.write_text("", encoding="utf-8")
+            else:
+                log_path.touch(exist_ok=True)
             subprocess.Popen(
                 [
                     sys.executable,
@@ -776,6 +792,7 @@ def _serve_report_locally(path: Path) -> str | None:
             # a tiny sink process follows from this terminal, and it also refreshes
             # direct console handles via /attach-console when reused.
             env["STOCKHELPER_REPORT_CONSOLE_LOG"] = str(log_path)
+            env.setdefault("STOCKHELPER_REPORT_CONSOLE_LOG_MAX_BYTES", str(5 * 1024 * 1024))
             env["STOCKHELPER_REPORT_CONSOLE_STDOUT"] = console_stdout
             env["STOCKHELPER_REPORT_CONSOLE_STDERR"] = console_stderr
             subprocess.Popen(
