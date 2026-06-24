@@ -527,7 +527,7 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
     .side-action-btn {{ margin-top:9px;width:100%;padding:10px 12px;color:white;border:none;border-radius:14px;font-size:14px;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:9px; }}
-    .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
+    .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }} .action-grid.no-wedge {{ grid-template-columns:1fr; }} .action-grid.no-wedge #journal-toggle-btn {{ min-height:58px; }}
     .action-grid .side-action-btn {{ min-height:52px; }}
     #calculate-btn {{ min-height:54px; background:linear-gradient(135deg,#18b572,#2dd4bf) !important; border:1px solid rgba(94,234,212,.75); box-shadow:0 16px 32px rgba(45,212,191,.22); font-size:17px; }}
     #calculate-btn::after {{ content:'›'; margin-left:auto; font-size:28px; line-height:1; }}
@@ -2099,7 +2099,7 @@ class LightweightChartLevelSelectorUI:
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
     const wedgeInfoBtn = $('wedge-debug-btn');
-    if (wedgeInfoBtn) wedgeInfoBtn.style.display = levels.__journal_source_technique__ === 'Kliny' ? 'flex' : 'none';
+    if (wedgeInfoBtn) {{ const showWedge = levels.__journal_source_technique__ === 'Kliny'; wedgeInfoBtn.style.display = showWedge ? 'flex' : 'none'; wedgeInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showWedge); }}
     const findNewWedgeBtn = $('find-new-wedge');
     if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
     ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
@@ -2431,7 +2431,6 @@ class LightweightChartLevelSelectorUI:
     setJournalReasonOptions(tech?.value || activeJournalTechnique(), (force || !reason?.dataset.manual) ? activeJournalReason() : reason?.value);
     updateJournalTouchesVisibility();
     if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
-    if (notes && (force || !notes.dataset.manual || !notes.value.trim())) notes.value = autoJournalNotes();
   }}
   function journalScreenshotRange() {{
     const idxs = [];
