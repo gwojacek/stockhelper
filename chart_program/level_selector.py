@@ -91,6 +91,10 @@ def _parse_args(raw_args=None):
     parser.add_argument("--wedge-lower-start")
     parser.add_argument("--wedge-lower-end")
     parser.add_argument("--wedge-right", action="store_true")
+    parser.add_argument("--journal-close-mode", action="store_true")
+    parser.add_argument("--journal-entry-id")
+    parser.add_argument("--journal-close-price")
+    parser.add_argument("--journal-stop-loss")
     return parser.parse_args(raw_args)
 
 
@@ -855,6 +859,12 @@ def run_level_selector(raw_args=None):
             pass
         existing["pip_value"] = 1.0
         existing.setdefault("spread_multiplier", 0.0)
+
+    if args.journal_close_mode:
+        existing['__journal_close_mode__'] = True
+        existing['__journal_entry_id__'] = args.journal_entry_id or ''
+        existing['__journal_close_price__'] = args.journal_close_price or ''
+        existing['__journal_stop_loss__'] = args.journal_stop_loss or existing.get('stop_loss', '')
 
     display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 

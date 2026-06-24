@@ -2539,6 +2539,10 @@ def main()->int:
     parser.add_argument('--wedge-lower-start')
     parser.add_argument('--wedge-lower-end')
     parser.add_argument('--wedge-right', action='store_true')
+    parser.add_argument('--journal-close-mode', action='store_true', help='Open chart in journal close-adjust mode.')
+    parser.add_argument('--journal-entry-id')
+    parser.add_argument('--journal-close-price')
+    parser.add_argument('--journal-stop-loss')
     parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older window (up to ~364+180 days total span target) before current oldest cached date.')
     parser.add_argument('--fetch-older-data-scope', choices=['all', 'commodities', 'stocks', 'forex'], default='all', help='Limit older-data fetch to one instrument group.')
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
@@ -2924,6 +2928,14 @@ def main()->int:
             cmd.extend(['--wedge-lower-end', args.wedge_lower_end])
         if args.wedge_right:
             cmd.append('--wedge-right')
+        if args.journal_close_mode:
+            cmd.append('--journal-close-mode')
+        if args.journal_entry_id:
+            cmd.extend(['--journal-entry-id', args.journal_entry_id])
+        if args.journal_close_price:
+            cmd.extend(['--journal-close-price', args.journal_close_price])
+        if args.journal_stop_loss:
+            cmd.extend(['--journal-stop-loss', args.journal_stop_loss])
     else:
         if chart_modifier:
             parser.error('chart modifier cfd can be used only together with -c/--chart')
