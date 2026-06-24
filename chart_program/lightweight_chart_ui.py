@@ -2707,11 +2707,26 @@ class LightweightChartLevelSelectorUI:
       activeLine = key;
       document.querySelectorAll('.close-line-control').forEach(el => el.classList.toggle('active', el.dataset.line === key));
     }}
+    function lineStartTime(key, price) {{
+      if (!Array.isArray(ohlc) || !ohlc.length) return first;
+      let idx = Math.max(0, ohlc.length - 45);
+      for (let i = ohlc.length - 1; i >= 0; i--) {{
+        const row = ohlc[i] || {{}};
+        const hi = Number(row.high);
+        const lo = Number(row.low);
+        if (Number.isFinite(hi) && Number.isFinite(lo) && price >= Math.min(lo, hi) && price <= Math.max(lo, hi)) {{
+          idx = i;
+          break;
+        }}
+      }}
+      return ohlc[idx]?.time || first;
+    }}
     function drawLine(key) {{
       const line = lines[key];
       const p = linePrice(key);
       if (!line || !Number.isFinite(p) || !first || !last) return;
-      line.series.setData(normalizeLineData([{{time:first,value:p}},{{time:last,value:p}}]));
+      const startTime = lineStartTime(key, p);
+      line.series.setData(normalizeLineData([{{time:startTime,value:p}},{{time:last,value:p}}]));
       line.marker.setData([{{time:last,value:p}}]);
       try {{ line.marker.setMarkers([{{time:last, position:'inBar', color:line.color, shape:key==='sold'?'circle':'square', text:line.label+' @ '+fmt(p)}}]); }} catch(e) {{}}
     }}
