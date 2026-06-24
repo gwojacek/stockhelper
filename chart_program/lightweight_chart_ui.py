@@ -612,7 +612,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
-      <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
+      <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
       <div id="chart-legend"></div>
       <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div></div>
       <section id="calc-drawer" aria-live="polite">
@@ -2677,6 +2677,7 @@ class LightweightChartLevelSelectorUI:
     const soldInput = $('close-mode-price');
     const entryInput = $('close-mode-entry');
     const slInput = $('close-mode-stop-loss');
+    const directionInput = $('close-mode-direction');
     const saveBtn = $('close-mode-save');
     const statusEl = $('close-mode-status');
     const first = ohlc[0]?.time, last = ohlc[ohlc.length - 1]?.time;
@@ -2688,6 +2689,7 @@ class LightweightChartLevelSelectorUI:
     if (soldInput) soldInput.value = Number.isFinite(initialSold) ? initialSold : '';
     if (entryInput) entryInput.value = Number.isFinite(initialEntry) ? initialEntry : '';
     if (slInput) slInput.value = Number.isFinite(initialSl) ? initialSl : '';
+    if (directionInput) directionInput.value = (cfg.__journal_direction__ || cfg.direction || cfg.position_type || 'long') === 'short' ? 'short' : 'long';
     let activeLine = 'sold';
     let dragLine = null;
     const lines = {{
@@ -2765,10 +2767,10 @@ class LightweightChartLevelSelectorUI:
       try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{ console.warn('close screenshot failed', e); }}
       const entry = linePrice('entry');
       const sold = linePrice('sold');
-      let direction = String(cfg.direction || cfg.position_type || '').toLowerCase();
+      let direction = String(directionInput?.value || cfg.__journal_direction__ || cfg.direction || cfg.position_type || '').toLowerCase();
       if (direction !== 'short' && direction !== 'long') {{ const sl=linePrice('sl'); direction = Number.isFinite(sl) && Number.isFinite(entry) && sl > entry ? 'short' : 'long'; }}
       const outcome = Number.isFinite(entry) && Number.isFinite(sold) ? ((direction === 'short' ? sold <= entry : sold >= entry) ? 'profit' : 'loss') : 'closed';
-      const resp = await fetch('/journal-close-from-chart', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id:cfg.__journal_entry_id__ || '', outcome, entry:entryInput?.value || '', exit_price:soldInput?.value || '', stop_loss:slInput?.value || '', screenshot}})}});
+      const resp = await fetch('/journal-close-from-chart', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id:cfg.__journal_entry_id__ || '', outcome, direction, entry:entryInput?.value || '', exit_price:soldInput?.value || '', stop_loss:slInput?.value || '', screenshot}})}});
       const data = await resp.json().catch(()=>({{ok:false}}));
       const msg = data.ok ? 'Closing screenshot saved. Closing chart...' : ('Closing screenshot failed: '+(data.error||resp.status));
       if (statusEl) statusEl.textContent = msg;
@@ -2961,7 +2963,7 @@ class LightweightChartLevelSelectorUI:
                 from journal import close_entry, update_entry
                 entry_id = str(payload.get("id") or "")
                 if payload.get("entry") not in (None, ""):
-                    update_entry(entry_id, {"entry": str(payload.get("entry") or "")})
+                    update_entry(entry_id, {"entry": str(payload.get("entry") or ""), "direction": str(payload.get("direction") or "")})
                 entry = close_entry(
                     entry_id,
                     str(payload.get("outcome") or "closed"),
@@ -2971,6 +2973,7 @@ class LightweightChartLevelSelectorUI:
                     "manual",
                     "",
                     str(payload.get("stop_loss") or ""),
+                    str(payload.get("direction") or ""),
                 )
                 return jsonify({"ok": bool(entry), "entry": entry})
             except Exception as exc:

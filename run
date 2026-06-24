@@ -2559,6 +2559,7 @@ def main()->int:
     parser.add_argument('--journal-close-mode', action='store_true', help='Open chart in journal close-adjust mode.')
     parser.add_argument('--journal-entry-id')
     parser.add_argument('--journal-entry-price')
+    parser.add_argument('--journal-direction', choices=['long', 'short'])
     parser.add_argument('--journal-close-price')
     parser.add_argument('--journal-stop-loss')
     parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older window (up to ~364+180 days total span target) before current oldest cached date.')
@@ -2952,6 +2953,8 @@ def main()->int:
             cmd.extend(['--journal-entry-id', args.journal_entry_id])
         if args.journal_entry_price:
             cmd.extend(['--journal-entry-price', args.journal_entry_price])
+        if args.journal_direction:
+            cmd.extend(['--journal-direction', args.journal_direction])
         if args.journal_close_price:
             cmd.extend(['--journal-close-price', args.journal_close_price])
         if args.journal_stop_loss:
