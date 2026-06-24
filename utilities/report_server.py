@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v14"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v15"
 
 
 def main() -> int:
@@ -33,6 +33,8 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     project_root = Path(args.project_root).resolve()
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
 
 
     def _canonicalize_chart_command(command: str) -> str:
