@@ -465,13 +465,16 @@ class LightweightChartLevelSelectorUI:
     .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
     #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     body.close-mode .layout {{ grid-template-columns: 1fr; }}
-    body.close-mode .side, body.close-mode .toolbar, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer {{ display:none !important; }}
+    body.close-mode .side, body.close-mode .toolbar, body.close-mode .level-grid, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer, body.close-mode .main>h3 {{ display:none !important; }}
     body.close-mode .main {{ padding:14px; }}
-    body.close-mode #chart-wrap {{ height:calc(100vh - 118px); min-height:520px; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.35),0 24px 80px rgba(0,0,0,.45); }}
-    #close-mode-panel {{ display:none; align-items:center; gap:12px; margin:0 0 12px; padding:12px 14px; border:1px solid rgba(34,197,94,.45); border-radius:14px; background:linear-gradient(135deg,rgba(22,101,52,.30),rgba(15,23,42,.92)); }}
+    body.close-mode #chart-wrap {{ height:calc(100vh - 96px); min-height:520px; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.35),0 24px 80px rgba(0,0,0,.45); }}
+    #close-mode-panel {{ display:none; align-items:center; gap:10px; margin:0 0 10px; padding:10px 12px; border:1px solid rgba(34,197,94,.45); border-radius:14px; background:linear-gradient(135deg,rgba(22,101,52,.30),rgba(15,23,42,.92)); }}
     body.close-mode #close-mode-panel {{ display:flex; }}
     #close-mode-panel strong {{ color:#86efac; font-size:18px; }}
-    #close-mode-price {{ width:150px; }}
+    .close-line-control {{ display:flex; align-items:center; gap:6px; padding:6px 8px; border:1px solid rgba(148,163,184,.28); border-radius:10px; background:rgba(15,23,42,.74); cursor:grab; }}
+    .close-line-control.active {{ border-color:#38bdf8; box-shadow:0 0 0 2px rgba(56,189,248,.16); }}
+    .close-line-control span {{ font-weight:900; font-size:12px; letter-spacing:.06em; }}
+    .close-line-control input {{ width:120px; }}
     #close-mode-save {{ background:linear-gradient(135deg,#16a34a,#22c55e); color:#052e16; border-color:#86efac; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
     #chart .tv-lightweight-charts {{ width:100% !important; height:100% !important; }}
@@ -609,7 +612,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
-      <div id="close-mode-panel"><strong>💰 Adjust SOLD line</strong><span>Click chart or edit price, then accept.</span><input id="close-mode-price" type="number" step="any"><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
+      <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
       <div id="chart-legend"></div>
       <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div></div>
       <section id="calc-drawer" aria-live="polite">
@@ -1600,6 +1603,7 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function beginLineObjectDrag(ev) {{
+    if (levels.__journal_close_mode__) return false;
     if (activeTool !== 'level' || activeField) return false;
     const hit = hitTestLineObject(ev);
     if (!hit) return false;
@@ -2670,44 +2674,101 @@ class LightweightChartLevelSelectorUI:
     const cfg = levels || {{}};
     if (!cfg.__journal_close_mode__) return;
     document.body.classList.add('close-mode');
-    const priceInput = $('close-mode-price');
+    const soldInput = $('close-mode-price');
+    const entryInput = $('close-mode-entry');
     const slInput = $('close-mode-stop-loss');
     const saveBtn = $('close-mode-save');
     const statusEl = $('close-mode-status');
     const first = ohlc[0]?.time, last = ohlc[ohlc.length - 1]?.time;
-    let closePrice = Number(String(cfg.__journal_close_price__ || cfg.exit_price || cfg.entry || ohlc[ohlc.length - 1]?.close || '').replace(',','.'));
-    if (!Number.isFinite(closePrice)) closePrice = Number(ohlc[ohlc.length - 1]?.close || 0);
-    if (priceInput) priceInput.value = Number.isFinite(closePrice) ? closePrice : '';
-    if (slInput) slInput.value = cfg.__journal_stop_loss__ || cfg.stop_loss || '';
-    const soldSeries = addLineSeries({{color:'#22c55e', lineWidth:4, priceLineVisible:true, lastValueVisible:true, title:'SOLD', autoscaleInfoProvider:() => null}});
-    const markerSeries = addLineSeries({{color:'#22c55e', lineWidth:1, priceLineVisible:false, lastValueVisible:false, title:'', autoscaleInfoProvider:() => null}});
-    function drawSoldLine() {{
-      const p = Number(String(priceInput?.value || closePrice || '').replace(',','.'));
-      if (!Number.isFinite(p) || !first || !last) return;
-      closePrice = p;
-      soldSeries.setData(normalizeLineData([{{time:first,value:p}},{{time:last,value:p}}]));
-      markerSeries.setData([{{time:last,value:p}}]);
-      try {{ markerSeries.setMarkers([{{time:last, position:'inBar', color:'#22c55e', shape:'circle', text:'SOLD @ '+fmt(p)}}]); }} catch(e) {{}}
+    const asNum = (value, fallback=null) => {{ const n=Number(String(value ?? '').replace(',','.')); return Number.isFinite(n) ? n : fallback; }};
+    const latestClose = asNum(ohlc[ohlc.length - 1]?.close, 0);
+    const initialEntry = asNum(cfg.entry, latestClose);
+    const initialSold = asNum(cfg.__journal_close_price__ || cfg.exit_price, latestClose);
+    const initialSl = asNum(cfg.__journal_stop_loss__ || cfg.stop_loss, null);
+    if (soldInput) soldInput.value = Number.isFinite(initialSold) ? initialSold : '';
+    if (entryInput) entryInput.value = Number.isFinite(initialEntry) ? initialEntry : '';
+    if (slInput) slInput.value = Number.isFinite(initialSl) ? initialSl : '';
+    let activeLine = 'sold';
+    let dragLine = null;
+    const lines = {{
+      sold: {{input:soldInput, color:'#22c55e', width:3, label:'SOLD', series:null, marker:null}},
+      entry: {{input:entryInput, color:'#60a5fa', width:2, label:'ENTRY', series:null, marker:null}},
+      sl: {{input:slInput, color:'#ef4444', width:2, label:'SL', series:null, marker:null}},
+    }};
+    Object.values(lines).forEach(line => {{
+      line.series = addLineSeries({{color:line.color, lineWidth:line.width, priceLineVisible:true, lastValueVisible:true, title:line.label, autoscaleInfoProvider:() => null}});
+      line.marker = addLineSeries({{color:line.color, lineWidth:1, priceLineVisible:false, lastValueVisible:false, title:'', autoscaleInfoProvider:() => null}});
+    }});
+    function linePrice(key) {{ return asNum(lines[key]?.input?.value, null); }}
+    function setActiveLine(key) {{
+      if (!lines[key]) return;
+      activeLine = key;
+      document.querySelectorAll('.close-line-control').forEach(el => el.classList.toggle('active', el.dataset.line === key));
     }}
-    drawSoldLine();
-    priceInput?.addEventListener('input', drawSoldLine);
-    chart.subscribeClick((param) => {{
-      if (!document.body.classList.contains('close-mode') || !param.point) return;
-      const y = Number(param.point.y);
+    function drawLine(key) {{
+      const line = lines[key];
+      const p = linePrice(key);
+      if (!line || !Number.isFinite(p) || !first || !last) return;
+      line.series.setData(normalizeLineData([{{time:first,value:p}},{{time:last,value:p}}]));
+      line.marker.setData([{{time:last,value:p}}]);
+      try {{ line.marker.setMarkers([{{time:last, position:'inBar', color:line.color, shape:key==='sold'?'circle':'square', text:line.label+' @ '+fmt(p)}}]); }} catch(e) {{}}
+    }}
+    function drawAllLines() {{ Object.keys(lines).forEach(drawLine); }}
+    function setLineFromY(key, y) {{
       let p = null;
       try {{ p = candleSeries.coordinateToPrice ? candleSeries.coordinateToPrice(y) : chart.priceScale('right').coordinateToPrice(y); }} catch(e) {{ p = null; }}
-      if (Number.isFinite(Number(p)) && priceInput) {{ priceInput.value = fmt(Number(p)); drawSoldLine(); }}
+      if (Number.isFinite(Number(p)) && lines[key]?.input) {{ lines[key].input.value = fmt(Number(p)); drawLine(key); }}
+    }}
+    function lineY(key) {{
+      const p = linePrice(key);
+      if (!Number.isFinite(p)) return null;
+      try {{ return candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p) : chart.priceScale('right').priceToCoordinate(p); }} catch(e) {{ return null; }}
+    }}
+    function nearestLine(y) {{
+      let best=null, dist=Infinity;
+      Object.keys(lines).forEach(key => {{ const ly=lineY(key); if (Number.isFinite(ly)) {{ const d=Math.abs(ly-y); if (d<dist) {{ best=key; dist=d; }} }} }});
+      return dist <= 14 ? best : null;
+    }}
+    document.querySelectorAll('.close-line-control[data-line]').forEach(el => {{
+      el.addEventListener('pointerdown', () => setActiveLine(el.dataset.line));
+      el.addEventListener('click', () => setActiveLine(el.dataset.line));
+    }});
+    Object.entries(lines).forEach(([key,line]) => line.input?.addEventListener('input', () => {{ setActiveLine(key); drawLine(key); }}));
+    drawAllLines();
+    const wrap = $('chart-wrap');
+    wrap?.addEventListener('pointerdown', ev => {{
+      if (!document.body.classList.contains('close-mode') || ev.button !== 0) return;
+      const rect = wrap.getBoundingClientRect();
+      const hit = nearestLine(ev.clientY - rect.top);
+      if (!hit) return;
+      dragLine = hit;
+      setActiveLine(hit);
+      wrap.setPointerCapture?.(ev.pointerId);
+      ev.preventDefault();
+    }}, true);
+    wrap?.addEventListener('pointermove', ev => {{
+      if (!dragLine) return;
+      const rect = wrap.getBoundingClientRect();
+      setLineFromY(dragLine, ev.clientY - rect.top);
+      ev.preventDefault();
+    }}, true);
+    const endDrag = ev => {{ if (!dragLine) return; dragLine=null; wrap?.releasePointerCapture?.(ev.pointerId); }};
+    wrap?.addEventListener('pointerup', endDrag, true);
+    wrap?.addEventListener('pointercancel', endDrag, true);
+    chart.subscribeClick((param) => {{
+      if (!document.body.classList.contains('close-mode') || !param.point || dragLine) return;
+      setLineFromY(activeLine, Number(param.point.y));
     }});
     saveBtn.onclick = async () => {{
-      drawSoldLine();
+      drawAllLines();
       let screenshot = '';
       try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{ console.warn('close screenshot failed', e); }}
-      const entry = Number(String(cfg.entry || '').replace(',','.'));
-      const sold = Number(String(priceInput?.value || '').replace(',','.'));
+      const entry = linePrice('entry');
+      const sold = linePrice('sold');
       let direction = String(cfg.direction || cfg.position_type || '').toLowerCase();
-      if (direction !== 'short' && direction !== 'long') {{ const sl=Number(String(slInput?.value || cfg.stop_loss || '').replace(',','.')); direction = Number.isFinite(sl) && Number.isFinite(entry) && sl > entry ? 'short' : 'long'; }}
+      if (direction !== 'short' && direction !== 'long') {{ const sl=linePrice('sl'); direction = Number.isFinite(sl) && Number.isFinite(entry) && sl > entry ? 'short' : 'long'; }}
       const outcome = Number.isFinite(entry) && Number.isFinite(sold) ? ((direction === 'short' ? sold <= entry : sold >= entry) ? 'profit' : 'loss') : 'closed';
-      const resp = await fetch('/journal-close-from-chart', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id:cfg.__journal_entry_id__ || '', outcome, exit_price:priceInput?.value || '', stop_loss:slInput?.value || '', screenshot}})}});
+      const resp = await fetch('/journal-close-from-chart', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id:cfg.__journal_entry_id__ || '', outcome, entry:entryInput?.value || '', exit_price:soldInput?.value || '', stop_loss:slInput?.value || '', screenshot}})}});
       const data = await resp.json().catch(()=>({{ok:false}}));
       const msg = data.ok ? 'Closing screenshot saved. Closing chart...' : ('Closing screenshot failed: '+(data.error||resp.status));
       if (statusEl) statusEl.textContent = msg;
@@ -2897,9 +2958,12 @@ class LightweightChartLevelSelectorUI:
         def _journal_close_from_chart():
             payload = request.get_json(silent=True) or {}
             try:
-                from journal import close_entry
+                from journal import close_entry, update_entry
+                entry_id = str(payload.get("id") or "")
+                if payload.get("entry") not in (None, ""):
+                    update_entry(entry_id, {"entry": str(payload.get("entry") or "")})
                 entry = close_entry(
-                    str(payload.get("id") or ""),
+                    entry_id,
                     str(payload.get("outcome") or "closed"),
                     "",
                     str(payload.get("exit_price") or ""),
