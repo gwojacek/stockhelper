@@ -2682,7 +2682,7 @@ class LightweightChartLevelSelectorUI:
     const first = ohlc[0]?.time, last = ohlc[ohlc.length - 1]?.time;
     const asNum = (value, fallback=null) => {{ const n=Number(String(value ?? '').replace(',','.')); return Number.isFinite(n) ? n : fallback; }};
     const latestClose = asNum(ohlc[ohlc.length - 1]?.close, 0);
-    const initialEntry = asNum(cfg.entry, latestClose);
+    const initialEntry = asNum(cfg.__journal_entry_price__ || cfg.entry, latestClose);
     const initialSold = asNum(cfg.__journal_close_price__ || cfg.exit_price, latestClose);
     const initialSl = asNum(cfg.__journal_stop_loss__ || cfg.stop_loss, null);
     if (soldInput) soldInput.value = Number.isFinite(initialSold) ? initialSold : '';
