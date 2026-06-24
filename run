@@ -2265,6 +2265,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
                   ("WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
+                  ("WYNIKI FIBO #0 (3P steep incline)", [x for x in mrows if x.scanner == "FIBO" and x.category == "steep"]),
                   ("WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
                   ("WYNIKI FIBO #2 (valid pattern >5 days, last month)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
         for gname, grows in groups:
