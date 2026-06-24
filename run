@@ -11,7 +11,7 @@ try:
 except Exception:
     tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
-from chart_program.chart_loader import COMMODITY_STOOQ_MAP
+from chart_program.chart_loader import COMMODITY_STOOQ_MAP, local_csv_path_for_symbol
 try:
     from chart_program.chart_loader import CSV_DATA_DIR, STATE_DATA_DIR
 except ImportError:
@@ -2348,16 +2348,9 @@ def _expected_scope_csv_paths(scope: str) -> list[Path]:
             symbol = f"{ticker}{exchange_suffix}"
         if instrument == "stock" and "." not in symbol and len(symbol) <= 5:
             symbol = f"{symbol}.WA"
-        if instrument == "commodity":
-            if group != "indexes" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
-                symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
-            folder = CSV_DATA_DIR / "commodities"
-        elif instrument == "forex":
-            folder = CSV_DATA_DIR / "forex"
-        else:
-            folder = CSV_DATA_DIR / "stocks"
-        fname = symbol.replace("/", "").replace(".", "_").upper() + ".csv"
-        out.append(folder / fname)
+        if instrument == "commodity" and group != "indexes" and ticker.upper() not in YAHOO_PRIMARY_COMMODITIES:
+            symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), symbol)).upper()
+        out.append(local_csv_path_for_symbol(symbol, instrument))
     return out
 
 
@@ -2371,7 +2364,7 @@ def _retry_missing_scope_csvs_once(scope: str) -> bool:
         from chart_program.chart_loader import load_or_update_daily_data
         for p in missing:
             parent = p.parent.name
-            instrument = "commodity" if parent == "commodities" else ("forex" if parent == "forex" else "stock")
+            instrument = "commodity" if parent in {"commodities", "indexes"} else ("forex" if parent == "forex" else "stock")
             symbol = p.stem.replace("_", ".")
             load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
     except Exception as exc:
