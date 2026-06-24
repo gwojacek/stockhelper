@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v13"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v15"
 
 
 def main() -> int:
@@ -33,6 +33,8 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     project_root = Path(args.project_root).resolve()
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
 
 
     def _canonicalize_chart_command(command: str) -> str:
@@ -76,13 +78,20 @@ def main() -> int:
     console_stdout_path = ""
     console_stderr_path = ""
     console_log_path = os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG", "")
+    try:
+        console_log_max_bytes = max(1024 * 1024, int(os.environ.get("STOCKHELPER_REPORT_CONSOLE_LOG_MAX_BYTES", str(5 * 1024 * 1024))))
+    except Exception:
+        console_log_max_bytes = 5 * 1024 * 1024
     console_log = None
     chart_groups: dict[str, dict] = {}
     chart_group_lock = threading.Lock()
     if console_log_path:
         try:
             Path(console_log_path).parent.mkdir(parents=True, exist_ok=True)
-            console_log = open(console_log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+            # Start each report-server process with a fresh bounded relay log.
+            # The sink process only needs new report/chart output, and append-mode
+            # allowed stale logs to grow without limit across long sessions.
+            console_log = open(console_log_path, "w", buffering=1, encoding="utf-8", errors="replace")
         except Exception:
             console_log = None
 
@@ -140,6 +149,10 @@ def main() -> int:
         _drop_stale_console_targets()
         if console_log is not None:
             try:
+                if console_log.tell() > console_log_max_bytes:
+                    console_log.seek(0)
+                    console_log.truncate(0)
+                    print("[report] console relay log truncated after size cap", file=console_log, flush=True)
                 print(message, file=console_log, flush=True)
             except Exception:
                 pass
@@ -453,6 +466,49 @@ def main() -> int:
                                 opened += 1
                     urls = [str(r.get("url", "")) if r.get("ok") and r.get("url") else "" for r in results]
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"opened": opened, "urls": urls, "results": results}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/journal-update":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    from journal import update_entry
+                    entry = update_entry(str(payload.get("id") or ""), payload)
+                    self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry), "entry": entry}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/journal-delete":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    from journal import delete_entry
+                    ok = delete_entry(str(payload.get("id") or ""))
+                    self.send_response(200 if ok else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(ok)}).encode("utf-8"))
+                except Exception as exc:
+                    self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
+                return
+            if parsed.path == "/journal-close":
+                try:
+                    ln = int(self.headers.get("content-length", "0") or "0")
+                    raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
+                    payload = json.loads(raw or "{}")
+                    from journal import close_entry
+                    entry = close_entry(
+                        str(payload.get("id") or ""),
+                        str(payload.get("outcome") or "closed"),
+                        str(payload.get("notes") or ""),
+                        str(payload.get("exit_price") or ""),
+                        str(payload.get("screenshot") or ""),
+                        str(payload.get("exit_reason") or ""),
+                        str(payload.get("stop_loss_moves") or ""),
+                        str(payload.get("stop_loss") or ""),
+                        str(payload.get("direction") or ""),
+                    )
+                    self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry), "entry": entry}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return

@@ -28,6 +28,7 @@ ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_sear
 TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
 
 DEFAULT_ALLSEARCH_SCOPES = ["wig", "dax", "us100", "forex", "commodities", "indexes"]
+JOURNAL_HTML = PROJECT_ROOT / "data" / "journal" / "transactions.html"
 
 TROJPOLLOWKI_RETEST_LABELS = {
     "breakout_confirmed": "breakout confirmed",
@@ -685,7 +686,7 @@ def _open_html_report(path: Path) -> None:
     subprocess.Popen(["xdg-open", file_url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v13"
+    report_server_protocol = "stockhelper-report-server-v15"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
@@ -698,10 +699,26 @@ def _serve_report_locally(path: Path) -> str | None:
     def _console_log_path(port: int) -> Path:
         return Path(os.environ.get("TMPDIR", "/tmp")) / f"stockhelper_report_console_{console_key}_{port}.log"
 
+    def _trim_stale_console_logs() -> None:
+        tmp = Path(os.environ.get("TMPDIR", "/tmp"))
+        for old in tmp.glob(f"stockhelper_report_console_{console_key}_*.log"):
+            try:
+                if old.stat().st_size > 5 * 1024 * 1024:
+                    old.write_text("", encoding="utf-8")
+            except Exception:
+                pass
+
+    _trim_stale_console_logs()
+
     def _start_console_sink(log_path: Path) -> None:
         try:
             log_path.parent.mkdir(parents=True, exist_ok=True)
-            log_path.touch(exist_ok=True)
+            # Keep the relay log bounded. A stale or feedback-looped log should
+            # never be inherited by a fresh report open.
+            if log_path.exists() and log_path.stat().st_size > 5 * 1024 * 1024:
+                log_path.write_text("", encoding="utf-8")
+            else:
+                log_path.touch(exist_ok=True)
             subprocess.Popen(
                 [
                     sys.executable,
@@ -775,6 +792,7 @@ def _serve_report_locally(path: Path) -> str | None:
             # a tiny sink process follows from this terminal, and it also refreshes
             # direct console handles via /attach-console when reused.
             env["STOCKHELPER_REPORT_CONSOLE_LOG"] = str(log_path)
+            env.setdefault("STOCKHELPER_REPORT_CONSOLE_LOG_MAX_BYTES", str(5 * 1024 * 1024))
             env["STOCKHELPER_REPORT_CONSOLE_STDOUT"] = console_stdout
             env["STOCKHELPER_REPORT_CONSOLE_STDERR"] = console_stderr
             subprocess.Popen(
@@ -2140,6 +2158,21 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         return None
 
 
+    def _journal_tab_html() -> str:
+        cmd = "python run --journal-html"
+        encoded = quote(cmd, safe="")
+        button = (
+            f'<button class="btn troj-cta" type="button" '
+            f'onclick="fetch(&quot;/run-command?command={encoded}&quot;).then(()=>setButtonText(this,&quot;Opened&quot;))">'
+            'Open transaction journal</button>'
+        )
+        return (
+            "<section class='market'><h2>🧾 Open journal</h2>"
+            "<p class='muted'>Open the live transaction journal in its own served window.</p>"
+            + button +
+            f"<p class='muted'><code>{html.escape(cmd)}</code></p></section>"
+        )
+
     def _wedge_tab_html() -> str:
         def _wedge_breakout_rank(r: ScannerRow) -> int:
             direction = (r.metrics.get("breakout_direction", "-") or "-").strip()
@@ -2216,7 +2249,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                   "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}.today-signal td{background:#dcfce7!important}.today-signal td:first-child{box-shadow:inset 4px 0 #16a34a}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}.pdfbtn{font-size:12px;font-weight:700;padding:4px 7px;align-self:center}.compactbtn{font-size:12px;padding:3px 7px}.troj-toolbar{margin:8px 0 10px}.troj-hide-extra .troj-extra-info{display:none}@media print{@page{size:A4 landscape;margin:6mm}body{max-width:none;padding:0;zoom:.78;background:#fff}.troj-hero,.market{box-shadow:none}.btn,.iconbtn{display:none!important}table{font-size:9px}th,td{padding:3px}.troj-table td{min-width:120px;line-height:1.25}.tab-panel:not(.active){display:none!important}}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
-    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"fetch('/run-command?command=python%20run%20--journal-html').then(()=>setButtonText(this,'Opened'))\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
     html_parts.append(_liquidity_legend_html())
@@ -2508,6 +2541,8 @@ def main()->int:
     parser.add_argument('-onlycache', '--onlycache', action='store_true', help='Use local CSV cache only; skip remote freshness probes/updates (works for commodities too).')
     parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
     parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
+    parser.add_argument('--journal-html', action='store_true', help='Open the transaction journal HTML only.')
+    parser.add_argument('--journal-pdf', action='store_true', help='Open the transaction journal HTML and use the PDF button/print dialog to save it as PDF.')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?'); parser.add_argument('chart_modifier', nargs='?', choices=['cfd', 'CFD'], help='Use after -c target to open a stock as CFD/commodity mode.')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('--debug-stooq-fetch',action='store_true',help='When used with --debug-stooq, merge fetched visible Stooq rows into the matching commodity CSV.'); parser.add_argument('-inspector','--inspector',action='store_true')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
@@ -2521,6 +2556,12 @@ def main()->int:
     parser.add_argument('--wedge-lower-start')
     parser.add_argument('--wedge-lower-end')
     parser.add_argument('--wedge-right', action='store_true')
+    parser.add_argument('--journal-close-mode', action='store_true', help='Open chart in journal close-adjust mode.')
+    parser.add_argument('--journal-entry-id')
+    parser.add_argument('--journal-entry-price')
+    parser.add_argument('--journal-direction', choices=['long', 'short'])
+    parser.add_argument('--journal-close-price')
+    parser.add_argument('--journal-stop-loss')
     parser.add_argument('--fetch-older-data', action='store_true', help='Fetch an additional older window (up to ~364+180 days total span target) before current oldest cached date.')
     parser.add_argument('--fetch-older-data-scope', choices=['all', 'commodities', 'stocks', 'forex'], default='all', help='Limit older-data fetch to one instrument group.')
     parser.add_argument('--xdist-worker-index', type=int, help='Optional explicit worker index (0-based) for --fetch-older-data sharding.')
@@ -2540,6 +2581,21 @@ def main()->int:
         os.environ['STOCKHELPER_SCAN_WORKERS'] = str(max(1, int(args.scan_workers)))
     else:
         os.environ.pop('STOCKHELPER_SCAN_WORKERS', None)
+    if args.journal_html or args.journal_pdf:
+        from journal import write_html
+        path = write_html()
+        url = _serve_report_locally(path)
+        if url:
+            webbrowser.open_new_tab(url)
+            print(f"[journal] opened HTML: {url}")
+            print("[journal] update/delete/review actions are served by the local report server.")
+        else:
+            webbrowser.open(path.resolve().as_uri())
+            print(f"[journal] opened HTML: {path}")
+            print("[journal] warning: local report server unavailable; update/delete/review buttons need the served URL.")
+        if args.journal_pdf:
+            print("[journal] click Download PDF in the opened HTML, or use browser Print → Save as PDF.")
+        return 0
     if args.trim_wig_csvs:
         from utilities.stooq_playwright import trim_wig_stock_csvs
         result = trim_wig_stock_csvs(stocks_dir=CSV_DATA_DIR / 'stocks', years=args.wig_trim_years)
@@ -2891,6 +2947,18 @@ def main()->int:
             cmd.extend(['--wedge-lower-end', args.wedge_lower_end])
         if args.wedge_right:
             cmd.append('--wedge-right')
+        if args.journal_close_mode:
+            cmd.append('--journal-close-mode')
+        if args.journal_entry_id:
+            cmd.extend(['--journal-entry-id', args.journal_entry_id])
+        if args.journal_entry_price:
+            cmd.extend(['--journal-entry-price', args.journal_entry_price])
+        if args.journal_direction:
+            cmd.extend(['--journal-direction', args.journal_direction])
+        if args.journal_close_price:
+            cmd.extend(['--journal-close-price', args.journal_close_price])
+        if args.journal_stop_loss:
+            cmd.extend(['--journal-stop-loss', args.journal_stop_loss])
     else:
         if chart_modifier:
             parser.error('chart modifier cfd can be used only together with -c/--chart')

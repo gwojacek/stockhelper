@@ -455,7 +455,7 @@ class LightweightChartLevelSelectorUI:
   <style>
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
-    .layout {{ display: grid; grid-template-columns: 1fr 380px; height: 100vh; }}
+    .layout {{ display: grid; grid-template-columns: 1fr 430px; height: 100vh; }}
     .main {{ padding: 14px 0 14px 14px; min-width: 0; }}
     h3 {{ margin: 0 0 10px 0; }}
     button {{ background: #1f2937; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; font-weight: 700; }}
@@ -464,7 +464,20 @@ class LightweightChartLevelSelectorUI:
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
     .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
     #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
+    body.close-mode .layout {{ grid-template-columns: 1fr; }}
+    body.close-mode .side, body.close-mode .toolbar, body.close-mode .level-grid, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer, body.close-mode .main>h3 {{ display:none !important; }}
+    body.close-mode .main {{ padding:14px; }}
+    body.close-mode #chart-wrap {{ height:calc(100vh - 96px); min-height:520px; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.35),0 24px 80px rgba(0,0,0,.45); }}
+    #close-mode-panel {{ display:none; align-items:center; gap:10px; margin:0 0 10px; padding:10px 12px; border:1px solid rgba(34,197,94,.45); border-radius:14px; background:linear-gradient(135deg,rgba(22,101,52,.30),rgba(15,23,42,.92)); }}
+    body.close-mode #close-mode-panel {{ display:flex; }}
+    #close-mode-panel strong {{ color:#86efac; font-size:18px; }}
+    .close-line-control {{ display:flex; align-items:center; gap:6px; padding:6px 8px; border:1px solid rgba(148,163,184,.28); border-radius:10px; background:rgba(15,23,42,.74); cursor:grab; }}
+    .close-line-control.active {{ border-color:#38bdf8; box-shadow:0 0 0 2px rgba(56,189,248,.16); }}
+    .close-line-control span {{ font-weight:900; font-size:12px; letter-spacing:.06em; }}
+    .close-line-control input {{ width:120px; }}
+    #close-mode-save {{ background:linear-gradient(135deg,#16a34a,#22c55e); color:#052e16; border-color:#86efac; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
+    #chart .tv-lightweight-charts {{ width:100% !important; height:100% !important; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
     #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
     .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:12px; height:12px; padding:0 2px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:1.5px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
@@ -475,9 +488,34 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ margin-bottom: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; text-align: center; }}
-    .side {{ border-left: 1px solid #1f2937; padding: 16px; background: #0b1220; overflow-y: auto; }}
+    .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
+    .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
+    .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
+    .instrument-hero {{ display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; }}
+    .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
+    .hero-icon {{ width:42px; height:42px; }}
+    .section-icon {{ width:26px; height:26px; font-size:14px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
+    #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
+    .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
+    .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
+    .meta-field.full {{ grid-column:1 / -1; }}
+    .meta-label,.side-section-title {{ display:flex; align-items:center; gap:6px; color:#b8c7e6; font-weight:800; font-size:12px; margin-bottom:6px; }}
+    .meta-value {{ min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid #334155; border-radius:11px; background:rgba(2,6,23,.42); color:#f8fafc; font-size:15px; font-weight:900; }}
+    #source {{ color:#f8fafc; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.03em; }}
+    #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
+    #stock-cfd-toggle::after {{ content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
+    #stock-cfd-toggle::before {{ content:''; position:absolute; right:29px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
+    #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
+    #stock-cfd-toggle.active::before {{ right:13px; background:#fff; }}
+    .side-card-head {{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }}
+    .manual-card .side-card-head {{ padding-bottom:14px; border-bottom:1px solid rgba(148,163,184,.20); margin-bottom:14px; }}
+    .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
+    .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:24px; letter-spacing:-.03em; }}
     label {{ display: block; margin-top: 8px; }}
-    input, select {{ width: 100%; color: black; background: white; font-size: 16px; padding: 6px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }}
+    input, select, textarea {{ width: 100%; min-height:38px; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 14px; padding: 8px 10px; border-radius: 11px; border: 1px solid #334155; }}
+    .manual-card label {{ color:#cbd5e1; font-size:14px; margin-top:10px; }}
+    .manual-card input,.manual-card select {{ min-height:42px; border-radius:13px; background:rgba(15,23,42,.62); border-color:rgba(96,165,250,.32); }}
+    .manual-card input:focus,.manual-card select:focus {{ outline:none; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(59,130,246,.18), 0 0 24px rgba(59,130,246,.18); }}
     input:disabled, select:disabled {{ opacity: 0.38; background: #475569; color: #cbd5e1; border-color: #334155; cursor: not-allowed; }}
     .muted {{ opacity: .5; }}
     .source {{ margin-bottom: 12px; font-weight: 700; color: #93c5fd; font-size: 16px; }}
@@ -489,13 +527,50 @@ class LightweightChartLevelSelectorUI:
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
     .chart-group-buttons button {{ padding:6px 8px; border-radius:999px; background:#1f2937; border-color:#475569; color:#e5e7eb; font-size:12px; }}
     .chart-group-buttons button.active {{ background:#2563eb; border-color:#93c5fd; color:white; box-shadow:0 0 0 2px rgba(147,197,253,.22); }}
-    .values {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 8px; white-space: pre-wrap; }}
+    .values {{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom: 4px; }}
+    .value-tile {{ min-height:58px; padding:8px; border:1px solid #334155; border-radius:12px; background:rgba(2,6,23,.38); text-align:center; }}
+    .value-tile .value-label {{ color:#aebcda; text-transform:uppercase; font-weight:900; font-size:11px; letter-spacing:.05em; }}
+    .value-tile .value-number {{ margin-top:5px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:17px; font-weight:900; color:#f8fafc; }}
+    .value-tile.entry .value-number {{ color:#4ade80; }}
+    .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:8px;width:100%;padding:10px;color:white;border:none;border-radius:8px; }}
+    .side-action-btn {{ margin-top:9px;width:100%;padding:12px 14px;color:white;border:none;border-radius:16px;font-size:16px;font-weight:900;letter-spacing:-.01em;line-height:1.15;text-align:center;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px; }} .side-action-btn .btn-icon {{ width:36px;height:36px;border-radius:12px;display:inline-grid;place-items:center;background:rgba(255,255,255,.13);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 18px rgba(0,0,0,.18);font-size:20px; }}
+    .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }} .action-grid.no-wedge {{ grid-template-columns:1fr; }} .action-grid.no-wedge #journal-toggle-btn {{ min-height:58px; }}
+    .action-grid .side-action-btn {{ min-height:52px; }}
+    #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#0f766e,#22c55e) !important; border:1px solid rgba(134,239,172,.80); box-shadow:0 16px 34px rgba(34,197,94,.24), inset 0 1px 0 rgba(255,255,255,.14); }}
+    #calculate-btn .btn-icon {{ background:rgba(220,252,231,.18); color:#dcfce7; }}
+    #calculate-btn::after {{ content:none; }}
+    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
+    #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; min-height:66px; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
+    #finish-btn .btn-icon {{ background:rgba(219,234,254,.18); color:#dbeafe; }}
+    #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
+    #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
+    #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
+    #currency-fee-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
+    #currency-fee-toggle.active::before {{ right:15px; background:#fff; }}
+    #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
+    #result-box:empty {{ display:none; }}
+    #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
+    #journal-panel h4 {{ display:flex;align-items:center;gap:10px;margin:0 0 12px 0;color:#f8fafc;font-size:18px; }}
+    #journal-panel h4::before {{ content:'🧾';display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#0ea5e9,#2563eb);box-shadow:0 0 24px rgba(37,99,235,.35); }}
+    #journal-panel label {{ margin-top:11px;color:#b6c7e6;text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:900; }}
+    #journal-panel input,#journal-panel select,#journal-panel textarea {{ margin-top:5px;color:#e5e7eb;background:rgba(15,23,42,.78);border:1px solid #334155;border-radius:12px;padding:10px 12px;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }}
+    #journal-panel input:focus,#journal-panel select:focus,#journal-panel textarea:focus {{ border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.18); }}
+    #journal-currency-buttons {{ display:grid !important;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:7px; }}
+    #journal-currency-buttons button {{ border-radius:999px;padding:8px;background:#111827;color:#bfdbfe;border:1px solid #334155; }}
+    #journal-currency-buttons button.active {{ background:linear-gradient(135deg,#2563eb,#06b6d4);color:white;border-color:#93c5fd; }}
+    #journal-notes {{ min-height:170px; resize:vertical; }}
+    #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
+    #journal-panel.show-preview #journal-preview {{ display:block; }}
+    .manual-card.journal-open > label,.manual-card.journal-open > input,.manual-card.journal-open > select,.manual-card.journal-open > #currency-fee-toggle,.manual-card.journal-open > #object-picker,.manual-card.journal-open > #delete-object,.manual-card.journal-open > #calculate-btn,.manual-card.journal-open > .action-grid,.manual-card.journal-open > #finish-btn,.manual-card.journal-open > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
+    #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
@@ -540,6 +615,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
+      <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
       <div id="chart-legend"></div>
       <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div></div>
       <section id="calc-drawer" aria-live="polite">
@@ -553,32 +629,56 @@ class LightweightChartLevelSelectorUI:
       </section>
     </main>
     <aside class="side">
-      <div style="margin-bottom:8px;font-weight:800;font-size:20px;color:#f8fafc" id="identity"></div>
-      <h4 id="instrument-title" style="margin-top:0;margin-bottom:6px;color:#cbd5e1"></h4>
-      <button id="stock-cfd-toggle" style="width:100%;margin-bottom:8px;display:none"></button>
-      <div class="source" id="source"></div>
-      <h4>Selected values</h4>
-      <div id="values-panel" class="values"></div>
-      <h4>Manual inputs</h4>
-      <label id="position-type-label">Position type</label>
-      <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
-      <label>Capital</label><input id="capital" type="number" />
-      <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
-      <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
-      <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
-      <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
-      <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
-      <button id="delete-object" style="display:none">Delete selected object</button>
-      <button id="calculate-btn" class="side-action-btn" style="background:#16a34a">Calculate position</button>
-      <button id="wedge-debug-btn" class="side-action-btn" style="background:#7c3aed">📋 Wedge Information</button>
-      <div id="wedge-debug-panel"></div>
-      <button id="finish-btn" class="side-action-btn" style="background:#2563eb">Save &amp; Close</button>
+      <section class="side-card instrument-card">
+        <div class="instrument-hero">
+          <div class="hero-icon">↗</div>
+          <div><h2 id="identity"></h2><div class="identity-sub">Name / Ticker</div></div>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
+          <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
+          <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
+        </div>
+      </section>
+      <section class="side-card selected-card">
+        <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4></div>
+        <div id="values-panel" class="values"></div>
+      </section>
+      <section class="side-card manual-card">
+        <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
+        <label id="position-type-label">Position type</label>
+        <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
+        <label>Capital</label><input id="capital" type="number" />
+        <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
+        <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
+        <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
+        <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
+        <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
+        <button id="delete-object" style="display:none">Delete selected object</button>
+        <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span>Calculate position</span></button>
+        <div class="action-grid">
+          <button id="wedge-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Wedge information</span></button>
+          <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
+        </div>
+        <button id="finish-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save &amp; Close</span></button>
+        <div id="journal-panel" style="display:none">
+          <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
+          <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
+          <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
+          <label>Reason</label><select id="journal-reason"></select>
+          <div id="journal-touches-row"><label>Touches</label><input id="journal-touches" placeholder="e.g. 3" /></div>
+          <label>Notes / why entry</label><textarea id="journal-notes" rows="5" placeholder="Setup, highlighted values, risk, context"></textarea>
+          <div id="journal-preview"></div>
+          <button id="journal-save-btn" class="side-action-btn" style="background:#ea580c">Save journal + screenshot</button>
+        </div>
+        <div id="wedge-debug-panel"></div>
+        <div id="result-box"></div>
+      </section>
       <div id="chart-group-nav" class="chart-group-nav">
         <h4>⭐ Quick charts from 📊</h4>
         <div id="chart-group-label" class="chart-group-label"></div>
         <div id="chart-group-buttons" class="chart-group-buttons"></div>
       </div>
-      <div id="result-box" style="margin-top:10px"></div>
     </aside>
   </div>
   <script>window.STOCKHELPER_PAYLOAD = {payload};</script>
@@ -679,6 +779,18 @@ class LightweightChartLevelSelectorUI:
     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
     localization: {{ priceFormatter: p => fmt(p) }},
   }});
+  function resizeChartToContainer() {{
+    const el = $('chart');
+    if (!el || !chart.applyOptions) return;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) {{
+      try {{ chart.applyOptions({{width: Math.floor(r.width), height: Math.floor(r.height)}}); }} catch(e) {{}}
+      requestAnimationFrame(drawCloud);
+    }}
+  }}
+  if (window.ResizeObserver) new ResizeObserver(resizeChartToContainer).observe($('chart'));
+  window.addEventListener('resize', resizeChartToContainer);
+  requestAnimationFrame(resizeChartToContainer);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   let verticalPan = 0;
   let chartDrag = null;
@@ -1494,6 +1606,7 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function beginLineObjectDrag(ev) {{
+    if (levels.__journal_close_mode__) return false;
     if (activeTool !== 'level' || activeField) return false;
     const hit = hitTestLineObject(ev);
     if (!hit) return false;
@@ -1853,9 +1966,9 @@ class LightweightChartLevelSelectorUI:
 
   function drawCloud() {{
     const canvas = $('cloud-overlay');
-    const wrap = $('chart-wrap');
-    if (!canvas || !wrap) return;
-    const rect = wrap.getBoundingClientRect();
+    const chartEl = $('chart');
+    if (!canvas || !chartEl) return;
+    const rect = chartEl.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
@@ -1997,11 +2110,13 @@ class LightweightChartLevelSelectorUI:
     $('tool-half').classList.toggle('active', activeTool === 'half');
     $('ichimoku-toggle').classList.toggle('active', !!levels.__show_ichimoku__);
     $('ichimoku-toggle').textContent = `Ichimoku: ${{levels.__show_ichimoku__ ? 'ON' : 'OFF'}}`;
-    $('values-panel').textContent = seq.map(k => `${{labels[k]}}: ${{levels[k] == null ? '--' : fmt(levels[k])}}`).join('\\n');
+    $('values-panel').innerHTML = seq.map(k => `<div class="value-tile ${{k}}"><div class="value-label">${{labels[k]}}</div><div class="value-number">${{levels[k] == null ? '--' : fmt(levels[k])}}</div></div>`).join('');
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
+    const wedgeInfoBtn = $('wedge-debug-btn');
+    if (wedgeInfoBtn) {{ const showWedge = levels.__journal_source_technique__ === 'Kliny'; wedgeInfoBtn.style.display = showWedge ? 'flex' : 'none'; wedgeInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showWedge); }}
     const findNewWedgeBtn = $('find-new-wedge');
     if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
     ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
@@ -2020,11 +2135,11 @@ class LightweightChartLevelSelectorUI:
     const sourceUpper = String(P.sourceTicker || '').toUpperCase();
     const symbolUpper = String(P.symbol || '').toUpperCase();
     const indexLike = P.instrumentType === 'commodity' && ['^','DE40','US500','US100','US30','JP225','WIG20','UK100','EU50','DAX','CAC','AEX','SMI','IBEX'].some(t => sourceUpper.includes(t) || symbolUpper.includes(t));
-    $('identity').textContent = `Name/Ticker: ${{P.sourceName || P.symbol}}${{P.sourceTicker ? ` (${{P.sourceTicker}})` : ''}}`;
-    $('instrument-title').textContent = `Instrument: ${{originalIsStock && stockCfdOn ? 'STOCK CFD' : (indexLike ? 'COMMODITY/INDEX' : P.instrumentType.toUpperCase())}}`;
-    $('source').textContent = `SOURCE: ${{P.sourceProvider}}`;
-    $('stock-cfd-toggle').style.display = originalIsStock ? 'block' : 'none';
-    $('stock-cfd-toggle').textContent = `CFD mode: ${{stockCfdOn ? 'ON' : 'OFF'}}`;
+    $('identity').textContent = `${{P.sourceName || P.symbol}}${{P.sourceTicker ? ` (${{P.sourceTicker}})` : ''}}`;
+    $('instrument-title').textContent = `${{originalIsStock && stockCfdOn ? 'STOCK CFD' : (indexLike ? 'COMMODITY/INDEX' : P.instrumentType.toUpperCase())}}`;
+    $('source').textContent = `${{P.sourceProvider}}`;
+    $('stock-cfd-toggle').style.display = originalIsStock ? 'flex' : 'none';
+    $('stock-cfd-toggle').textContent = `${{stockCfdOn ? 'ON' : 'OFF'}}`;
     $('stock-cfd-toggle').classList.toggle('active', stockCfdOn);
     const setFieldState = (id, isDisabled, visible=true) => {{
       const el = $(id), label = $(`${{id}}-label`);
@@ -2197,6 +2312,7 @@ class LightweightChartLevelSelectorUI:
   }}
 
   chart.subscribeClick(param => {{
+    if (levels.__journal_close_mode__) return;
     if (Date.now() < suppressChartClickUntil) return;
     if (!param || !param.point) return;
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
@@ -2228,6 +2344,250 @@ class LightweightChartLevelSelectorUI:
     if (activeTool === 'line' && lineAnchor && Number.isFinite(cursor)) updateLinePreview(time, cursor);
     if (activeTool === 'fib' && fibAnchor && time) updateFibPreview(time);
   }});
+
+
+  function activeJournalTechnique() {{
+    if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
+    if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
+    if (levels.__show_ichimoku__) return 'Ichimoku';
+    return 'Manual';
+  }}
+  function selectedJournalTechnique() {{
+    return $('journal-technique')?.value || activeJournalTechnique();
+  }}
+  const journalReasonOptions = {{
+    Kliny: [
+      ['wedge_breakout', 'Wedge breakout'],
+      ['wedge_retest', 'Wedge retest'],
+      ['wedge_stop_loss', 'Wedge stop loss review'],
+      ['manual', 'Manual']
+    ],
+    Ichimoku: [
+      ['ichimoku_cloud_breakout', 'Cloud breakout'],
+      ['ichimoku_retest_pattern', 'Retest + candle pattern']
+    ],
+    Fibo: [
+      ['fibo_618_pattern', 'Fibo 61.8 + candle pattern']
+    ],
+    Manual: [
+      ['manual', 'Manual'],
+      ['stop_loss_review', 'Stop loss review'],
+      ['other', 'Other']
+    ]
+  }};
+  function reasonOptionsForTechnique(tech) {{
+    return journalReasonOptions[tech] || journalReasonOptions.Manual;
+  }}
+  function candlePatternLabel() {{
+    const last = ohlc[ohlc.length - 1] || {{}};
+    const open = Number(last.open), high = Number(last.high), low = Number(last.low), close = Number(last.close);
+    if (![open, high, low, close].every(Number.isFinite)) return 'candle pattern';
+    const body = Math.abs(close - open);
+    const range = Math.max(0.000001, high - low);
+    const upper = high - Math.max(open, close);
+    const lower = Math.min(open, close) - low;
+    if (lower > body * 2 && upper < range * 0.35) return close >= open ? 'bullish hammer' : 'hammer';
+    if (upper > body * 2 && lower < range * 0.35) return close <= open ? 'bearish shooting star' : 'shooting star';
+    if (body / range < 0.18) return 'doji';
+    return close >= open ? 'bullish candle' : 'bearish candle';
+  }}
+  function reasonLabel(value, label) {{
+    if (String(value).startsWith('ichimoku_retest') || String(value).startsWith('fibo_')) return label.replace('candle pattern', candlePatternLabel());
+    return label;
+  }}
+  function setJournalReasonOptions(tech, preferred=null) {{
+    const reason = $('journal-reason');
+    if (!reason) return;
+    const oldValue = preferred || reason.value;
+    const opts = reasonOptionsForTechnique(tech);
+    reason.innerHTML = opts.map(([value, label]) => `<option value="${{value}}">${{reasonLabel(value, label)}}</option>`).join('');
+    reason.value = opts.some(([value]) => value === oldValue) ? oldValue : opts[0][0];
+  }}
+  function activeJournalReason() {{
+    const tech = activeJournalTechnique();
+    return reasonOptionsForTechnique(tech)[0][0];
+  }}
+  function reasonUsesTouches(reasonValue) {{
+    return String(reasonValue || '').startsWith('wedge_');
+  }}
+  function updateJournalTouchesVisibility() {{
+    const row = $('journal-touches-row');
+    const touches = $('journal-touches');
+    const visible = reasonUsesTouches($('journal-reason')?.value);
+    if (row) row.style.display = visible ? 'block' : 'none';
+    if (touches && !visible && !touches.dataset.manual) touches.value = '';
+  }}
+  function wedgeTouchCountsBySide() {{
+    const counts = {{upper:new Set(), lower:new Set()}};
+    drawnObjects.filter(isWedgeLineObject).forEach(obj => {{
+      const side = wedgeSide(obj) === 'upper' ? 'upper' : 'lower';
+      wedgeTouchPoints(obj).forEach(pt => counts[side].add(`${{pt.time}}|${{Number(pt.value).toFixed(6)}}`));
+    }});
+    return {{upper:counts.upper.size, lower:counts.lower.size}};
+  }}
+  function wedgeTouchCountText() {{
+    const c = wedgeTouchCountsBySide();
+    return `upper ${{c.upper}} / lower ${{c.lower}}`;
+  }}
+  function autoJournalNotes() {{
+    const lines = [];
+    lines.push(`Auto context: ${{selectedJournalTechnique()}} / ${{($('journal-reason') && $('journal-reason').selectedOptions[0]?.textContent) || ''}}`);
+    lines.push(`Direction: ${{($('position-type') && $('position-type').value) || ''}}`);
+    ['entry','stop_loss','check_zr_value_fibo_or_elevation','line_cross_value','high','low'].forEach(k => {{ if (levels[k] != null) lines.push(`${{labels[k] || k}}: ${{fmt(levels[k])}}`); }});
+    if (reasonUsesTouches($('journal-reason')?.value)) lines.push(`Wedge touches: ${{wedgeTouchCountText()}}`);
+    if (levels.position_calculations?.ok) {{
+      const b = levels.position_calculations.basics || {{}};
+      if (Number.isFinite(Number(b.max_capital))) lines.push(`Calculated capital: ${{money(b.max_capital, levels.position_calculations.currency || 'PLN')}}`);
+      if (levels.position_calculations.risk_reward != null) lines.push(`Risk/reward: ${{numText(levels.position_calculations.risk_reward, 2)}}:1`);
+    }}
+    return lines.join('\\n');
+  }}
+  function autofillJournal(force=false) {{
+    const tech = $('journal-technique'), reason = $('journal-reason'), touches = $('journal-touches'), notes = $('journal-notes');
+    if (tech && (force || !tech.dataset.manual)) tech.value = activeJournalTechnique();
+    setJournalReasonOptions(tech?.value || activeJournalTechnique(), (force || !reason?.dataset.manual) ? activeJournalReason() : reason?.value);
+    updateJournalTouchesVisibility();
+    if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
+  }}
+  function journalScreenshotRange() {{
+    const idxs = [];
+    drawnObjects.forEach(obj => {{
+      [...(obj.x || []), obj.x0, obj.x1, obj.time, obj.date].filter(Boolean).forEach(t => {{
+        const row = ohlcByTime.get(String(t).slice(0, 10));
+        if (row && Number.isFinite(row.idx)) idxs.push(row.idx);
+      }});
+    }});
+    ['entry','stop_loss','check_zr_value_fibo_or_elevation','line_cross_value'].forEach(k => {{ if (levels[k] != null && ohlc.length) idxs.push(ohlc.length - 1); }});
+    if (selectedJournalTechnique() === 'Ichimoku' || levels.__show_ichimoku__) {{
+      ['tenkan','kijun','spanA','spanB','chikou'].forEach(k => (P.ichimoku?.[k] || []).forEach(pt => {{
+        const row = ohlcByTime.get(String(pt.time).slice(0, 10));
+        if (row && Number.isFinite(row.idx)) idxs.push(row.idx);
+      }}));
+    }}
+    if (!idxs.length) return null;
+    const pad = Math.max(24, Math.round(ohlc.length * ((selectedJournalTechnique() === 'Ichimoku' || levels.__show_ichimoku__) ? 0.12 : 0.07)));
+    return {{from: Math.max(0, Math.min(...idxs) - pad), to: Math.min(Math.max(ohlc.length - 1, 0) + 8, Math.max(...idxs) + pad)}};
+  }}
+  async function withZoomedJournalViewport(fn) {{
+    const ts = chart.timeScale();
+    const previous = ts.getVisibleLogicalRange ? ts.getVisibleLogicalRange() : null;
+    const range = journalScreenshotRange();
+    try {{
+      if (range && ts.setVisibleLogicalRange) ts.setVisibleLogicalRange(range);
+      else if (ts.fitContent) ts.fitContent();
+    }} catch(e) {{ console.warn('journal screenshot zoom failed', e); }}
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    try {{ return await fn(); }} finally {{ if (previous && ts.setVisibleLogicalRange) requestAnimationFrame(() => {{ try {{ ts.setVisibleLogicalRange(previous); }} catch(e) {{}} requestAnimationFrame(drawCloud); }}); }}
+  }}
+  async function captureJournalScreenshot(calcData=null) {{
+    return withZoomedJournalViewport(async () => {{
+      drawCloud();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      let base = null;
+      try {{ base = chart.takeScreenshot(true, false); }} catch(e) {{ base = null; }}
+      const overlay = $('cloud-overlay');
+      if (!base || !base.width || !base.height) return null;
+      const drawerHeight = calcData && calcData.ok ? 190 : 0;
+      const canvas = document.createElement('canvas');
+      canvas.width = base.width;
+      canvas.height = base.height + drawerHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(base, 0, 0);
+      if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
+      if (drawerHeight) {{
+        const y0 = base.height;
+        const b = calcData.basics || {{}};
+        const currency = calcData.currency || 'PLN';
+        const reasonText = $('journal-reason')?.selectedOptions?.[0]?.textContent || '';
+        const lines = [
+          ['Instrument', calcData.instrument_type || P.instrumentType || P.symbol],
+          ['Position', String(calcData.position_type || $('position-type').value || '').toUpperCase()],
+          ['Entry', Number.isFinite(Number(b.entry)) ? fmt(Number(b.entry)) : ''],
+          ['Stop loss', Number.isFinite(Number(b.stop_loss)) ? fmt(Number(b.stop_loss)) : ''],
+          ['Max capital', Number.isFinite(Number(b.max_capital)) ? money(b.max_capital, currency) : ''],
+          ['Setup', reasonText],
+          ['Risk/reward', calcData.risk_reward != null ? `${{numText(calcData.risk_reward, 2)}}:1` : ''],
+          ['Profit', calcData.profit != null ? `${{money(calcData.profit, currency)}} (${{numText(calcData.profit_percent, 2)}}%)` : '']
+        ].filter(([,v]) => v !== '');
+        const grad = ctx.createLinearGradient(0, y0, canvas.width, y0 + drawerHeight);
+        grad.addColorStop(0, '#071426'); grad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = grad; ctx.fillRect(0, y0, canvas.width, drawerHeight);
+        ctx.strokeStyle = '#38bdf8'; ctx.globalAlpha = .45; ctx.strokeRect(0.5, y0 + 0.5, canvas.width - 1, drawerHeight - 1); ctx.globalAlpha = 1;
+        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 20px Inter, Arial'; ctx.fillText('Position calculation', 18, y0 + 32);
+        ctx.font = '13px ui-monospace, Menlo, monospace';
+        lines.forEach(([k, v], i) => {{
+          const x = 18 + (i % 4) * Math.floor(canvas.width / 4);
+          const y = y0 + 62 + Math.floor(i / 4) * 46;
+          ctx.fillStyle = '#93c5fd'; ctx.fillText(String(k).toUpperCase(), x, y);
+          ctx.fillStyle = '#e5e7eb'; ctx.font = 'bold 15px ui-monospace, Menlo, monospace'; ctx.fillText(String(v).slice(0, 32), x, y + 20); ctx.font = '13px ui-monospace, Menlo, monospace';
+        }});
+      }}
+      return canvas.toDataURL('image/png');
+    }});
+  }}
+  function journalPayload() {{
+    autofillJournal(false);
+    const reasonText = $('journal-reason')?.selectedOptions?.[0]?.textContent || '';
+    const preview = [
+      'Instrument: ' + P.symbol,
+      'Technique: ' + (($('journal-technique') && $('journal-technique').value) || ''),
+      'Direction: ' + (($('position-type') && $('position-type').value) || ''),
+      'Amount: ' + (($('journal-amount') && $('journal-amount').value) || '') + ' ' + (($('journal-currency') && $('journal-currency').value) || 'PLN'),
+      'Entry: ' + (levels.entry || ''),
+      'Stop loss: ' + (levels.stop_loss || ''),
+      'Take profit/check: ' + (levels.check_zr_value_fibo_or_elevation || ''),
+      'Reason: ' + reasonText,
+      ...(reasonUsesTouches($('journal-reason')?.value) ? ['Touches: ' + (($('journal-touches') && $('journal-touches').value) || '')] : []),
+      '',
+      (($('journal-notes') && $('journal-notes').value) || '')
+    ].join('\\n');
+    if ($('journal-preview')) $('journal-preview').textContent = preview;
+    return {{
+      symbol: P.symbol,
+      sourceTicker: P.sourceTicker || '',
+      instrumentType: P.instrumentType || '',
+      technique: (($('journal-technique') && $('journal-technique').value) || ''),
+      direction: (($('position-type') && $('position-type').value) || ''),
+      amount: (($('journal-amount') && $('journal-amount').value) || ''),
+      amount_currency: (($('journal-currency') && $('journal-currency').value) || 'PLN'),
+      entry: levels.entry || '',
+      stop_loss: levels.stop_loss || '',
+      take_profit: levels.check_zr_value_fibo_or_elevation || '',
+      line_cross_value: levels.line_cross_value || '',
+      high: levels.high || '',
+      low: levels.low || '',
+      reason: (($('journal-reason') && $('journal-reason').value) || ''),
+      reason_label: reasonText,
+      pattern: reasonText,
+      touches: reasonUsesTouches($('journal-reason')?.value) ? (($('journal-touches') && $('journal-touches').value) || '') : '',
+      notes: (($('journal-notes') && $('journal-notes').value) || ''),
+      preview,
+      levels: collectLevelsForSave(false)
+    }};
+  }}
+  function bindJournal() {{
+    const toggle = $('journal-toggle-btn');
+    if (!toggle) return;
+    toggle.onclick = () => {{ const p = $('journal-panel'); const card = p?.closest('.manual-card'); const opening = p.style.display === 'none'; p.style.display = opening ? 'block' : 'none'; card?.classList.toggle('journal-open', opening); if (opening) autofillJournal(false); journalPayload(); }};
+    const closePanel = $('journal-close-panel');
+    if (closePanel) closePanel.onclick = () => {{ const p = $('journal-panel'); p.style.display = 'none'; p.closest('.manual-card')?.classList.remove('journal-open'); }};
+    ['journal-technique','journal-reason','journal-touches','journal-notes'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', () => {{ el.dataset.manual='1'; journalPayload(); }}); if(el) el.addEventListener('change', () => {{ el.dataset.manual='1'; if(id==='journal-technique') {{ const reason=$('journal-reason'); if (reason) delete reason.dataset.manual; setJournalReasonOptions(el.value, activeJournalReason()); }} updateJournalTouchesVisibility(); if(id==='journal-reason' && reasonUsesTouches(el.value) && $('journal-touches') && !$('journal-touches').dataset.manual) $('journal-touches').value = wedgeTouchCountText(); journalPayload(); }}); }});
+    ['journal-amount','position-type'].forEach(id => {{ const el=$(id); if(el) el.addEventListener('input', journalPayload); if(el) el.addEventListener('change', journalPayload); }});
+    document.querySelectorAll('#journal-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => {{ $('journal-currency').value = btn.dataset.currency || 'PLN'; document.querySelectorAll('#journal-currency-buttons button').forEach(b => b.classList.toggle('active', b === btn)); journalPayload(); }});
+    document.querySelector('#journal-currency-buttons button[data-currency="PLN"]')?.classList.add('active');
+    const save = $('journal-save-btn');
+    if (save) save.onclick = async () => {{
+      const calc = await calculatePosition(false);
+      if (calc && calc.ok) levels.position_calculations = calc;
+      autofillJournal(false);
+      const payload = journalPayload();
+      payload.screenshot = await captureJournalScreenshot(calc);
+      const resp = await fetch('/journal-entry', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload)}});
+      const data = await resp.json();
+      $('result-box').textContent = data.ok ? ('Journal saved: ' + data.id) : ('Journal save failed: ' + (data.error || resp.status));
+    }};
+  }}
 
   function collectLevelsForSave(finished=false) {{
     const stockCfdMode = !!levels.__stock_cfd_mode__;
@@ -2312,6 +2672,134 @@ class LightweightChartLevelSelectorUI:
     if (resp.ok) {{ $('result-box').textContent = 'Saved. Closing app...'; setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250); }}
   }};
 
+
+  function setupJournalCloseMode() {{
+    const cfg = levels || {{}};
+    if (!cfg.__journal_close_mode__) return;
+    document.body.classList.add('close-mode');
+    const soldInput = $('close-mode-price');
+    const entryInput = $('close-mode-entry');
+    const slInput = $('close-mode-stop-loss');
+    const directionInput = $('close-mode-direction');
+    const saveBtn = $('close-mode-save');
+    const statusEl = $('close-mode-status');
+    const first = ohlc[0]?.time, last = ohlc[ohlc.length - 1]?.time;
+    const asNum = (value, fallback=null) => {{ const n=Number(String(value ?? '').replace(',','.')); return Number.isFinite(n) ? n : fallback; }};
+    const latestClose = asNum(ohlc[ohlc.length - 1]?.close, 0);
+    const initialEntry = asNum(cfg.__journal_entry_price__ || cfg.entry, latestClose);
+    const initialSold = asNum(cfg.__journal_close_price__ || cfg.exit_price, latestClose);
+    const initialSl = asNum(cfg.__journal_stop_loss__ || cfg.stop_loss, null);
+    if (soldInput) soldInput.value = Number.isFinite(initialSold) ? initialSold : '';
+    if (entryInput) entryInput.value = Number.isFinite(initialEntry) ? initialEntry : '';
+    if (slInput) slInput.value = Number.isFinite(initialSl) ? initialSl : '';
+    if (directionInput) directionInput.value = (cfg.__journal_direction__ || cfg.direction || cfg.position_type || 'long') === 'short' ? 'short' : 'long';
+    let activeLine = 'sold';
+    let dragLine = null;
+    const lines = {{
+      sold: {{input:soldInput, color:'#22c55e', width:3, label:'SOLD', series:null, marker:null}},
+      entry: {{input:entryInput, color:'#60a5fa', width:2, label:'ENTRY', series:null, marker:null}},
+      sl: {{input:slInput, color:'#ef4444', width:2, label:'SL', series:null, marker:null}},
+    }};
+    Object.values(lines).forEach(line => {{
+      line.series = addLineSeries({{color:line.color, lineWidth:line.width, priceLineVisible:true, lastValueVisible:true, title:line.label, autoscaleInfoProvider:() => null}});
+      line.marker = addLineSeries({{color:line.color, lineWidth:1, priceLineVisible:false, lastValueVisible:false, title:'', autoscaleInfoProvider:() => null}});
+    }});
+    function linePrice(key) {{ return asNum(lines[key]?.input?.value, null); }}
+    function setActiveLine(key) {{
+      if (!lines[key]) return;
+      activeLine = key;
+      document.querySelectorAll('.close-line-control').forEach(el => el.classList.toggle('active', el.dataset.line === key));
+    }}
+    function lineStartTime(key, price) {{
+      if (!Array.isArray(ohlc) || !ohlc.length) return first;
+      let idx = Math.max(0, ohlc.length - 45);
+      for (let i = ohlc.length - 1; i >= 0; i--) {{
+        const row = ohlc[i] || {{}};
+        const hi = Number(row.high);
+        const lo = Number(row.low);
+        if (Number.isFinite(hi) && Number.isFinite(lo) && price >= Math.min(lo, hi) && price <= Math.max(lo, hi)) {{
+          idx = i;
+          break;
+        }}
+      }}
+      return ohlc[idx]?.time || first;
+    }}
+    function drawLine(key) {{
+      const line = lines[key];
+      const p = linePrice(key);
+      if (!line || !Number.isFinite(p) || !first || !last) return;
+      const startTime = lineStartTime(key, p);
+      line.series.setData(normalizeLineData([{{time:startTime,value:p}},{{time:last,value:p}}]));
+      line.marker.setData([{{time:last,value:p}}]);
+      try {{ line.marker.setMarkers([{{time:last, position:'inBar', color:line.color, shape:key==='sold'?'circle':'square', text:line.label+' @ '+fmt(p)}}]); }} catch(e) {{}}
+    }}
+    function drawAllLines() {{ Object.keys(lines).forEach(drawLine); }}
+    function setLineFromY(key, y) {{
+      let p = null;
+      try {{ p = candleSeries.coordinateToPrice ? candleSeries.coordinateToPrice(y) : chart.priceScale('right').coordinateToPrice(y); }} catch(e) {{ p = null; }}
+      if (Number.isFinite(Number(p)) && lines[key]?.input) {{ lines[key].input.value = fmt(Number(p)); drawLine(key); }}
+    }}
+    function lineY(key) {{
+      const p = linePrice(key);
+      if (!Number.isFinite(p)) return null;
+      try {{ return candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p) : chart.priceScale('right').priceToCoordinate(p); }} catch(e) {{ return null; }}
+    }}
+    function nearestLine(y) {{
+      let best=null, dist=Infinity;
+      Object.keys(lines).forEach(key => {{ const ly=lineY(key); if (Number.isFinite(ly)) {{ const d=Math.abs(ly-y); if (d<dist) {{ best=key; dist=d; }} }} }});
+      return dist <= 14 ? best : null;
+    }}
+    document.querySelectorAll('.close-line-control[data-line]').forEach(el => {{
+      el.addEventListener('pointerdown', () => setActiveLine(el.dataset.line));
+      el.addEventListener('click', () => setActiveLine(el.dataset.line));
+    }});
+    Object.entries(lines).forEach(([key,line]) => line.input?.addEventListener('input', () => {{ setActiveLine(key); drawLine(key); }}));
+    drawAllLines();
+    const wrap = $('chart-wrap');
+    wrap?.addEventListener('pointerdown', ev => {{
+      if (!document.body.classList.contains('close-mode') || ev.button !== 0) return;
+      const rect = wrap.getBoundingClientRect();
+      const hit = nearestLine(ev.clientY - rect.top);
+      if (!hit) return;
+      dragLine = hit;
+      setActiveLine(hit);
+      wrap.setPointerCapture?.(ev.pointerId);
+      ev.preventDefault();
+    }}, true);
+    wrap?.addEventListener('pointermove', ev => {{
+      if (!dragLine) return;
+      const rect = wrap.getBoundingClientRect();
+      setLineFromY(dragLine, ev.clientY - rect.top);
+      ev.preventDefault();
+    }}, true);
+    const endDrag = ev => {{ if (!dragLine) return; dragLine=null; wrap?.releasePointerCapture?.(ev.pointerId); }};
+    wrap?.addEventListener('pointerup', endDrag, true);
+    wrap?.addEventListener('pointercancel', endDrag, true);
+    chart.subscribeClick((param) => {{
+      if (!document.body.classList.contains('close-mode') || !param.point || dragLine) return;
+      setLineFromY(activeLine, Number(param.point.y));
+    }});
+    saveBtn.onclick = async () => {{
+      drawAllLines();
+      let screenshot = '';
+      try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{ console.warn('close screenshot failed', e); }}
+      const entry = linePrice('entry');
+      const sold = linePrice('sold');
+      let direction = String(directionInput?.value || cfg.__journal_direction__ || cfg.direction || cfg.position_type || '').toLowerCase();
+      if (direction !== 'short' && direction !== 'long') {{ const sl=linePrice('sl'); direction = Number.isFinite(sl) && Number.isFinite(entry) && sl > entry ? 'short' : 'long'; }}
+      const outcome = Number.isFinite(entry) && Number.isFinite(sold) ? ((direction === 'short' ? sold <= entry : sold >= entry) ? 'profit' : 'loss') : 'closed';
+      const resp = await fetch('/journal-close-from-chart', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{id:cfg.__journal_entry_id__ || '', outcome, direction, entry:entryInput?.value || '', exit_price:soldInput?.value || '', stop_loss:slInput?.value || '', screenshot}})}});
+      const data = await resp.json().catch(()=>({{ok:false}}));
+      const msg = data.ok ? 'Closing screenshot saved. Closing chart...' : ('Closing screenshot failed: '+(data.error||resp.status));
+      if (statusEl) statusEl.textContent = msg;
+      if ($('result-box')) $('result-box').textContent = msg;
+      if (data.ok) setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 550);
+    }};
+    requestAnimationFrame(() => {{ try {{ chart.timeScale().fitContent(); }} catch(e) {{}} resizeChartToContainer(); }});
+  }}
+  setupJournalCloseMode();
+
+  bindJournal();
   setInterval(() => fetch('/heartbeat', {{method:'POST', keepalive:true}}).catch(()=>{{}}), 1000);
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
@@ -2475,6 +2963,39 @@ class LightweightChartLevelSelectorUI:
             payload = request.get_json(silent=True) or {}
             levels = payload.get("levels") or {}
             return jsonify(self._position_calculation_payload(levels))
+
+        @app.route("/journal-entry", methods=["POST"])
+        def _journal_entry():
+            payload = request.get_json(silent=True) or {}
+            try:
+                from journal import save_entry
+                entry = save_entry(payload)
+                return jsonify({"ok": True, "id": entry.get("id")})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/journal-close-from-chart", methods=["POST"])
+        def _journal_close_from_chart():
+            payload = request.get_json(silent=True) or {}
+            try:
+                from journal import close_entry, update_entry
+                entry_id = str(payload.get("id") or "")
+                if payload.get("entry") not in (None, ""):
+                    update_entry(entry_id, {"entry": str(payload.get("entry") or ""), "direction": str(payload.get("direction") or "")})
+                entry = close_entry(
+                    entry_id,
+                    str(payload.get("outcome") or "closed"),
+                    "",
+                    str(payload.get("exit_price") or ""),
+                    str(payload.get("screenshot") or ""),
+                    "manual",
+                    "",
+                    str(payload.get("stop_loss") or ""),
+                    str(payload.get("direction") or ""),
+                )
+                return jsonify({"ok": bool(entry), "entry": entry})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
 
         @app.route("/finish", methods=["POST"])
         def _finish():

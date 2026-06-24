@@ -91,6 +91,12 @@ def _parse_args(raw_args=None):
     parser.add_argument("--wedge-lower-start")
     parser.add_argument("--wedge-lower-end")
     parser.add_argument("--wedge-right", action="store_true")
+    parser.add_argument("--journal-close-mode", action="store_true")
+    parser.add_argument("--journal-entry-id")
+    parser.add_argument("--journal-entry-price")
+    parser.add_argument("--journal-direction", choices=["long", "short"])
+    parser.add_argument("--journal-close-price")
+    parser.add_argument("--journal-stop-loss")
     return parser.parse_args(raw_args)
 
 
@@ -125,7 +131,16 @@ def _load_session_state(config_path: Path) -> dict:
 def _save_session_state(config_path: Path, values: dict):
     path = _session_path(config_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    safe = {k: v for k, v in (values or {}).items() if k != "__finished__"}
+    transient_keys = {
+        "__finished__",
+        "__journal_close_mode__",
+        "__journal_entry_id__",
+        "__journal_entry_price__",
+        "__journal_direction__",
+        "__journal_close_price__",
+        "__journal_stop_loss__",
+    }
+    safe = {k: v for k, v in (values or {}).items() if k not in transient_keys}
     path.write_text(json.dumps(safe, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
 
@@ -517,6 +532,12 @@ def run_level_selector(raw_args=None):
         else:
             os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
+    if args.wedge_lines:
+        existing["__journal_source_technique__"] = "Kliny"
+    elif args.fibo_lines:
+        existing["__journal_source_technique__"] = "Fibo"
+    elif args.ichimoku_mode == "on":
+        existing["__journal_source_technique__"] = "Ichimoku"
 
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
     df = _trim_chart_window(df, max_days=548)
@@ -849,6 +870,25 @@ def run_level_selector(raw_args=None):
             pass
         existing["pip_value"] = 1.0
         existing.setdefault("spread_multiplier", 0.0)
+
+    journal_close_keys = [
+        '__journal_close_mode__',
+        '__journal_entry_id__',
+        '__journal_entry_price__',
+        '__journal_direction__',
+        '__journal_close_price__',
+        '__journal_stop_loss__',
+    ]
+    if args.journal_close_mode:
+        existing['__journal_close_mode__'] = True
+        existing['__journal_entry_id__'] = args.journal_entry_id or ''
+        existing['__journal_entry_price__'] = args.journal_entry_price or existing.get('entry', '')
+        existing['__journal_direction__'] = args.journal_direction or existing.get('direction') or existing.get('position_type', '')
+        existing['__journal_close_price__'] = args.journal_close_price or ''
+        existing['__journal_stop_loss__'] = args.journal_stop_loss or existing.get('stop_loss', '')
+    else:
+        for key in journal_close_keys:
+            existing.pop(key, None)
 
     display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
 

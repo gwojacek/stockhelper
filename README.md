@@ -9,8 +9,9 @@ It helps you:
 - download/cache daily market data from Stooq, Yahoo Finance, and Stooq web/table fallbacks;
 - scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations with improved 5.0 anchor scoring and alternate-wedge review;
 - generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists plus a dedicated Kliny tab from the latest allsearch data;
-- open an interactive chart tool, select price levels, inspect/import/edit wedge lines, save/update config files, and export chart snapshots;
-- generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, and chart images.
+- open an interactive chart tool, select price levels, inspect/import/edit wedge lines, save/update config files, export chart snapshots, and create transaction journal entries;
+- review a local transaction journal with opening/closing screenshots, close-adjust chart mode, estimated P/L, and update/delete actions;
+- generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, journal HTML, and chart images.
 
 The project is practical and config-driven: most workflows start from a ticker/config slug, write reusable files under `configs/`, cache market data under `data/`, and save reports under `chart_program/data/`.
 
@@ -27,6 +28,8 @@ Use this table as the fastest path to the commands you will run most often. Deta
 | Open chart editor | `python run -c ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
 | Open chart with Ichimoku | `python run -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
 | Open stock as CFD | `python run -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
+| Open transaction journal | `python run --journal-html` | Opens the live journal HTML served by the local report server so update/delete/close buttons work. |
+| Prepare PDF journal | `python run --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
 | Run Ichimoku scan | `python run -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
 | Run Fibonacci scan | `python run -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
 | Build combined report | `python run -allsearch all` | Runs scanners and creates combined Markdown/HTML reports plus embedded 3P and Kliny tabs. |
@@ -60,12 +63,14 @@ Use this table as the fastest path to the commands you will run most often. Deta
 - **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
-- **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, and chart snapshots.
+- **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
+- **Transaction journal** stored locally under `data/journal/`, with opening screenshots, close-adjust chart screenshots, Trade Summary autosave, long/short direction, estimated profit/loss, compressed review mode, year filtering, delete/update/close actions, and PDF-friendly HTML output.
 - **Reports and artifacts**:
   - Markdown scanner reports in `chart_program/data/search/ichimoku/` and `chart_program/data/search/fibo/`;
   - Trójpolówki Markdown watchlists in `Trojpolowki/fibo.md` and `Trojpolowki/ichimoku.md`;
   - combined Markdown/HTML scanner reports in `chart_program/data/all_insturments_search/allsearch/`;
   - chart snapshots in `charts/`;
+  - transaction journal JSON/HTML/screenshots in `data/journal/`;
   - manual/session state in `data/state/sessions/`;
   - Stooq debug JSON/HTML/screenshots in `debug/stooq/`.
 - **CAPTCHA/rate-limit support** for Stooq web and bulk-download fallback, including OCR attempts, saved artifacts, and optional Playwright inspector/manual mode.
@@ -90,7 +95,7 @@ stockhelper/
 ├── chart_program/              # Interactive chart UI and config writer
 ├── Trojpolowki/                # Generated compact 3P Fibo/Ichimoku watchlists
 ├── utilities/                  # Stooq/Yahoo/report/debug helpers
-├── data/                       # Cached market data and chart sessions
+├── data/                       # Cached market data, chart sessions, and transaction journal
 └── charts/                     # Generated chart snapshots
 ```
 
@@ -311,6 +316,8 @@ python run -c ena
 - Opens the TradingView Lightweight Charts UI in your browser.
 - Loads cached data first, with data provider fallback support.
 - Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects; the active level can be cleared from the sidebar.
+- Includes a **Transaction journal** button for saving the current setup, selected technique/reason, transaction amount/currency, notes, calculated context, and chart screenshot.
+- When launched from the journal for closing a trade, the chart opens in a focused close-adjust mode where only ENTRY, SOLD, and SL lines are edited before saving the closing screenshot back into the journal.
 - Stock charts include a CFD mode toggle; `python run -c AAPL.US cfd` opens the same symbol directly with CFD sizing inputs enabled. Stock CFDs use lot/deposit cost plus spread entered as price units with pips shown as `spread / 0.01`, so no separate pip-value field is required.
 - Saves a config and chart snapshot when you click **Finish**.
 
@@ -324,6 +331,27 @@ python run -c ena
 - Chart snapshot: `charts/<config>_levels.png`.
 - Session state: `data/state/sessions/<config>.json`.
 - Cached market data: `data/<group>/<symbol>.csv`.
+
+### 3a. Use the transaction journal
+
+```bash
+python run --journal-html
+python run --journal-pdf
+```
+
+**Description:**
+
+- `python run --journal-html` writes `data/journal/transactions.html` and opens it through the local report server when possible. Use this served URL for update/delete/close buttons; opening the file directly is read-only for browser security.
+- Journal entries are created from the chart sidebar with **Add journal entry** and stored in `data/journal/transactions.json`. Screenshots are stored in `data/journal/screenshots/`.
+- The journal supports editable Trade Summary fields, manual notes, compressed mode, year filtering, bulk delete, and closing entries with profit/loss estimation from entry, sold price, and long/short direction.
+- To capture a closing screenshot, open the close-adjust chart from a journal entry, adjust ENTRY/SOLD/SL lines, and accept the screenshot. This special chart mode is only for journal closing; normal `python run -c <symbol>` chart sessions keep all normal chart features.
+- `python run --journal-pdf` opens the same journal view and reminds you to use the PDF/download/print flow.
+
+**Output files created/updated:**
+
+- Journal JSON: `data/journal/transactions.json`.
+- Journal HTML: `data/journal/transactions.html`.
+- Journal screenshots: `data/journal/screenshots/*.png`.
 
 **Common variants:**
 
@@ -443,6 +471,7 @@ python run -allsearch all
 - Embeds four HTML tabs: `ALLSEARCH REPORT`, `3P FIBO`, `3P ICHIMOKU`, and `🔻 Kliny`.
 - Adds top-choice sections, sortable/filterable tables, group Stooq-open buttons, StockHelper chart-open buttons, and a PDF export button that works from every tab.
 - Opens/serves the HTML report via the local report server when possible.
+- Includes an **Open journal** button that runs `python run --journal-html` in a separate served window; the journal is separate from scanner result generation and does not remove instruments from the scanner report.
 
 **When to use it:**
 
