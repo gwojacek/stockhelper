@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v13"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v14"
 
 
 def main() -> int:

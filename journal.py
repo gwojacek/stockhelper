@@ -218,7 +218,7 @@ def _row(entry: dict[str, Any], number: int = 1) -> str:
         f"<div class='kv'><span>Auto context</span><b>{e(entry.get('technique'))} / {e(reason)}</b></div>",
         f"<div class='kv'><span>Exit reason</span><b>{e(entry.get('exit_reason'))}</b></div>",
         "</section>", review,
-        f"<section class='panel notes'><div class='panel-head'>📄 Notes <button class='mini-update noprint' type='button' onclick='updateJournalEntry(this)'>Modify</button></div><pre>{e(entry.get('notes'))}</pre></section>",
+        f"<section class='panel notes'><div class='panel-head'>📄 Notes <span class='autosave-label noprint'>autosaves</span></div><textarea class='edit-notes autosave-notes' data-id='{eid}' rows='8' placeholder='Notes'>{e(entry.get('notes'))}</textarea></section>",
         f"<div class='edit noprint' data-id='{eid}' style='display:none'>"
         f"<input class='edit-amount' value='{e(entry.get('amount'))}'><input class='edit-entry' value='{e(entry.get('entry'))}'>"
         f"<input class='edit-reason' value='{e(reason)}'><input class='edit-touches' value='{e(entry.get('touches'))}'>"
@@ -241,11 +241,32 @@ def html_fragment(entries: list[dict[str, Any]] | None = None) -> str:
     return "\n".join(card_parts) or "<div class='empty'>No journal entries yet. Open ./run --journal-html for the live journal view.</div>"
 
 
+def _stats_section(entries: list[dict[str, Any]]) -> str:
+    total = len(entries)
+    closed = sum(1 for e in entries if str(e.get("status") or "").lower() == "closed")
+    open_count = total - closed
+    profit = sum(1 for e in entries if str(e.get("outcome") or "").lower() == "profit")
+    loss = sum(1 for e in entries if str(e.get("outcome") or "").lower() == "loss")
+    estimated_total = 0.0
+    for entry in entries:
+        value = entry.get("estimated_pl")
+        if value in (None, ""):
+            value = _estimate_pl(entry)
+        num = _num(value)
+        if num is not None:
+            estimated_total += num
+    cells = [("Transactions", total), ("Open", open_count), ("Closed", closed), ("Profit", profit), ("Loss", loss), ("Estimated P/L", round(estimated_total, 2))]
+    return "<section class='stats noprint'>" + "".join(
+        f"<div class='stat'><span>{html.escape(label)}</span><b>{html.escape(str(value))}</b></div>" for label, value in cells
+    ) + "</section>"
+
+
 def html_document(entries: list[dict[str, Any]] | None = None) -> str:
     entries = entries if entries is not None else load_entries()
     years = sorted({_entry_year(e) for e in entries}, reverse=True)
     options = "".join(f"<option value='{html.escape(y)}'>{html.escape(y)}</option>" for y in years)
     cards = html_fragment(entries)
+    stats = _stats_section(entries)
     return f"""<!doctype html><html><head><meta charset='utf-8'><title>StockHelper Transaction Journal</title>
 <style>
 :root{{--bg:#f7fbff;--card:#fff;--ink:#10213d;--muted:#64748b;--line:#cbdff5;--blue:#1476f2;--danger:#ef233c}}
@@ -259,9 +280,10 @@ body{{max-width:none;background:radial-gradient(circle at 18% 0,rgba(59,130,246,
 /* final layout width/screenshot fixes */
 body{{padding:18px 20px}}.shell{{width:calc(100vw - 40px);max-width:none;margin:0 auto}}.card-grid{{grid-template-columns:minmax(360px,.95fr) minmax(360px,1fr) minmax(360px,.95fr);gap:16px}}.screens{{grid-column:1 / -1}}.screens .thumb{{width:100%;max-height:640px;min-height:360px;object-fit:contain}}.notes{{grid-column:auto;display:block}}.notes pre{{min-height:250px}}.edit{{grid-column:1 / -1}}.journal-card{{margin-bottom:32px}}@media(max-width:1280px){{.card-grid{{grid-template-columns:1fr}}.screens,.notes,.edit{{grid-column:auto}}.screens .thumb{{min-height:220px}}}}
 
-.toolbar .btn-danger{{border-color:#ef4444;color:#fecaca}}.mini-update{{margin-left:auto;padding:6px 10px;border-radius:999px;border:1px solid rgba(96,165,250,.35);background:rgba(15,23,42,.62);color:#dbeafe;cursor:pointer}}.bulk{{margin:0 10px 0 0;display:flex;align-items:center}}.bulk input{{width:18px;height:18px;accent-color:#38bdf8}}.estimated-pl.positive{{color:#86efac}}.estimated-pl.negative{{color:#fecaca}}body.compressed .screens,body.compressed .review,body.compressed .notes{{display:none}}body.compressed .journal-card{{margin-bottom:16px}}.facts{{order:2}}.review{{order:1}}.notes{{order:3}}.edit{{order:4}}
+.stats{{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;margin:0 0 24px}}.stat{{padding:14px 16px;border:1px solid rgba(96,165,250,.28);border-radius:16px;background:linear-gradient(135deg,rgba(30,41,59,.72),rgba(15,23,42,.74));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}}.stat span{{display:block;color:#93a4bd;text-transform:uppercase;font-size:11px;font-weight:900;letter-spacing:.08em}}.stat b{{display:block;margin-top:6px;font-size:22px;color:#f8fafc}}@media(max-width:900px){{.stats{{grid-template-columns:repeat(2,1fr)}}}}.toolbar .btn-danger{{border-color:#ef4444;color:#fecaca}}.mini-update{{margin-left:auto;padding:6px 10px;border-radius:999px;border:1px solid rgba(96,165,250,.35);background:rgba(15,23,42,.62);color:#dbeafe;cursor:pointer}}.bulk{{margin:0 10px 0 0;display:flex;align-items:center}}.bulk input{{width:18px;height:18px;accent-color:#38bdf8}}.autosave-label{{margin-left:auto;color:#93c5fd;font-size:12px;text-transform:uppercase;letter-spacing:.08em}}.notes textarea.autosave-notes{{width:100%;min-height:250px}}.estimated-pl.positive{{color:#86efac}}.estimated-pl.negative{{color:#fecaca}}body.compressed .screens,body.compressed .review,body.compressed .notes{{display:none}}body.compressed .journal-card{{margin-bottom:16px}}.facts{{order:2}}.review{{order:1}}.notes{{order:3}}.edit{{order:4}}
 </style></head><body><div class='shell'>
 <div class='top'><div><h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p></div><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='toggleCompressed()'>Compress all</button><button class='btn btn-danger' onclick='bulkDelete(false)'>Delete selected</button><button class='btn btn-danger' onclick='bulkDelete(true)'>Delete all</button><button class='btn' onclick='window.print()'>📄 Download PDF</button></div></div>
+{stats}
 {cards}</div><div id='toast' class='toast'></div>
 <script>
 function toast(msg){{const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2600);}}
@@ -272,7 +294,11 @@ document.addEventListener('input',e=>{{if(e.target.classList.contains('exit-pric
 function updateSummary(card,entry){{if(!card||!entry)return;const est=card.querySelector('.estimated-pl');if(est&&entry.estimated_pl!==undefined&&entry.estimated_pl!==null){{est.textContent=entry.estimated_pl;est.classList.toggle('positive',Number(entry.estimated_pl)>=0);est.classList.toggle('negative',Number(entry.estimated_pl)<0);}}const st=card.querySelector('header .status');if(st){{const out=(entry.outcome||'pending').toLowerCase();st.textContent=(out==='profit'?'🟢 ':out==='loss'?'🔴 ':'🟡 ')+(entry.status==='closed'?'completed · '+out:out);st.className='status '+(entry.status||'')+' '+out;}}card.classList.toggle('closed',entry.status==='closed');card.classList.toggle('profit',(entry.outcome||'').toLowerCase()==='profit');card.classList.toggle('loss',(entry.outcome||'').toLowerCase()==='loss');card.querySelector('.facts')?.classList.toggle('completed-summary',entry.status==='closed');}}
 function updateJournalEntry(btn){{const card=btn.closest('.journal-card');const box=btn.closest('.edit')||card?.querySelector('.edit');if(!box)return;const payload={{id:box.dataset.id,amount:box.querySelector('.edit-amount').value,entry:box.querySelector('.edit-entry').value,reason_label:box.querySelector('.edit-reason').value,touches:box.querySelector('.edit-touches').value,notes:box.querySelector('.edit-notes').value}};api('/journal-update',payload).then(d=>{{if(d.ok){{updateSummary(card,d.entry);toast('Updated');}}else toast('Update failed');}});}}
 function deleteJournalEntry(btn){{const card=btn.closest('.journal-card');const box=btn.closest('.edit')||card?.querySelector('.edit');if(!box||!confirm('Delete this journal entry?'))return;api('/journal-delete',{{id:box.dataset.id}}).then(d=>{{if(d.ok){{card.remove();toast('Deleted');}}else toast('Delete failed');}});}}
-function closeJournalEntry(btn){{const box=btn.closest('.review');if(!box)return;const card=btn.closest('.journal-card');const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};const preview=box.querySelector('.preview');if(preview)preview.textContent=payload.outcome+' @ '+payload.exit_price+'\\nreason: '+payload.exit_reason+'\\nSL moves: '+payload.stop_loss_moves+'\\n'+payload.notes;api('/journal-close',payload).then(d=>{{if(d.ok){{updateSummary(card,d.entry);toast('Position closed');}}else toast('Review failed');}});}}
+async function captureCloseScreenshot(card,payload){{const img=card?.querySelector('.screens .thumb');if(!img)return '';try{{await img.decode?.();const canvas=document.createElement('canvas');canvas.width=img.naturalWidth||img.width;canvas.height=img.naturalHeight||img.height;const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);const label='CLOSE '+(payload.outcome||'')+' @ '+(payload.exit_price||'--');ctx.fillStyle='rgba(2,6,23,.82)';ctx.fillRect(0,0,Math.min(canvas.width,520),56);ctx.fillStyle=payload.outcome==='loss'?'#fecaca':'#86efac';ctx.font='bold 28px Arial';ctx.fillText(label,18,37);ctx.strokeStyle=payload.outcome==='loss'?'#ef4444':'#22c55e';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(0,Math.round(canvas.height*.50));ctx.lineTo(canvas.width,Math.round(canvas.height*.50));ctx.stroke();return canvas.toDataURL('image/png');}}catch(e){{console.warn('close screenshot failed',e);return '';}}}}
+async function closeJournalEntry(btn){{const box=btn.closest('.review');if(!box)return;const card=btn.closest('.journal-card');const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};payload.screenshot=await captureCloseScreenshot(card,payload);const preview=box.querySelector('.preview');if(preview)preview.textContent=payload.outcome+' @ '+payload.exit_price+'\\nreason: '+payload.exit_reason+'\\nSL moves: '+payload.stop_loss_moves+'\\n'+payload.notes;api('/journal-close',payload).then(d=>{{if(d.ok){{updateSummary(card,d.entry);toast('Position closed — refreshing journal');setTimeout(()=>location.reload(),700);}}else toast('Review failed');}});}}
+function debounce(fn,ms){{let t;return (...args)=>{{clearTimeout(t);t=setTimeout(()=>fn(...args),ms);}}}}
+const autosaveNotes=debounce((el)=>{{api('/journal-update',{{id:el.dataset.id,notes:el.value}}).then(d=>{{if(d.ok){{const hidden=el.closest('.journal-card')?.querySelector('.edit .edit-notes');if(hidden)hidden.value=el.value;toast('Notes saved');}}else toast('Notes save failed');}});}},700);
+document.addEventListener('input',e=>{{if(e.target.classList.contains('autosave-notes'))autosaveNotes(e.target);}});
 function toggleCompressed(){{document.body.classList.toggle('compressed');document.querySelectorAll('details').forEach(d=>d.open=false);}}
 function selectedIds(all){{return all?[...document.querySelectorAll('.bulk-select')].map(x=>x.value):[...document.querySelectorAll('.bulk-select:checked')].map(x=>x.value);}}
 async function bulkDelete(all){{const ids=selectedIds(all);if(!ids.length){{toast('No entries selected');return;}}if(!confirm((all?'Delete ALL':'Delete selected')+' journal entries?'))return;let ok=0;for(const id of ids){{const d=await api('/journal-delete',{{id}});if(d.ok){{document.querySelector(`.bulk-select[value="${{id}}"]`)?.closest('.journal-card')?.remove();ok++;}}}}toast('Deleted '+ok+' entr'+(ok===1?'y':'ies'));}}
