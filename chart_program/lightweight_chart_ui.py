@@ -538,14 +538,17 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:9px;width:100%;padding:12px 14px;color:white;border:none;border-radius:16px;font-size:16px;font-weight:900;letter-spacing:-.01em;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:12px; }} .side-action-btn .btn-icon {{ width:34px;height:34px;border-radius:10px;display:inline-grid;place-items:center;background:rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.12);font-size:19px; }}
+    .side-action-btn {{ margin-top:9px;width:100%;padding:12px 14px;color:white;border:none;border-radius:16px;font-size:16px;font-weight:900;letter-spacing:-.01em;line-height:1.15;text-align:center;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px; }} .side-action-btn .btn-icon {{ width:36px;height:36px;border-radius:12px;display:inline-grid;place-items:center;background:rgba(255,255,255,.13);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 18px rgba(0,0,0,.18);font-size:20px; }}
     .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }} .action-grid.no-wedge {{ grid-template-columns:1fr; }} .action-grid.no-wedge #journal-toggle-btn {{ min-height:58px; }}
     .action-grid .side-action-btn {{ min-height:52px; }}
-    #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#18b572,#2dd4bf) !important; border:1px solid rgba(94,234,212,.75); box-shadow:0 16px 32px rgba(45,212,191,.22); }}
-    #calculate-btn::after {{ content:'›'; margin-left:auto; font-size:28px; line-height:1; }}
-    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.62),rgba(30,41,59,.78)) !important; border:1px solid #a78bfa; }}
-    #journal-toggle-btn {{ background:linear-gradient(135deg,rgba(120,53,15,.62),rgba(30,41,59,.78)) !important; border:1px solid #fdba74; }}
-    #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; }}
+    #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#0f766e,#22c55e) !important; border:1px solid rgba(134,239,172,.80); box-shadow:0 16px 34px rgba(34,197,94,.24), inset 0 1px 0 rgba(255,255,255,.14); }}
+    #calculate-btn .btn-icon {{ background:rgba(220,252,231,.18); color:#dcfce7; }}
+    #calculate-btn::after {{ content:none; }}
+    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
+    #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; min-height:66px; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
+    #finish-btn .btn-icon {{ background:rgba(219,234,254,.18); color:#dbeafe; }}
     #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
     #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
