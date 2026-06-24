@@ -526,14 +526,14 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:9px;width:100%;padding:10px 12px;color:white;border:none;border-radius:14px;font-size:14px;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:9px; }}
+    .side-action-btn {{ margin-top:9px;width:100%;padding:12px 14px;color:white;border:none;border-radius:16px;font-size:16px;font-weight:900;letter-spacing:-.01em;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;gap:12px; }} .side-action-btn .btn-icon {{ width:34px;height:34px;border-radius:10px;display:inline-grid;place-items:center;background:rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.12);font-size:19px; }}
     .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }} .action-grid.no-wedge {{ grid-template-columns:1fr; }} .action-grid.no-wedge #journal-toggle-btn {{ min-height:58px; }}
     .action-grid .side-action-btn {{ min-height:52px; }}
-    #calculate-btn {{ min-height:54px; background:linear-gradient(135deg,#18b572,#2dd4bf) !important; border:1px solid rgba(94,234,212,.75); box-shadow:0 16px 32px rgba(45,212,191,.22); font-size:17px; }}
+    #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#18b572,#2dd4bf) !important; border:1px solid rgba(94,234,212,.75); box-shadow:0 16px 32px rgba(45,212,191,.22); }}
     #calculate-btn::after {{ content:'›'; margin-left:auto; font-size:28px; line-height:1; }}
     #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.62),rgba(30,41,59,.78)) !important; border:1px solid #a78bfa; }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,rgba(120,53,15,.62),rgba(30,41,59,.78)) !important; border:1px solid #fdba74; }}
-    #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; font-size:16px; }}
+    #finish-btn {{ background:linear-gradient(135deg,#0759d1,#0b75ff) !important; border:1px solid #60a5fa; min-height:58px; }}
     #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
     #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
@@ -639,12 +639,12 @@ class LightweightChartLevelSelectorUI:
         <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
         <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
         <button id="delete-object" style="display:none">Delete selected object</button>
-        <button id="calculate-btn" class="side-action-btn">▦ Calculate position</button>
+        <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span>Calculate position</span></button>
         <div class="action-grid">
-          <button id="wedge-debug-btn" class="side-action-btn">ⓘ Wedge information</button>
-          <button id="journal-toggle-btn" class="side-action-btn">▤ Add journal entry</button>
+          <button id="wedge-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Wedge information</span></button>
+          <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
         </div>
-        <button id="finish-btn" class="side-action-btn">▣ Save &amp; Close</button>
+        <button id="finish-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save &amp; Close</span></button>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
           <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>

@@ -2150,7 +2150,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             'Open transaction journal</button>'
         )
         return (
-            "<section class='market'><h2>🧾 Played instruments</h2>"
+            "<section class='market'><h2>🧾 Open journal</h2>"
             "<p class='muted'>Open the live transaction journal in its own served window.</p>"
             + button +
             f"<p class='muted'><code>{html.escape(cmd)}</code></p></section>"
