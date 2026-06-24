@@ -494,6 +494,7 @@ def main() -> int:
                         str(payload.get("screenshot") or ""),
                         str(payload.get("exit_reason") or ""),
                         str(payload.get("stop_loss_moves") or ""),
+                        str(payload.get("stop_loss") or ""),
                     )
                     self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry), "entry": entry}).encode("utf-8"))
                 except Exception as exc:
