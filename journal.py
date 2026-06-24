@@ -197,39 +197,31 @@ def _row(entry: dict[str, Any], number: int = 1) -> str:
         f"<div><div class='section-title'>Stop loss moves count</div><input class='stop-loss-moves' placeholder='0' value='{e(entry.get('stop_loss_moves'))}'></div></div>"
         f"<div class='section-title'>Review notes</div><textarea class='notes' rows='4' placeholder='Review notes'>{e(entry.get('review_notes'))}</textarea>"
         f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div><div class='kv'><span>Close Price</span><b class='js-close-price'>{e(entry.get('exit_price') or '--')}</b></div><div class='kv'><span>Setup</span><b>{e(reason)}</b></div>"
-        "<pre class='preview'></pre><button class='btn btn-outline' type='button' onclick='closeJournalEntry(this)'>💾 Save Review</button>"
+        "<pre class='preview'></pre><button class='btn btn-outline' type='button' onclick='closeJournalEntry(this)'>✅ Close position</button>"
     )
     if ended:
         review = f"<details class='panel review noprint collapsed-review' data-id='{eid}'><summary>✎ Trade / Review (completed)</summary>{review_inner}</details>"
     else:
         review = f"<section class='panel review noprint' data-id='{eid}'><div class='panel-head'>✎ Trade / Review</div>{review_inner}</section>"
-    edit = (
-        f"<details class='panel edit noprint' data-id='{eid}'>"
-        "<summary>⚙ Modify entry <span>(optional)</span></summary>"
-        f"<div class='edit-grid'><label>Amount<input class='edit-amount' placeholder='amount' value='{e(entry.get('amount'))}'></label>"
-        f"<label>Entry price<input class='edit-entry' placeholder='entry' value='{e(entry.get('entry'))}'></label>"
-        f"<label>Reason<input class='edit-reason' placeholder='reason' value='{e(reason)}'></label>"
-        f"<label>Touches<input class='edit-touches' placeholder='touches' value='{e(entry.get('touches'))}'></label></div>"
-        f"<textarea class='edit-notes' rows='3' placeholder='notes'>{e(entry.get('notes'))}</textarea>"
-        "<div class='actions'><button class='btn btn-primary' type='button' onclick='updateJournalEntry(this)'>↻ Update</button>"
-        "<button class='btn btn-danger' type='button' onclick='deleteJournalEntry(this)'>🗑 Delete</button></div></details>"
-    )
     return "".join([
         f"<article class='journal-card {e(status)} {e(outcome)}' data-year='{e(_entry_year(entry))}'>",
-        f"<header><div class='badge'>#{number}</div><div><h2>{e(entry.get('symbol') or entry.get('instrument'))}</h2><p>{e(_clean_date(entry.get('created_at')))} · {e(entry.get('technique'))} · {e(entry.get('direction'))}</p></div><span class='status {e(status)} {e(outcome)}'>{outcome_dot} {e(status_text)}</span></header>",
+        f"<header><label class='bulk noprint'><input type='checkbox' class='bulk-select' value='{eid}'></label><div class='badge'>#{number}</div><div><h2>{e(entry.get('symbol') or entry.get('instrument'))}</h2><p>{e(_clean_date(entry.get('created_at')))} · {e(entry.get('technique'))} · {e(entry.get('direction'))}</p></div><span class='status {e(status)} {e(outcome)}'>{outcome_dot} {e(status_text)}</span></header>",
         "<div class='card-grid'><section class='panel screens'><div class='panel-head'>▧ Chart</div>", thumb_html, close_thumb, "</section>",
-        f"<section class='panel facts {'completed-summary' if ended else ''}'><div class='panel-head'>✅ Trade Summary <span>{e(status_text)}</span></div>",
+        f"<section class='panel facts {'completed-summary' if ended else ''}'><div class='panel-head'>✅ Trade Summary <span>{e(status_text)}</span><button class='mini-update noprint' type='button' onclick='updateJournalEntry(this)'>Modify</button></div>",
         f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div>",
         f"<div class='kv'><span>Buy / Entry</span><b>{e(entry.get('entry'))}</b></div>",
         f"<div class='kv'><span>Sold / Close</span><b>{e(entry.get('exit_price') or '--')}</b></div>",
-        f"<div class='kv'><span>Estimated P/L</span><b>{e(estimated or '--')}</b></div>",
+        f"<div class='kv'><span>Estimated P/L</span><b class='estimated-pl'>{e(estimated or '--')}</b></div>",
         f"<div class='kv'><span>Stop loss</span><b>{e(entry.get('stop_loss'))}</b></div>",
         f"<div class='kv'><span>Reason</span><b>{e(reason)}</b></div>",
         f"<div class='kv'><span>Touches</span><b>{e(entry.get('touches'))}</b></div>",
         f"<div class='kv'><span>Exit reason</span><b>{e(entry.get('exit_reason'))}</b></div>",
         "</section>", review,
-        f"<section class='panel notes'><div class='panel-head'>📄 Auto Context / Notes</div><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></section>",
-        edit,
+        f"<section class='panel notes'><div class='panel-head'>📄 Auto Context / Notes <button class='mini-update noprint' type='button' onclick='updateJournalEntry(this)'>Modify</button></div><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></section>",
+        f"<div class='edit noprint' data-id='{eid}' style='display:none'>"
+        f"<input class='edit-amount' value='{e(entry.get('amount'))}'><input class='edit-entry' value='{e(entry.get('entry'))}'>"
+        f"<input class='edit-reason' value='{e(reason)}'><input class='edit-touches' value='{e(entry.get('touches'))}'>"
+        f"<textarea class='edit-notes'>{e(entry.get('notes'))}</textarea></div>",
         "</div></article>",
     ])
 
@@ -265,8 +257,10 @@ body{{max-width:none;background:radial-gradient(circle at 18% 0,rgba(59,130,246,
 
 /* final layout width/screenshot fixes */
 body{{padding:18px 20px}}.shell{{width:calc(100vw - 40px);max-width:none;margin:0 auto}}.card-grid{{grid-template-columns:minmax(360px,.95fr) minmax(360px,1fr) minmax(360px,.95fr);gap:16px}}.screens{{grid-column:1 / -1}}.screens .thumb{{width:100%;max-height:640px;min-height:360px;object-fit:contain}}.notes{{grid-column:auto;display:block}}.notes pre{{min-height:250px}}.edit{{grid-column:1 / -1}}.journal-card{{margin-bottom:32px}}@media(max-width:1280px){{.card-grid{{grid-template-columns:1fr}}.screens,.notes,.edit{{grid-column:auto}}.screens .thumb{{min-height:220px}}}}
+
+.toolbar .btn-danger{{border-color:#ef4444;color:#fecaca}}.mini-update{{margin-left:auto;padding:6px 10px;border-radius:999px;border:1px solid rgba(96,165,250,.35);background:rgba(15,23,42,.62);color:#dbeafe;cursor:pointer}}.bulk{{margin:0 10px 0 0;display:flex;align-items:center}}.bulk input{{width:18px;height:18px;accent-color:#38bdf8}}.estimated-pl.positive{{color:#86efac}}.estimated-pl.negative{{color:#fecaca}}body.compressed .screens,body.compressed .review,body.compressed .notes{{display:none}}body.compressed .journal-card{{margin-bottom:16px}}.facts{{order:2}}.review{{order:1}}.notes{{order:3}}.edit{{order:4}}
 </style></head><body><div class='shell'>
-<div class='top'><div><h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p></div><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='window.print()'>📄 Download PDF</button></div></div>
+<div class='top'><div><h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p></div><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='toggleCompressed()'>Compress all</button><button class='btn btn-danger' onclick='bulkDelete(false)'>Delete selected</button><button class='btn btn-danger' onclick='bulkDelete(true)'>Delete all</button><button class='btn' onclick='window.print()'>📄 Download PDF</button></div></div>
 {cards}</div><div id='toast' class='toast'></div>
 <script>
 function toast(msg){{const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',2600);}}
@@ -274,9 +268,13 @@ function api(path,payload){{if(location.protocol==='file:'){{toast('Open journal
 function applyYearFilter(){{const y=document.getElementById('year-filter').value;document.querySelectorAll('[data-year]').forEach(r=>r.style.display=(!y||r.dataset.year===y)?'':'none');}}
 document.getElementById('year-filter')?.addEventListener('change',applyYearFilter);
 document.addEventListener('input',e=>{{if(e.target.classList.contains('exit-price')){{const box=e.target.closest('.review');const out=box?.querySelector('.js-close-price');if(out)out.textContent=e.target.value||'--';}}}});
-function updateJournalEntry(btn){{const box=btn.closest('.edit');if(!box)return;const payload={{id:box.dataset.id,amount:box.querySelector('.edit-amount').value,entry:box.querySelector('.edit-entry').value,reason_label:box.querySelector('.edit-reason').value,touches:box.querySelector('.edit-touches').value,notes:box.querySelector('.edit-notes').value}};api('/journal-update',payload).then(d=>toast(d.ok?'Updated':'Update failed'));}}
-function deleteJournalEntry(btn){{const box=btn.closest('.edit');if(!box||!confirm('Delete this journal entry?'))return;api('/journal-delete',{{id:box.dataset.id}}).then(d=>{{if(d.ok){{box.closest('.journal-card').remove();toast('Deleted');}}else toast('Delete failed');}});}}
-function closeJournalEntry(btn){{const box=btn.closest('.review');if(!box)return;const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};const preview=box.querySelector('.preview');if(preview)preview.textContent=payload.outcome+' @ '+payload.exit_price+'\nreason: '+payload.exit_reason+'\nSL moves: '+payload.stop_loss_moves+'\n'+payload.notes;api('/journal-close',payload).then(d=>toast(d.ok?'Review saved':'Review failed'));}}
+function updateSummary(card,entry){{if(!card||!entry)return;const est=card.querySelector('.estimated-pl');if(est&&entry.estimated_pl!==undefined&&entry.estimated_pl!==null){{est.textContent=entry.estimated_pl;est.classList.toggle('positive',Number(entry.estimated_pl)>=0);est.classList.toggle('negative',Number(entry.estimated_pl)<0);}}const st=card.querySelector('header .status');if(st){{const out=(entry.outcome||'pending').toLowerCase();st.textContent=(out==='profit'?'🟢 ':out==='loss'?'🔴 ':'🟡 ')+(entry.status==='closed'?'completed · '+out:out);st.className='status '+(entry.status||'')+' '+out;}}card.classList.toggle('closed',entry.status==='closed');card.classList.toggle('profit',(entry.outcome||'').toLowerCase()==='profit');card.classList.toggle('loss',(entry.outcome||'').toLowerCase()==='loss');card.querySelector('.facts')?.classList.toggle('completed-summary',entry.status==='closed');}}
+function updateJournalEntry(btn){{const card=btn.closest('.journal-card');const box=btn.closest('.edit')||card?.querySelector('.edit');if(!box)return;const payload={{id:box.dataset.id,amount:box.querySelector('.edit-amount').value,entry:box.querySelector('.edit-entry').value,reason_label:box.querySelector('.edit-reason').value,touches:box.querySelector('.edit-touches').value,notes:box.querySelector('.edit-notes').value}};api('/journal-update',payload).then(d=>{{if(d.ok){{updateSummary(card,d.entry);toast('Updated');}}else toast('Update failed');}});}}
+function deleteJournalEntry(btn){{const card=btn.closest('.journal-card');const box=btn.closest('.edit')||card?.querySelector('.edit');if(!box||!confirm('Delete this journal entry?'))return;api('/journal-delete',{{id:box.dataset.id}}).then(d=>{{if(d.ok){{card.remove();toast('Deleted');}}else toast('Delete failed');}});}}
+function closeJournalEntry(btn){{const box=btn.closest('.review');if(!box)return;const card=btn.closest('.journal-card');const payload={{id:box.dataset.id,outcome:box.querySelector('.outcome').value,exit_price:box.querySelector('.exit-price').value,exit_reason:box.querySelector('.exit-reason').value,stop_loss_moves:box.querySelector('.stop-loss-moves').value,notes:box.querySelector('.notes').value}};const preview=box.querySelector('.preview');if(preview)preview.textContent=payload.outcome+' @ '+payload.exit_price+'\nreason: '+payload.exit_reason+'\nSL moves: '+payload.stop_loss_moves+'\n'+payload.notes;api('/journal-close',payload).then(d=>{{if(d.ok){{updateSummary(card,d.entry);toast('Position closed');}}else toast('Review failed');}});}}
+function toggleCompressed(){{document.body.classList.toggle('compressed');document.querySelectorAll('details').forEach(d=>d.open=false);}}
+function selectedIds(all){{return all?[...document.querySelectorAll('.bulk-select')].map(x=>x.value):[...document.querySelectorAll('.bulk-select:checked')].map(x=>x.value);}}
+async function bulkDelete(all){{const ids=selectedIds(all);if(!ids.length){{toast('No entries selected');return;}}if(!confirm((all?'Delete ALL':'Delete selected')+' journal entries?'))return;let ok=0;for(const id of ids){{const d=await api('/journal-delete',{{id}});if(d.ok){{document.querySelector(`.bulk-select[value="${{id}}"]`)?.closest('.journal-card')?.remove();ok++;}}}}toast('Deleted '+ok+' entr'+(ok===1?'y':'ies'));}}
 </script></body></html>"""
 
 def write_html(entries: list[dict[str, Any]] | None = None) -> Path:

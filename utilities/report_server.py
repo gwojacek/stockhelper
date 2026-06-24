@@ -463,7 +463,7 @@ def main() -> int:
                     payload = json.loads(raw or "{}")
                     from journal import update_entry
                     entry = update_entry(str(payload.get("id") or ""), payload)
-                    self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry)}).encode("utf-8"))
+                    self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry), "entry": entry}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
@@ -493,7 +493,7 @@ def main() -> int:
                         str(payload.get("exit_reason") or ""),
                         str(payload.get("stop_loss_moves") or ""),
                     )
-                    self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry)}).encode("utf-8"))
+                    self.send_response(200 if entry else 404); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": bool(entry), "entry": entry}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))
                 return
