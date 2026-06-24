@@ -168,12 +168,18 @@ def _thumb(path_text: str) -> str:
     return f"<a href='../../{safe}' target='_blank'><img class='thumb' src='../../{safe}' alt='screenshot'></a>"
 
 
+def _selected(value: Any, expected: str) -> str:
+    return " selected" if str(value or "").lower() == expected else ""
+
+
 def _row(entry: dict[str, Any], number: int = 1) -> str:
     def e(v: Any) -> str:
         return html.escape(str(v or ""))
 
     eid = e(entry.get("id"))
-    status = str(entry.get("status") or "open")
+    status = str(entry.get("status") or "open").lower()
+    outcome = str(entry.get("outcome") or ("pending" if status == "open" else "closed")).lower()
+    ended = status == "closed" or outcome in {"profit", "loss"}
     estimated = entry.get("estimated_pl")
     if estimated in (None, ""):
         estimated = _estimate_pl(entry)
@@ -181,45 +187,49 @@ def _row(entry: dict[str, Any], number: int = 1) -> str:
     amount = str(entry.get("amount") or "") + (" " + str(entry.get("amount_currency")) if entry.get("amount_currency") else "")
     thumb_html = _thumb(str(entry.get("screenshot_path") or "")) or "<div class='screen-empty'>No screenshot</div>"
     close_thumb = _thumb(str(entry.get("close_screenshot_path") or ""))
-    review = ""
-    if status == "open":
-        review = (
-            f"<section class='panel review noprint' data-id='{eid}'>"
-            "<div class='section-title'>Trade / review status</div>"
-            "<select class='outcome'><option value='profit'>↗ Profit</option><option value='loss'>↘ Loss</option></select>"
-            "<div class='section-title'>Price (sold / close price)</div><input class='exit-price' placeholder='close price'>"
-            "<div class='section-title'>Mode</div><select class='exit-reason'><option value='manual'>🛡 Manually</option><option value='stop_loss'>🛑 Stop loss</option></select>"
-            "<div class='section-title'>Stop loss moves count</div><input class='stop-loss-moves' placeholder='0'>"
-            "<div class='section-title'>Review notes</div><textarea class='notes' rows='3' placeholder='Review notes'></textarea>"
-            f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div><div class='kv'><span>Close Price</span><b class='js-close-price'>--</b></div><div class='kv'><span>Setup</span><b>{e(reason)}</b></div>"
-            "<pre class='preview'></pre><button class='btn btn-outline' type='button' onclick='closeJournalEntry(this)'>💾 Save Review</button></section>"
-        )
+    status_text = ("completed · " + outcome) if ended else (outcome or status)
+    outcome_dot = "🟢" if outcome == "profit" else ("🔴" if outcome == "loss" else "🟡")
+    review_inner = (
+        "<div class='section-title'>Status</div>"
+        f"<select class='outcome'><option value='profit'{_selected(outcome, 'profit')}>🟢 Profit</option><option value='loss'{_selected(outcome, 'loss')}>🔴 Loss</option></select>"
+        f"<div class='section-title'>Price (sold / close price)</div><input class='exit-price' placeholder='close price' value='{e(entry.get('exit_price'))}'>"
+        f"<div class='review-grid'><div><div class='section-title'>Mode</div><select class='exit-reason'><option value='manual'{_selected(entry.get('exit_reason'), 'manual')}>👤 Manually</option><option value='stop_loss'{_selected(entry.get('exit_reason'), 'stop_loss')}>🛑 Stop loss</option></select></div>"
+        f"<div><div class='section-title'>Stop loss moves count</div><input class='stop-loss-moves' placeholder='0' value='{e(entry.get('stop_loss_moves'))}'></div></div>"
+        f"<div class='section-title'>Review notes</div><textarea class='notes' rows='4' placeholder='Review notes'>{e(entry.get('review_notes'))}</textarea>"
+        f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div><div class='kv'><span>Close Price</span><b class='js-close-price'>{e(entry.get('exit_price') or '--')}</b></div><div class='kv'><span>Setup</span><b>{e(reason)}</b></div>"
+        "<pre class='preview'></pre><button class='btn btn-outline' type='button' onclick='closeJournalEntry(this)'>💾 Save Review</button>"
+    )
+    if ended:
+        review = f"<details class='panel review noprint collapsed-review' data-id='{eid}'><summary>✎ Trade / Review (completed)</summary>{review_inner}</details>"
+    else:
+        review = f"<section class='panel review noprint' data-id='{eid}'><div class='panel-head'>✎ Trade / Review</div>{review_inner}</section>"
     edit = (
-        f"<section class='panel edit noprint' data-id='{eid}'>"
-        "<div class='section-title'>Modify entry</div>"
-        f"<input class='edit-amount' placeholder='amount' value='{e(entry.get('amount'))}'>"
-        f"<input class='edit-entry' placeholder='entry' value='{e(entry.get('entry'))}'>"
-        f"<input class='edit-reason' placeholder='reason' value='{e(reason)}'>"
-        f"<input class='edit-touches' placeholder='touches' value='{e(entry.get('touches'))}'>"
+        f"<details class='panel edit noprint' data-id='{eid}'>"
+        "<summary>⚙ Modify entry <span>(optional)</span></summary>"
+        f"<div class='edit-grid'><label>Amount<input class='edit-amount' placeholder='amount' value='{e(entry.get('amount'))}'></label>"
+        f"<label>Entry price<input class='edit-entry' placeholder='entry' value='{e(entry.get('entry'))}'></label>"
+        f"<label>Reason<input class='edit-reason' placeholder='reason' value='{e(reason)}'></label>"
+        f"<label>Touches<input class='edit-touches' placeholder='touches' value='{e(entry.get('touches'))}'></label></div>"
         f"<textarea class='edit-notes' rows='3' placeholder='notes'>{e(entry.get('notes'))}</textarea>"
-        "<div class='actions'><button class='btn btn-primary' type='button' onclick='updateJournalEntry(this)'>✎ Update</button>"
-        "<button class='btn btn-danger' type='button' onclick='deleteJournalEntry(this)'>🗑 Delete</button></div></section>"
+        "<div class='actions'><button class='btn btn-primary' type='button' onclick='updateJournalEntry(this)'>↻ Update</button>"
+        "<button class='btn btn-danger' type='button' onclick='deleteJournalEntry(this)'>🗑 Delete</button></div></details>"
     )
     return "".join([
-        f"<article class='journal-card' data-year='{e(_entry_year(entry))}'>",
-        f"<header><div class='badge'>#{number}</div><div><h2>{e(entry.get('symbol') or entry.get('instrument'))}</h2><p>{e(_clean_date(entry.get('created_at')))} · {e(entry.get('technique'))} · {e(entry.get('direction'))}</p></div><span class='status {e(status)}'>{e(entry.get('outcome') or status)}</span></header>",
-        "<div class='card-grid'><section class='panel screens'><div class='panel-head'>▧ Screens</div>", thumb_html, close_thumb, "</section>",
-        "<section class='panel facts'>",
+        f"<article class='journal-card {e(status)} {e(outcome)}' data-year='{e(_entry_year(entry))}'>",
+        f"<header><div class='badge'>#{number}</div><div><h2>{e(entry.get('symbol') or entry.get('instrument'))}</h2><p>{e(_clean_date(entry.get('created_at')))} · {e(entry.get('technique'))} · {e(entry.get('direction'))}</p></div><span class='status {e(status)} {e(outcome)}'>{outcome_dot} {e(status_text)}</span></header>",
+        "<div class='card-grid'><section class='panel screens'><div class='panel-head'>▧ Chart</div>", thumb_html, close_thumb, "</section>",
+        f"<section class='panel facts {'completed-summary' if ended else ''}'><div class='panel-head'>✅ Trade Summary <span>{e(status_text)}</span></div>",
         f"<div class='kv'><span>Position Value</span><b>{e(amount)}</b></div>",
         f"<div class='kv'><span>Buy / Entry</span><b>{e(entry.get('entry'))}</b></div>",
-        f"<div class='kv'><span>Sold / Close</span><b>{e(entry.get('exit_price'))}</b></div>",
-        f"<div class='kv'><span>Estimated P/L</span><b>{e(estimated)}</b></div>",
+        f"<div class='kv'><span>Sold / Close</span><b>{e(entry.get('exit_price') or '--')}</b></div>",
+        f"<div class='kv'><span>Estimated P/L</span><b>{e(estimated or '--')}</b></div>",
         f"<div class='kv'><span>Stop loss</span><b>{e(entry.get('stop_loss'))}</b></div>",
         f"<div class='kv'><span>Reason</span><b>{e(reason)}</b></div>",
         f"<div class='kv'><span>Touches</span><b>{e(entry.get('touches'))}</b></div>",
         f"<div class='kv'><span>Exit reason</span><b>{e(entry.get('exit_reason'))}</b></div>",
-        "</section>", review, edit,
-        f"<section class='panel notes'><div class='section-title'>Auto context / notes</div><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></section>",
+        "</section>", review,
+        f"<section class='panel notes'><div class='panel-head'>📄 Auto Context / Notes</div><pre>{e(entry.get('notes'))}</pre><pre>{e(entry.get('review_notes'))}</pre></section>",
+        edit,
         "</div></article>",
     ])
 
@@ -250,6 +260,8 @@ def html_document(entries: list[dict[str, Any]] | None = None) -> str:
 /* Dark glass journal UI override */
 :root{{--bg:#050b16;--card:rgba(15,23,42,.76);--ink:#f8fafc;--muted:#93a4bd;--line:rgba(148,163,184,.28);--blue:#2f8cff;--danger:#fb7185}}
 body{{max-width:none;background:radial-gradient(circle at 18% 0,rgba(59,130,246,.16),transparent 32%),radial-gradient(circle at 88% 18%,rgba(168,85,247,.13),transparent 28%),#050b16;color:#f8fafc;padding:26px}}.shell{{max-width:1380px}}.top{{margin-bottom:24px}}h1{{color:#f8fafc;text-shadow:0 4px 18px rgba(0,0,0,.35)}}.top p{{color:#93a4bd}}.toolbar select,.toolbar .btn{{background:rgba(15,23,42,.72);border-color:rgba(96,165,250,.38);color:#dbeafe}}.year-row{{color:#93c5fd}}.journal-card{{background:transparent;border:0;box-shadow:none;margin-bottom:28px}}.journal-card>header{{background:transparent;border:0;padding:0 6px 18px 6px}}.badge{{background:linear-gradient(135deg,#0759d1,#38bdf8);box-shadow:0 0 32px rgba(56,189,248,.45);border-radius:12px}}header h2{{color:#f8fafc;text-transform:uppercase}}header p{{color:#a8b5c9}}.status{{background:linear-gradient(135deg,#7c5b19,#fde68a);color:#fff7ed;box-shadow:0 0 30px rgba(250,204,21,.35)}}.status.closed{{background:linear-gradient(135deg,#166534,#4ade80);color:#dcfce7}}.card-grid{{grid-template-columns:minmax(420px,1.35fr) minmax(250px,.55fr) minmax(320px,.7fr);gap:14px;padding:0}}.panel{{background:linear-gradient(135deg,rgba(30,41,59,.80),rgba(15,23,42,.76));border:1px solid rgba(148,163,184,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 18px 50px rgba(0,0,0,.28);backdrop-filter:blur(10px);border-radius:14px}}.screens{{grid-row:span 2}}.panel-head,.section-title{{color:#e0f2fe;text-shadow:0 2px 10px rgba(0,0,0,.3)}}.thumb{{max-height:470px;border-color:rgba(96,165,250,.45);border-radius:13px;background:#08111f;box-shadow:inset 0 0 80px rgba(96,165,250,.08)}}.screen-empty{{background:rgba(15,23,42,.82);color:#93a4bd}}.kv{{border-color:rgba(148,163,184,.22)}}.kv span{{color:#cbd5e1}}.kv b{{color:#f8fafc}}pre{{color:#dbeafe}}select,input,textarea{{background:rgba(15,23,42,.70);border-color:rgba(148,163,184,.34);color:#f8fafc}}select:focus,input:focus,textarea:focus{{outline:none;border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.18)}}.btn{{background:rgba(15,23,42,.65);border-color:rgba(226,232,240,.72);color:#f8fafc}}.btn-primary,.review .btn-outline{{background:linear-gradient(135deg,#0673ff,#38bdf8);border-color:#38bdf8;color:white;box-shadow:0 0 28px rgba(56,189,248,.42)}}.btn-danger{{background:rgba(127,29,29,.35);border-color:#ef4444;color:#fecaca}}.review,.edit{{gap:10px}}.notes{{grid-column:1 / -1;display:flex;gap:14px;flex-wrap:wrap}}.notes pre{{min-width:220px;padding:12px;border:1px solid rgba(148,163,184,.20);border-radius:12px;background:rgba(15,23,42,.46)}}.toast{{background:#071426;border:1px solid rgba(96,165,250,.35)}}@media(max-width:1100px){{.card-grid{{grid-template-columns:1fr}}.screens,.notes{{grid-column:auto;grid-row:auto}}}}@media print{{.noprint,.toolbar{{display:none!important}}body{{background:white;padding:0;color:#0f172a}}.journal-card{{break-inside:avoid;box-shadow:none}}.thumb{{max-height:160px}}}}
+
+.journal-card>header .status{{margin-left:auto;display:inline-flex;align-items:center;gap:10px;padding:12px 18px;border-radius:14px;text-transform:uppercase;letter-spacing:.08em}}.journal-card.closed.profit>header .status,.journal-card.profit>header .status{{background:rgba(22,101,52,.40);border:1px solid #4ade80;color:#86efac;box-shadow:0 0 30px rgba(34,197,94,.24)}}.journal-card.closed.loss>header .status,.journal-card.loss>header .status{{background:rgba(127,29,29,.42);border:1px solid #fb7185;color:#fecaca;box-shadow:0 0 30px rgba(248,113,113,.22)}}.card-grid{{grid-template-columns:minmax(320px,1fr) minmax(320px,1fr) minmax(320px,1fr);align-items:stretch}}.screens{{grid-column:1 / -1;grid-row:auto}}.screens .thumb{{width:100%;max-height:420px;object-fit:contain}}.facts.completed-summary{{border-color:#22c55e;box-shadow:0 0 0 1px rgba(34,197,94,.35),0 18px 50px rgba(34,197,94,.12),inset 0 1px 0 rgba(255,255,255,.08)}}.facts .panel-head{{display:flex;justify-content:space-between;align-items:center;color:#86efac}}.facts .panel-head span{{font-size:12px;padding:6px 10px;border-radius:999px;background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.35);text-transform:uppercase;letter-spacing:.08em}}.review-grid,.edit-grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}details.panel{{padding:0;overflow:hidden}}details.panel>summary{{list-style:none;cursor:pointer;padding:18px 20px;color:#dbeafe;font-weight:900;text-transform:uppercase;letter-spacing:.08em}}details.panel>summary::-webkit-details-marker{{display:none}}details.panel>summary::after{{content:'⌄';float:right;color:#cbd5e1;font-size:20px}}details.panel[open]>summary::after{{content:'⌃'}}details.panel.review:not([open]){{min-height:64px}}details.panel.review[open],details.panel.edit[open]{{padding:0 14px 14px}}details.panel.review[open]>summary,details.panel.edit[open]>summary{{margin:0 -14px 12px}}.collapsed-review{{opacity:.92}}.edit{{grid-column:1 / -1}}.edit textarea{{margin-top:12px}}.notes{{grid-column:1 / -1;display:block}}.notes pre{{width:100%;min-height:120px;margin-top:10px}}@media(max-width:1100px){{.card-grid{{grid-template-columns:1fr}}.screens,.notes,.edit{{grid-column:auto}}}}
 </style></head><body><div class='shell'>
 <div class='top'><div><h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p></div><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='window.print()'>📄 Download PDF</button></div></div>
 {cards}</div><div id='toast' class='toast'></div>
