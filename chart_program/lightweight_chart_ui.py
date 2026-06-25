@@ -643,6 +643,11 @@ class LightweightChartLevelSelectorUI:
       <section class="side-card selected-card">
         <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4></div>
         <div id="values-panel" class="values"></div>
+        <div id="chart-group-nav" class="chart-group-nav">
+          <h4>⭐ Quick charts from 📊</h4>
+          <div id="chart-group-label" class="chart-group-label"></div>
+          <div id="chart-group-buttons" class="chart-group-buttons"></div>
+        </div>
       </section>
       <section class="side-card manual-card">
         <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
@@ -674,11 +679,6 @@ class LightweightChartLevelSelectorUI:
         <div id="wedge-debug-panel"></div>
         <div id="result-box"></div>
       </section>
-      <div id="chart-group-nav" class="chart-group-nav">
-        <h4>⭐ Quick charts from 📊</h4>
-        <div id="chart-group-label" class="chart-group-label"></div>
-        <div id="chart-group-buttons" class="chart-group-buttons"></div>
-      </div>
     </aside>
   </div>
   <script>window.STOCKHELPER_PAYLOAD = {payload};</script>
