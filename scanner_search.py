@@ -45,7 +45,7 @@ STOP_SCAN_EVENT = threading.Event()
 PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
 REFRESH_STATE_FILE = STATE_DATA_DIR / "sessions" / "search_refresh_state.json"
-API_METAL_COMMODITIES = {"GOLD", "SILVER", "PALLADIUM"}
+API_METAL_COMMODITIES: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -880,10 +880,8 @@ def _is_after_warsaw_stock_close() -> bool:
 
 def _is_ui_commodity_ticker(ticker: str) -> bool:
     raw = (ticker or "").strip().upper()
-    if raw in API_METAL_COMMODITIES:
-        return False
     mapped = str(COMMODITY_STOOQ_MAP.get(raw, raw)).lower()
-    return raw in COMMODITY_STOOQ_MAP and not mapped.startswith("^") and mapped not in {"xauusd", "xagusd", "xpdusd"}
+    return raw in COMMODITY_STOOQ_MAP and not mapped.startswith("^")
 
 
 def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
