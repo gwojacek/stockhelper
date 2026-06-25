@@ -914,10 +914,8 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         min_rows = max(1, int(os.getenv("STOCKHELPER_COMMODITIES_MIN_ROWS", "250")))
     except ValueError:
         min_rows = 250
-    print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
-    ok_count = 0
-    warn_count = 0
-    for ticker in members:
+
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, Exception | None]:
         raw = (ticker or "").strip().upper()
         csv_path = local_csv_path_for_symbol(raw, "commodity")
         if not csv_path.exists():
@@ -930,15 +928,50 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
             rows = len(df)
             dates = pd.to_datetime(df.get("Date"), errors="coerce").dropna() if "Date" in df.columns else pd.Series(dtype="datetime64[ns]")
             latest = dates.max().date().isoformat() if not dates.empty else "-"
-            status = "OK" if rows >= min_rows else "WARN"
-            if status == "OK":
-                ok_count += 1
-            else:
-                warn_count += 1
-            print(f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, csv={csv_path}")
+            return raw, csv_path, rows, latest, None
         except Exception as exc:
+            return raw, csv_path, 0, "-", exc
+
+    print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
+    checked: list[tuple[str, Path, int, str, Exception | None]] = []
+    retry_tickers: list[str] = []
+    for ticker in members:
+        item = _health_row(ticker)
+        checked.append(item)
+        raw, csv_path, rows, latest, exc = item
+        if exc is not None or rows < min_rows:
+            retry_tickers.append(raw)
+
+    if retry_tickers and os.getenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "1") != "0":
+        print(f"[commodity-check] retrying {len(retry_tickers)} short/missing commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
+        old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        try:
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            for raw in retry_tickers:
+                try:
+                    load_or_update_daily_data(symbol=raw, instrument_type="commodity", persist=True, fetch_older_data=False)
+                except Exception as exc:
+                    print(f"[commodity-check] retry failed for {raw}: {_retry_error_brief(exc)}")
+        finally:
+            if old_force is None:
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
+        checked = [_health_row(ticker) for ticker in members]
+
+    ok_count = 0
+    warn_count = 0
+    for raw, csv_path, rows, latest, exc in checked:
+        if exc is not None:
             warn_count += 1
             print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
+            continue
+        status = "OK" if rows >= min_rows else "WARN"
+        if status == "OK":
+            ok_count += 1
+        else:
+            warn_count += 1
+        print(f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, csv={csv_path}")
     print(f"[commodity-check] summary: ok={ok_count}, warn={warn_count}, total={len(members)}")
 
 

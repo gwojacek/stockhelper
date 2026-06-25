@@ -1213,7 +1213,7 @@ def load_or_update_daily_data(
         and not fetch_older_data
         and _is_after_warsaw_market_close()
     )
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and not stock_after_close_refresh:
+    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and not stock_after_close_refresh and not _force_remote_refresh_enabled():
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",

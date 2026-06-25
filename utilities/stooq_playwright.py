@@ -1096,9 +1096,14 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 
-def _open_page(playwright, interactive: bool = False):
-    browser = playwright.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium"):
+    browser_type = getattr(playwright, browser_name)
+    browser = browser_type.launch(headless=not interactive, slow_mo=150 if interactive else 0)
     page = browser.new_page()
+    try:
+        page.__stockhelper_browser_name = browser_name
+    except Exception:
+        pass
     return browser, page
 
 
@@ -1258,6 +1263,51 @@ def _retry_blocked_page_before_inspector(page, url: str, symbol: str, reason: st
             pass
     return _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page)
 
+def _retry_blank_page_with_webkit(playwright, browser, page, url: str, symbol: str, interactive: bool):
+    """Relaunch blank Stooq pages in WebKit before giving up to inspector.
+
+    Some Stooq rate-limit states render as a blank/no-table Chromium page even
+    after reloads, while WebKit often renders the captcha/table correctly.
+    """
+    if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
+        return browser, page, False
+    try:
+        current_name = getattr(page, "__stockhelper_browser_name", "chromium")
+    except Exception:
+        current_name = "chromium"
+    if current_name == "webkit":
+        return browser, page, False
+    print(f"[stooq-web] blank/no-table page persisted for {symbol}; retrying with WebKit browser.", flush=True)
+    try:
+        page.close()
+    except Exception:
+        pass
+    try:
+        browser.close()
+    except Exception:
+        pass
+    try:
+        browser, page = _open_page(playwright, interactive=interactive, browser_name="webkit")
+    except Exception as exc:
+        print(f"[stooq-web] WebKit retry unavailable for {symbol}: {exc}", flush=True)
+        browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium")
+        return browser, page, False
+    page.set_default_timeout(15000)
+    page.set_default_navigation_timeout(20000)
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+    except Exception:
+        return browser, page, True
+    try:
+        _accept_consent_if_present(page, first_page=True)
+        _wait_for_table_or_limit_with_retry(page, retries=5)
+    except Exception:
+        pass
+    if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page):
+        return browser, page, True
+    return browser, page, not _page_is_blank_or_without_captcha_and_rows(page)
+
+
 def _switch_to_inspector_for_captcha(
     playwright,
     browser,
@@ -1293,7 +1343,15 @@ def _switch_to_inspector_for_captcha(
         captcha_image_visible = _page_has_captcha_image(page)
         blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
         if blank_or_no_rows and not captcha_image_visible:
-            print(f"[stooq-web] blank/no-table page persisted for {symbol}; opening inspector on second failure.", flush=True)
+            browser, page, webkit_helped = _retry_blank_page_with_webkit(playwright, browser, page, url, symbol, interactive=True)
+            if webkit_helped:
+                blocked = _page_has_rate_limit_or_captcha(page)
+                captcha_image_visible = _page_has_captcha_image(page)
+                blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
+                if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page):
+                    return browser, page, False
+            if blank_or_no_rows and not captcha_image_visible:
+                print(f"[stooq-web] blank/no-table page persisted for {symbol}; opening inspector on second failure.", flush=True)
 
     if blocked or captcha_image_visible:
         if _retry_blocked_page_before_inspector(page, url, symbol, "Stooq CAPTCHA/limit page before inspector"):
@@ -1316,7 +1374,8 @@ def _switch_to_inspector_for_captcha(
         except Exception:
             pass
 
-        browser, page = _open_page(playwright, interactive=True)
+        current_browser_name = getattr(page, "__stockhelper_browser_name", "chromium") if page is not None else "chromium"
+        browser, page = _open_page(playwright, interactive=True, browser_name=current_browser_name)
         page.set_default_timeout(15000)
         page.set_default_navigation_timeout(20000)
         try:
