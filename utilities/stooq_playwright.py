@@ -8,6 +8,7 @@ import threading
 import warnings
 import zipfile
 from pathlib import Path
+from urllib.parse import urlparse, unquote
 
 import pandas as pd
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -1096,9 +1097,72 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium"):
+def _is_metal_stooq_symbol(symbol: str | None) -> bool:
+    return (symbol or "").strip().lower() in {"xauusd", "xagusd", "pl.f", "pa.f"}
+
+
+def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
+    """Return Playwright proxy config from environment, optionally metal-specific.
+
+    Supported env vars:
+    - STOCKHELPER_STOOQ_PROXY_XAUUSD / _XAGUSD / _PL_F / _PA_F
+    - STOCKHELPER_STOOQ_PROXY_METALS
+    - STOCKHELPER_STOOQ_PROXY
+    - optional country placeholders via STOCKHELPER_STOOQ_PROXY_COUNTRY_*
+
+    Values can be full URLs with credentials, e.g.
+    http://user:pass@host:port, or plain server strings. Country targeting is
+    provider-specific, so include it in the proxy host/user name, optionally
+    using a {country} placeholder filled from the matching COUNTRY env var.
+    """
+    raw_symbol = (symbol or "").strip().upper().replace(".", "_")
+    candidates = []
+    if raw_symbol:
+        candidates.append(f"STOCKHELPER_STOOQ_PROXY_{raw_symbol}")
+    if _is_metal_stooq_symbol(symbol):
+        candidates.append("STOCKHELPER_STOOQ_PROXY_METALS")
+    candidates.append("STOCKHELPER_STOOQ_PROXY")
+    value = ""
+    source = ""
+    for key in candidates:
+        value = os.getenv(key, "").strip()
+        if value:
+            source = key
+            break
+    if not value:
+        return None
+    country_candidates = []
+    if raw_symbol:
+        country_candidates.append(f"STOCKHELPER_STOOQ_PROXY_COUNTRY_{raw_symbol}")
+    if _is_metal_stooq_symbol(symbol):
+        country_candidates.append("STOCKHELPER_STOOQ_PROXY_COUNTRY_METALS")
+    country_candidates.append("STOCKHELPER_STOOQ_PROXY_COUNTRY")
+    country = next((os.getenv(k, "").strip() for k in country_candidates if os.getenv(k, "").strip()), "")
+    if country:
+        value = value.replace("{country}", country)
+    parsed = urlparse(value)
+    if parsed.scheme and parsed.hostname:
+        server = f"{parsed.scheme}://{parsed.hostname}"
+        if parsed.port:
+            server += f":{parsed.port}"
+        cfg = {"server": server}
+        if parsed.username:
+            cfg["username"] = unquote(parsed.username)
+        if parsed.password:
+            cfg["password"] = unquote(parsed.password)
+    else:
+        cfg = {"server": value}
+    print(f"[stooq-web] using proxy from {source} for {symbol or '-'}: {cfg['server']}", flush=True)
+    return cfg
+
+
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None):
     browser_type = getattr(playwright, browser_name)
-    browser = browser_type.launch(headless=not interactive, slow_mo=150 if interactive else 0)
+    launch_kwargs = {"headless": not interactive, "slow_mo": 150 if interactive else 0}
+    proxy = _stooq_proxy_config(symbol)
+    if proxy:
+        launch_kwargs["proxy"] = proxy
+    browser = browser_type.launch(**launch_kwargs)
     page = browser.new_page()
     try:
         page.__stockhelper_browser_name = browser_name
@@ -1292,10 +1356,10 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
     except Exception:
         pass
     try:
-        browser, page = _open_page(playwright, interactive=interactive, browser_name="firefox")
+        browser, page = _open_page(playwright, interactive=interactive, browser_name="firefox", symbol=symbol)
     except Exception as exc:
         print(f"[stooq-web] Firefox retry unavailable for {symbol}: {exc}", flush=True)
-        browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium")
+        browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol)
         return browser, page, False
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
@@ -1380,7 +1444,7 @@ def _switch_to_inspector_for_captcha(
             pass
 
         current_browser_name = getattr(page, "__stockhelper_browser_name", "chromium") if page is not None else "chromium"
-        browser, page = _open_page(playwright, interactive=True, browser_name=current_browser_name)
+        browser, page = _open_page(playwright, interactive=True, browser_name=current_browser_name, symbol=symbol)
         page.set_default_timeout(15000)
         page.set_default_navigation_timeout(20000)
         try:
@@ -2022,7 +2086,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         except Exception:
             start_page = 1
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=False)
+        browser, page = _open_page(p, interactive=False, symbol=symbol)
         try:
             page.set_default_timeout(15000)
             page.set_default_navigation_timeout(20000)
@@ -2267,7 +2331,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=interactive_captcha)
+        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol)
         response = None
         interactive_state = {"done": False, "forced_pause_done": False}
         for u in urls:
