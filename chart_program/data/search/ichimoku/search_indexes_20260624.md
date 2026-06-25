@@ -4,7 +4,7 @@ WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/belo
 
 | Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| WIG20 | ⚪ above | 166 | 8.1 | 2025-10-20 | 3671.0300 | - | Over Kijun-sen | 2 | 2026-04-02 | bullish_engulfing | - | bullish TK cross | slow | normal | ↑ over | green | yes | no | [📈](https://stooq.pl/q/a2/?s=wig20&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c WIG20 --ichimoku-mode on | ❌ | 2026-06-18 | 2026-06-19 |
+| WIG20 | ⚪ above | 170 | 8.3 | 2025-10-20 | 3553.6599 | - | Inside the cloud | 2 | 2026-04-02 | bullish_engulfing | - | neutral TK cross | high | normal | ↓ under | green | no | no | [📈](https://stooq.pl/q/a2/?s=wig20&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c WIG20 --ichimoku-mode on | ✅ | 2026-06-24 | 2026-06-24 |
 ## WYNIKI 2
 
 WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.

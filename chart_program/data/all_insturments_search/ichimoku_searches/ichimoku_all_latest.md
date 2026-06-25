@@ -1,7 +1,7 @@
 ICHIMOKU ALL COMBO REPORT
 
 
-■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 🇩🇪 DAX ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ 🛢️ COMMODITIES ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 
 
 Źródło danych CSV instrumentów: /home/jacek/PycharmProjects/stockhelper/data/csv

@@ -8,6 +8,7 @@ import threading
 import warnings
 import zipfile
 from pathlib import Path
+from urllib.parse import urlparse, unquote
 
 import pandas as pd
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -1096,9 +1097,77 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 
 
 
-def _open_page(playwright, interactive: bool = False):
-    browser = playwright.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
+def _is_metal_stooq_symbol(symbol: str | None) -> bool:
+    return (symbol or "").strip().lower() in {"xauusd", "xagusd", "pl.f", "pa.f"}
+
+
+def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
+    """Return Playwright proxy config from environment, optionally metal-specific.
+
+    Supported env vars:
+    - STOCKHELPER_STOOQ_PROXY_XAUUSD / _XAGUSD / _PL_F / _PA_F
+    - STOCKHELPER_STOOQ_PROXY_METALS
+    - STOCKHELPER_STOOQ_PROXY
+    - optional country placeholders via STOCKHELPER_STOOQ_PROXY_COUNTRY_*
+
+    Values can be full URLs with credentials, e.g.
+    http://user:pass@host:port, or plain server strings. Country targeting is
+    provider-specific, so include it in the proxy host/user name, optionally
+    using a {country} placeholder filled from the matching COUNTRY env var.
+    """
+    raw_symbol = (symbol or "").strip().upper().replace(".", "_")
+    candidates = []
+    if raw_symbol:
+        candidates.append(f"STOCKHELPER_STOOQ_PROXY_{raw_symbol}")
+    if _is_metal_stooq_symbol(symbol):
+        candidates.append("STOCKHELPER_STOOQ_PROXY_METALS")
+    candidates.append("STOCKHELPER_STOOQ_PROXY")
+    value = ""
+    source = ""
+    for key in candidates:
+        value = os.getenv(key, "").strip()
+        if value:
+            source = key
+            break
+    if not value:
+        return None
+    country_candidates = []
+    if raw_symbol:
+        country_candidates.append(f"STOCKHELPER_STOOQ_PROXY_COUNTRY_{raw_symbol}")
+    if _is_metal_stooq_symbol(symbol):
+        country_candidates.append("STOCKHELPER_STOOQ_PROXY_COUNTRY_METALS")
+    country_candidates.append("STOCKHELPER_STOOQ_PROXY_COUNTRY")
+    country = next((os.getenv(k, "").strip() for k in country_candidates if os.getenv(k, "").strip()), "")
+    if country:
+        value = value.replace("{country}", country)
+    parsed = urlparse(value)
+    if parsed.scheme and parsed.hostname:
+        server = f"{parsed.scheme}://{parsed.hostname}"
+        if parsed.port:
+            server += f":{parsed.port}"
+        cfg = {"server": server}
+        if parsed.username:
+            cfg["username"] = unquote(parsed.username)
+        if parsed.password:
+            cfg["password"] = unquote(parsed.password)
+    else:
+        cfg = {"server": value}
+    print(f"[stooq-web] using proxy from {source} for {symbol or '-'}: {cfg['server']}", flush=True)
+    return cfg
+
+
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None):
+    browser_type = getattr(playwright, browser_name)
+    launch_kwargs = {"headless": not interactive, "slow_mo": 150 if interactive else 0}
+    proxy = _stooq_proxy_config(symbol)
+    if proxy:
+        launch_kwargs["proxy"] = proxy
+    browser = browser_type.launch(**launch_kwargs)
     page = browser.new_page()
+    try:
+        page.__stockhelper_browser_name = browser_name
+    except Exception:
+        pass
     return browser, page
 
 
@@ -1134,9 +1203,9 @@ def _page_is_blank_or_without_captcha_and_rows(page) -> bool:
 
 def _blank_page_auto_retry_count() -> int:
     try:
-        return max(1, int(os.getenv("STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES", "5")))
+        return max(1, int(os.getenv("STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES", "3")))
     except ValueError:
-        return 5
+        return 3
 
 
 def _vpn_pause_and_reload_stooq_page(page, url: str, symbol: str, reason: str) -> None:
@@ -1222,6 +1291,11 @@ def _retry_blank_page_with_vpn_before_inspector(page, url: str, symbol: str, rea
         for attempt in range(1, max(1, attempts) + 1):
             if attempts > 1:
                 print(f"[stooq-web] {reason} for {symbol}; automatic blank-page retry ({attempt}/{attempts}).", flush=True)
+            if _consent_overlay_visible(page):
+                print(f"[stooq-web] consent overlay visible for {symbol}; clicking consent before reload retry.", flush=True)
+                _accept_consent_if_present(page, first_page=True)
+                if _page_has_history_rows(page) or _page_has_captcha_image(page):
+                    return _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page)
             _vpn_pause_and_reload_stooq_page(page, url, symbol, reason)
             if _try_solve_stooq_captcha(page, symbol):
                 return True
@@ -1258,6 +1332,51 @@ def _retry_blocked_page_before_inspector(page, url: str, symbol: str, reason: st
             pass
     return _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page)
 
+def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: str, interactive: bool):
+    """Relaunch blank Stooq pages in Firefox before giving up to inspector.
+
+    Some Stooq rate-limit states render as a blank/no-table Chromium page even
+    after reloads, while Firefox often renders the captcha/table correctly.
+    """
+    if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
+        return browser, page, False
+    try:
+        current_name = getattr(page, "__stockhelper_browser_name", "chromium")
+    except Exception:
+        current_name = "chromium"
+    if current_name == "firefox":
+        return browser, page, False
+    print(f"[stooq-web] blank/no-table page persisted for {symbol}; retrying with Firefox browser.", flush=True)
+    try:
+        page.close()
+    except Exception:
+        pass
+    try:
+        browser.close()
+    except Exception:
+        pass
+    try:
+        browser, page = _open_page(playwright, interactive=interactive, browser_name="firefox", symbol=symbol)
+    except Exception as exc:
+        print(f"[stooq-web] Firefox retry unavailable for {symbol}: {exc}", flush=True)
+        browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol)
+        return browser, page, False
+    page.set_default_timeout(15000)
+    page.set_default_navigation_timeout(20000)
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+    except Exception:
+        return browser, page, True
+    try:
+        _accept_consent_if_present(page, first_page=True)
+        _wait_for_table_or_limit_with_retry(page, retries=5)
+    except Exception:
+        pass
+    if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page):
+        return browser, page, True
+    return browser, page, not _page_is_blank_or_without_captcha_and_rows(page)
+
+
 def _switch_to_inspector_for_captcha(
     playwright,
     browser,
@@ -1293,7 +1412,15 @@ def _switch_to_inspector_for_captcha(
         captcha_image_visible = _page_has_captcha_image(page)
         blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
         if blank_or_no_rows and not captcha_image_visible:
-            print(f"[stooq-web] blank/no-table page persisted for {symbol}; opening inspector on second failure.", flush=True)
+            browser, page, firefox_helped = _retry_blank_page_with_firefox(playwright, browser, page, url, symbol, interactive=True)
+            if firefox_helped:
+                blocked = _page_has_rate_limit_or_captcha(page)
+                captcha_image_visible = _page_has_captcha_image(page)
+                blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
+                if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page):
+                    return browser, page, False
+            if blank_or_no_rows and not captcha_image_visible:
+                print(f"[stooq-web] blank/no-table page persisted for {symbol}; opening inspector on second failure.", flush=True)
 
     if blocked or captcha_image_visible:
         if _retry_blocked_page_before_inspector(page, url, symbol, "Stooq CAPTCHA/limit page before inspector"):
@@ -1316,7 +1443,8 @@ def _switch_to_inspector_for_captcha(
         except Exception:
             pass
 
-        browser, page = _open_page(playwright, interactive=True)
+        current_browser_name = getattr(page, "__stockhelper_browser_name", "chromium") if page is not None else "chromium"
+        browser, page = _open_page(playwright, interactive=True, browser_name=current_browser_name, symbol=symbol)
         page.set_default_timeout(15000)
         page.set_default_navigation_timeout(20000)
         try:
@@ -1363,6 +1491,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         continue
                     loc.wait_for(state='visible', timeout=1500)
                     loc.click(timeout=3000, force=True)
+                    print(f"[stooq-web] consent click attempted with selector: {sel}", flush=True)
                     clicked = True
                     break
                 except Exception:
@@ -1376,7 +1505,9 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             except Exception:
                 pass
             if not _consent_overlay_visible(page):
+                print("[stooq-web] consent overlay cleared.", flush=True)
                 return
+            print("[stooq-web] consent overlay still visible after click.", flush=True)
         else:
             try:
                 page.wait_for_timeout(500)
@@ -1406,7 +1537,7 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
             const dataRows = Array.from(document.querySelectorAll('tr[id^="t"]'));
             for (const tr of dataRows) {
                 const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
-                if (tds.length >= 9) out.push(tds);
+                if (tds.length >= 8) out.push(tds);
             }
             if (out.length) return out;
 
@@ -1414,7 +1545,7 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
             const tblRows = Array.from(document.querySelectorAll('#fth1 tr')).filter(tr => (tr.id || '').toLowerCase() !== 'f13');
             for (const tr of tblRows) {
                 const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
-                if (tds.length >= 9) out.push(tds);
+                if (tds.length >= 8) out.push(tds);
             }
             return out;
         }""")
@@ -1955,7 +2086,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         except Exception:
             start_page = 1
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=False)
+        browser, page = _open_page(p, interactive=False, symbol=symbol)
         try:
             page.set_default_timeout(15000)
             page.set_default_navigation_timeout(20000)
@@ -1978,10 +2109,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     page.goto(url, wait_until="domcontentloaded")
                 except Exception:
                     break
-                if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
-                    page, url, symbol, "Blank/no-table Stooq page before consent", pre_vpn_refreshes=2
-                ):
-                    pass
+                if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
+                    if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
+                        page, url, symbol, "Blank/no-table Stooq page before consent", pre_vpn_refreshes=2
+                    ):
+                        pass
+                    elif not interactive_captcha:
+                        browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 if _page_has_rate_limit_or_captcha(page):
                     browser, page, still_blocked = _switch_to_inspector_for_captcha(p, browser, page, url, symbol, interactive_captcha)
                     if still_blocked:
@@ -1989,15 +2123,22 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
-                    if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
-                        page, url, symbol, "Blank/no-table Stooq page after consent"
-                    ):
-                        pass
+                    if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
+                        if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
+                            page, url, symbol, "Blank/no-table Stooq page after consent"
+                        ):
+                            pass
+                        elif not interactive_captcha:
+                            browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
-                if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
-                    page, url, symbol, "Blank/no-table Stooq page after table wait"
-                ):
-                    ready = True
+                if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
+                    if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
+                        page, url, symbol, "Blank/no-table Stooq page after table wait"
+                    ):
+                        ready = True
+                    elif not interactive_captcha:
+                        browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
+                        ready = ready or _alt_helped
                 if _page_has_rate_limit_or_captcha(page):
                     browser, page, still_blocked = _switch_to_inspector_for_captcha(p, browser, page, url, symbol, interactive_captcha)
                     if still_blocked:
@@ -2069,13 +2210,17 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     parsed_ok += 1
                     if dt < min_required:
                         continue
+                    volume_value = _clean_numeric(row[8], for_volume=True) if len(row) > 8 else 0.0
                     rows.append({
                         'Date': dt,
                         'Open': _clean_numeric(row[2]),
                         'High': _clean_numeric(row[3]),
                         'Low': _clean_numeric(row[4]),
                         'Close': _clean_numeric(row[5]),
-                        'Volume': _clean_numeric((row[8] if len(row) > 8 else row[7]), for_volume=True)
+                        # Some Stooq FX/metal pages (xauusd/xagusd) expose only
+                        # Nr/Data/OHLC/Zmiana columns, without volume.  Keep those
+                        # rows instead of mistaking the Zmiana column for volume.
+                        'Volume': volume_value
                     })
                     page_added += 1
 
@@ -2186,7 +2331,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=interactive_captcha)
+        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol)
         response = None
         interactive_state = {"done": False, "forced_pause_done": False}
         for u in urls:

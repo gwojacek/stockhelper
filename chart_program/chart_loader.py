@@ -94,7 +94,7 @@ COMMODITY_STOOQ_MAP = {
     "GOLD": "xauusd",
     "SILVER": "xagusd",
     "PLATINUM": "pl.f",
-    "PALLADIUM": "xpdusd",
+    "PALLADIUM": "pa.f",
     "COFFEE": "kc.f",
     "COCOA": "cc.f",
     "SUGAR": "sb.f",
@@ -268,8 +268,6 @@ def _storage_symbol_for_csv(symbol: str, instrument_type: str) -> str:
     if instrument_type != "commodity":
         return symbol
     canonical = _canonical_commodity_symbol(symbol)
-    if canonical in {"GOLD", "SILVER", "PALLADIUM"}:
-        return canonical
     if canonical in COMMODITY_YAHOO_MAP and _is_index_like_commodity(canonical):
         return canonical
     mapped = COMMODITY_STOOQ_MAP.get((symbol or "").strip().upper())
@@ -943,10 +941,6 @@ def _is_index_like_commodity(symbol: str) -> bool:
 
 
 
-def _is_yahoo_primary_commodity(symbol: str) -> bool:
-    canonical = _canonical_commodity_symbol(symbol)
-    return canonical in {"GOLD", "SILVER", "PALLADIUM"}
-
 def _is_wig20_index_symbol(symbol: str) -> bool:
     canonical = _canonical_commodity_symbol(symbol)
     return canonical in {"WIG20", "W20"}
@@ -1045,10 +1039,6 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         )
         return df, "stooq", candidate, None, "Stooq forced by --data-source stooq."
 
-    if instrument_type == "commodity" and _is_yahoo_primary_commodity(symbol):
-        df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for API metal commodity."
-
     if instrument_type == "commodity" and _is_wig20_index_symbol(symbol):
         return _download_wig20_index_from_stooq_plus_yahoo(
             symbol,
@@ -1069,13 +1059,10 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
     is_index_like_commodity_symbol = _is_index_like_commodity(symbol)
     # Some symbols are unavailable via Stooq CSV API and must use web pages.
     requires_web_even_if_index_like = str(mapped_stooq).lower() in {"fx.f"}
-    # Force selected metals to stay on API path (no Playwright fallback).
-    force_api_only_symbols = {"xauusd", "xagusd", "xpdusd"}
     is_literal_commodity = (
         instrument_type == "commodity"
         and (normalized_symbol in COMMODITY_STOOQ_MAP or bool(mapped_stooq))
         and (not is_index_like_commodity_symbol or requires_web_even_if_index_like)
-        and str(mapped_stooq).lower() not in force_api_only_symbols
     )
     use_commodity_yahoo_freshness = (
         instrument_type == "commodity"
@@ -1226,7 +1213,7 @@ def load_or_update_daily_data(
         and not fetch_older_data
         and _is_after_warsaw_market_close()
     )
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and not stock_after_close_refresh:
+    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and not stock_after_close_refresh and not _force_remote_refresh_enabled():
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",
