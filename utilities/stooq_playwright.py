@@ -1406,7 +1406,7 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
             const dataRows = Array.from(document.querySelectorAll('tr[id^="t"]'));
             for (const tr of dataRows) {
                 const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
-                if (tds.length >= 9) out.push(tds);
+                if (tds.length >= 8) out.push(tds);
             }
             if (out.length) return out;
 
@@ -1414,7 +1414,7 @@ def _extract_rows_from_frame(frame) -> list[list[str]]:
             const tblRows = Array.from(document.querySelectorAll('#fth1 tr')).filter(tr => (tr.id || '').toLowerCase() !== 'f13');
             for (const tr of tblRows) {
                 const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
-                if (tds.length >= 9) out.push(tds);
+                if (tds.length >= 8) out.push(tds);
             }
             return out;
         }""")
@@ -2069,13 +2069,17 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     parsed_ok += 1
                     if dt < min_required:
                         continue
+                    volume_value = _clean_numeric(row[8], for_volume=True) if len(row) > 8 else 0.0
                     rows.append({
                         'Date': dt,
                         'Open': _clean_numeric(row[2]),
                         'High': _clean_numeric(row[3]),
                         'Low': _clean_numeric(row[4]),
                         'Close': _clean_numeric(row[5]),
-                        'Volume': _clean_numeric((row[8] if len(row) > 8 else row[7]), for_volume=True)
+                        # Some Stooq FX/metal pages (xauusd/xagusd) expose only
+                        # Nr/Data/OHLC/Zmiana columns, without volume.  Keep those
+                        # rows instead of mistaking the Zmiana column for volume.
+                        'Volume': volume_value
                     })
                     page_added += 1
 
