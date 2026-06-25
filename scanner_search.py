@@ -439,20 +439,27 @@ def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[Fibo
 
 def _is_bullish_hammer(c: pd.Series) -> bool:
     body = abs(float(c["Close"] - c["Open"]))
-    if body == 0:
-        return False
+    candle_range = float(c["High"] - c["Low"])
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
-    return lower >= 2 * body and upper <= body
+    if body == 0:
+        # Doji hammers are valid when the candle still has a dominant lower
+        # shadow and no oversized upper shadow. Ratio-to-body checks are not
+        # meaningful for a zero-sized body.
+        return candle_range > 0 and lower > 0 and lower >= upper
+    return lower >= 2 * body and upper <= 2 * body
 
 
 def _is_bearish_shooting_star(c: pd.Series) -> bool:
     body = abs(float(c["Close"] - c["Open"]))
-    if body == 0:
-        return False
+    candle_range = float(c["High"] - c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
-    return upper >= 2 * body and lower <= body
+    if body == 0:
+        # Doji shooting stars / bearish hammers are valid with a dominant upper
+        # shadow and no oversized lower shadow.
+        return candle_range > 0 and upper > 0 and upper >= lower
+    return upper >= 2 * body and lower <= 2 * body
 
 
 def _touches_level(c: pd.Series, level: float) -> bool:
