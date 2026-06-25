@@ -100,6 +100,14 @@
     "checked_at": "2026-06-22T08:44:35.105725+00:00",
     "result": "stale"
   },
+  "commodities:2026-06-24:post1945": {
+    "checked_at": "2026-06-24T21:57:16.137856+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-06-25:pre1945": {
+    "checked_at": "2026-06-25T12:56:45.690111+00:00",
+    "result": "stale"
+  },
   "dax40": {
     "last_remote_check": "2026-05-28T16:58:39.959472+02:00"
   },
@@ -142,6 +150,10 @@
   },
   "stooq_bulk:2026-06-22": {
     "checked_at": "2026-06-22T08:31:15.776863+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-24": {
+    "checked_at": "2026-06-24T21:55:38.849916+00:00",
     "result": "bulk"
   },
   "wig": {
