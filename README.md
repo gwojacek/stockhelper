@@ -162,8 +162,12 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_STOOQ_MAX_RUNTIME_S` | `900` | Watchdog timeout for Stooq web scraping. Code enforces at least 30 seconds. |
 | `STOCKHELPER_COMMODITIES_WORKERS` | `6` | Worker count for bounded parallel commodity Stooq web scans. Default is `6`; lower it when Stooq/VPN/CAPTCHA handling is noisy. |
 | `STOCKHELPER_COMMODITIES_SEQUENTIAL` | `1` | Forces commodity scans to single-threaded Stooq web fetching. Useful when VPN/CAPTCHA prompts are noisy. |
-| `STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES` | `5` | Automatic blank/no-table and pre-inspector CAPTCHA/limit Stooq reload attempts before falling back to manual inspector handling. |
+| `STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES` | `3` | Automatic blank/no-table and pre-inspector CAPTCHA/limit Stooq reload attempts before falling back to alternate browser/inspector handling. |
 | `STOCKHELPER_STOOQ_BLANK_PROMPT` | `1` | Restores the old manual “press Enter after VPN change” pause for blank/no-table Stooq pages. Default is automatic retry (`0`). |
+| `STOCKHELPER_STOOQ_PROXY` | `http://user:pass@host:port` | Global proxy for Stooq Playwright browser launches. Applies to Chromium, Firefox fallback, inspector, and debug captures. |
+| `STOCKHELPER_STOOQ_PROXY_METALS` | `http://user:pass@host:port` | Proxy only for metal Stooq symbols (`xauusd`, `xagusd`, `pl.f`, `pa.f`). Overrides the global proxy for those symbols. |
+| `STOCKHELPER_STOOQ_PROXY_XAUUSD` / `_XAGUSD` / `_PL_F` / `_PA_F` | `http://user:pass@host:port` | Symbol-specific Stooq Playwright proxy. Highest priority for the matching metal. |
+| `STOCKHELPER_STOOQ_PROXY_COUNTRY`, `_COUNTRY_METALS`, `_COUNTRY_XAUUSD` etc. | `PL` | Optional replacement for `{country}` inside the selected proxy string. Country targeting itself is provider-specific. |
 | `STOCKHELPER_COMMODITIES_MIN_ROWS` | `250` | Minimum row count used by the post-run commodities CSV health check. |
 | `STOCKHELPER_DEBUG_SYMBOL` | `XTB.WA` | Enables detailed scanner debug logs for one symbol. |
 | `STOCKHELPER_DEFER_OPEN_LINKS` | `1` | Prevents scanner flows from prompting/opening all result links immediately. Used internally by batch reports. |
@@ -197,11 +201,12 @@ StockHelper deliberately mixes data sources so scans use the freshest daily cand
 ### Source rules
 
 - **Forex and global index-like instruments** (`US500`, `US100`, `DE40`, `FRA40`, `JP225`, etc.) use Yahoo Finance as the primary source.
-- **Canonical metals** use Yahoo futures tickers and canonical cache names:
-  - `GOLD` -> Yahoo `GC=F` -> `data/csv/commodities/GOLD.csv`
-  - `SILVER` -> Yahoo `SI=F` -> `data/csv/commodities/SILVER.csv`
-  - `PALLADIUM` -> Yahoo `PA=F` -> `data/csv/commodities/PALLADIUM.csv`
-- **Legacy metal aliases are intentionally not used in search groups**: do not expect `XAUUSD`, `XAGUSD`, or `XPDUSD` scan rows or cache files from allsearch. Use `GOLD`, `SILVER`, and `PALLADIUM`.
+- **Canonical metals** now use Stooq web/table symbols like other literal commodities:
+  - `GOLD` -> Stooq `xauusd` -> `data/csv/commodities/XAUUSD.csv`
+  - `SILVER` -> Stooq `xagusd` -> `data/csv/commodities/XAGUSD.csv`
+  - `PLATINUM` -> Stooq `pl.f` -> `data/csv/commodities/PL_F.csv`
+  - `PALLADIUM` -> Stooq `pa.f` -> `data/csv/commodities/PA_F.csv`
+- **Search groups still use canonical display names** (`GOLD`, `SILVER`, `PLATINUM`, `PALLADIUM`), but fetch/cache paths are based on the mapped Stooq symbols above.
 - **Warsaw stocks/WIG** use Stooq bulk (`d_pl_txt` / `wse stocks`) as the historical base. After Warsaw close, Yahoo is probed to append fresh `.WA` candles when only the newest session is missing. The first WIG/index scanner freshness check after 03:00 Warsaw time downloads Stooq bulk once per Warsaw date so the local WIG base is refreshed before Yahoo fresh-candle merges.
 - **WIG20** uses Stooq as the base (`wse indices/wig20.txt` imported to `data/csv/commodities/WIG20.csv`) and Yahoo only for a newer `WIG20.WA` candle. If WIG20 appears to be missing more than one session, StockHelper triggers Stooq bulk first.
 - **Literal commodities** such as cocoa/coffee/oil keep Stooq web/table as the base when needed, with optional Yahoo fresh-candle merges.
@@ -226,16 +231,17 @@ python run --download-wig-bulk --inspector
 # Run indexes sequentially (useful for VPN/rate-limit safety).
 python run -allsearch indexes --scan-workers 1
 
-# Run commodity allsearch with canonical metal names (GOLD, SILVER, PALLADIUM).
+# Run commodity allsearch with canonical metal names (GOLD, SILVER, PLATINUM, PALLADIUM).
 python run -allsearch commodities --scan-workers 1
 ```
 
 ### Expected cache filenames
 
 ```text
-data/csv/commodities/GOLD.csv       # Yahoo GC=F
-data/csv/commodities/SILVER.csv     # Yahoo SI=F
-data/csv/commodities/PALLADIUM.csv  # Yahoo PA=F
+data/csv/commodities/XAUUSD.csv     # Stooq xauusd (GOLD)
+data/csv/commodities/XAGUSD.csv     # Stooq xagusd (SILVER)
+data/csv/commodities/PL_F.csv       # Stooq pl.f (PLATINUM)
+data/csv/commodities/PA_F.csv       # Stooq pa.f (PALLADIUM)
 data/csv/commodities/WIG20.csv      # Stooq bulk wse indices/wig20.txt + optional Yahoo WIG20.WA fresh candle
 data/csv/stocks/*_WA.csv               # Stooq bulk wse stocks, automatically trimmed to two years
 ```
@@ -747,7 +753,36 @@ STOCKHELPER_STOOQ_DEBUG=1 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 python run --debug-s
 
 Check `debug/stooq/` for JSON, HTML, and screenshots. If visible rows are correct and you want to merge them into commodity CSV cache, add `--debug-stooq-fetch`.
 
-For `python run -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=6`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1` or lower the worker count. Blank/no-table pages and CAPTCHA/limit states just before Playwright inspector are refreshed automatically (`STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES=5`), so the common “press Enter and it works” case no longer needs manual input. Set `STOCKHELPER_STOOQ_BLANK_PROMPT=1` only when you explicitly want the old pause-before-retry behavior. After commodities scans, StockHelper prints a `[commodity-check]` CSV row-count summary using `STOCKHELPER_COMMODITIES_MIN_ROWS` (default `250`).
+For `python run -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=6`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1` or lower the worker count. Blank/no-table pages and CAPTCHA/limit states just before Playwright inspector are refreshed automatically (`STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES=3`), then a Firefox Playwright fallback can be tried for blank Chromium pages before the headed inspector. Set `STOCKHELPER_STOOQ_BLANK_PROMPT=1` only when you explicitly want the old pause-before-retry behavior. After commodities scans, StockHelper prints a `[commodity-check]` CSV row-count summary using `STOCKHELPER_COMMODITIES_MIN_ROWS` (default `250`).
+
+#### Stooq Playwright proxies
+
+Proxy support is optional and is applied only to Playwright browser launches used for Stooq web/debug scraping. It does not change Yahoo requests or non-Playwright downloads. Priority is:
+
+1. symbol-specific proxy, e.g. `STOCKHELPER_STOOQ_PROXY_XAUUSD`;
+2. metals-wide proxy, `STOCKHELPER_STOOQ_PROXY_METALS`, for `xauusd`, `xagusd`, `pl.f`, `pa.f`;
+3. global Stooq proxy, `STOCKHELPER_STOOQ_PROXY`.
+
+Examples:
+
+```bash
+# One proxy for all Stooq Playwright traffic.
+export STOCKHELPER_STOOQ_PROXY='http://user:pass@host:port'
+
+# One proxy for metals only.
+export STOCKHELPER_STOOQ_PROXY_METALS='http://user:pass@host:port'
+
+# Per-metal proxy.
+export STOCKHELPER_STOOQ_PROXY_XAUUSD='http://gold-user:gold-pass@host:port'
+export STOCKHELPER_STOOQ_PROXY_XAGUSD='http://silver-user:silver-pass@host:port'
+
+# Provider-specific country targeting using a placeholder.
+export STOCKHELPER_STOOQ_PROXY_METALS='http://customer-{country}:pass@host:port'
+export STOCKHELPER_STOOQ_PROXY_COUNTRY_METALS='PL'
+python run -allsearch commodities
+```
+
+Country targeting is proxy-provider-specific: StockHelper only substitutes `{country}` in the proxy string and passes the resulting proxy settings to Playwright. Put country information where your provider expects it, usually in the username, host, or port.
 
 ### No scanner Markdown is created
 
