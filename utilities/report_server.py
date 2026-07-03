@@ -169,10 +169,14 @@ def main() -> int:
                     close_console_out.close()
                 console_out, close_console_out, console_stdout_path = sys.stdout, None, ""
 
-    def _forward_process_output(pipe, *, err: bool = False) -> None:
+    def _forward_process_output(pipe, *, err: bool = False, tail: list[str] | None = None) -> None:
         try:
             for line in pipe:
-                _safe_print(line.rstrip("\n"), err=err)
+                text = line.rstrip("\n")
+                if tail is not None:
+                    tail.append(text)
+                    del tail[:-80]
+                _safe_print(text, err=err)
         except Exception as exc:
             _safe_print(f"[report] failed to forward process output: {exc}", err=True)
         finally:
@@ -181,7 +185,7 @@ def main() -> int:
             except Exception:
                 pass
 
-    def _start_process(argv: list[str], env: dict[str, str]) -> subprocess.Popen:
+    def _start_process(argv: list[str], env: dict[str, str], output_tail: list[str] | None = None) -> subprocess.Popen:
         proc = subprocess.Popen(
             argv,
             cwd=str(project_root),
@@ -195,9 +199,9 @@ def main() -> int:
             bufsize=1,
         )
         if proc.stdout is not None:
-            threading.Thread(target=_forward_process_output, args=(proc.stdout,), daemon=True).start()
+            threading.Thread(target=_forward_process_output, args=(proc.stdout,), kwargs={"tail": output_tail}, daemon=True).start()
         if proc.stderr is not None:
-            threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True}, daemon=True).start()
+            threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True, "tail": output_tail}, daemon=True).start()
         return proc
 
     # Open the launcher console once while the parent `run` process is still
@@ -243,7 +247,8 @@ def main() -> int:
             try:
                 env["STOCKHELPER_CHART_URL_FILE"] = url_path
                 env["STOCKHELPER_CHART_NO_AUTO_OPEN"] = "1"
-                proc = _start_process(argv, env)
+                output_tail: list[str] = []
+                proc = _start_process(argv, env, output_tail=output_tail)
                 chart_url = ""
                 # Chart startup can take longer than a few seconds when the
                 # command has to import scanner modules or refresh/load a local
@@ -280,7 +285,7 @@ def main() -> int:
                     if not chart_ready:
                         rc = proc.poll()
                         _safe_print(f"[report] chart ui url did not respond, exit={rc}")
-                        return int(rc or 1), {"ok": False, "error": "chart UI URL did not respond", "url": chart_url, "pid": proc.pid}
+                        return int(rc or 1), {"ok": False, "error": "chart UI URL did not respond", "url": chart_url, "pid": proc.pid, "output": "\n".join(output_tail[-40:])}
                     _safe_print(f"[report] chart ui url: {chart_url} pid={proc.pid}")
                     return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
                 rc = proc.poll()
@@ -289,9 +294,14 @@ def main() -> int:
                         rc = proc.wait(timeout=30)
                     except subprocess.TimeoutExpired:
                         _safe_print(f"[report] chart command still running before UI url, pid={proc.pid}")
-                        return 1, {"ok": False, "error": "chart command is still starting and did not publish a UI URL yet", "pid": proc.pid}
+                        return 1, {"ok": False, "error": "chart command is still starting and did not publish a UI URL yet", "pid": proc.pid, "output": "\n".join(output_tail[-40:])}
                 _safe_print(f"[report] chart command exited before UI url, exit={rc}")
-                return int(rc or 1), {"ok": False, "error": f"chart command exited before UI url (exit {rc})"}
+                output = "\n".join(output_tail[-40:])
+                hint = _dependency_hint(output)
+                payload = {"ok": False, "error": f"chart command exited before UI url (exit {rc})", "output": output}
+                if hint:
+                    payload["hint"] = hint
+                return int(rc or 1), payload
             finally:
                 try:
                     Path(url_path).unlink(missing_ok=True)
@@ -299,11 +309,25 @@ def main() -> int:
                     pass
 
         # Non-chart commands are rare here; keep them synchronous and status-backed.
-        proc = _start_process(argv, env)
+        output_tail: list[str] = []
+        proc = _start_process(argv, env, output_tail=output_tail)
         rc = proc.wait()
         _safe_print(f"[report] chart command exit: {rc}")
-        return rc, {"ok": rc == 0, "exit": rc}
+        return rc, {"ok": rc == 0, "exit": rc, "output": "\n".join(output_tail[-40:])}
 
+
+
+    def _dependency_hint(output: str) -> str:
+        missing = re.findall(r"ModuleNotFoundError: No module named ['\"]([^'\"]+)['\"]", output or "")
+        if not missing:
+            return ""
+        module = missing[-1]
+        install_cmd = "poetry install" if (project_root / "pyproject.toml").exists() else f"{shlex.quote(sys.executable)} -m pip install -r requirements.txt"
+        return (
+            f"Missing Python dependency '{module}'. On a new computer, install StockHelper dependencies "
+            f"from {project_root} with: {install_cmd}. If you do not use Poetry, install the packages "
+            "listed in pyproject.toml into the same Python environment that starts the report server."
+        )
 
     def _html_response(title: str, message: str, debug: dict | None = None, status: int = 500) -> bytes:
         debug = debug or {}
