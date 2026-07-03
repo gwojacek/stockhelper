@@ -20,12 +20,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", help="Optional API key passed to data provider")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--no-run-after-save", action="store_true", help="Do not run analysis script after saving config")
+    parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
+    parser.add_argument("--fibo-lines", type=int, default=0)
+    parser.add_argument("--fibo-anchor-start")
+    parser.add_argument("--fibo-anchor-end")
+    parser.add_argument("--fibo-right", action="store_true")
     parser.add_argument("--wedge-lines", action="store_true")
     parser.add_argument("--wedge-upper-start")
     parser.add_argument("--wedge-upper-end")
     parser.add_argument("--wedge-lower-start")
     parser.add_argument("--wedge-lower-end")
     parser.add_argument("--wedge-right", action="store_true")
+    parser.add_argument("--journal-close-mode", action="store_true")
+    parser.add_argument("--journal-entry-id")
+    parser.add_argument("--journal-entry-price")
+    parser.add_argument("--journal-direction", choices=["long", "short"])
+    parser.add_argument("--journal-close-price")
+    parser.add_argument("--journal-stop-loss")
     return parser
 
 
@@ -71,18 +82,32 @@ def main() -> int:
     if args.api_key:
         forwarded.extend(["--api-key", args.api_key])
     forwarded.extend(["--data-source", args.data_source])
-    if args.wedge_lines:
-        forwarded.append("--wedge-lines")
+    forwarded.extend(["--ichimoku-mode", args.ichimoku_mode])
+    if args.fibo_lines:
+        forwarded.extend(["--fibo-lines", str(args.fibo_lines)])
     for flag, value in [
+        ("--fibo-anchor-start", args.fibo_anchor_start),
+        ("--fibo-anchor-end", args.fibo_anchor_end),
         ("--wedge-upper-start", args.wedge_upper_start),
         ("--wedge-upper-end", args.wedge_upper_end),
         ("--wedge-lower-start", args.wedge_lower_start),
         ("--wedge-lower-end", args.wedge_lower_end),
+        ("--journal-entry-id", args.journal_entry_id),
+        ("--journal-entry-price", args.journal_entry_price),
+        ("--journal-direction", args.journal_direction),
+        ("--journal-close-price", args.journal_close_price),
+        ("--journal-stop-loss", args.journal_stop_loss),
     ]:
         if value:
             forwarded.extend([flag, value])
-    if args.wedge_right:
-        forwarded.append("--wedge-right")
+    for flag, enabled in [
+        ("--fibo-right", args.fibo_right),
+        ("--wedge-lines", args.wedge_lines),
+        ("--wedge-right", args.wedge_right),
+        ("--journal-close-mode", args.journal_close_mode),
+    ]:
+        if enabled:
+            forwarded.append(flag)
     forwarded.extend(unknown)
 
     from chart_program.level_selector import run_level_selector
