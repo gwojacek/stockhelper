@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v15"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v16"
 
 
 def main() -> int:
@@ -198,11 +198,28 @@ def main() -> int:
             errors="replace",
             bufsize=1,
         )
+        output_threads: list[threading.Thread] = []
         if proc.stdout is not None:
-            threading.Thread(target=_forward_process_output, args=(proc.stdout,), kwargs={"tail": output_tail}, daemon=True).start()
+            thread = threading.Thread(target=_forward_process_output, args=(proc.stdout,), kwargs={"tail": output_tail}, daemon=True)
+            thread.start()
+            output_threads.append(thread)
         if proc.stderr is not None:
-            threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True, "tail": output_tail}, daemon=True).start()
+            thread = threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True, "tail": output_tail}, daemon=True)
+            thread.start()
+            output_threads.append(thread)
+        proc._stockhelper_output_threads = output_threads  # type: ignore[attr-defined]
         return proc
+
+    def _drain_process_output(proc: subprocess.Popen, timeout: float = 0.5) -> None:
+        deadline = time.monotonic() + max(0.0, timeout)
+        for thread in getattr(proc, "_stockhelper_output_threads", []):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                thread.join(remaining)
+            except Exception:
+                pass
 
     # Open the launcher console once while the parent `run` process is still
     # alive. If this server is reused by a later report open, /attach-console
@@ -295,6 +312,7 @@ def main() -> int:
                     except subprocess.TimeoutExpired:
                         _safe_print(f"[report] chart command still running before UI url, pid={proc.pid}")
                         return 1, {"ok": False, "error": "chart command is still starting and did not publish a UI URL yet", "pid": proc.pid, "output": "\n".join(output_tail[-40:])}
+                _drain_process_output(proc)
                 _safe_print(f"[report] chart command exited before UI url, exit={rc}")
                 output = "\n".join(output_tail[-40:])
                 hint = _dependency_hint(output)
@@ -312,6 +330,7 @@ def main() -> int:
         output_tail: list[str] = []
         proc = _start_process(argv, env, output_tail=output_tail)
         rc = proc.wait()
+        _drain_process_output(proc)
         _safe_print(f"[report] chart command exit: {rc}")
         return rc, {"ok": rc == 0, "exit": rc, "output": "\n".join(output_tail[-40:])}
 
