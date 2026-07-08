@@ -15,6 +15,7 @@ def load_run_module():
     detector.detect_instrument_type = lambda ticker, default=None: default or "stock"
     loader_mod = types.ModuleType("chart_program.chart_loader")
     loader_mod.COMMODITY_STOOQ_MAP = {"OIL": "cl.f"}
+    loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
     sys.modules["chart_program.instrument_detector"] = detector
@@ -92,7 +93,8 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
-    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" not in text
+    assert "✅ Pattern ≤14d / SL intact" in text
+    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
     assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
     assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text

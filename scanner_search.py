@@ -2137,11 +2137,13 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
 
     inside_cloud = bottom <= close <= top
     if inside_cloud:
+        # A single wick through the far cloud boundary is not enough to call the
+        # breakout unsuccessful; only a body-side failure should receive that label.
         if side == "above":
-            broke_other_side_intraday = low < bottom or open_ < bottom
+            broke_other_side_by_body = open_ < bottom and close < bottom
         else:
-            broke_other_side_intraday = high > top or open_ > top
-        if broke_other_side_intraday:
+            broke_other_side_by_body = open_ > top and close > top
+        if broke_other_side_by_body:
             return "Unsuccessful breakout to the other side"
         return "Inside the cloud"
 
@@ -3789,10 +3791,11 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     # above 23.6, keep it as a pure first-column steep incline.
     band_236_to_618 = max(abs(fib_236 - fib_618), 1e-9)
     progress_to_618 = (fib_236 - current_close) / band_236_to_618
-    around_23_6 = 0.0 <= progress_to_618 <= 0.15
-    if progress_to_618 >= 1.0:
-        _log("Rejected 3P steep: pullback already reached/crossed 61.8; regular 61.8 pattern rules must handle it.")
+    reached_618_after_peak = bool((pd.to_numeric(w["Low"].iloc[i_peak:], errors="coerce") <= fib_618).any())
+    if reached_618_after_peak:
+        _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
+    crossed_23_6 = progress_to_618 >= 0.0
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
@@ -3806,7 +3809,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     return FiboScanResult(
         ticker="",
         direction="long",
-        status=("3p_steep_23_6_zone" if around_23_6 else "3p_steep_incline"),
+        status=("3p_steep_23_6_zone" if crossed_23_6 else "3p_steep_incline"),
         incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
         incline_end_date=str(pd.to_datetime(w.iloc[i_peak]["Date"]).date()),
         incline_duration_days=incline_days,
@@ -4222,7 +4225,7 @@ def _print_fibo_results(
         except Exception:
             pass
         print(f"{ANSI_CYAN}{r.ticker:<10}{ANSI_RESET} {r.direction:<6} {color}{r.status:<30}{ANSI_RESET} {r.reversal_pattern_name:<22} {incline:<23} {ratio_txt:>16} {(r.first_61_8_touch_date or '-'): <16} {avg_col}{avg_turn:>12}{ANSI_RESET} {near_col}{near_txt:>10}{ANSI_RESET} {ANSI_CYAN}{link}{ANSI_RESET}")
-    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid pattern >5 days, last month):{ANSI_RESET}")
+    print(f"\n{ANSI_BOLD}{ANSI_YELLOW}WYNIKI FIBO #2 (valid pattern up to 2 weeks):{ANSI_RESET}")
     if not rows2:
         print("Brak wyników.")
         return links
@@ -4473,17 +4476,14 @@ def run_fibo_search(target: str) -> int:
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_md = _daily_report_path("fibo_search", group_name)
     today_ts = pd.Timestamp(datetime.now(UTC).date())
-    valid_recent_cutoff = today_ts - pd.Timedelta(days=5)
-    valid_archive_cutoff = today_ts - pd.Timedelta(days=31)
-    rows0 = [r for r in rows3p_steep if _fibo_retracement_progress_pct(r) < 100.0]
+    valid_recent_cutoff = today_ts - pd.Timedelta(days=14)
+    rows0 = [r for r in rows3p_steep if r.status == "3p_steep_incline"]
     rows2 = []
-    rows1 = []
+    rows1 = [r for r in rows3p_steep if r.status == "3p_steep_23_6_zone"]
     for r in rows:
         touch_ts = pd.to_datetime(r.first_61_8_touch_date, errors="coerce") if r.first_61_8_touch_date else pd.NaT
         if r.status == "valid_reversal" and r.reversal_pattern_name != "none" and pd.notna(touch_ts):
             if touch_ts >= valid_recent_cutoff:
-                rows1.append(r)
-            elif touch_ts >= valid_archive_cutoff:
                 rows2.append(r)
             continue
         if r.status == "touched_61_8_no_pattern":
@@ -4654,14 +4654,14 @@ def run_fibo_search(target: str) -> int:
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
-    rows0_md=[[r.ticker,r.direction,("⚠️ 3p_steep_23_6_zone" if r.status == "3p_steep_23_6_zone" else "🚀 3p_steep_incline"),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)",_format_fibo_progress_pct(r),(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
+    rows0_md=[[r.ticker,r.direction,"🚀 3p_steep_incline",f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
     _write_md_table(out_md,"WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)",["Ticker","Dir","Status","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
-    _write_md_table(out_md,"WYNIKI FIBO #2 (valid pattern >5 days, last month)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
+    _write_md_table(out_md,"WYNIKI FIBO #2 (valid pattern up to 2 weeks)",["Ticker","Dir","Pattern","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
     _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
