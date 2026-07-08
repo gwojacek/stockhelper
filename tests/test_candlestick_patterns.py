@@ -75,3 +75,35 @@ def test_evening_star_requires_middle_body_above_first_and_third_body():
 
     assert not _is_evening_star(first, middle, third, 13.0)
     assert _is_evening_star(first, middle, third, 13.0, allow_equal_third_close=True)
+
+
+def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
+    from scanner_search import FiboScanResult, _limit_fibo_formations_per_ticker
+
+    def result(start: str, days: int, stop: float = 100.0) -> FiboScanResult:
+        return FiboScanResult(
+            ticker="COCOA",
+            direction="short",
+            status="reached_23_6_waiting_for_61_8",
+            incline_start_date=start,
+            incline_end_date="2026-03-02",
+            incline_duration_days=days,
+            decline_end_date="2026-07-08",
+            decline_duration_days=80,
+            incline_decline_duration_ratio=1.0,
+            fib_23_6=130.0,
+            fib_38_2=150.0,
+            fib_61_8=180.0,
+            first_61_8_touch_date="",
+            reversal_pattern_name="none",
+            stop_loss=stop,
+            current_close=160.0,
+        )
+
+    small = result("2025-08-25", 129)
+    middle = result("2025-08-13", 137)
+    big = result("2025-08-12", 138)
+
+    limited = _limit_fibo_formations_per_ticker([small, middle, big])
+
+    assert limited == [small, big]

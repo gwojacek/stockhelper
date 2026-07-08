@@ -401,6 +401,27 @@ def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
     return size_similarity >= 0.78
 
 
+
+
+def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_side: int = 2) -> list[FiboScanResult]:
+    """Keep at most one broad and one small Fibo formation per ticker/direction."""
+    grouped: dict[tuple[str, str], list[FiboScanResult]] = {}
+    for item in items:
+        grouped.setdefault((str(item.ticker).upper(), str(item.direction).lower()), []).append(item)
+    limited: list[FiboScanResult] = []
+    for group in grouped.values():
+        if len(group) <= max_per_side:
+            limited.extend(group)
+            continue
+        ordered = sorted(
+            group,
+            key=lambda r: (int(r.incline_duration_days), _fibo_formation_size(r), str(r.incline_start_date)),
+        )
+        keep = [ordered[0], ordered[-1]]
+        keep_ids = {id(x) for x in keep}
+        limited.extend([item for item in group if id(item) in keep_ids])
+    return limited
+
 def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[FiboScanResult]:
     picked: list[FiboScanResult] = []
 
@@ -3890,6 +3911,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 12.00%."
             )
             return None
+        long_sideways_month = _latest_sideways_window(correction_seg, max_days=30, band_pct=0.20)
+        if long_sideways_month is not None:
+            s, e, hi, lo, rng_pct = long_sideways_month
+            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
+            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
+            _log(
+                "Rejected long: correction has a month-long sideways block. "
+                f"window={s}-{e} ({start_date}..{end_date}), "
+                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 20.00%."
+            )
+            return None
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None
@@ -4055,8 +4087,20 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     fib_500 = fib_end + rng * 0.5
     fib_618 = fib_end + rng * 0.618
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
-    if _has_long_sideways(w.iloc[i_bottom:i_end + 1], max_days=22, band_pct=0.12):
+    short_correction_seg = w.iloc[i_bottom:i_end + 1].reset_index(drop=True)
+    if _has_long_sideways(short_correction_seg, max_days=22, band_pct=0.12):
         _log("Rejected short: correction is sideways/flat.")
+        return None
+    short_sideways_month = _latest_sideways_window(short_correction_seg, max_days=30, band_pct=0.20)
+    if short_sideways_month is not None:
+        s, e, hi, lo, rng_pct = short_sideways_month
+        start_date = str(pd.to_datetime(short_correction_seg.iloc[s]["Date"]).date())
+        end_date = str(pd.to_datetime(short_correction_seg.iloc[e]["Date"]).date())
+        _log(
+            "Rejected short: correction has a month-long sideways block. "
+            f"window={s}-{e} ({start_date}..{end_date}), "
+            f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 20.00%."
+        )
         return None
     if corr_high < fib_236:
         _log("Rejected short: correction never reached 23.6.")
@@ -4591,7 +4635,7 @@ def run_fibo_search(target: str) -> int:
     rows1_liquid = [r for r in rows1 if _passes_fibo_liquidity(r)]
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows2_ids = {id(r) for r in rows2_liquid}
-    deduped_fibo_rows = _dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid)
+    deduped_fibo_rows = _limit_fibo_formations_per_ticker(_dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid))
     rows0 = [r for r in deduped_fibo_rows if r.status.startswith("3p_steep")]
     rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
     rows1 = [r for r in deduped_fibo_rows if not r.status.startswith("3p_steep") and id(r) not in rows2_ids]
