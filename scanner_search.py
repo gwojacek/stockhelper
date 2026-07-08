@@ -3922,6 +3922,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 20.00%."
             )
             return None
+        long_sideways_multiweek = _latest_sideways_window(correction_seg, max_days=42, band_pct=0.35)
+        if long_sideways_multiweek is not None:
+            s, e, hi, lo, rng_pct = long_sideways_multiweek
+            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
+            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
+            _log(
+                "Rejected long: correction has a multi-week sideways block. "
+                f"window={s}-{e} ({start_date}..{end_date}), "
+                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 35.00%."
+            )
+            return None
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None
@@ -4066,7 +4077,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
-    i_start = int(close.iloc[:-60].idxmax())
+    # Anchor short Fibo on the candle with the highest wick, not on the highest close.
+    # This keeps scanner anchors on the real visible peak candle (including commodity spikes).
+    i_start = int(high.iloc[:-60].idxmax())
     min_incline_days = 10
     i_bottom = int(low.iloc[i_start + min_incline_days:].idxmin())
     if i_bottom <= i_start + min_incline_days:
@@ -4100,6 +4113,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             "Rejected short: correction has a month-long sideways block. "
             f"window={s}-{e} ({start_date}..{end_date}), "
             f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 20.00%."
+        )
+        return None
+    short_sideways_multiweek = _latest_sideways_window(short_correction_seg, max_days=42, band_pct=0.35)
+    if short_sideways_multiweek is not None:
+        s, e, hi, lo, rng_pct = short_sideways_multiweek
+        start_date = str(pd.to_datetime(short_correction_seg.iloc[s]["Date"]).date())
+        end_date = str(pd.to_datetime(short_correction_seg.iloc[e]["Date"]).date())
+        _log(
+            "Rejected short: correction has a multi-week sideways block. "
+            f"window={s}-{e} ({start_date}..{end_date}), "
+            f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 35.00%."
         )
         return None
     if corr_high < fib_236:

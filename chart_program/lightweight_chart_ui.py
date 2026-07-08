@@ -654,6 +654,7 @@ class LightweightChartLevelSelectorUI:
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
         <label>Capital</label><input id="capital" type="number" />
+        <label>Calculation currency</label><select id="calculation-currency"><option value="PLN">PLN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option></select>
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
@@ -2141,6 +2142,16 @@ class LightweightChartLevelSelectorUI:
     $('stock-cfd-toggle').style.display = originalIsStock ? 'flex' : 'none';
     $('stock-cfd-toggle').textContent = `${{stockCfdOn ? 'ON' : 'OFF'}}`;
     $('stock-cfd-toggle').classList.toggle('active', stockCfdOn);
+    const instrumentCurrency = () => {{
+      const source = String(P.sourceTicker || P.symbol || '').toUpperCase();
+      if (source.endsWith('.US') || source.endsWith('.F') || source.includes('USD')) return 'USD';
+      if (source.endsWith('.DE') || source.endsWith('.FR') || source.endsWith('.NL') || source.endsWith('.ES') || source.endsWith('.IT') || source.includes('EUR')) return 'EUR';
+      if (source.endsWith('.L') || source.includes('GBP')) return 'GBP';
+      return 'PLN';
+    }};
+    const selectedCurrency = String($('calculation-currency')?.value || levels.calculation_currency || 'PLN').toUpperCase();
+    const stockCurrencyMatches = originalIsStock && !stockCfdOn && selectedCurrency === instrumentCurrency();
+    const feeEligible = !!levels.__currency_fee_eligible__ && !stockCurrencyMatches;
     const setFieldState = (id, isDisabled, visible=true) => {{
       const el = $(id), label = $(`${{id}}-label`);
       if (!el) return;
@@ -2157,7 +2168,7 @@ class LightweightChartLevelSelectorUI:
     setFieldState('spread-mult', disabled, !disabled);
     setFieldState('pip-value', disabled || stockCfdOn, !disabled && !stockCfdOn);
     $('spread-mult-label').textContent = stockCfdOn ? 'Spread (price units; pips = spread / 0.01)' : 'Spread multiplier (spread = Multiplier * pip_value)';
-    $('currency-fee-toggle').style.display = levels.__currency_fee_eligible__ ? 'block' : 'none';
+    $('currency-fee-toggle').style.display = feeEligible ? 'block' : 'none';
     $('currency-fee-toggle').textContent = `FX conversion fee 1%: ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
   }}
@@ -2216,7 +2227,7 @@ class LightweightChartLevelSelectorUI:
   }}
 
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
-  $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000;
+  $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000; $('calculation-currency').value = levels.calculation_currency || levels.currency || 'PLN';
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
   $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
@@ -2227,6 +2238,7 @@ class LightweightChartLevelSelectorUI:
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('calculation-currency').onchange = () => {{ levels.calculation_currency = $('calculation-currency').value; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   $('wedge-debug-btn').onclick = () => copyWedgeDebug();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
@@ -2596,6 +2608,7 @@ class LightweightChartLevelSelectorUI:
     return {{...levels,
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
+      calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
       lot_cost:roundPrice(Number($('lot-cost').value || 0)),
       pip_value:Number(pipValue.toFixed(4)),
       spread_multiplier:Number(spreadMult.toFixed(4)),
@@ -2830,14 +2843,27 @@ class LightweightChartLevelSelectorUI:
         risk_levels = sorted(DEFAULT_RISK_LEVELS)
         rows = []
         warnings = []
-        currency = "PLN"
+        requested_currency = str(levels.get("calculation_currency") or levels.get("currency") or "PLN").upper()
+        currency = requested_currency if requested_currency in {"PLN", "USD", "EUR", "GBP"} else "PLN"
+
+        def _instrument_currency() -> str:
+            source = str(self.source_ticker or self.symbol or "").upper()
+            if source.endswith(".US") or source.endswith(".F") or "USD" in source:
+                return "USD"
+            if source.endswith((".DE", ".FR", ".NL", ".ES", ".IT")) or "EUR" in source:
+                return "EUR"
+            if source.endswith(".L") or "GBP" in source:
+                return "GBP"
+            return "PLN"
 
         if entry <= 0 or capital <= 0 or stop_loss <= 0:
             return {"ok": False, "error": "Select entry, stop loss, and capital before calculating."}
 
         try:
+            stock_currency_matches = effective_instrument == "stock" and currency == _instrument_currency()
+            fx_fee_applicable = bool(levels.get("__currency_fee_eligible__")) and not stock_currency_matches
             if effective_instrument == "stock":
-                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
                 max_capital = capital
                 try:
                     if "Volume" in self.df.columns:
@@ -2929,8 +2955,8 @@ class LightweightChartLevelSelectorUI:
                 "instrument_type": effective_instrument,
                 "position_type": position_type,
                 "currency": currency,
-                "fx_conversion_fee_applicable": bool(levels.get("__currency_fee_eligible__")),
-                "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")),
+                "fx_conversion_fee_applicable": fx_fee_applicable,
+                "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")) and fx_fee_applicable,
                 "fx_conversion_fee_pct": round(float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) * 100, 2),
                 "rows": rows,
                 "basics": basics,
