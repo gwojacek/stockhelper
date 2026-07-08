@@ -531,16 +531,23 @@ def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
     return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
 
-def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
-    o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
-    c2_close = float(c2["Close"])
+def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
+    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
+    c1_body_low = min(o1, cl1)
+    c2_body_high = max(o2, cl2)
+    c3_body_low = min(o3, cl3)
     if not (cl1 < o1 and cl3 > o3):
         return False
     if b2 >= b1 * 0.6:
         return False
     if doji_middle and not _is_doji(c2):
         return False
-    if not (c2_close <= min(cl1, cl3)):
+    if c2_body_high >= c1_body_low:
+        return False
+    if allow_equal_third_close:
+        if c2_body_high > c3_body_low:
+            return False
+    elif c2_body_high >= c3_body_low:
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 > mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 > level
@@ -586,16 +593,23 @@ def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     mid1 = (o1 + cl1) / 2.0
     return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
 
-def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False) -> bool:
-    o1, cl1, _, _, b1 = _candle_parts(c1); _, _, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
-    c2_close = float(c2["Close"])
+def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
+    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
+    c1_body_high = max(o1, cl1)
+    c2_body_low = min(o2, cl2)
+    c3_body_high = max(o3, cl3)
     if not (cl1 > o1 and cl3 < o3):
         return False
     if b2 >= b1 * 0.6:
         return False
     if doji_middle and not _is_doji(c2):
         return False
-    if not (c2_close >= max(cl1, cl3)):
+    if c2_body_low <= c1_body_high:
+        return False
+    if allow_equal_third_close:
+        if c2_body_low < c3_body_high:
+            return False
+    elif c2_body_low <= c3_body_high:
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 < level
@@ -1570,8 +1584,8 @@ def _find_latest_breakout_idx(
     return None
 
 
-def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str) -> tuple[int, str, str]:
-    _status, _depth, count, _first_date, events = _detect_ichimoku_retest(df, breakout_idx, current_side)
+def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str, allow_equal_third_close: bool = False) -> tuple[int, str, str]:
+    _status, _depth, count, _first_date, events = _detect_ichimoku_retest(df, breakout_idx, current_side, allow_equal_third_close=allow_equal_third_close)
     if count > 0 and events:
         d, pattern, _ = events[-1]
         return count, d, pattern
@@ -1683,7 +1697,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         )
         enriched = _ichimoku(df)
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
-        flip = _flip_after_long_respect(enriched)
+        flip = _flip_after_long_respect(enriched, allow_equal_third_close=(instrument == "forex"))
         _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
         stock_liquidity_ok = True
         if instrument == "stock" and (result or flip):
@@ -1698,7 +1712,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             bidx = _find_latest_breakout_idx(enriched, result.side, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
             if bidx is not None:
                 result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
-                rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side)
+                rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side, allow_equal_third_close=(instrument == "forex"))
                 result.retest_count = rc
                 result.latest_retest_date = rd
                 result.latest_retest_pattern = rp
@@ -2250,7 +2264,7 @@ def _print_flip_results_with_links(flip_results: list[FlipResult]) -> list[str]:
     return links
 
 
-def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult | None:
+def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_third_close: bool = False) -> FlipResult | None:
     if len(df) < min_days + 5:
         return None
     close = df["Close"]
@@ -2329,7 +2343,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80) -> FlipResult
         flip.valid_retests_count,
         flip.first_valid_retest_pattern_date,
         flip.retest_events,
-    ) = _detect_ichimoku_retest(df, flip_idx, current_side)
+    ) = _detect_ichimoku_retest(df, flip_idx, current_side, allow_equal_third_close=allow_equal_third_close)
     return flip
 
 
@@ -2347,7 +2361,7 @@ def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: f
     return "deep"
 
 
-def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, allow_equal_third_close: bool = False) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
@@ -2438,9 +2452,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "bullish_piercing_line"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
-                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False):
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                         pattern_candidates.append((j, "morning_star"))
-                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                    if _is_morning_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                         pattern_candidates.append((j, "morning_doji_star"))
             else:
                 for j in range(0, len(w)):
@@ -2467,9 +2481,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str) 
                         pattern_candidates.append((j, "dark_cloud_cover"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
-                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False):
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                         pattern_candidates.append((j, "evening_star"))
-                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True):
+                    if _is_evening_star(w.iloc[j - 2], w.iloc[j - 1], w.iloc[j], lvl, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                         pattern_candidates.append((j, "evening_doji_star"))
             # Prefer stronger multi-candle formations over partial-overlap and 1-candle
             # signals when more than one pattern ends on the same retest candle.
@@ -3808,7 +3822,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         current_close=current_close,
     )
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject") -> FiboScanResult | None:
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject", allow_equal_third_close: bool = False) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)
@@ -3938,14 +3952,14 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
                 includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_star"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
                 includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_doji_star"
                     pattern_idx = i
                     break
@@ -4100,14 +4114,14 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
             includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False):
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
             includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True):
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_doji_star"
                 pattern_idx = i
                 break
@@ -4324,12 +4338,12 @@ def run_fibo_search(target: str) -> int:
                 out_rows.append(steep_3p)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
-            long_offset0 = _find_fibo_setup(df, "long", end_offset=0)
+            long_offset0 = _find_fibo_setup(df, "long", end_offset=0, allow_equal_third_close=(instrument == "forex"))
             for off in [0, 5, 10, 15, 20, 30, 40]:
-                cand = _find_fibo_setup(df, "long", end_offset=off)
+                cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                 if cand:
                     long_candidates.append(cand)
-                broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow")
+                broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
                 if broad_cand:
                     long_candidates.append(broad_cand)
             if long_candidates:
@@ -4371,9 +4385,9 @@ def run_fibo_search(target: str) -> int:
                     out_rows.append(c)
             if instrument in {"commodity", "forex"}:
                 short_candidates: list[FiboScanResult] = []
-                short_offset0 = _find_fibo_setup(df, "short", end_offset=0)
+                short_offset0 = _find_fibo_setup(df, "short", end_offset=0, allow_equal_third_close=(instrument == "forex"))
                 for off in [0, 5, 10, 15, 20, 30, 40]:
-                    cand = _find_fibo_setup(df, "short", end_offset=off)
+                    cand = _find_fibo_setup(df, "short", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                     if cand:
                         short_candidates.append(cand)
                 if short_candidates:
@@ -4699,7 +4713,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:
             steps: list[str] = []
-            res = _find_fibo_setup(df, direction, end_offset=off, explain=steps)
+            res = _find_fibo_setup(df, direction, end_offset=off, explain=steps, allow_equal_third_close=(instrument == "forex"))
             print(f"- offset={off}: {'MATCH' if res else 'NO MATCH'}")
             if res:
                 print(f"  status={res.status}, pattern={res.reversal_pattern_name}, touch_date={res.first_61_8_touch_date}, close={res.current_close:.4f}")
@@ -4707,7 +4721,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
                 print(f"    • {s}")
             if direction == "long":
                 broad_steps: list[str] = []
-                broad = _find_fibo_setup(df, direction, end_offset=off, explain=broad_steps, stale_cycle_mode="allow")
+                broad = _find_fibo_setup(df, direction, end_offset=off, explain=broad_steps, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
                 if broad and (not res or broad.incline_start_date != res.incline_start_date or broad.incline_end_date != res.incline_end_date):
                     print(f"- offset={off} broad: MATCH")
                     print(f"  status={broad.status}, pattern={broad.reversal_pattern_name}, touch_date={broad.first_61_8_touch_date}, close={broad.current_close:.4f}, incline={broad.incline_start_date}->{broad.incline_end_date}")

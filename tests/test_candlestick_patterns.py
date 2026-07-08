@@ -31,7 +31,12 @@ sys.modules.setdefault("chart_program.chart_loader", chart_loader)
 sys.modules.setdefault("utilities.yahoo_finance", yahoo_finance)
 sys.modules.setdefault("utilities.output_silence", output_silence)
 
-from scanner_search import _is_bearish_shooting_star, _is_bullish_hammer
+from scanner_search import (
+    _is_bearish_shooting_star,
+    _is_bullish_hammer,
+    _is_evening_star,
+    _is_morning_star,
+)
 
 
 def candle(open_: float, high: float, low: float, close: float) -> dict[str, float]:
@@ -52,3 +57,21 @@ def test_bearish_hammer_mirrors_shadow_rules_and_allows_doji_shape():
     assert _is_bearish_shooting_star(candle(10.0, 14.0, 8.0, 11.0))
     assert not _is_bearish_shooting_star(candle(10.0, 14.0, 7.9, 11.0))
     assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.5, 10.0))
+
+
+def test_morning_star_requires_middle_body_below_first_and_third_body():
+    first = candle(12.0, 12.5, 9.5, 10.0)
+    middle = candle(9.0, 9.4, 8.8, 9.2)
+    third = candle(9.2, 12.2, 9.0, 11.5)
+
+    assert not _is_morning_star(first, middle, third, 9.0)
+    assert _is_morning_star(first, middle, third, 9.0, allow_equal_third_close=True)
+
+
+def test_evening_star_requires_middle_body_above_first_and_third_body():
+    first = candle(10.0, 12.5, 9.8, 12.0)
+    middle = candle(13.0, 13.2, 12.8, 12.8)
+    third = candle(12.8, 13.0, 9.8, 10.5)
+
+    assert not _is_evening_star(first, middle, third, 13.0)
+    assert _is_evening_star(first, middle, third, 13.0, allow_equal_third_close=True)
