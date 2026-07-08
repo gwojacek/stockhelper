@@ -562,13 +562,15 @@ class LightweightChartLevelSelectorUI:
     #journal-panel label {{ margin-top:11px;color:#b6c7e6;text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:900; }}
     #journal-panel input,#journal-panel select,#journal-panel textarea {{ margin-top:5px;color:#e5e7eb;background:rgba(15,23,42,.78);border:1px solid #334155;border-radius:12px;padding:10px 12px;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }}
     #journal-panel input:focus,#journal-panel select:focus,#journal-panel textarea:focus {{ border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.18); }}
-    #journal-currency-buttons {{ display:grid !important;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:7px; }}
-    #journal-currency-buttons button {{ border-radius:999px;padding:8px;background:#111827;color:#bfdbfe;border:1px solid #334155; }}
-    #journal-currency-buttons button.active {{ background:linear-gradient(135deg,#2563eb,#06b6d4);color:white;border-color:#93c5fd; }}
+    #journal-currency-buttons,#calculation-currency-buttons {{ display:grid !important;gap:7px;margin-top:7px; }}
+    #journal-currency-buttons {{ grid-template-columns:repeat(3,1fr); }}
+    #calculation-currency-buttons {{ grid-template-columns:repeat(4,1fr); }}
+    #journal-currency-buttons button,#calculation-currency-buttons button {{ border-radius:999px;padding:8px;background:#111827;color:#bfdbfe;border:1px solid #334155; }}
+    #journal-currency-buttons button.active,#calculation-currency-buttons button.active {{ background:linear-gradient(135deg,#2563eb,#06b6d4);color:white;border-color:#93c5fd; }}
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > label,.manual-card.journal-open > input,.manual-card.journal-open > select,.manual-card.journal-open > #currency-fee-toggle,.manual-card.journal-open > #object-picker,.manual-card.journal-open > #delete-object,.manual-card.journal-open > #calculate-btn,.manual-card.journal-open > .action-grid,.manual-card.journal-open > #finish-btn,.manual-card.journal-open > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > label,.manual-card.journal-open > input,.manual-card.journal-open > select,.manual-card.journal-open > #calculation-currency-buttons,.manual-card.journal-open > #currency-fee-toggle,.manual-card.journal-open > #object-picker,.manual-card.journal-open > #delete-object,.manual-card.journal-open > #calculate-btn,.manual-card.journal-open > .action-grid,.manual-card.journal-open > #finish-btn,.manual-card.journal-open > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -654,7 +656,7 @@ class LightweightChartLevelSelectorUI:
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
         <label>Capital</label><input id="capital" type="number" />
-        <label>Calculation currency</label><select id="calculation-currency"><option value="PLN">PLN</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option></select>
+        <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
@@ -2129,6 +2131,39 @@ class LightweightChartLevelSelectorUI:
     updateWedgeDebugPanel();
   }}
 
+  const FX_TO_PLN = {{PLN:1, USD:3.92, EUR:4.25, GBP:5.05}};
+
+  function setCalculationCurrencyButtons(currency) {{
+    const target = String(currency || 'PLN').toUpperCase();
+    document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.classList.toggle('active', btn.dataset.currency === target));
+  }}
+
+  function convertMoneyField(id, fromCurrency, toCurrency, digits=2) {{
+    const el = $(id);
+    if (!el || el.disabled) return;
+    const value = Number(el.value || 0);
+    if (!Number.isFinite(value) || value === 0) return;
+    const fromRate = FX_TO_PLN[fromCurrency] || 1;
+    const toRate = FX_TO_PLN[toCurrency] || 1;
+    el.value = Number((value * fromRate / toRate).toFixed(digits));
+  }}
+
+  function changeCalculationCurrency(toCurrency, convert=true) {{
+    const to = String(toCurrency || 'PLN').toUpperCase();
+    const from = String($('calculation-currency').value || levels.calculation_currency || 'PLN').toUpperCase();
+    if (to === from) {{ setCalculationCurrencyButtons(to); return; }}
+    if (convert) {{
+      convertMoneyField('capital', from, to, 2);
+      convertMoneyField('lot-cost', from, to, 2);
+      convertMoneyField('pip-value', from, to, 4);
+    }}
+    $('calculation-currency').value = to;
+    levels.calculation_currency = to;
+    setCalculationCurrencyButtons(to);
+    applyInstrumentControls();
+    if ($('calc-drawer').classList.contains('open')) calculatePosition(true);
+  }}
+
   function applyInstrumentControls() {{
     const stockCfdOn = !!levels.__stock_cfd_mode__;
     const originalIsStock = P.instrumentType === 'stock' || stockCfdOn;
@@ -2227,7 +2262,7 @@ class LightweightChartLevelSelectorUI:
   }}
 
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
-  $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000; $('calculation-currency').value = levels.calculation_currency || levels.currency || 'PLN';
+  $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000; $('calculation-currency').value = levels.calculation_currency || levels.currency || 'PLN'; setCalculationCurrencyButtons($('calculation-currency').value);
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
   $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
@@ -2235,10 +2270,10 @@ class LightweightChartLevelSelectorUI:
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
-  $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; render(); applyInstrumentControls(); }};
+  $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; $('calculation-currency').value='PLN'; setCalculationCurrencyButtons('PLN'); render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
-  $('calculation-currency').onchange = () => {{ levels.calculation_currency = $('calculation-currency').value; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('wedge-debug-btn').onclick = () => copyWedgeDebug();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');

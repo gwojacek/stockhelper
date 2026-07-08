@@ -384,6 +384,18 @@ def _fibo_formation_strength(result: FiboScanResult) -> float:
         return 0.0
 
 
+def _fibo_has_minimum_small_impulse(result: FiboScanResult) -> bool:
+    """Reject tiny nested Fibo candidates unless time or price expansion is meaningful."""
+    try:
+        if int(result.incline_duration_days) >= 10:  # about two trading weeks
+            return True
+        size = _fibo_formation_size(result)
+        anchor = max(abs(float(result.stop_loss)), 1e-9)
+        return (size / anchor) >= 0.30
+    except Exception:
+        return False
+
+
 def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
     if str(a.ticker).upper() != str(b.ticker).upper() or str(a.direction).lower() != str(b.direction).lower():
         return False
@@ -407,6 +419,8 @@ def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_side:
     """Keep at most one broad and one small Fibo formation per ticker/direction."""
     grouped: dict[tuple[str, str], list[FiboScanResult]] = {}
     for item in items:
+        if not _fibo_has_minimum_small_impulse(item):
+            continue
         grouped.setdefault((str(item.ticker).upper(), str(item.direction).lower()), []).append(item)
     limited: list[FiboScanResult] = []
     for group in grouped.values():

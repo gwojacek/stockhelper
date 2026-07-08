@@ -80,7 +80,7 @@ def test_evening_star_requires_middle_body_above_first_and_third_body():
 def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
     from scanner_search import FiboScanResult, _limit_fibo_formations_per_ticker
 
-    def result(start: str, days: int, stop: float = 100.0) -> FiboScanResult:
+    def result(start: str, days: int, stop: float = 100.0, fib_23_6: float = 130.0, fib_38_2: float = 150.0, fib_61_8: float = 180.0) -> FiboScanResult:
         return FiboScanResult(
             ticker="COCOA",
             direction="short",
@@ -91,9 +91,9 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
             decline_end_date="2026-07-08",
             decline_duration_days=80,
             incline_decline_duration_ratio=1.0,
-            fib_23_6=130.0,
-            fib_38_2=150.0,
-            fib_61_8=180.0,
+            fib_23_6=fib_23_6,
+            fib_38_2=fib_38_2,
+            fib_61_8=fib_61_8,
             first_61_8_touch_date="",
             reversal_pattern_name="none",
             stop_loss=stop,
@@ -104,6 +104,8 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
     middle = result("2025-08-13", 137)
     big = result("2025-08-12", 138)
 
-    limited = _limit_fibo_formations_per_ticker([small, middle, big])
+    tiny_fast = result("2026-02-20", 8, fib_23_6=110.0, fib_38_2=114.0, fib_61_8=118.0)
+
+    limited = _limit_fibo_formations_per_ticker([small, middle, big, tiny_fast])
 
     assert limited == [small, big]
