@@ -56,6 +56,7 @@ def test_bullish_hammer_allows_doji_hammer_shape():
 def test_bearish_hammer_mirrors_shadow_rules_and_allows_doji_shape():
     assert _is_bearish_shooting_star(candle(10.0, 14.0, 8.0, 11.0))
     assert not _is_bearish_shooting_star(candle(10.0, 14.0, 7.9, 11.0))
+    assert not _is_bearish_shooting_star(candle(10.0, 13.0, 8.2, 10.5))
     assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.5, 10.0))
 
 

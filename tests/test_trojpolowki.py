@@ -148,8 +148,8 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
-    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ deep retest (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text

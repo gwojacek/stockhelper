@@ -478,11 +478,10 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     if body == 0:
-        # Doji hammers are valid when the candle still has a dominant lower
-        # shadow and no oversized upper shadow. Ratio-to-body checks are not
-        # meaningful for a zero-sized body.
-        return candle_range > 0 and lower > 0 and lower >= upper
-    return lower >= 2 * body and upper <= 2 * body
+        # Doji hammers are valid only when the lower shadow is dominant;
+        # balanced long-legged doji candles should not be treated as hammers.
+        return candle_range > 0 and lower > 0 and lower >= 1.5 * max(upper, 1e-9)
+    return lower >= 2 * body and upper <= 2 * body and lower >= 1.5 * max(upper, 1e-9)
 
 
 def _is_bearish_shooting_star(c: pd.Series) -> bool:
@@ -491,10 +490,10 @@ def _is_bearish_shooting_star(c: pd.Series) -> bool:
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     if body == 0:
-        # Doji shooting stars / bearish hammers are valid with a dominant upper
-        # shadow and no oversized lower shadow.
-        return candle_range > 0 and upper > 0 and upper >= lower
-    return upper >= 2 * body and lower <= 2 * body
+        # Doji shooting stars are valid only when the upper shadow is dominant;
+        # candles with long wicks on both sides are neutral long-legged doji.
+        return candle_range > 0 and upper > 0 and upper >= 1.5 * max(lower, 1e-9)
+    return upper >= 2 * body and lower <= 2 * body and upper >= 1.5 * max(lower, 1e-9)
 
 
 def _touches_level(c: pd.Series, level: float) -> bool:
@@ -2465,7 +2464,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             cycle_end = n
 
         w_start = max(cycle_start - 2, flip_idx + 1)
-        w = df.iloc[w_start: cycle_end + 1].reset_index(drop=True)
+        # Include the first candle that leaves the cloud after a retest cycle.
+        # Bearish/bullish harami confirmation often prints on that outside candle.
+        detect_until = min(cycle_end + 1, len(df) - 1)
+        w = df.iloc[w_start: detect_until + 1].reset_index(drop=True)
         if len(w) >= 2:
             pattern_candidates: list[tuple[int, str]] = []
             if current_side == "above":
@@ -2593,6 +2595,14 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         return latest_status, latest_depth, valid_count, first_valid_date, events
     if found_too_late:
         return "invalid_pattern_too_late", "-", 0, "-", []
+    latest_idx = len(df) - 1
+    latest_outside = (
+        body_low.iloc[latest_idx] > top.iloc[latest_idx]
+        if current_side == "above"
+        else body_high.iloc[latest_idx] < bottom.iloc[latest_idx]
+    )
+    if latest_outside:
+        return "breakout_confirmed", "-", 0, "-", []
     return "returned_to_cloud_waiting_for_pattern", "-", 0, "-", []
 
 
@@ -4689,8 +4699,8 @@ def run_fibo_search(target: str) -> int:
     rows1 = sorted(
         rows1,
         key=lambda r: (
+            -_fibo_retracement_progress_pct(r),
             r.status != "valid_reversal",
-            abs(float(r.current_close) - float(r.fib_61_8)),
             r.ticker,
             r.direction,
             r.incline_start_date,

@@ -1485,6 +1485,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             if note_date and note_date != "-":
                 note = f"{note} ({note_date})"
         lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**"]
+        lines.append(f"🏷️ {note}")
         if detailed:
             plus, minus = _factor_lists(info)
             lines.append(f"{_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}")
@@ -1494,7 +1495,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
                 lines.append("➖ " + " · ".join(minus))
         elif info["kijun"] != "-":
             lines.append(f"Kijun: {info['kijun']}")
-        lines.append(f"🏷️ {note} · {_links_for_troj(row)}")
+        lines.append(_links_for_troj(row))
         return "<br>".join(lines)
 
     prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
