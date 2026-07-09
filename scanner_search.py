@@ -2319,6 +2319,11 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     current_side: str | None = None
     previous_respect_run = 0
 
+    # Allow a multi-week cloud transition before the final close on the other
+    # side.  OPL.WA-style setups can spend longer than 15 sessions inside/near
+    # the cloud after many months of respect before printing the actual breakout.
+    max_transition_days = 35
+
     # Prefer latest valid flip below->above.
     for i in range(len(df) - 1, 0, -1):
         crossed_up = body_low.iloc[i] > top.iloc[i] and body_low.iloc[i - 1] <= top.iloc[i - 1]
@@ -2329,7 +2334,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
         prev_run = 0
         j = i - 1
         transition = 0
-        while j >= 0 and not bool(below_respected.iloc[j]) and float(body_low.iloc[j]) <= float(top.iloc[j]) and transition < 15:
+        while j >= 0 and not bool(below_respected.iloc[j]) and float(body_low.iloc[j]) <= float(top.iloc[j]) and transition < max_transition_days:
             transition += 1
             j -= 1
         while j >= 0 and bool(below_respected.iloc[j]):
@@ -2353,7 +2358,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             prev_run = 0
             j = i - 1
             transition = 0
-            while j >= 0 and not bool(above_respected.iloc[j]) and float(body_high.iloc[j]) >= float(bottom.iloc[j]) and transition < 15:
+            while j >= 0 and not bool(above_respected.iloc[j]) and float(body_high.iloc[j]) >= float(bottom.iloc[j]) and transition < max_transition_days:
                 transition += 1
                 j -= 1
             while j >= 0 and bool(above_respected.iloc[j]):
