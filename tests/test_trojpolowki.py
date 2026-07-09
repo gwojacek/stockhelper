@@ -15,6 +15,7 @@ def load_run_module():
     detector.detect_instrument_type = lambda ticker, default=None: default or "stock"
     loader_mod = types.ModuleType("chart_program.chart_loader")
     loader_mod.COMMODITY_STOOQ_MAP = {"OIL": "cl.f"}
+    loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
     sys.modules["chart_program.instrument_detector"] = detector
@@ -92,7 +93,8 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
-    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" not in text
+    assert "✅ Pattern ≤14d / SL intact" in text
+    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
     assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
     assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
@@ -146,8 +148,8 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
-    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>Kijun: over<br>🏷️ above cloud" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ deep retest (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
@@ -301,7 +303,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "pattern/retest: bullish_harami" not in text
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
-    assert "Fibo 3P</td><td><strong>🇺🇸 SBUX.US" in text
+    assert "<h3>📐 Fibo" in text
+    assert "<strong>🇺🇸 SBUX.US</strong></td><td>near 61.8: 98.5%" in text
+    assert "<h3>🔻 Kliny" in text
     assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
     assert "Fibo pattern: none" not in text
