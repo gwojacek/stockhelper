@@ -177,7 +177,7 @@ WIG_SEARCH_TICKERS = [
     "CMP","COG","CPD","CRM","DCR","DOM","EAT","EKP","ELT","ENE","ENI","ERB","ETL","FON","FRO","FSG","FTE","LES","GPW","HDR",
     "HEL","HRP","HRS","IMC","IMP","INC","ING","INK","INL","INP","IPE","ITB","IZS","JSW","FAB","KGN","RWL","KOM","KPD","KPL",
     "KRK","KRU","KSG","KTY","LBT","LBW","DVL","LEN","LPP","LTX","LWB","MBR","MCI","MCR","MEX","MIR","GKI","MLK","MNC","MON",
-    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PEP","PHN","PJP","PLZ","FHB","PRM","PPS",
+    "MRB","MSP","MSW","MSZ","NEU","3RG","NTT","NVA","ODL","OTM","PAT","PCE","PCO","PHN","PJP","PLZ","FHB","PRM","PPS",
     "PRT","QRS","NVG","RBW","RLP","RMK","RNK","SEL","SFS","SGN","SKA","ONO","SNK","SON","STF","STP","STX","SWG","TOA",
     "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WXF","ZEP","MGT","ZMT","PGV","ZUE",
     "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
@@ -2589,6 +2589,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if float(df["Low"].iloc[k]) <= float(top.iloc[k]):
                         returned_to_cloud = True
                     if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
+                        latest_idx = len(df) - 1
+                        if body_low.iloc[latest_idx] > top.iloc[latest_idx]:
+                            return "breakout_confirmed", "-", valid_count, first_valid_date, events
                         return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
             else:
                 last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
@@ -2597,6 +2600,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if float(df["High"].iloc[k]) >= float(bottom.iloc[k]):
                         returned_to_cloud = True
                     if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
+                        latest_idx = len(df) - 1
+                        if body_high.iloc[latest_idx] < bottom.iloc[latest_idx]:
+                            return "breakout_confirmed", "-", valid_count, first_valid_date, events
                         return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
@@ -3925,6 +3931,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 )
                 i_start, fib_start = newer_low_idx, newer_low
         i_end = len(w) - 1
+        later_high = float(pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce").max()) if i_peak + 1 <= i_end else float("nan")
+        if pd.notna(later_high) and later_high > fib_end * 1.005:
+            _log(
+                "Rejected long: later high exceeded selected Fibo peak; "
+                f"still an incline/new-high structure (peak={fib_end:.4f}, later_high={later_high:.4f})."
+            )
+            return None
         corr_bars = i_end - i_peak
         early_correction_accepted = False
         if corr_bars < 8:

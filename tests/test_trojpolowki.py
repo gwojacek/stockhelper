@@ -303,7 +303,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "pattern/retest: bullish_harami" not in text
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
-    assert "Fibo 3P</td><td><strong>🇺🇸 SBUX.US" in text
+    assert "<h3>📐 Fibo" in text
+    assert "<strong>🇺🇸 SBUX.US</strong></td><td>near 61.8: 98.5%" in text
+    assert "<h3>🔻 Kliny" in text
     assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
     assert "Fibo pattern: none" not in text

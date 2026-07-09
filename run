@@ -2120,8 +2120,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             breakout_date = (row.metrics.get("breakout_date", "-") or "-").strip()
             breakout_direction = (row.metrics.get("breakout_direction", "-") or "-").strip()
             breakout_rank = 1 if breakout_direction in {"long", "short"} and breakout_date not in {"", "-"} else 0
-            breakout_text = f", wybicie {breakout_direction} {breakout_date}" if breakout_rank else ""
-            return ((0, -breakout_rank, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający{breakout_text}: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}, score {score:.0f}")
+            return ((0, -breakout_rank, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}, score {score:.0f}")
         if row.scanner == "FIBO":
             if row.category == "valid":
                 return None
@@ -2218,17 +2217,18 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
     def _allsearch_top_choices(limit_per_group: int = 2) -> str:
         groups = [
-            ("Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
-            ("Ichimoku continuation", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "position"]),
-            ("Fibo 3P", [r for r in rows if r.scanner == "FIBO" and r.category in {"waiting", "valid", "steep"}]),
+            ("☁️ Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
+            ("☁️ Ichimoku continuation", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "position"]),
+            ("📐 Fibo", [r for r in rows if r.scanner == "FIBO" and r.category in {"waiting", "valid", "steep"}]),
+            ("🔻 Kliny", [r for r in rows if r.scanner == "WEDGE"]),
         ]
 
         def _must_include_top_choice(rank: tuple[int, int, float, str], reason: str) -> bool:
             low = reason.lower()
             return rank[0] == 0 or "recent breakout" in low or "last 3 days" in low or "recent retest" in low or "returned to cloud" in low
 
-        html_rows = ""
-        seen_top_choice_tickers: set[str] = set()
+        group_sections: list[str] = []
+        seen_top_choice_tickers: set[tuple[str, str]] = set()
         for label, group_rows in groups:
             qualified: list[tuple[tuple[int, int, float, str], ScannerRow, str]] = []
             for r in group_rows:
@@ -2239,19 +2239,26 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             ranked = sorted(qualified, key=lambda item: item[0])
             must = [item for item in ranked if _must_include_top_choice(item[0], item[2])]
             selected = must + [item for item in ranked if item not in must][:max(0, limit_per_group - len(must))]
+            rows_html = ""
             for _rank, r, reason in selected:
-                ticker_key = (r.ticker or "").upper()
+                ticker_key = (label, (r.ticker or "").upper())
                 if ticker_key in seen_top_choice_tickers:
                     continue
                 seen_top_choice_tickers.add(ticker_key)
                 cmd = html.escape(_chart_command_for_row(r))
                 stooq = r.chart_url or _stooq_chart_url(r.ticker)
                 stooq_btn = _stooq_link_with_cell_button(stooq, r.ticker)
-                html_rows += f"<tr{_row_attrs(r)}><td>{html.escape(label)}</td><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker} {reason}", label)}</td></tr>"
-        if not html_rows:
+                rows_html += f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd, f'{_market_icon(r.market, r.ticker)} {r.ticker} {reason}', label)}</td></tr>"
+            if rows_html:
+                group_sections.append(
+                    f"<div class='top-choice-group'><h3>{html.escape(label)} <button class='iconbtn' title='Open stooq links from this top group' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice-group&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from this top group' onclick='openClosestStockhelperCharts(this)'>📊</button></h3>"
+                    f"<table class='data top-choice-compact'><thead><tr><th>Instrument</th><th>Why top choice</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{rows_html}</tbody></table></div>"
+                )
+        if not group_sections:
             return ""
-        open_btn = ' <button class=\'iconbtn\' title=\'Open stooq links from top choices\' onclick="_openLinks(_tableLinks(this.closest(\'.top-choice\').querySelector(\'table\')))">🔗</button> <button class=\'iconbtn\' title=\'Open stockhelper charts from top choices\' onclick="openClosestStockhelperCharts(this)">📊</button>'
-        return f"<section class='market top-choice'><h2>Top choices{open_btn}</h2><table class='data'><thead><tr><th>Source</th><th>Instrument</th><th>Why top choice</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{html_rows}</tbody></table></section>"
+        open_btn = ' <button class=\'iconbtn\' title=\'Open stooq links from all top choices\' onclick="_openLinks(_tableLinks(this.closest(\'.top-choice\')))" >🔗</button> <button class=\'iconbtn\' title=\'Open stockhelper charts from all top choices\' onclick="openClosestStockhelperCharts(this)">📊</button>'
+        return f"<section class='market top-choice'><h2>Top choices{open_btn}</h2>{''.join(group_sections)}</section>"
+
 
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
                   "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}.today-signal td{background:#dcfce7!important}.today-signal td:first-child{box-shadow:inset 4px 0 #16a34a}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}.pdfbtn{font-size:12px;font-weight:700;padding:4px 7px;align-self:center}.compactbtn{font-size:12px;padding:3px 7px}.troj-toolbar{margin:8px 0 10px}.troj-hide-extra .troj-extra-info{display:none}@media print{@page{size:A4 landscape;margin:6mm}body{max-width:none;padding:0;zoom:.78;background:#fff}.troj-hero,.market{box-shadow:none}.btn,.iconbtn{display:none!important}table{font-size:9px}th,td{padding:3px}.troj-table td{min-width:120px;line-height:1.25}.tab-panel:not(.active){display:none!important}}</style>",
