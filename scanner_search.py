@@ -2406,13 +2406,21 @@ def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: f
 
 
 def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, allow_equal_third_close: bool = False) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+    def _breakout_status_for_age() -> str:
+        try:
+            flip_date = pd.to_datetime(df.iloc[flip_idx]["Date"]).date()
+            latest_date = pd.to_datetime(df.iloc[-1]["Date"]).date()
+            return "breakout_confirmed" if 0 <= (latest_date - flip_date).days <= 5 else "breakout_aged"
+        except Exception:
+            return "breakout_confirmed"
+
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     post = range(flip_idx + 1, len(df))
     if flip_idx <= 0 or (flip_idx + 1) >= len(df):
-        return "breakout_confirmed", "-", 0, "-", []
+        return _breakout_status_for_age(), "-", 0, "-", []
 
     waiting = False
     touch_idxs: list[int] = []
@@ -2432,7 +2440,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             touch_idxs.append(i)
 
     if not waiting:
-        return "breakout_confirmed", "-", 0, "-", []
+        return _breakout_status_for_age(), "-", 0, "-", []
 
     first_valid_date = "-"
     first_valid_status = "-"
@@ -2591,7 +2599,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
                         latest_idx = len(df) - 1
                         if body_low.iloc[latest_idx] > top.iloc[latest_idx]:
-                            return "breakout_confirmed", "-", valid_count, first_valid_date, events
+                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
                         return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
             else:
                 last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
@@ -2602,7 +2610,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
                         latest_idx = len(df) - 1
                         if body_high.iloc[latest_idx] < bottom.iloc[latest_idx]:
-                            return "breakout_confirmed", "-", valid_count, first_valid_date, events
+                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
                         return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
@@ -2616,7 +2624,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         else body_high.iloc[latest_idx] < bottom.iloc[latest_idx]
     )
     if latest_outside:
-        return "breakout_confirmed", "-", 0, "-", []
+        return _breakout_status_for_age(), "-", 0, "-", []
     return "returned_to_cloud_waiting_for_pattern", "-", 0, "-", []
 
 
@@ -3831,9 +3839,13 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
-        _log("Rejected 3P steep: impulse is sideways/flat.")
-        return None
+    # The 3P steep column is an incline-quality watchlist, not a pullback
+    # scanner.  Do not reject a multi-month uptrend just because it paused in a
+    # tight consolidation for a few weeks; names like PCO should remain visible
+    # while they keep making current highs.  The regular Fibo scanner below still
+    # applies stricter sideways/correction filters for pullback setups.
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=45, band_pct=0.035):
+        _log("3P steep: impulse has a very tight pause, but keeping current-high incline watchlist candidate.")
 
     rng = fib_end - fib_start
     if rng <= 0:

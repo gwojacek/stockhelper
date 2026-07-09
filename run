@@ -2197,7 +2197,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if not wedge:
             return "<section class='market'><h2>🔻 Kliny opadające</h2><p class='muted'>Brak niewybitych klinów opadających.</p></section>"
         parts = ["<section class='market'><h2>🔻 Kliny opadające</h2><p class='muted'>Osobna lista klinów: w marketach najwyżej są świeże wybicia, a dalej formacje z dobrymi stykami linii, rozmiarem i nachyleniem.</p>"]
-        top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:10]
+        top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:5]
         top_rows = "".join(
             f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('upper_touches','?') + '/' + r.metrics.get('lower_touches','?'))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>"
             for r in top
@@ -2239,6 +2239,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             ranked = sorted(qualified, key=lambda item: item[0])
             must = [item for item in ranked if _must_include_top_choice(item[0], item[2])]
             selected = must + [item for item in ranked if item not in must][:max(0, limit_per_group - len(must))]
+            if label == "🔻 Kliny":
+                selected = selected[:5]
             rows_html = ""
             for _rank, r, reason in selected:
                 ticker_key = (label, (r.ticker or "").upper())
@@ -2266,16 +2268,16 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"fetch('/run-command?command=python%20run%20--journal-html').then(()=>setButtonText(this,'Opened'))\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
-    html_parts.append(_allsearch_top_choices())
-    html_parts.append(_liquidity_legend_html())
     html_parts.append("<div style='display:flex;gap:10px;align-items:center;flex-wrap:nowrap;overflow-x:auto;margin:10px 0 14px'>"
-                      "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status'><button id='clear-q' class='btn' type='button'>Clear</button>"
+                      "<label for='q'><b>Search</b></label><input id='q' placeholder='Search ticker/status/top choices'><button id='clear-q' class='btn' type='button'>Clear</button>"
                       "<label for='market'><b>Market</b></label><select id='market'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
                       "<div id='scanner-controls' style='display:inline-flex;gap:8px;align-items:center;margin-left:6px'>"
                       "<button id='flt-all' class='btn' data-scanner=''>📊 All</button>"
                       "<button id='flt-ichi' class='btn' data-scanner='ICHIMOKU'>☁️ Ichimoku</button>"
                       "<button id='flt-fibo' class='btn' data-scanner='FIBO'>📐 Fibo</button></div>"
                       "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>")
+    html_parts.append(_allsearch_top_choices())
+    html_parts.append(_liquidity_legend_html())
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
