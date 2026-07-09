@@ -2194,13 +2194,11 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
 
 
 def _flip_still_actionable(row: FlipResult) -> bool:
-    if row.months_since_flip >= 4.0:
-        return True
-    status = (row.ichimoku_status or "").lower()
-    if row.current_side == "above" and "over kijun" in status:
-        return False
-    if row.current_side == "below" and "under kijun" in status:
-        return False
+    # Keep every detected cloud-side flip in the scanner output.  The previous
+    # short-flip filter removed clean continuation breakouts as soon as price was
+    # also on the correct side of Kijun-sen, which hid fresh/valid formations
+    # such as OPL.WA from every report table.  Ranking/top-choice logic can
+    # decide importance, but the raw scanner result should stay findable.
     return True
 
 
@@ -3184,8 +3182,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         for lh1 in lower_anchor1_candidates:
             lower_anchor2_candidates: list[int] = []
             for j in range(lh1 + 5, end - 2):
-                if lows[j] <= lows[lh1]:
-                    continue
+                # Allow the lower wedge boundary to descend when it falls more
+                # slowly than the upper boundary.  Some active falling wedges
+                # (e.g. DNP.WA) compress with lower lows, so requiring the second
+                # lower anchor to be higher than the first hides valid setups.
                 if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
                     lower_anchor2_candidates.append(j)
             active_lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
