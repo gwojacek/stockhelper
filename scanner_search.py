@@ -2330,6 +2330,10 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             continue
         prev_run = 0
         j = i - 1
+        transition = 0
+        while j >= 0 and not bool(below_respected.iloc[j]) and float(body_low.iloc[j]) <= float(top.iloc[j]) and transition < 15:
+            transition += 1
+            j -= 1
         while j >= 0 and bool(below_respected.iloc[j]):
             prev_run += 1
             j -= 1
@@ -2350,6 +2354,10 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
                 continue
             prev_run = 0
             j = i - 1
+            transition = 0
+            while j >= 0 and not bool(above_respected.iloc[j]) and float(body_high.iloc[j]) >= float(bottom.iloc[j]) and transition < 15:
+                transition += 1
+                j -= 1
             while j >= 0 and bool(above_respected.iloc[j]):
                 prev_run += 1
                 j -= 1
@@ -3898,6 +3906,24 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if base is None:
             return None
         i_start, fib_start, fib_end = base
+        newer_low_slice = low.iloc[i_start + 1:i_peak + 1]
+        if not newer_low_slice.empty:
+            newer_low_idx = int(newer_low_slice.idxmin())
+            newer_low = float(low.iloc[newer_low_idx])
+            if newer_low < fib_start:
+                newer_days = i_peak - newer_low_idx
+                newer_gain = (fib_end - newer_low) / max(abs(newer_low), 1e-9)
+                if newer_days < min_incline_days and newer_gain < 0.30:
+                    _log(
+                        "Rejected long: newer lower low would be the correct small-Fibo anchor, "
+                        f"but the resulting incline is too short/small ({newer_days}d, {newer_gain * 100:.2f}%)."
+                    )
+                    return None
+                _log(
+                    "Long: reset fib anchor to newer lower low before peak "
+                    f"idx={i_start} low={fib_start:.4f} -> idx={newer_low_idx} low={newer_low:.4f}."
+                )
+                i_start, fib_start = newer_low_idx, newer_low
         i_end = len(w) - 1
         corr_bars = i_end - i_peak
         early_correction_accepted = False
