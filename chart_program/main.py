@@ -19,6 +19,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pip-size", type=float, default=0.0001)
     parser.add_argument("--api-key", help="Optional API key passed to data provider")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
+    parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
+    parser.add_argument("--fibo-lines", type=int, default=0)
+    parser.add_argument("--fibo-anchor-start")
+    parser.add_argument("--fibo-anchor-end")
+    parser.add_argument("--fibo-right", action="store_true")
     parser.add_argument("--no-run-after-save", action="store_true", help="Do not run analysis script after saving config")
     parser.add_argument("--wedge-lines", action="store_true")
     parser.add_argument("--wedge-upper-start")
@@ -71,6 +76,15 @@ def main() -> int:
     if args.api_key:
         forwarded.extend(["--api-key", args.api_key])
     forwarded.extend(["--data-source", args.data_source])
+    forwarded.extend(["--ichimoku-mode", args.ichimoku_mode])
+    if args.fibo_lines:
+        forwarded.extend(["--fibo-lines", str(args.fibo_lines)])
+    if args.fibo_anchor_start:
+        forwarded.extend(["--fibo-anchor-start", args.fibo_anchor_start])
+    if args.fibo_anchor_end:
+        forwarded.extend(["--fibo-anchor-end", args.fibo_anchor_end])
+    if args.fibo_right:
+        forwarded.append("--fibo-right")
     if args.wedge_lines:
         forwarded.append("--wedge-lines")
     for flag, value in [

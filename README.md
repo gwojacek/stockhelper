@@ -172,15 +172,19 @@ Command translation table:
 | `python run --open-allsearch-report all` | `docker compose run --rm stockhelper --open-allsearch-report all` |
 | `python run -ichimoku_search wig` | `docker compose run --rm stockhelper -ichimoku_search wig` |
 
-To shorten commands, add this shell function to `~/.bashrc` or `~/.zshrc` from the repository directory:
+To shorten commands permanently, install the `stock` shortcut:
 
 ```bash
-stock() {
-  docker compose run --rm stockhelper "$@"
-}
+./scripts/install-stock-command.sh
 ```
 
-Then reload your shell and run the same Docker-backed commands more comfortably:
+The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, add this to `~/.bashrc` or `~/.zshrc` and restart the terminal:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then run the same Docker-backed commands more comfortably:
 
 ```bash
 stock -allsearch all
@@ -188,7 +192,7 @@ stock --open-allsearch-report all
 stock -c ena
 ```
 
-When opening an HTML report from Docker, keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report.
+For report commands, the `stock` shortcut watches the Docker output and opens the first printed `http://127.0.0.1:...` report URL with your host `xdg-open`/browser. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report.
 
 If you do not use Docker Compose, build and run the image directly:
 
