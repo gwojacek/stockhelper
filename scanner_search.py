@@ -1635,12 +1635,23 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     worker queue. Use the explicit launcher command `python run --fetch-older-data`
     when older cache extension is needed.
     """
-    _runtime_df, csv_path, meta = _load_daily_data_with_retries(
-        symbol=symbol,
-        instrument_type=instrument_type,
-        persist=True,
-        fetch_older_data=False,
-    )
+    # Auto cache-only mode is useful for avoiding full group refreshes, but it
+    # must not prevent the scanner from merging the newest Yahoo candle for the
+    # actual calculation.  Only the explicit --onlycache mode should skip this.
+    old_auto_cache = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    user_onlycache = os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
+    if old_auto_cache == "1" and not user_onlycache:
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+    try:
+        _runtime_df, csv_path, meta = _load_daily_data_with_retries(
+            symbol=symbol,
+            instrument_type=instrument_type,
+            persist=True,
+            fetch_older_data=False,
+        )
+    finally:
+        if old_auto_cache == "1" and not user_onlycache:
+            os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -2413,7 +2424,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         try:
             flip_date = pd.to_datetime(df.iloc[flip_idx]["Date"]).date()
             latest_date = pd.to_datetime(df.iloc[-1]["Date"]).date()
-            return "breakout_confirmed" if 0 <= (latest_date - flip_date).days <= 5 else "breakout_aged"
+            return "breakout_confirmed" if 0 <= (latest_date - flip_date).days <= 5 else "no_breakout"
         except Exception:
             return "breakout_confirmed"
 
