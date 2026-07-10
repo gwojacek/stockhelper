@@ -696,6 +696,46 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct) is not None
 
 
+def _early_sideways_after_anchor_window(
+    w: pd.DataFrame,
+    i_start: int,
+    direction: str = "long",
+    min_days: int = 22,
+    max_days: int = 32,
+    band_pct: float = 0.10,
+    max_progress_pct: float = 0.12,
+) -> tuple[int, int, float, float, float, float] | None:
+    """Detect an anchor followed by a flat month instead of an immediate impulse.
+
+    Fibo anchors should mark the start of the incline.  If the first month after
+    the anchor remains in a tight band and makes little directional progress, the
+    selected old anchor is stale; a later breakout point should become the anchor.
+    """
+    if i_start < 0 or i_start >= len(w) - min_days:
+        return None
+    end = min(len(w), i_start + max_days)
+    seg = w.iloc[i_start:end].reset_index(drop=True)
+    if len(seg) < min_days:
+        return None
+    highs = pd.to_numeric(seg["High"], errors="coerce")
+    lows = pd.to_numeric(seg["Low"], errors="coerce")
+    if highs.dropna().empty or lows.dropna().empty:
+        return None
+    hi = float(highs.max())
+    lo = float(lows.min())
+    mid = (hi + lo) / 2.0
+    if mid <= 0:
+        return None
+    rng_pct = (hi - lo) / mid
+    anchor_price = float(lows.iloc[0] if direction == "long" else highs.iloc[0])
+    if anchor_price <= 0:
+        return None
+    progress_pct = ((hi - anchor_price) / anchor_price) if direction == "long" else ((anchor_price - lo) / anchor_price)
+    if rng_pct <= band_pct and progress_pct <= max_progress_pct:
+        return (i_start, i_start + len(seg) - 1, hi, lo, rng_pct, progress_pct)
+    return None
+
+
 def _select_impulse_start_long(
     w: pd.DataFrame,
     peak_idx: int,
@@ -3855,6 +3895,18 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
+    early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="long")
+    if early_sideways is not None:
+        s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
+        start_date = str(pd.to_datetime(w.iloc[s_idx]["Date"]).date())
+        end_date = str(pd.to_datetime(w.iloc[e_idx]["Date"]).date())
+        _log(
+            "Rejected 3P steep: anchor is followed by a flat month instead of an immediate incline. "
+            f"window={s_idx}-{e_idx} ({start_date}..{end_date}), "
+            f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}%, progress={progress_pct * 100:.2f}%."
+        )
+        return None
+
     # The 3P steep column is an incline-quality watchlist, not a pullback
     # scanner.  Do not reject a multi-month uptrend just because it paused in a
     # tight consolidation for a few weeks; names like PCO should remain visible
@@ -3958,6 +4010,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     f"idx={i_start} low={fib_start:.4f} -> idx={newer_low_idx} low={newer_low:.4f}."
                 )
                 i_start, fib_start = newer_low_idx, newer_low
+        early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="long")
+        if early_sideways is not None:
+            s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
+            start_date = str(pd.to_datetime(w.iloc[s_idx]["Date"]).date())
+            end_date = str(pd.to_datetime(w.iloc[e_idx]["Date"]).date())
+            _log(
+                "Rejected long: anchor is followed by a flat month instead of an immediate incline. "
+                f"window={s_idx}-{e_idx} ({start_date}..{end_date}), "
+                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}%, progress={progress_pct * 100:.2f}%."
+            )
+            return None
         i_end = len(w) - 1
         later_high = float(pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce").max()) if i_peak + 1 <= i_end else float("nan")
         if pd.notna(later_high) and later_high > fib_end * 1.005:
