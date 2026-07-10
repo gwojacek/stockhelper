@@ -130,7 +130,7 @@ Build the image once:
 docker compose build
 ```
 
-After building, run StockHelper through Docker. Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before, but replace `python run` with `docker compose run --rm stockhelper`:
+After building, run StockHelper through Docker. Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before, but replace `python run` with `docker compose run --rm stockhelper`. The Compose file sets the container entrypoint to `python run`, so arguments like `-allsearch all` are passed to StockHelper, not treated as executables:
 
 ```bash
 # Before Docker:

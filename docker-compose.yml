@@ -8,6 +8,7 @@ services:
     tty: true
     # Chart/report workflows bind to 127.0.0.1 on dynamic ports; host networking makes them reachable on the host.
     network_mode: host
+    entrypoint: ["python", "run"]
     environment:
       PYTHONUNBUFFERED: "1"
     volumes:
