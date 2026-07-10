@@ -17,4 +17,4 @@ services:
       - ./chart_program/data:/app/chart_program/data
       - ./Trojpolowki:/app/Trojpolowki
       - ./debug:/app/debug
-    command: ["python", "run", "--help"]
+    command: ["--help"]

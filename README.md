@@ -130,31 +130,46 @@ Build the image once:
 docker compose build
 ```
 
-Run the same StockHelper commands as before, but prefix them with `docker compose run --rm stockhelper`. The compose file mounts `configs/`, `data/`, `charts/`, report output folders, `Trojpolowki/`, and `debug/` so generated reports, cached CSVs, journal files, screenshots, and edited configs stay on your host machine:
+After building, run StockHelper through Docker. Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before, but replace `python run` with `docker compose run --rm stockhelper`:
+
+```bash
+# Before Docker:
+python run -allsearch all
+
+# With Docker:
+docker compose run --rm stockhelper -allsearch all
+```
+
+The compose file mounts `configs/`, `data/`, `charts/`, report output folders, `Trojpolowki/`, and `debug/`, so generated reports, cached CSVs, journal files, screenshots, and edited configs stay on your host machine.
+
+Common commands:
 
 ```bash
 # Show all launcher options
-docker compose run --rm stockhelper python run --help
+docker compose run --rm stockhelper --help
 
 # Run a configured setup
-docker compose run --rm stockhelper python run ena
+docker compose run --rm stockhelper ena
+
+# Run the all-market scanner
+docker compose run --rm stockhelper -allsearch all
 
 # Open chart mode for a symbol/config
 # The compose file uses host networking so the local browser UI is reachable on 127.0.0.1.
-docker compose run --rm stockhelper python run -c ena
+docker compose run --rm stockhelper -c ena
 
 # Run a scanner using only local cache
-docker compose run --rm -e STOCKHELPER_CACHE_ONLY=1 stockhelper python run -ichimoku_search wig
+docker compose run --rm -e STOCKHELPER_CACHE_ONLY=1 stockhelper -ichimoku_search wig
 ```
 
-
-In short, the commands stay the same inside Docker:
+Command translation table:
 
 | Before Docker | With Docker Compose |
 | --- | --- |
-| `python run ena` | `docker compose run --rm stockhelper python run ena` |
-| `python run -c ena` | `docker compose run --rm stockhelper python run -c ena` |
-| `python run -ichimoku_search wig` | `docker compose run --rm stockhelper python run -ichimoku_search wig` |
+| `python run ena` | `docker compose run --rm stockhelper ena` |
+| `python run -c ena` | `docker compose run --rm stockhelper -c ena` |
+| `python run -allsearch all` | `docker compose run --rm stockhelper -allsearch all` |
+| `python run -ichimoku_search wig` | `docker compose run --rm stockhelper -ichimoku_search wig` |
 
 If you do not use Docker Compose, build and run the image directly:
 
@@ -167,7 +182,7 @@ docker run --rm -it --network host \
   -v "$PWD/chart_program/data:/app/chart_program/data" \
   -v "$PWD/Trojpolowki:/app/Trojpolowki" \
   -v "$PWD/debug:/app/debug" \
-  stockhelper python run ena
+  stockhelper -allsearch all
 ```
 
 For commands that launch a local web UI, the Compose setup uses host networking because StockHelper binds chart/report servers to dynamic `127.0.0.1` ports. If you use plain Docker for chart mode on Linux, add `--network host`; on Docker Desktop, enable host networking first or prefer the Compose command above.

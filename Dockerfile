@@ -46,4 +46,5 @@ RUN python -m playwright install chromium
 COPY . .
 RUN chmod +x /app/run /app/refresh
 
-CMD ["python", "run", "--help"]
+ENTRYPOINT ["python", "run"]
+CMD ["--help"]
