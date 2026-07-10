@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v16"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v17"
 
 
 def main() -> int:
@@ -216,12 +216,39 @@ def main() -> int:
     def _is_report_chart_command(argv: list[str]) -> bool:
         return len(argv) >= 3 and Path(argv[1]).name == "run" and argv[2] in {"-c", "--chart"}
 
+    def _direct_chart_argv(argv: list[str]) -> list[str]:
+        if os.environ.get("STOCKHELPER_REPORT_DIRECT_CHART", "1").strip().lower() in {"0", "false", "no", "off"}:
+            return argv
+        if not _is_report_chart_command(argv) or len(argv) < 4:
+            return argv
+        # Report buttons already carry chart_program-compatible flags. Avoid an
+        # extra nested `python run -c ...` process and launch chart_program directly
+        # from the warm report-server container.
+        return [sys.executable, "-m", "chart_program", *argv[3:]]
+
+    def _journal_response_payload() -> dict:
+        from journal import write_html
+        path = write_html()
+        rel = path.resolve().relative_to(root)
+        url = "/" + "/".join(rel.parts)
+        return {"ok": True, "url": url, "path": str(path)}
+
+    def _is_journal_html_command(command: str) -> bool:
+        try:
+            argv = shlex.split(command)
+        except Exception:
+            return False
+        return len(argv) >= 3 and argv[0] in {"python", "python3"} and argv[1] == "run" and argv[2] == "--journal-html"
+
     def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
         original_command = command
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
+        if _is_journal_html_command(command):
+            return 0, _journal_response_payload()
         if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
             argv = [sys.executable, str(project_root / "run"), *argv[2:]]
+        argv = _direct_chart_argv(argv)
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
@@ -352,6 +379,15 @@ def main() -> int:
             if parsed.path == "/__stockhelper_report_server_info":
                 payload = {"protocol": REPORT_SERVER_PROTOCOL, "project_root": str(project_root), "root": str(root)}
                 self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/journal-html":
+                try:
+                    payload = _journal_response_payload()
+                    self.send_response(303)
+                    self.send_header("Location", str(payload["url"]))
+                    self.end_headers()
+                except Exception as exc:
+                    _send_html(self, "StockHelper journal failed", str(exc), {"error": str(exc)}, 500)
+                return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()

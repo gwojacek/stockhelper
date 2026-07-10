@@ -192,7 +192,7 @@ stock --open-allsearch-report all
 stock -c ena
 ```
 
-For report commands, the `stock` shortcut watches the Docker output and opens the first printed `http://127.0.0.1:...` report URL with your host Chrome/Chromium in a new window, falling back to `xdg-open`/`gio`. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report.
+For report commands, the `stock` shortcut watches the Docker output and opens the first printed `http://127.0.0.1:...` report URL with your host Chrome/Chromium in a new window, falling back to `xdg-open`/`gio`. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report. Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container to avoid an extra nested launcher process.
 
 If you do not use Docker Compose, build and run the image directly:
 

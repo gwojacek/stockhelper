@@ -659,7 +659,15 @@ def _patch_report_runtime_js(path: Path) -> None:
         count=1,
         flags=re.S,
     )
-    if count or group_count:
+    patched = patched.replace(
+        "fetch('/run-command?command=python%20run%20--journal-html').then(()=>setButtonText(this,'Opened'))",
+        "window.open('/journal-html','_blank')"
+    )
+    patched = patched.replace(
+        "fetch(&quot;/run-command?command=python%20run%20--journal-html&quot;).then(()=>setButtonText(this,&quot;Opened&quot;))",
+        "window.open('/journal-html','_blank')"
+    )
+    if count or group_count or patched != text:
         path.write_text(patched, encoding="utf-8")
 
 def _open_html_report(path: Path) -> str | None:
@@ -707,7 +715,7 @@ def _wait_for_report_server(report_url: str | None) -> int:
         return 0
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v16"
+    report_server_protocol = "stockhelper-report-server-v17"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
@@ -2217,11 +2225,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
 
     def _journal_tab_html() -> str:
-        cmd = "python run --journal-html"
-        encoded = quote(cmd, safe="")
         button = (
-            f'<button class="btn troj-cta" type="button" '
-            f'onclick="fetch(&quot;/run-command?command={encoded}&quot;).then(()=>setButtonText(this,&quot;Opened&quot;))">'
+            '<button class="btn troj-cta" type="button" '
+            'onclick="window.open(\'/journal-html\',\'_blank\')">'
             'Open transaction journal</button>'
         )
         return (
@@ -2328,7 +2334,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "<select id='market' style='display:none'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
         "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>"
     )
-    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"fetch('/run-command?command=python%20run%20--journal-html').then(()=>setButtonText(this,'Opened'))\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"window.open('/journal-html','_blank')\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append(search_toolbar_html)
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
