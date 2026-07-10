@@ -2,7 +2,36 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently has five release tags: `1.0`, `2.0`, `3.0`, `4.0`, and `5.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently has six release tags: `1.0`, `2.0`, `3.0`, `4.0`, `5.0`, and `6.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+
+## [6.0] - 2026-07-10
+
+Tag: `6.0`
+Compare: [`5.0...6.0`](https://github.com/gwojacek/stockhelper/compare/5.0...6.0)
+
+### Added
+
+- Added the transaction journal workflow with served report actions, trade review/editing, completed-position summaries, close-preview handling, and chart screenshots.
+- Added journal close-adjust chart mode so closing trades can be reviewed and adjusted from dedicated chart views without affecting normal chart mode.
+- Added calculation-currency support and FX-fee-aware position calculations in the chart UI, including improved calculation controls and report integration.
+- Added quick-chart navigation and selected-value chart affordances to make report-linked chart inspection faster.
+- Added Stooq Playwright proxy support and documented proxy usage for more resilient Stooq data collection.
+
+### Changed
+
+- Refined transaction journal layout, compression, action buttons, slider toggles, reason labels, bulk actions, summary editing, and full-journal embedding in all-search reports.
+- Improved Fibo, 3P, Ichimoku, hammer, engulfing, and candlestick detection, including steep/mid-pullback handling, forex retest behavior, OPL cloud transitions, and matching-cell search filters.
+- Tuned scanner/report behavior by restoring toggleable scanner filters, scoping filters to all-search reports, hiding empty groups, preserving 3P search columns, refreshing scan candles, and improving report icons.
+- Tuned wedge selection and breakout freshness, including descending wedge lows and retained OPL flips.
+- Updated generated market data/report artifacts and tightened project documentation, including the Python 3.12 requirement.
+
+### Fixed
+
+- Fixed generated journal JavaScript escaping, journal HTML actions, journal close chart opening, journal direction sync, and close-line screenshot synchronization.
+- Stabilized Lightweight Charts bootstrap and scanner-launched chart rendering.
+- Fixed index CSV cache completeness checks and commodity parsing for Stooq metal rows without volume.
+- Improved Stooq blank-page fallback handling with WebKit and Firefox retry paths.
+- Rejected flat Fibo anchors and fixed 3P tab search/report filtering edge cases.
 
 ## [5.0] - 2026-06-22
 
