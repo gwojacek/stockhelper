@@ -10,5 +10,6 @@
   "spread": 54.0,
   "name": "WIG20",
   "__show_ichimoku__": true,
-  "spread_multiplier": 2.7
+  "spread_multiplier": 2.7,
+  "__journal_source_technique__": "Ichimoku"
 }

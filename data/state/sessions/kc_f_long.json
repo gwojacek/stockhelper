@@ -1,6 +1,84 @@
 {
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "lot_cost": 218982.66,
   "pip_value": 7238.1,
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (242.7)",
+      "x0": "2026-06-09",
+      "x1": "2034-05-29",
+      "y0": 242.7,
+      "y1": 242.7,
+      "price": 242.7,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (317.2855)",
+      "x0": "2026-03-13",
+      "x1": "2034-05-29",
+      "y0": 317.2855,
+      "y1": 317.2855,
+      "price": 317.2855,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (340.325)",
+      "x0": "2026-02-17",
+      "x1": "2034-05-29",
+      "y0": 340.325,
+      "y1": 340.325,
+      "price": 340.325,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (363.3645)",
+      "x0": "2026-01-21",
+      "x1": "2034-05-29",
+      "y0": 363.3645,
+      "y1": 363.3645,
+      "price": 363.3645,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (437.95)",
+      "x0": "2025-10-23",
+      "x1": "2034-05-29",
+      "y0": 437.95,
+      "y1": 437.95,
+      "price": 437.95,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2025-10-23",
+      "x1": "2026-06-09",
+      "y0": 437.95,
+      "y1": 242.7,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
 }

@@ -1,0 +1,18 @@
+{
+  "high": 150.915,
+  "low": 145.756,
+  "entry": 148.78,
+  "stop_loss": 147,
+  "position_type": "long",
+  "capital": 233000,
+  "lot_cost": 12663.63,
+  "pip_value": 23.44,
+  "pip_size": 0.01,
+  "spread": 31.72,
+  "pair": "USD/JPY",
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku"
+}

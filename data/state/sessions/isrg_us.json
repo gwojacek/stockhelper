@@ -2,5 +2,6 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": true
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku"
 }
