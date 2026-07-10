@@ -104,8 +104,28 @@
     "checked_at": "2026-06-24T21:57:16.137856+00:00",
     "result": "stale"
   },
+  "commodities:2026-06-25:post1945": {
+    "checked_at": "2026-06-25T20:53:43.957008+00:00",
+    "result": "fresh"
+  },
   "commodities:2026-06-25:pre1945": {
     "checked_at": "2026-06-25T12:56:45.690111+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-07-08:pre1945": {
+    "checked_at": "2026-07-08T08:51:05.418308+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-07-09:post1945": {
+    "checked_at": "2026-07-09T20:19:16.172991+00:00",
+    "result": "fresh"
+  },
+  "commodities:2026-07-09:pre1945": {
+    "checked_at": "2026-07-09T09:50:58.317606+00:00",
+    "result": "stale"
+  },
+  "commodities:2026-07-10:pre1945": {
+    "checked_at": "2026-07-10T09:42:19.159384+00:00",
     "result": "stale"
   },
   "dax40": {
@@ -154,6 +174,22 @@
   },
   "stooq_bulk:2026-06-24": {
     "checked_at": "2026-06-24T21:55:38.849916+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-06-25": {
+    "checked_at": "2026-06-25T17:30:54.265004+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-08": {
+    "checked_at": "2026-07-08T08:49:50.572512+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-09": {
+    "checked_at": "2026-07-09T09:49:38.375196+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-10": {
+    "checked_at": "2026-07-10T08:30:36.203503+00:00",
     "result": "bulk"
   },
   "wig": {

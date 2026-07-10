@@ -7,8 +7,8 @@ It helps you:
 - calculate position size, engaged capital, potential loss, and risk/reward for configured setups;
 - work with stocks, forex pairs, commodities, and CFD/index-like instruments;
 - download/cache daily market data from Stooq, Yahoo Finance, and Stooq web/table fallbacks;
-- scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations with improved 5.0 anchor scoring and alternate-wedge review;
-- generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists plus a dedicated Kliny tab from the latest allsearch data;
+- scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations with age-aware breakout/retest handling, stale-Fibo-anchor rejection, improved 5.0 wedge anchor scoring, and alternate-wedge review;
+- generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists plus a dedicated Kliny tab from the latest allsearch data, with searchable/filterable HTML tabs and grouped quick-chart buttons;
 - open an interactive chart tool, select price levels, inspect/import/edit wedge lines, save/update config files, export chart snapshots, and create transaction journal entries;
 - review a local transaction journal with opening/closing screenshots, close-adjust chart mode, estimated P/L, and update/delete actions;
 - generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, journal HTML, and chart images.
@@ -58,9 +58,9 @@ Use this table as the fastest path to the commands you will run most often. Deta
   - Stooq bulk `wse indices/wig20.txt` import as `data/csv/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
   - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
-- **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, and an explain/debug mode.
+- **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, stale-anchor rejection when the first month after an anchor is flat, and an explain/debug mode.
 - **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, stricter wick/contact validation, improved anchor scoring, and chart commands that preload wedge lines.
-- **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
+- **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner metadata for filtering, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
 - **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
@@ -103,7 +103,7 @@ stockhelper/
 
 ### Requirements
 
-- Python `>=3.10,<4.0`
+- Python `>=3.12,<4.0` (Python 3.12 or newer is required; older 3.10/3.11 environments are not supported).
 - Poetry is the recommended installer because dependencies are declared in `pyproject.toml`.
 - Browser support for Stooq web fallback/debug flows requires Playwright browser binaries.
 
@@ -475,7 +475,7 @@ python run -allsearch all
 - Regenerates compact Trójpolówki Markdown watchlists from the same allsearch run (no second instrument scan).
 - Builds a browser-friendly HTML report and a Markdown report.
 - Embeds four HTML tabs: `ALLSEARCH REPORT`, `3P FIBO`, `3P ICHIMOKU`, and `🔻 Kliny`.
-- Adds top-choice sections, sortable/filterable tables, group Stooq-open buttons, StockHelper chart-open buttons, and a PDF export button that works from every tab.
+- Adds top-choice sections, sortable/filterable tables, a search toolbar with market buttons and Allsearch-only scanner buttons, group Stooq-open buttons, StockHelper chart-open buttons, and a PDF export button that works from every tab.
 - Opens/serves the HTML report via the local report server when possible.
 - Includes an **Open journal** button that runs `python run --journal-html` in a separate served window; the journal is separate from scanner result generation and does not remove instruments from the scanner report.
 
@@ -496,9 +496,9 @@ python run -allsearch all
 
 - `Trojpolowki/fibo.md` uses three compact columns: steep/early `WYNIKI FIBO #0` setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
 - `Trojpolowki/ichimoku.md` uses compact continuation/watch/cloud/retest columns and keeps risk/context details only where they are relevant.
-- The HTML report renders both 3P files as tabs, not as separate links; every 3P column and top-choice block has a `📊` StockHelper chart-open control, plus compact Stooq and Google-Sheets copy icons next to instruments. Grouped `📊` controls open one chart first and then show the rest of that button's instruments in the chart sidebar as quick buttons grouped by the originating section/source.
+- The HTML report renders both 3P files as tabs, not as separate links; every 3P cell carries market/scanner metadata so the toolbar can filter instruments in-place without collapsing columns. Every 3P column and top-choice block has a `📊` StockHelper chart-open control, plus compact Stooq and Google-Sheets copy icons next to instruments. Grouped `📊` controls open one chart first and then show the rest of that button's instruments in the chart sidebar as quick buttons grouped by the originating section/source.
 - Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, deeper Fibo pullbacks, and the strongest falling-wedge setups are prioritized.
-- The `🔻 Kliny` tab groups falling wedges by market, keeps Stooq/StockHelper/Google-Sheets-copy controls next to each table, marks statuses as `⏳ unbroken` or `🚀 breakout`, and shows `Breakout date` plus `Breakout direction` (`long` for upper-line breakout, `short` for lower-line breakdown).
+- The `🔻 Kliny` tab groups falling wedges by market, keeps Stooq/StockHelper/Google-Sheets-copy controls next to each table, hides empty market groups while filtering, marks statuses as `⏳ unbroken` or `🚀 breakout`, and shows `Breakout date` plus `Breakout direction` (`long` for upper-line breakout, `short` for lower-line breakdown).
 - Falling-wedge scanner rows are written at the end of Fibo markdown under `WYNIKI KLINY OPADAJĄCE`; wedges must pass the same Avg10d liquidity threshold used by Fibonacci formations, and the wedge tables include `Avg10d PLN`. A wedge remains valid only while no candle closes outside its boundaries, except for an accepted breakout/breakdown on the latest candle or within the last 5 candles, which becomes the absolute top-choice wedge case. Touch counts are based on anchor candles plus separate local-extreme wick contacts on the wedge boundary, matching the chart markers: larger anchor dots and smaller colored touch dots. In 5.0, wedge scoring favors longer structures with stronger boundary touches, active anchors, and exact wick-contact debug markers; report chart links can also expose alternate wedge candidates in the chart UI. The report keeps wedge table columns compact (months, touches, slope, breakout, size, score) and does not show fit/proximity/compression columns.
 - WYNIKI 2 Ichimoku includes `Mies. respektu przed wybiciem`, showing how long the prior cloud side was respected before the breakout.
 - Freshness probing samples up to five random instruments per run (instead of always the first five) so an interrupted refresh does not keep checking the same already-updated symbols on the next run.
@@ -618,7 +618,7 @@ python run -onlycache -fibo_search commodities
 python run -onlycache -allsearch all
 ```
 
-Use this when remote data providers are slow, rate-limited, or unavailable and you trust local CSV files. `-onlycache` sets `STOCKHELPER_CACHE_ONLY=1` internally and skips the normal freshness probes, including the commodities freshness check.
+Use this when remote data providers are slow, rate-limited, or unavailable and you trust local CSV files. `-onlycache` sets both `STOCKHELPER_CACHE_ONLY=1` and the internal `STOCKHELPER_USER_ONLYCACHE=1` marker, skips normal freshness probes, and prevents the scanner from merging fresh Yahoo candles for that run. Without explicit `-onlycache`, automatic cache gating may still be temporarily relaxed per symbol so calculations can use the newest available candle.
 
 ### Force verbose Stooq logs
 
@@ -815,7 +815,7 @@ Or open the HTML file directly from:
 chart_program/data/all_insturments_search/allsearch/
 ```
 
-The combined HTML includes tabs for the allsearch report, 3P Fibo, 3P Ichimoku, and `🔻 Kliny`. Use the `📄 Download PDF` button in the tab header to export the currently visible report view.
+The combined HTML includes tabs for the allsearch report, 3P Fibo, 3P Ichimoku, and `🔻 Kliny`. Use the search box and market buttons across tabs; the Ichimoku/Fibo scanner buttons are shown only on the Allsearch tab and can be clicked again to clear the scanner filter. Use the `📄 Download PDF` button in the tab header to export the currently visible report view.
 
 ### Data history is too short
 

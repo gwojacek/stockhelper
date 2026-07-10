@@ -1,0 +1,85 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (105.91)",
+      "x0": "2026-05-08",
+      "x1": "2034-05-27",
+      "y0": 105.91,
+      "y1": 105.91,
+      "price": 105.91,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (88.1088)",
+      "x0": "2026-04-23",
+      "x1": "2034-05-27",
+      "y0": 88.1088,
+      "y1": 88.1088,
+      "price": 88.1088,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (82.61)",
+      "x0": "2026-04-20",
+      "x1": "2034-05-27",
+      "y0": 82.61,
+      "y1": 82.61,
+      "price": 82.61,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (77.1112)",
+      "x0": "2026-04-15",
+      "x1": "2034-05-27",
+      "y0": 77.1112,
+      "y1": 77.1112,
+      "price": 77.1112,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (59.31)",
+      "x0": "2026-03-30",
+      "x1": "2034-05-27",
+      "y0": 59.31,
+      "y1": 59.31,
+      "price": 59.31,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-03-30",
+      "x1": "2026-05-08",
+      "y0": 59.31,
+      "y1": 105.91,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}

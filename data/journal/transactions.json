@@ -1,0 +1,135 @@
+[
+  {
+    "symbol": "KC.F",
+    "sourceTicker": "KC.F / COFFEE",
+    "instrumentType": "commodity",
+    "technique": "Ichimoku",
+    "direction": "long",
+    "amount": "448",
+    "amount_currency": "USD",
+    "entry": 280.48,
+    "stop_loss": 285.29,
+    "take_profit": "",
+    "line_cross_value": "",
+    "high": "",
+    "low": "",
+    "reason": "ichimoku_retest_pattern",
+    "reason_label": "Retest + bullish candle",
+    "pattern": "Retest + bullish candle",
+    "touches": "",
+    "notes": "",
+    "preview": "Instrument: KC.F\nTechnique: Ichimoku\nDirection: long\nAmount: 448 USD\nEntry: 280.48\nStop loss: 285.29\nTake profit/check: \nReason: Retest + bullish candle\n\n",
+    "levels": {
+      "__show_ichimoku__": true,
+      "lot_cost": 218982.66,
+      "pip_value": 7238.1,
+      "__journal_source_technique__": "Ichimoku",
+      "entry": 280.48,
+      "stop_loss": 285.29,
+      "__half_points__": [],
+      "position_calculations": {
+        "basics": {
+          "entry": 280.48,
+          "lot_cost": 218982.66,
+          "pip_value": 7238.1,
+          "spread": 0,
+          "stop_loss": 285.29
+        },
+        "currency": "PLN",
+        "fx_conversion_fee_applicable": false,
+        "fx_conversion_fee_enabled": false,
+        "fx_conversion_fee_pct": 1,
+        "instrument_type": "commodity",
+        "ok": true,
+        "position_type": "long",
+        "profit": null,
+        "profit_percent": null,
+        "risk_reward": null,
+        "rows": [
+          {
+            "capital_used": 7883.38,
+            "loss_percent": 0.49,
+            "position_size": 0.036,
+            "position_unit": "Lots",
+            "potential_loss": 1253.35,
+            "risk": 0.005,
+            "risk_label": "0.5%"
+          },
+          {
+            "capital_used": 15985.73,
+            "loss_percent": 1,
+            "position_size": 0.073,
+            "position_unit": "Lots",
+            "potential_loss": 2541.51,
+            "risk": 0.01,
+            "risk_label": "1.0%"
+          },
+          {
+            "capital_used": 23869.11,
+            "loss_percent": 1.49,
+            "position_size": 0.109,
+            "position_unit": "Lots",
+            "potential_loss": 3794.86,
+            "risk": 0.015,
+            "risk_label": "1.5%"
+          },
+          {
+            "capital_used": 31971.47,
+            "loss_percent": 1.99,
+            "position_size": 0.146,
+            "position_unit": "Lots",
+            "potential_loss": 5083.03,
+            "risk": 0.02,
+            "risk_label": "2.0%"
+          },
+          {
+            "capital_used": 40073.83,
+            "loss_percent": 2.5,
+            "position_size": 0.183,
+            "position_unit": "Lots",
+            "potential_loss": 6371.19,
+            "risk": 0.025,
+            "risk_label": "2.5%"
+          },
+          {
+            "capital_used": 47957.2,
+            "loss_percent": 2.99,
+            "position_size": 0.219,
+            "position_unit": "Lots",
+            "potential_loss": 7624.54,
+            "risk": 0.03,
+            "risk_label": "3.0%"
+          }
+        ],
+        "take_profit": null,
+        "warnings": [],
+        "zr_ratio": null
+      },
+      "position_type": "long",
+      "capital": 255000,
+      "spread_multiplier": 0,
+      "spread": 0,
+      "spread_pips": null,
+      "drawn_objects": [],
+      "level_points": {
+        "entry": {
+          "price": 280.48,
+          "plot_price": 280.48,
+          "date": "2026-06-25"
+        },
+        "stop_loss": {
+          "price": 285.29,
+          "plot_price": 285.29,
+          "date": "2026-06-22"
+        }
+      },
+      "__finished__": false
+    },
+    "id": "2cbc8ba54a9b43c5881af83b9343e247",
+    "created_at": "2026-06-25T13:27:21Z",
+    "status": "open",
+    "outcome": "pending",
+    "review_notes": "",
+    "screenshot_path": "data/journal/screenshots/2026-06-25_KC.F_2cbc8ba5.png"
+  }
+]

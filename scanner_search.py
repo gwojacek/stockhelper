@@ -696,6 +696,46 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct) is not None
 
 
+def _early_sideways_after_anchor_window(
+    w: pd.DataFrame,
+    i_start: int,
+    direction: str = "long",
+    min_days: int = 22,
+    max_days: int = 32,
+    band_pct: float = 0.10,
+    max_progress_pct: float = 0.12,
+) -> tuple[int, int, float, float, float, float] | None:
+    """Detect an anchor followed by a flat month instead of an immediate impulse.
+
+    Fibo anchors should mark the start of the incline.  If the first month after
+    the anchor remains in a tight band and makes little directional progress, the
+    selected old anchor is stale; a later breakout point should become the anchor.
+    """
+    if i_start < 0 or i_start >= len(w) - min_days:
+        return None
+    end = min(len(w), i_start + max_days)
+    seg = w.iloc[i_start:end].reset_index(drop=True)
+    if len(seg) < min_days:
+        return None
+    highs = pd.to_numeric(seg["High"], errors="coerce")
+    lows = pd.to_numeric(seg["Low"], errors="coerce")
+    if highs.dropna().empty or lows.dropna().empty:
+        return None
+    hi = float(highs.max())
+    lo = float(lows.min())
+    mid = (hi + lo) / 2.0
+    if mid <= 0:
+        return None
+    rng_pct = (hi - lo) / mid
+    anchor_price = float(lows.iloc[0] if direction == "long" else highs.iloc[0])
+    if anchor_price <= 0:
+        return None
+    progress_pct = ((hi - anchor_price) / anchor_price) if direction == "long" else ((anchor_price - lo) / anchor_price)
+    if rng_pct <= band_pct and progress_pct <= max_progress_pct:
+        return (i_start, i_start + len(seg) - 1, hi, lo, rng_pct, progress_pct)
+    return None
+
+
 def _select_impulse_start_long(
     w: pd.DataFrame,
     peak_idx: int,
@@ -1635,12 +1675,23 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     worker queue. Use the explicit launcher command `python run --fetch-older-data`
     when older cache extension is needed.
     """
-    _runtime_df, csv_path, meta = _load_daily_data_with_retries(
-        symbol=symbol,
-        instrument_type=instrument_type,
-        persist=True,
-        fetch_older_data=False,
-    )
+    # Auto cache-only mode is useful for avoiding full group refreshes, but it
+    # must not prevent the scanner from merging the newest Yahoo candle for the
+    # actual calculation.  Only the explicit --onlycache mode should skip this.
+    old_auto_cache = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    user_onlycache = os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
+    if old_auto_cache == "1" and not user_onlycache:
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+    try:
+        _runtime_df, csv_path, meta = _load_daily_data_with_retries(
+            symbol=symbol,
+            instrument_type=instrument_type,
+            persist=True,
+            fetch_older_data=False,
+        )
+    finally:
+        if old_auto_cache == "1" and not user_onlycache:
+            os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -2194,13 +2245,11 @@ def _ichimoku_status(df: pd.DataFrame, side: str) -> str:
 
 
 def _flip_still_actionable(row: FlipResult) -> bool:
-    if row.months_since_flip >= 4.0:
-        return True
-    status = (row.ichimoku_status or "").lower()
-    if row.current_side == "above" and "over kijun" in status:
-        return False
-    if row.current_side == "below" and "under kijun" in status:
-        return False
+    # Keep every detected cloud-side flip in the scanner output.  The previous
+    # short-flip filter removed clean continuation breakouts as soon as price was
+    # also on the correct side of Kijun-sen, which hid fresh/valid formations
+    # such as OPL.WA from every report table.  Ranking/top-choice logic can
+    # decide importance, but the raw scanner result should stay findable.
     return True
 
 
@@ -2321,6 +2370,11 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     current_side: str | None = None
     previous_respect_run = 0
 
+    # Allow a multi-week cloud transition before the final close on the other
+    # side.  OPL.WA-style setups can spend longer than 15 sessions inside/near
+    # the cloud after many months of respect before printing the actual breakout.
+    max_transition_days = 35
+
     # Prefer latest valid flip below->above.
     for i in range(len(df) - 1, 0, -1):
         crossed_up = body_low.iloc[i] > top.iloc[i] and body_low.iloc[i - 1] <= top.iloc[i - 1]
@@ -2331,7 +2385,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
         prev_run = 0
         j = i - 1
         transition = 0
-        while j >= 0 and not bool(below_respected.iloc[j]) and float(body_low.iloc[j]) <= float(top.iloc[j]) and transition < 15:
+        while j >= 0 and not bool(below_respected.iloc[j]) and float(body_low.iloc[j]) <= float(top.iloc[j]) and transition < max_transition_days:
             transition += 1
             j -= 1
         while j >= 0 and bool(below_respected.iloc[j]):
@@ -2355,7 +2409,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             prev_run = 0
             j = i - 1
             transition = 0
-            while j >= 0 and not bool(above_respected.iloc[j]) and float(body_high.iloc[j]) >= float(bottom.iloc[j]) and transition < 15:
+            while j >= 0 and not bool(above_respected.iloc[j]) and float(body_high.iloc[j]) >= float(bottom.iloc[j]) and transition < max_transition_days:
                 transition += 1
                 j -= 1
             while j >= 0 and bool(above_respected.iloc[j]):
@@ -2406,13 +2460,21 @@ def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: f
 
 
 def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, allow_equal_third_close: bool = False) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+    def _breakout_status_for_age() -> str:
+        try:
+            flip_date = pd.to_datetime(df.iloc[flip_idx]["Date"]).date()
+            latest_date = pd.to_datetime(df.iloc[-1]["Date"]).date()
+            return "breakout_confirmed" if 0 <= (latest_date - flip_date).days <= 5 else "no_breakout"
+        except Exception:
+            return "breakout_confirmed"
+
     body_high = df[["Open", "Close"]].max(axis=1)
     body_low = df[["Open", "Close"]].min(axis=1)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     post = range(flip_idx + 1, len(df))
     if flip_idx <= 0 or (flip_idx + 1) >= len(df):
-        return "breakout_confirmed", "-", 0, "-", []
+        return _breakout_status_for_age(), "-", 0, "-", []
 
     waiting = False
     touch_idxs: list[int] = []
@@ -2432,7 +2494,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             touch_idxs.append(i)
 
     if not waiting:
-        return "breakout_confirmed", "-", 0, "-", []
+        return _breakout_status_for_age(), "-", 0, "-", []
 
     first_valid_date = "-"
     first_valid_status = "-"
@@ -2591,7 +2653,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
                         latest_idx = len(df) - 1
                         if body_low.iloc[latest_idx] > top.iloc[latest_idx]:
-                            return "breakout_confirmed", "-", valid_count, first_valid_date, events
+                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
                         return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
             else:
                 last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
@@ -2602,7 +2664,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
                         latest_idx = len(df) - 1
                         if body_high.iloc[latest_idx] < bottom.iloc[latest_idx]:
-                            return "breakout_confirmed", "-", valid_count, first_valid_date, events
+                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
                         return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
@@ -2616,7 +2678,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         else body_high.iloc[latest_idx] < bottom.iloc[latest_idx]
     )
     if latest_outside:
-        return "breakout_confirmed", "-", 0, "-", []
+        return _breakout_status_for_age(), "-", 0, "-", []
     return "returned_to_cloud_waiting_for_pattern", "-", 0, "-", []
 
 
@@ -3176,8 +3238,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         for lh1 in lower_anchor1_candidates:
             lower_anchor2_candidates: list[int] = []
             for j in range(lh1 + 5, end - 2):
-                if lows[j] <= lows[lh1]:
-                    continue
+                # Allow the lower wedge boundary to descend when it falls more
+                # slowly than the upper boundary.  Some active falling wedges
+                # (e.g. DNP.WA) compress with lower lows, so requiring the second
+                # lower anchor to be higher than the first hides valid setups.
                 if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
                     lower_anchor2_candidates.append(j)
             active_lower_anchor2_candidates = sorted(lower_anchor2_candidates, key=lambda j: (abs(end - j), -j))
@@ -3831,9 +3895,25 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
-        _log("Rejected 3P steep: impulse is sideways/flat.")
+    early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="long")
+    if early_sideways is not None:
+        s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
+        start_date = str(pd.to_datetime(w.iloc[s_idx]["Date"]).date())
+        end_date = str(pd.to_datetime(w.iloc[e_idx]["Date"]).date())
+        _log(
+            "Rejected 3P steep: anchor is followed by a flat month instead of an immediate incline. "
+            f"window={s_idx}-{e_idx} ({start_date}..{end_date}), "
+            f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}%, progress={progress_pct * 100:.2f}%."
+        )
         return None
+
+    # The 3P steep column is an incline-quality watchlist, not a pullback
+    # scanner.  Do not reject a multi-month uptrend just because it paused in a
+    # tight consolidation for a few weeks; names like PCO should remain visible
+    # while they keep making current highs.  The regular Fibo scanner below still
+    # applies stricter sideways/correction filters for pullback setups.
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=45, band_pct=0.035):
+        _log("3P steep: impulse has a very tight pause, but keeping current-high incline watchlist candidate.")
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -3930,6 +4010,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     f"idx={i_start} low={fib_start:.4f} -> idx={newer_low_idx} low={newer_low:.4f}."
                 )
                 i_start, fib_start = newer_low_idx, newer_low
+        early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="long")
+        if early_sideways is not None:
+            s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
+            start_date = str(pd.to_datetime(w.iloc[s_idx]["Date"]).date())
+            end_date = str(pd.to_datetime(w.iloc[e_idx]["Date"]).date())
+            _log(
+                "Rejected long: anchor is followed by a flat month instead of an immediate incline. "
+                f"window={s_idx}-{e_idx} ({start_date}..{end_date}), "
+                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}%, progress={progress_pct * 100:.2f}%."
+            )
+            return None
         i_end = len(w) - 1
         later_high = float(pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce").max()) if i_peak + 1 <= i_end else float("nan")
         if pd.notna(later_high) and later_high > fib_end * 1.005:
