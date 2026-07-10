@@ -13,10 +13,6 @@ services:
       PYTHONUNBUFFERED: "1"
       STOCKHELPER_REPORT_SERVER_FOREGROUND: "1"
     volumes:
-      - ./configs:/app/configs
-      - ./data:/app/data
-      - ./charts:/app/charts
-      - ./chart_program/data:/app/chart_program/data
-      - ./Trojpolowki:/app/Trojpolowki
-      - ./debug:/app/debug
+      # Mount the repository so code/doc fixes from git are used immediately; rebuild only when dependencies change.
+      - .:/app
     command: ["--help"]

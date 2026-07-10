@@ -27,7 +27,13 @@ if [[ "\$_should_watch_for_report_url" == "1" ]]; then
     printf '%s\n' "\$line"
     if [[ -z "\$_opened_url" && "\$line" =~ (https?://[^[:space:]]+) ]]; then
       _opened_url="\${BASH_REMATCH[1]}"
-      if command -v xdg-open >/dev/null 2>&1; then
+      if command -v google-chrome >/dev/null 2>&1; then
+        google-chrome --new-window "\$_opened_url" >/dev/null 2>&1 &
+      elif command -v chromium >/dev/null 2>&1; then
+        chromium --new-window "\$_opened_url" >/dev/null 2>&1 &
+      elif command -v chromium-browser >/dev/null 2>&1; then
+        chromium-browser --new-window "\$_opened_url" >/dev/null 2>&1 &
+      elif command -v xdg-open >/dev/null 2>&1; then
         xdg-open "\$_opened_url" >/dev/null 2>&1 &
       elif command -v gio >/dev/null 2>&1; then
         gio open "\$_opened_url" >/dev/null 2>&1 &

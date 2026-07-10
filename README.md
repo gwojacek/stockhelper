@@ -140,7 +140,7 @@ python run -allsearch all
 docker compose run --rm stockhelper -allsearch all
 ```
 
-The compose file mounts `configs/`, `data/`, `charts/`, report output folders, `Trojpolowki/`, and `debug/`, so generated reports, cached CSVs, journal files, screenshots, and edited configs stay on your host machine.
+The compose file mounts the repository at `/app`, so generated reports, cached CSVs, journal files, screenshots, edited configs, and code updates from `git pull` stay on your host machine. Rebuild the image only when Docker/package dependencies change.
 
 Common commands:
 
@@ -192,7 +192,7 @@ stock --open-allsearch-report all
 stock -c ena
 ```
 
-For report commands, the `stock` shortcut watches the Docker output and opens the first printed `http://127.0.0.1:...` report URL with your host `xdg-open`/browser. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report.
+For report commands, the `stock` shortcut watches the Docker output and opens the first printed `http://127.0.0.1:...` report URL with your host Chrome/Chromium in a new window, falling back to `xdg-open`/`gio`. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report.
 
 If you do not use Docker Compose, build and run the image directly:
 
