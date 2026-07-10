@@ -120,6 +120,58 @@ Use `poetry run ...` for commands, or activate the Poetry environment first:
 poetry shell
 ```
 
+### Install with Docker (easiest)
+
+Docker packages the Python runtime, Poetry dependencies, and Playwright Chromium browser into one image, so you do not need to install Python/Poetry locally.
+
+Build the image once:
+
+```bash
+docker compose build
+```
+
+Run the same StockHelper commands as before, but prefix them with `docker compose run --rm stockhelper`. The compose file mounts `configs/`, `data/`, `charts/`, report output folders, `Trojpolowki/`, and `debug/` so generated reports, cached CSVs, journal files, screenshots, and edited configs stay on your host machine:
+
+```bash
+# Show all launcher options
+docker compose run --rm stockhelper python run --help
+
+# Run a configured setup
+docker compose run --rm stockhelper python run ena
+
+# Open chart mode for a symbol/config
+# The compose file uses host networking so the local browser UI is reachable on 127.0.0.1.
+docker compose run --rm stockhelper python run -c ena
+
+# Run a scanner using only local cache
+docker compose run --rm -e STOCKHELPER_CACHE_ONLY=1 stockhelper python run -ichimoku_search wig
+```
+
+
+In short, the commands stay the same inside Docker:
+
+| Before Docker | With Docker Compose |
+| --- | --- |
+| `python run ena` | `docker compose run --rm stockhelper python run ena` |
+| `python run -c ena` | `docker compose run --rm stockhelper python run -c ena` |
+| `python run -ichimoku_search wig` | `docker compose run --rm stockhelper python run -ichimoku_search wig` |
+
+If you do not use Docker Compose, build and run the image directly:
+
+```bash
+docker build -t stockhelper .
+docker run --rm -it --network host \
+  -v "$PWD/configs:/app/configs" \
+  -v "$PWD/data:/app/data" \
+  -v "$PWD/charts:/app/charts" \
+  -v "$PWD/chart_program/data:/app/chart_program/data" \
+  -v "$PWD/Trojpolowki:/app/Trojpolowki" \
+  -v "$PWD/debug:/app/debug" \
+  stockhelper python run ena
+```
+
+For commands that launch a local web UI, the Compose setup uses host networking because StockHelper binds chart/report servers to dynamic `127.0.0.1` ports. If you use plain Docker for chart mode on Linux, add `--network host`; on Docker Desktop, enable host networking first or prefer the Compose command above.
+
 ### Install with `venv` + `pip` instead
 
 There is no `requirements.txt` in this repository. If you do not use Poetry, install the dependencies listed in `pyproject.toml` manually:

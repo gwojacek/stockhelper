@@ -1,0 +1,20 @@
+services:
+  stockhelper:
+    build:
+      context: .
+    image: stockhelper:latest
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    # Chart/report workflows bind to 127.0.0.1 on dynamic ports; host networking makes them reachable on the host.
+    network_mode: host
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./configs:/app/configs
+      - ./data:/app/data
+      - ./charts:/app/charts
+      - ./chart_program/data:/app/chart_program/data
+      - ./Trojpolowki:/app/Trojpolowki
+      - ./debug:/app/debug
+    command: ["python", "run", "--help"]

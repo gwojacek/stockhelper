@@ -1,0 +1,24 @@
+.git
+.gitignore
+.idea
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+.env
+*.log
+
+dist
+build
+*.spec
+
+# Generated/local artifacts can be mounted at runtime instead of baked into the image.
+charts
+debug
+data/journal/screenshots
+data/journal/*.html
+chart_program/data/search
+chart_program/data/all_insturments_search
