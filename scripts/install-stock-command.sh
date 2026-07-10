@@ -23,7 +23,7 @@ done
 
 if [[ "\$_should_watch_for_report_url" == "1" ]]; then
   _opened_url=""
-  docker compose run --rm stockhelper "\$@" 2>&1 | while IFS= read -r line; do
+  docker compose run --rm --no-deps stockhelper "\$@" 2>&1 | while IFS= read -r line; do
     printf '%s\n' "\$line"
     if [[ -z "\$_opened_url" && "\$line" =~ (https?://[^[:space:]]+) ]]; then
       _opened_url="\${BASH_REMATCH[1]}"
@@ -43,7 +43,7 @@ if [[ "\$_should_watch_for_report_url" == "1" ]]; then
   exit "\${PIPESTATUS[0]}"
 fi
 
-exec docker compose run --rm stockhelper "\$@"
+exec docker compose run --rm --no-deps stockhelper "\$@"
 WRAPPER
 
 chmod +x "${TARGET}"

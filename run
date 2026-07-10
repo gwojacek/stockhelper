@@ -707,7 +707,7 @@ def _wait_for_report_server(report_url: str | None) -> int:
         return 0
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v15"
+    report_server_protocol = "stockhelper-report-server-v16"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"

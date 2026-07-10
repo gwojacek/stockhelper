@@ -130,14 +130,14 @@ Build the image once:
 docker compose build
 ```
 
-After building, run StockHelper through Docker. Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before, but replace `python run` with `docker compose run --rm stockhelper`. The Compose file sets the container entrypoint to `python run`, so arguments like `-allsearch all` are passed to StockHelper, not treated as executables:
+After building, run StockHelper through Docker. Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before, but replace `python run` with `docker compose run --rm --no-deps stockhelper`. The Compose file sets the container entrypoint to `python run`, so arguments like `-allsearch all` are passed to StockHelper, not treated as executables:
 
 ```bash
 # Before Docker:
 python run -allsearch all
 
 # With Docker:
-docker compose run --rm stockhelper -allsearch all
+docker compose run --rm --no-deps stockhelper -allsearch all
 ```
 
 The compose file mounts the repository at `/app`, so generated reports, cached CSVs, journal files, screenshots, edited configs, and code updates from `git pull` stay on your host machine. Rebuild the image only when Docker/package dependencies change.
@@ -146,31 +146,31 @@ Common commands:
 
 ```bash
 # Show all launcher options
-docker compose run --rm stockhelper --help
+docker compose run --rm --no-deps stockhelper --help
 
 # Run a configured setup
-docker compose run --rm stockhelper ena
+docker compose run --rm --no-deps stockhelper ena
 
 # Run the all-market scanner
-docker compose run --rm stockhelper -allsearch all
+docker compose run --rm --no-deps stockhelper -allsearch all
 
 # Open chart mode for a symbol/config
 # The compose file uses host networking so the local browser UI is reachable on 127.0.0.1.
-docker compose run --rm stockhelper -c ena
+docker compose run --rm --no-deps stockhelper -c ena
 
 # Run a scanner using only local cache
-docker compose run --rm -e STOCKHELPER_CACHE_ONLY=1 stockhelper -ichimoku_search wig
+docker compose run --rm --no-deps -e STOCKHELPER_CACHE_ONLY=1 stockhelper -ichimoku_search wig
 ```
 
 Command translation table:
 
 | Before Docker | With Docker Compose |
 | --- | --- |
-| `python run ena` | `docker compose run --rm stockhelper ena` |
-| `python run -c ena` | `docker compose run --rm stockhelper -c ena` |
-| `python run -allsearch all` | `docker compose run --rm stockhelper -allsearch all` |
-| `python run --open-allsearch-report all` | `docker compose run --rm stockhelper --open-allsearch-report all` |
-| `python run -ichimoku_search wig` | `docker compose run --rm stockhelper -ichimoku_search wig` |
+| `python run ena` | `docker compose run --rm --no-deps stockhelper ena` |
+| `python run -c ena` | `docker compose run --rm --no-deps stockhelper -c ena` |
+| `python run -allsearch all` | `docker compose run --rm --no-deps stockhelper -allsearch all` |
+| `python run --open-allsearch-report all` | `docker compose run --rm --no-deps stockhelper --open-allsearch-report all` |
+| `python run -ichimoku_search wig` | `docker compose run --rm --no-deps stockhelper -ichimoku_search wig` |
 
 To shorten commands permanently, install the `stock` shortcut:
 
