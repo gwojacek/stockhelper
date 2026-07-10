@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v17"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v18"
 
 
 def main() -> int:
@@ -213,13 +213,19 @@ def main() -> int:
         os.environ.get("STOCKHELPER_REPORT_CONSOLE_STDERR", ""),
     )
 
-    def _is_report_chart_command(argv: list[str]) -> bool:
+    def _is_run_chart_command(argv: list[str]) -> bool:
         return len(argv) >= 3 and Path(argv[1]).name == "run" and argv[2] in {"-c", "--chart"}
+
+    def _is_direct_chart_program_command(argv: list[str]) -> bool:
+        return len(argv) >= 3 and argv[1] == "-m" and argv[2] == "chart_program"
+
+    def _is_report_chart_command(argv: list[str]) -> bool:
+        return _is_run_chart_command(argv) or _is_direct_chart_program_command(argv)
 
     def _direct_chart_argv(argv: list[str]) -> list[str]:
         if os.environ.get("STOCKHELPER_REPORT_DIRECT_CHART", "1").strip().lower() in {"0", "false", "no", "off"}:
             return argv
-        if not _is_report_chart_command(argv) or len(argv) < 4:
+        if not _is_run_chart_command(argv) or len(argv) < 4:
             return argv
         # Report buttons already carry chart_program-compatible flags. Avoid an
         # extra nested `python run -c ...` process and launch chart_program directly
