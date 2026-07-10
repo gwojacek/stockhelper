@@ -11,6 +11,7 @@ services:
     entrypoint: ["python", "run"]
     environment:
       PYTHONUNBUFFERED: "1"
+      STOCKHELPER_REPORT_SERVER_FOREGROUND: "1"
     volumes:
       - ./configs:/app/configs
       - ./data:/app/data
