@@ -1,4 +1,28 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+import os as _bootstrap_os
+import sys as _bootstrap_sys
+from pathlib import Path as _BootstrapPath
+
+_BOOTSTRAP_PROJECT_ROOT = _BootstrapPath(__file__).resolve().parent
+_BOOTSTRAP_RUNNING_IN_DOCKER = (
+    _bootstrap_os.environ.get("STOCKHELPER_IN_DOCKER") == "1"
+    or _BootstrapPath("/.dockerenv").exists()
+)
+
+# Preserve clickable/backward-compatible host commands such as:
+#   python run -allsearch all
+# On the host, redirect them to the Docker-backed ./stock launcher before any
+# project imports can require local Python dependencies. Inside Docker, continue
+# with the normal application code below.
+if not _BOOTSTRAP_RUNNING_IN_DOCKER:
+    _stock_launcher = _BOOTSTRAP_PROJECT_ROOT / "stock"
+    if not _stock_launcher.is_file():
+        raise SystemExit(f"Stock launcher not found: {_stock_launcher}")
+    _bootstrap_os.chdir(_BOOTSTRAP_PROJECT_ROOT)
+    _bootstrap_os.execv(str(_stock_launcher), [str(_stock_launcher), *_bootstrap_sys.argv[1:]])
+
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib
 from urllib.request import Request, urlopen
 from urllib.parse import quote

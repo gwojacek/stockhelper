@@ -14,6 +14,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       STOCKHELPER_REPORT_SERVER_FOREGROUND: "1"
+      STOCKHELPER_IN_DOCKER: "1"
       HOME: /app/.docker-home
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
