@@ -867,8 +867,28 @@ def _stooq_bulk_txt_to_ohlcv_df(raw: bytes) -> tuple[str, pd.DataFrame]:
 
 
 def _write_daily_csv_without_trailing_blank_line(df: pd.DataFrame, path: Path) -> None:
+    required = {"Date", "Open", "High", "Low", "Close"}
+    if df is None or df.empty:
+        raise ValueError(f"refusing to write empty daily CSV: {path}")
+    missing = sorted(required.difference(df.columns))
+    if missing:
+        raise ValueError(f"refusing to write daily CSV with missing columns {missing}: {path}")
     text = df.to_csv(index=False).rstrip("\r\n")
-    path.write_text(text, encoding="utf-8")
+    if not text or text.strip().lower() in {"<null>", "null", "none"}:
+        raise ValueError(f"refusing to write invalid daily CSV payload: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    try:
+        check = pd.read_csv(tmp_path, nrows=2)
+        if check.empty or any(col not in check.columns for col in required):
+            raise ValueError(f"daily CSV readback validation failed: {path}")
+        tmp_path.replace(path)
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 
