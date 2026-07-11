@@ -2,15 +2,12 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    POETRY_VERSION=1.8.5 \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false \
     PIP_NO_CACHE_DIR=1 \
-    POETRY_CACHE_DIR=/tmp/poetry-cache
+    PIP_DEFAULT_TIMEOUT=120
 
 WORKDIR /app
 
-# Runtime libraries for OpenCV, Playwright/Chromium, and Tk/web helpers used by chart workflows.
+# Runtime libraries for OpenCV, Playwright/Chromium, EasyOCR, and Tk/web helpers used by chart workflows.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -38,17 +35,39 @@ RUN apt-get update \
         xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install "poetry==$POETRY_VERSION"
+RUN python -m pip install --upgrade pip setuptools wheel
 
 COPY pyproject.toml poetry.lock ./
-# EasyOCR pulls GPU-enabled PyTorch/CUDA wheels from the lockfile by default.
-# Replace that stack with CPU-only PyTorch so Stooq CAPTCHA OCR works without a multi-GB CUDA image.
-RUN poetry install --only main --no-root --no-ansi \
-    && pip uninstall -y easyocr torch torchvision triton \
-    && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
-    && pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.7.1" "torchvision==0.22.1" \
+# The Poetry lock currently resolves EasyOCR through GPU-enabled PyTorch/CUDA wheels.
+# Installing Docker runtime dependencies directly avoids downloading those multi-GB
+# NVIDIA packages and then installs CPU-only PyTorch before EasyOCR.
+RUN pip install \
+        "colorama>=0.4.6,<0.5.0" \
+        "dash>=4.1.0,<5.0.0" \
+        "flask>=3.1.1,<4.0.0" \
+        "numpy>=2.2.6,<3.0" \
+        "pandas>=2.3.3,<4.0" \
+        "plotly>=6.0.1,<7.0.0" \
+        "tabulate>=0.9.0,<0.11.0" \
+        "tenacity>=9.1.2,<10.0.0" \
+        "playwright>=1.55.0,<2.0.0" \
+        "yfinance>=1.3.0,<2.0.0" \
+        "opencv-python>=4.13.0.92,<5.0.0" \
+    && pip install --index-url https://download.pytorch.org/whl/cpu \
+        "torch==2.7.1" \
+        "torchvision==0.22.1" \
+    && pip install \
+        "Pillow>=12.0.0,<13.0.0" \
+        "scipy>=1.16.0" \
+        "scikit-image>=0.25.0" \
+        "python-bidi>=0.6.0" \
+        "PyYAML>=6.0.0" \
+        "Shapely>=2.0.0" \
+        "pyclipper>=1.3.0" \
+        "ninja>=1.11.0" \
     && pip install --no-deps "easyocr==1.7.2" \
-    && rm -rf "$POETRY_CACHE_DIR" /root/.cache/pip /root/.cache/pypoetry
+    && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
+    && rm -rf /root/.cache/pip
 RUN python -m playwright install chromium \
     && apt-get purge -y --auto-remove build-essential curl \
     && rm -rf /var/lib/apt/lists/* /tmp/*

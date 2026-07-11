@@ -122,7 +122,7 @@ poetry shell
 
 ### Install with Docker (easiest)
 
-Docker packages the Python runtime, Poetry dependencies, and Playwright Chromium browser into one image, so you do not need to install Python/Poetry locally.
+Docker packages the Python runtime, runtime dependencies, CPU-only EasyOCR/PyTorch, and Playwright Chromium browser into one image, so you do not need to install Python/Poetry locally.
 
 Build the image once:
 
@@ -212,7 +212,7 @@ docker image prune -f
 docker builder prune -f
 ```
 
-The Docker image replaces the default GPU-enabled EasyOCR/PyTorch/CUDA dependency stack with CPU-only PyTorch plus EasyOCR. This keeps Stooq CAPTCHA OCR available for WIG bulk downloads without keeping the multi-GB CUDA packages in the final image. WIG20 is imported from the same Stooq bulk zip during successful WIG bulk refreshes, so the later indexes phase should reuse the refreshed local WIG20 CSV rather than downloading the same zip again.
+The Docker image avoids the Poetry lock's GPU-enabled EasyOCR/PyTorch/CUDA dependency path and installs CPU-only PyTorch plus EasyOCR directly. This keeps Stooq CAPTCHA OCR available for WIG bulk downloads without downloading or keeping the multi-GB CUDA packages in the final image. WIG20 is imported from the same Stooq bulk zip during successful WIG bulk refreshes, so the later indexes phase should reuse the refreshed local WIG20 CSV rather than downloading the same zip again.
 
 If you do not use Docker Compose, build and run the image directly:
 
