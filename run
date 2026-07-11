@@ -824,6 +824,8 @@ def _serve_report_locally(path: Path) -> str | None:
             env.setdefault("STOCKHELPER_REPORT_CONSOLE_LOG_MAX_BYTES", str(5 * 1024 * 1024))
             env["STOCKHELPER_REPORT_CONSOLE_STDOUT"] = console_stdout
             env["STOCKHELPER_REPORT_CONSOLE_STDERR"] = console_stderr
+            env["STOCKHELPER_REPORT_HTML_PATH"] = str(path)
+            env.setdefault("STOCKHELPER_REPORT_FAST_CACHE_MAX_AGE_HOURS", "24")
             subprocess.Popen(
                 [
                     sys.executable,

@@ -246,6 +246,22 @@ def main() -> int:
             return False
         return len(argv) >= 3 and argv[0] in {"python", "python3"} and argv[1] == "run" and argv[2] == "--journal-html"
 
+    def _should_use_fast_chart_cache() -> bool:
+        explicit = os.environ.get("STOCKHELPER_CHART_FAST_CACHE", "").strip().lower()
+        if explicit in {"1", "true", "yes", "on"}:
+            return True
+        if explicit in {"0", "false", "no", "off"}:
+            return False
+        report_path = os.environ.get("STOCKHELPER_REPORT_HTML_PATH", "").strip()
+        if not report_path:
+            return False
+        try:
+            max_age_h = float(os.environ.get("STOCKHELPER_REPORT_FAST_CACHE_MAX_AGE_HOURS", "24") or 24)
+            age_s = max(0.0, time.time() - Path(report_path).stat().st_mtime)
+            return age_s <= max_age_h * 3600
+        except Exception:
+            return False
+
     def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
         original_command = command
         command = _canonicalize_chart_command(command)
@@ -258,7 +274,10 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
-        env.setdefault("STOCKHELPER_CHART_FAST_CACHE", "1")
+        if _should_use_fast_chart_cache():
+            env["STOCKHELPER_CHART_FAST_CACHE"] = "1"
+        else:
+            env.pop("STOCKHELPER_CHART_FAST_CACHE", None)
         if group_id:
             with chart_group_lock:
                 group_data = chart_groups.get(group_id, {})
