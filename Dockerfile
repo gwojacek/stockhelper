@@ -41,11 +41,13 @@ RUN apt-get update \
 RUN pip install "poetry==$POETRY_VERSION"
 
 COPY pyproject.toml poetry.lock ./
-# EasyOCR pulls GPU-enabled PyTorch/CUDA wheels from the lockfile; it is only an optional CAPTCHA OCR fallback.
-# Remove that stack from the default Docker image to keep local images from growing by many GB.
+# EasyOCR pulls GPU-enabled PyTorch/CUDA wheels from the lockfile by default.
+# Replace that stack with CPU-only PyTorch so Stooq CAPTCHA OCR works without a multi-GB CUDA image.
 RUN poetry install --only main --no-root --no-ansi \
     && pip uninstall -y easyocr torch torchvision triton \
     && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
+    && pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.7.1" "torchvision==0.22.1" \
+    && pip install --no-deps "easyocr==1.7.2" \
     && rm -rf "$POETRY_CACHE_DIR" /root/.cache/pip /root/.cache/pypoetry
 RUN python -m playwright install chromium \
     && apt-get purge -y --auto-remove build-essential curl \

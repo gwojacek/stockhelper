@@ -212,7 +212,7 @@ docker image prune -f
 docker builder prune -f
 ```
 
-The Docker image also removes the optional EasyOCR/PyTorch/CUDA OCR stack after dependency installation. CAPTCHA OCR may fall back to non-EasyOCR behavior in Docker, but normal scanners, reports, charts, Playwright, and OpenCV remain available.
+The Docker image replaces the default GPU-enabled EasyOCR/PyTorch/CUDA dependency stack with CPU-only PyTorch plus EasyOCR. This keeps Stooq CAPTCHA OCR available for WIG bulk downloads without keeping the multi-GB CUDA packages in the final image. WIG20 is imported from the same Stooq bulk zip during successful WIG bulk refreshes, so the later indexes phase should reuse the refreshed local WIG20 CSV rather than downloading the same zip again.
 
 If you do not use Docker Compose, build and run the image directly:
 
