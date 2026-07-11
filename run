@@ -1,4 +1,24 @@
 #!/usr/bin/env python3
+# Bootstrap: when README/PyCharm runs `python run ...` on the host, delegate to
+# the Docker-backed repo launcher before importing project dependencies. Inside
+# Docker (or when STOCKHELPER_RUN_LOCAL=1 is set), continue with the normal app.
+import os as _bootstrap_os
+import sys as _bootstrap_sys
+from pathlib import Path as _BootstrapPath
+
+_BOOTSTRAP_ROOT = _BootstrapPath(__file__).resolve().parent
+if (
+    _bootstrap_os.environ.get("STOCKHELPER_RUN_LOCAL") != "1"
+    and _bootstrap_os.environ.get("STOCKHELPER_DISABLE_DOCKER_WRAPPER") != "1"
+    and not _BootstrapPath("/.dockerenv").exists()
+    and (_BOOTSTRAP_ROOT / "docker-compose.yml").exists()
+    and (_BOOTSTRAP_ROOT / "stock").exists()
+):
+    _bootstrap_os.execv(
+        _bootstrap_sys.executable,
+        [_bootstrap_sys.executable, str(_BOOTSTRAP_ROOT / "stock"), *_bootstrap_sys.argv[1:]],
+    )
+
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib
 from urllib.request import Request, urlopen
 from urllib.parse import quote

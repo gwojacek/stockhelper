@@ -17,40 +17,40 @@ The project is practical and config-driven: most workflows start from a ticker/c
 
 ## Quick command table
 
-Use this table as the fastest path to the commands you will run most often. The recommended install is Docker + the `stock` launcher. PyCharm detects `python3 stock ...` as runnable in the README, while the terminal shortcut installed by `./scripts/install-stock-command.sh` still lets you type `stock ...`. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
+Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed. PyCharm detects `python run ...` as runnable in the README; on the host, `python run ...` delegates to the Docker `stock` launcher automatically. The terminal shortcut installed by `./scripts/install-stock-command.sh` still lets you type `stock ...`. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
 
 | Use case | Recommended command | Short description |
 | --- | --- | --- |
 | Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
 | Install/update `stock` shortcut | `./scripts/install-stock-command.sh` | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
-| Show launcher help | `python3 stock --help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
-| Run a stock setup | `python3 stock ena` | Auto-detects a stock config and prints position/risk output. |
-| Run a forex/commodity setup | `python3 stock eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
-| Open chart editor | `python3 stock -c ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
-| Open chart with Ichimoku | `python3 stock -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
-| Open stock as CFD | `python3 stock -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
-| Open transaction journal | `python3 stock --journal-html` | Opens the live journal HTML through the local report server so update/delete/close buttons work. |
-| Prepare PDF journal | `python3 stock --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
-| Run Ichimoku scan | `python3 stock -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
-| Run Fibonacci scan | `python3 stock -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
-| Build combined report | `python3 stock -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
-| Reopen combined report | `python3 stock --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
-| Explain one Fibo symbol | `python3 stock -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
-| Check liquidity | `python3 stock -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
-| Debug Stooq page | `python3 stock --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Refresh WIG/WIG20 from Stooq bulk | `python3 stock --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip. |
-| Trim WIG stock CSVs | `python3 stock --trim-wig-csvs` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
-| Use cache only | `python3 stock -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
-| Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python3 stock -fibo_search wig` | Ignores usable cache and refreshes market data. |
-| Extend history | `python3 stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
-| Fix old Docker file ownership | `python3 stock --fix-permissions` | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
-| Clean Docker disk usage | `python3 stock --cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
+| Show launcher help | `python run --help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
+| Run a stock setup | `python run ena` | Auto-detects a stock config and prints position/risk output. |
+| Run a forex/commodity setup | `python run eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
+| Open chart editor | `python run -c ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
+| Open chart with Ichimoku | `python run -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
+| Open stock as CFD | `python run -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
+| Open transaction journal | `python run --journal-html` | Opens the live journal HTML through the local report server so update/delete/close buttons work. |
+| Prepare PDF journal | `python run --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
+| Run Ichimoku scan | `python run -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
+| Run Fibonacci scan | `python run -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
+| Build combined report | `python run -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
+| Reopen combined report | `python run --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
+| Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
+| Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
+| Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
+| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip. |
+| Trim WIG stock CSVs | `python run --trim-wig-csvs` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
+| Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
+| Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
+| Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
+| Fix old Docker file ownership | `python run --fix-permissions` | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
+| Clean Docker disk usage | `python run --cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
 
-If you intentionally use a local Poetry/Python install instead of Docker, replace `python3 stock ...` or terminal `stock ...` with `python run ...` after installing dependencies with `poetry install` and `poetry run playwright install chromium`.
+If you intentionally use a local Poetry/Python install instead of Docker, run commands as `STOCKHELPER_RUN_LOCAL=1 python run ...` after installing dependencies with `poetry install` and `poetry run playwright install chromium`.
 
-### Click-to-run `stock` commands
+### Click-to-run `python run` commands
 
-PyCharm recognizes README commands that start with `python`/`python3` as runnable. These are the same quick commands as above, repeated as `python3 stock ...` so they can be launched with one click from the README. In a normal terminal you can still use the installed `stock ...` shortcut.
+PyCharm recognizes README commands that start with `python run ...` as runnable. These snippets keep that clickable behavior; when run on the host they delegate to Docker through the `stock` launcher, while inside Docker or with `STOCKHELPER_RUN_LOCAL=1` they execute the local Python app directly. In a normal terminal you can still use the installed `stock ...` shortcut.
 
 Build or rebuild the Docker image:
 
@@ -67,85 +67,85 @@ Install or update the `stock` shortcut:
 Show StockHelper help:
 
 ```bash
-python3 stock --help
+python run --help
 ```
 
 Run a stock setup:
 
 ```bash
-python3 stock ena
+python run ena
 ```
 
 Open a chart editor:
 
 ```bash
-python3 stock -c ena
+python run -c ena
 ```
 
 Open a chart with Ichimoku enabled:
 
 ```bash
-python3 stock -c EUR/USD --ichimoku-mode on
+python run -c EUR/USD --ichimoku-mode on
 ```
 
 Open the transaction journal:
 
 ```bash
-python3 stock --journal-html
+python run --journal-html
 ```
 
 Run an Ichimoku scan:
 
 ```bash
-python3 stock -ichimoku_search wig
+python run -ichimoku_search wig
 ```
 
 Run a Fibonacci scan:
 
 ```bash
-python3 stock -fibo_search wig
+python run -fibo_search wig
 ```
 
 Run the default all-search flow and open the HTML report:
 
 ```bash
-python3 stock -allsearch all
+python run -allsearch all
 ```
 
 Reopen the latest all-search report:
 
 ```bash
-python3 stock --open-allsearch-report all
+python run --open-allsearch-report all
 ```
 
 Refresh WIG/WIG20 from Stooq bulk:
 
 ```bash
-python3 stock --download-wig-bulk
+python run --download-wig-bulk
 ```
 
 Use cache only:
 
 ```bash
-python3 stock -onlycache -ichimoku_search wig
+python run -onlycache -ichimoku_search wig
 ```
 
 Force refresh:
 
 ```bash
-STOCKHELPER_FORCE_REMOTE_REFRESH=1 python3 stock -fibo_search wig
+STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig
 ```
 
 Fix old Docker file ownership:
 
 ```bash
-python3 stock --fix-permissions
+python run --fix-permissions
 ```
 
 Clean Docker disk usage:
 
 ```bash
-python3 stock --cleanup
+python run --cleanup
 ```
 
 ## Features
@@ -255,7 +255,7 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-After that, use `stock ...` instead of `python run ...`:
+After that, use `stock ...` in a normal terminal, or keep using clickable `python run ...` from PyCharm/README:
 
 ```bash
 stock --help
@@ -283,15 +283,15 @@ Regular code changes are mounted from your working tree, so they usually do not 
 
 #### Command translation
 
-Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before and replace `python run` with `stock`:
+With Docker, keep the same arguments you used before. In a terminal, use `stock ...`; in PyCharm/README click-to-run snippets, use `python run ...` because the host bootstrap delegates it to Docker automatically:
 
 | Before Docker | Recommended Docker command |
 | --- | --- |
-| `python run ena` | `python3 stock ena` |
-| `python run -c ena` | `python3 stock -c ena` |
-| `python run -allsearch all` | `python3 stock -allsearch all` |
-| `python run --open-allsearch-report all` | `python3 stock --open-allsearch-report all` |
-| `python run -ichimoku_search wig` | `python3 stock -ichimoku_search wig` |
+| `python run ena` | `stock ena` (terminal) or clickable `python run ena` |
+| `python run -c ena` | `stock -c ena` (terminal) or clickable `python run -c ena` |
+| `python run -allsearch all` | `stock -allsearch all` (terminal) or clickable `python run -allsearch all` |
+| `python run --open-allsearch-report all` | `stock --open-allsearch-report all` (terminal) or clickable `python run --open-allsearch-report all` |
+| `python run -ichimoku_search wig` | `stock -ichimoku_search wig` (terminal) or clickable `python run -ichimoku_search wig` |
 
 If you do not use the helper, the equivalent Compose form is:
 
@@ -303,7 +303,7 @@ The Compose file sets the container entrypoint to `python run`, so arguments lik
 
 #### Reports, charts, and browser opening
 
-Use `python3 stock -allsearch all` for the normal all-search workflow. When the HTML report is ready, the helper watches Docker output and opens the first local StockHelper report URL (`http://127.0.0.1:...` or `http://localhost:...`) in a new Chrome/Chromium window, falling back to `xdg-open`/`gio`.
+Use `python run -allsearch all` for the normal all-search workflow. When the HTML report is ready, the helper watches Docker output and opens the first local StockHelper report URL (`http://127.0.0.1:...` or `http://localhost:...`) in a new Chrome/Chromium window, falling back to `xdg-open`/`gio`.
 
 The helper intentionally ignores non-localhost URLs printed in scraper diagnostics. For example, Stooq bulk logs may print `https://stooq.com/db/d/?b=d_pl_txt`; that URL is not a StockHelper report and should not be opened by the helper.
 
@@ -331,7 +331,7 @@ The Compose service runs as your host UID/GID through `STOCKHELPER_UID` and `STO
 If an older Docker run already created root-owned files such as `data/csv/stocks/ALL_WA.csv`, fix existing host file ownership once:
 
 ```bash
-python3 stock --fix-permissions
+python run --fix-permissions
 ```
 
 If that prints a `sudo chown ...` command, run the printed command once. Future `stock ...` runs should create files as your user.
@@ -341,7 +341,7 @@ If that prints a `sudo chown ...` command, run the printed command once. Future 
 Report commands intentionally keep a container alive while the report server is open. Use this when you are done with reports or need disk space:
 
 ```bash
-python3 stock --cleanup
+python run --cleanup
 ```
 
 It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. Manual equivalent:

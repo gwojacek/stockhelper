@@ -20,7 +20,7 @@ Compare: [`6.0...7.0`](https://github.com/gwojacek/stockhelper/compare/6.0...7.0
 
 ### Changed
 
-- Updated README usage to make Docker + `stock` the easiest path, including a quick command table, click-to-run `python3 stock` command snippets and a repo-local Python `stock` launcher, update workflow after `git pull`, report/browser behavior, permissions, cleanup, and plain Docker alternatives.
+- Updated README usage to make Docker + `stock` the easiest path, including a quick command table, click-to-run `python run` command snippets that delegate to the Docker `stock` launcher on the host, update workflow after `git pull`, report/browser behavior, permissions, cleanup, and plain Docker alternatives.
 - Changed Yahoo-primary/Yahoo-only chart data trimming to keep about 1.5 years of recent data instead of about 1 year.
 - Improved all-search report behavior so local report URLs are printed/served for the host helper and report-launched charts can open faster from fresh all-search cache.
 - Changed Docker runs to use the host UID/GID and a writable project-local Docker home while keeping Playwright browsers installed at `/ms-playwright` in the image.
