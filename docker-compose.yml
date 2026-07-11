@@ -15,6 +15,7 @@ services:
       PYTHONUNBUFFERED: "1"
       STOCKHELPER_REPORT_SERVER_FOREGROUND: "1"
       HOME: /app/.docker-home
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
       # Mount the repository so code/doc fixes from git are used immediately; rebuild only when dependencies change.
       - .:/app

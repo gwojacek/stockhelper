@@ -3,7 +3,8 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DEFAULT_TIMEOUT=120
+    PIP_DEFAULT_TIMEOUT=120 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
@@ -69,6 +70,7 @@ RUN pip install \
     && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
     && rm -rf /root/.cache/pip
 RUN python -m playwright install chromium \
+    && chmod -R a+rX /ms-playwright \
     && apt-get purge -y --auto-remove build-essential curl \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 

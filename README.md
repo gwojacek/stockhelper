@@ -122,7 +122,7 @@ poetry shell
 
 ### Install with Docker (easiest)
 
-Docker packages the Python runtime, runtime dependencies, CPU-only EasyOCR/PyTorch, and Playwright Chromium browser into one image, so you do not need to install Python/Poetry locally.
+Docker packages the Python runtime, runtime dependencies, CPU-only EasyOCR/PyTorch, and Playwright Chromium browser into one image, so you do not need to install Python/Poetry locally. Playwright browsers are installed in the image at `/ms-playwright`, separate from the writable per-user Docker home.
 
 Build the image once:
 
