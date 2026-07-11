@@ -48,6 +48,106 @@ Use this table as the fastest path to the commands you will run most often. The 
 
 If you intentionally use a local Poetry/Python install instead of Docker, replace `stock ...` with `python run ...` after installing dependencies with `poetry install` and `poetry run playwright install chromium`.
 
+### Click-to-run `stock` commands
+
+Some IDEs (for example PyCharm) show a run/play action next to shell commands in fenced `bash` blocks. These are the same quick commands as above, repeated outside the table so they can be launched with one click from the README.
+
+Build or rebuild the Docker image:
+
+```bash
+docker compose build
+```
+
+Install or update the `stock` shortcut:
+
+```bash
+./scripts/install-stock-command.sh
+```
+
+Show StockHelper help:
+
+```bash
+stock --help
+```
+
+Run a stock setup:
+
+```bash
+stock ena
+```
+
+Open a chart editor:
+
+```bash
+stock -c ena
+```
+
+Open a chart with Ichimoku enabled:
+
+```bash
+stock -c EUR/USD --ichimoku-mode on
+```
+
+Open the transaction journal:
+
+```bash
+stock --journal-html
+```
+
+Run an Ichimoku scan:
+
+```bash
+stock -ichimoku_search wig
+```
+
+Run a Fibonacci scan:
+
+```bash
+stock -fibo_search wig
+```
+
+Run the default all-search flow and open the HTML report:
+
+```bash
+stock -allsearch all
+```
+
+Reopen the latest all-search report:
+
+```bash
+stock --open-allsearch-report all
+```
+
+Refresh WIG/WIG20 from Stooq bulk:
+
+```bash
+stock --download-wig-bulk
+```
+
+Use cache only:
+
+```bash
+stock -onlycache -ichimoku_search wig
+```
+
+Force refresh:
+
+```bash
+STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig
+```
+
+Fix old Docker file ownership:
+
+```bash
+stock --fix-permissions
+```
+
+Clean Docker disk usage:
+
+```bash
+stock --cleanup
+```
+
 ## Features
 
 - **Position/risk analysis** for stocks, forex, and commodities/CFDs.
