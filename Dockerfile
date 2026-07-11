@@ -5,11 +5,12 @@ ENV PYTHONUNBUFFERED=1 \
     POETRY_VERSION=1.8.5 \
     POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=false \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    POETRY_CACHE_DIR=/tmp/poetry-cache
 
 WORKDIR /app
 
-# Runtime libraries for OpenCV/EasyOCR, Playwright/Chromium, and Tk/web helpers used by chart workflows.
+# Runtime libraries for OpenCV, Playwright/Chromium, and Tk/web helpers used by chart workflows.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -40,8 +41,15 @@ RUN apt-get update \
 RUN pip install "poetry==$POETRY_VERSION"
 
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-root --no-ansi
-RUN python -m playwright install chromium
+# EasyOCR pulls GPU-enabled PyTorch/CUDA wheels from the lockfile; it is only an optional CAPTCHA OCR fallback.
+# Remove that stack from the default Docker image to keep local images from growing by many GB.
+RUN poetry install --only main --no-root --no-ansi \
+    && pip uninstall -y easyocr torch torchvision triton \
+    && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
+    && rm -rf "$POETRY_CACHE_DIR" /root/.cache/pip /root/.cache/pypoetry
+RUN python -m playwright install chromium \
+    && apt-get purge -y --auto-remove build-essential curl \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
 
 COPY . .
 RUN chmod +x /app/run /app/refresh

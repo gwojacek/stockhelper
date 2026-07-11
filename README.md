@@ -194,6 +194,26 @@ stock -c ena
 
 For report commands, the `stock` shortcut watches the Docker output and opens the first printed `http://127.0.0.1:...` report URL with your host Chrome/Chromium in a new window, falling back to `xdg-open`/`gio`. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report. Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container to avoid an extra nested launcher process.
 
+#### Docker disk cleanup
+
+Report commands intentionally keep a container alive while the report server is open. The `stock` shortcut protects you from accumulating old report containers by stopping older StockHelper report containers before starting a new report command. If you want to keep multiple reports alive, set `STOCKHELPER_KEEP_OLD_REPORTS=1`.
+
+Use this cleanup command when you are done with reports or need disk space:
+
+```bash
+stock --cleanup
+```
+
+It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. If you need to clean up manually, run:
+
+```bash
+docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f
+docker image prune -f
+docker builder prune -f
+```
+
+The Docker image also removes the optional EasyOCR/PyTorch/CUDA OCR stack after dependency installation. CAPTCHA OCR may fall back to non-EasyOCR behavior in Docker, but normal scanners, reports, charts, Playwright, and OpenCV remain available.
+
 If you do not use Docker Compose, build and run the image directly:
 
 ```bash

@@ -12,6 +12,25 @@ set -o pipefail
 PROJECT_ROOT=${PROJECT_ROOT@Q}
 cd "\$PROJECT_ROOT" || exit 1
 
+if [[ "\${1:-}" == "--cleanup" ]]; then
+  echo "Stopping StockHelper report containers..."
+  docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f
+  echo "Removing dangling Docker images..."
+  docker image prune -f
+  echo "Removing unused build cache..."
+  docker builder prune -f
+  echo "Done. Current StockHelper images:"
+  docker images 'stockhelper*'
+  exit 0
+fi
+
+_stop_old_report_containers() {
+  if [[ "\${STOCKHELPER_KEEP_OLD_REPORTS:-0}" == "1" ]]; then
+    return 0
+  fi
+  docker ps -aq --filter "name=stockhelper" --filter "ancestor=stockhelper:latest" | xargs -r docker rm -f >/dev/null 2>&1 || true
+}
+
 _should_watch_for_report_url=0
 for arg in "\$@"; do
   case "\$arg" in
@@ -22,6 +41,7 @@ for arg in "\$@"; do
 done
 
 if [[ "\$_should_watch_for_report_url" == "1" ]]; then
+  _stop_old_report_containers
   _opened_url=""
   docker compose run --rm --no-deps stockhelper "\$@" 2>&1 | while IFS= read -r line; do
     printf '%s\n' "\$line"
@@ -59,4 +79,5 @@ Try:
   stock --help
   stock -allsearch all
   stock --open-allsearch-report all
+  stock --cleanup
 MSG
