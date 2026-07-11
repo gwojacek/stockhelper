@@ -140,7 +140,7 @@ python run -allsearch all
 docker compose run --rm --no-deps stockhelper -allsearch all
 ```
 
-The compose file mounts the repository at `/app`, so generated reports, cached CSVs, journal files, screenshots, edited configs, and code updates from `git pull` stay on your host machine. Rebuild the image only when Docker/package dependencies change.
+The compose file mounts the repository at `/app`, so generated reports, cached CSVs, journal files, screenshots, edited configs, and code updates from `git pull` stay on your host machine. It also runs the container as your host UID/GID (through the `stock` shortcut, or `STOCKHELPER_UID`/`STOCKHELPER_GID`) so new CSV/report files remain editable and deletable from your IDE. Rebuild the image only when Docker/package dependencies change.
 
 Common commands:
 
@@ -204,7 +204,17 @@ Use this cleanup command when you are done with reports or need disk space:
 stock --cleanup
 ```
 
-It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. If you need to clean up manually, run:
+It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache.
+
+If Docker previously created root-owned files such as `data/csv/stocks/ALL_WA.csv`, fix existing host file ownership once:
+
+```bash
+stock --fix-permissions
+```
+
+If that prints a `sudo chown ...` command, run the printed command once; future `stock ...` runs should create files as your user.
+
+If you need to clean up manually, run:
 
 ```bash
 docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f

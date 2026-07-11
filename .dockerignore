@@ -22,3 +22,5 @@ data/journal/screenshots
 data/journal/*.html
 chart_program/data/search
 chart_program/data/all_insturments_search
+
+.docker-home

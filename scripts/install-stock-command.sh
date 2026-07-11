@@ -24,6 +24,32 @@ if [[ "\${1:-}" == "--cleanup" ]]; then
   exit 0
 fi
 
+if [[ "\${1:-}" == "--fix-permissions" ]]; then
+  echo "Fixing ownership for StockHelper generated files..."
+  paths=(data charts chart_program/data Trojpolowki debug configs .docker-home)
+  existing=()
+  for path in "\${paths[@]}"; do
+    [[ -e "\$path" ]] && existing+=("\$path")
+  done
+  if [[ "\${#existing[@]}" -eq 0 ]]; then
+    echo "No generated StockHelper paths found."
+    exit 0
+  fi
+  if chown -R "\$(id -u):\$(id -g)" "\${existing[@]}" 2>/dev/null; then
+    echo "Permissions fixed."
+  else
+    echo "Could not change every file as your user. Run this once:"
+    printf '  sudo chown -R %q:%q' "\$(id -u)" "\$(id -g)"
+    printf ' %q' "\${existing[@]}"
+    printf '\n'
+    exit 1
+  fi
+  exit 0
+fi
+
+export STOCKHELPER_UID="\${STOCKHELPER_UID:-\$(id -u)}"
+export STOCKHELPER_GID="\${STOCKHELPER_GID:-\$(id -g)}"
+
 _stop_old_report_containers() {
   if [[ "\${STOCKHELPER_KEEP_OLD_REPORTS:-0}" == "1" ]]; then
     return 0
@@ -80,4 +106,5 @@ Try:
   stock -allsearch all
   stock --open-allsearch-report all
   stock --cleanup
+  stock --fix-permissions
 MSG

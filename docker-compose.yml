@@ -9,9 +9,12 @@ services:
     # Chart/report workflows bind to 127.0.0.1 on dynamic ports; host networking makes them reachable on the host.
     network_mode: host
     entrypoint: ["python", "run"]
+    # Run as the host user so generated CSV/report files are editable/deletable outside Docker.
+    user: "${STOCKHELPER_UID:-1000}:${STOCKHELPER_GID:-1000}"
     environment:
       PYTHONUNBUFFERED: "1"
       STOCKHELPER_REPORT_SERVER_FOREGROUND: "1"
+      HOME: /app/.docker-home
     volumes:
       # Mount the repository so code/doc fixes from git are used immediately; rebuild only when dependencies change.
       - .:/app
