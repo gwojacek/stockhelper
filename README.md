@@ -50,7 +50,7 @@ If you intentionally use a local Poetry/Python install instead of Docker, replac
 
 ### Click-to-run `stock` commands
 
-Some IDEs (for example PyCharm) show a run/play action next to shell commands in fenced `bash` blocks. These are the same quick commands as above, repeated outside the table so they can be launched with one click from the README.
+Some IDEs (for example PyCharm) show a run/play action when a fenced `bash` command starts with a repo-local executable path. These are the same quick commands as above, repeated as `./stock ...` so they can be launched with one click from the README. In a normal terminal you can still use the installed `stock ...` shortcut.
 
 Build or rebuild the Docker image:
 
@@ -67,85 +67,85 @@ Install or update the `stock` shortcut:
 Show StockHelper help:
 
 ```bash
-stock --help
+./stock --help
 ```
 
 Run a stock setup:
 
 ```bash
-stock ena
+./stock ena
 ```
 
 Open a chart editor:
 
 ```bash
-stock -c ena
+./stock -c ena
 ```
 
 Open a chart with Ichimoku enabled:
 
 ```bash
-stock -c EUR/USD --ichimoku-mode on
+./stock -c EUR/USD --ichimoku-mode on
 ```
 
 Open the transaction journal:
 
 ```bash
-stock --journal-html
+./stock --journal-html
 ```
 
 Run an Ichimoku scan:
 
 ```bash
-stock -ichimoku_search wig
+./stock -ichimoku_search wig
 ```
 
 Run a Fibonacci scan:
 
 ```bash
-stock -fibo_search wig
+./stock -fibo_search wig
 ```
 
 Run the default all-search flow and open the HTML report:
 
 ```bash
-stock -allsearch all
+./stock -allsearch all
 ```
 
 Reopen the latest all-search report:
 
 ```bash
-stock --open-allsearch-report all
+./stock --open-allsearch-report all
 ```
 
 Refresh WIG/WIG20 from Stooq bulk:
 
 ```bash
-stock --download-wig-bulk
+./stock --download-wig-bulk
 ```
 
 Use cache only:
 
 ```bash
-stock -onlycache -ichimoku_search wig
+./stock -onlycache -ichimoku_search wig
 ```
 
 Force refresh:
 
 ```bash
-STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig
+STOCKHELPER_FORCE_REMOTE_REFRESH=1 ./stock -fibo_search wig
 ```
 
 Fix old Docker file ownership:
 
 ```bash
-stock --fix-permissions
+./stock --fix-permissions
 ```
 
 Clean Docker disk usage:
 
 ```bash
-stock --cleanup
+./stock --cleanup
 ```
 
 ## Features
@@ -331,7 +331,7 @@ The Compose service runs as your host UID/GID through `STOCKHELPER_UID` and `STO
 If an older Docker run already created root-owned files such as `data/csv/stocks/ALL_WA.csv`, fix existing host file ownership once:
 
 ```bash
-stock --fix-permissions
+./stock --fix-permissions
 ```
 
 If that prints a `sudo chown ...` command, run the printed command once. Future `stock ...` runs should create files as your user.
@@ -341,7 +341,7 @@ If that prints a `sudo chown ...` command, run the printed command once. Future 
 Report commands intentionally keep a container alive while the report server is open. Use this when you are done with reports or need disk space:
 
 ```bash
-stock --cleanup
+./stock --cleanup
 ```
 
 It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. Manual equivalent:
