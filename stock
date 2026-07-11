@@ -1,158 +1,84 @@
-#!/usr/bin/env python3
-"""Docker-backed StockHelper launcher.
+#!/usr/bin/env bash
+set -o pipefail
 
-The file intentionally lives at repo root so IDEs can run commands like
-`python3 stock -allsearch all` from README snippets, while
-`scripts/install-stock-command.sh` exposes the same launcher as `stock` in PATH.
-"""
-from __future__ import annotations
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_ROOT" || exit 1
 
-import os
-import re
-import shutil
-import subprocess
-import sys
-from pathlib import Path
+if [[ "${1:-}" == "--cleanup" ]]; then
+  echo "Stopping StockHelper report containers..."
+  docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f
+  echo "Removing dangling Docker images..."
+  docker image prune -f
+  echo "Removing unused build cache..."
+  docker builder prune -f
+  echo "Done. Current StockHelper images:"
+  docker images 'stockhelper*'
+  exit 0
+fi
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-REPORT_URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost):\d+\S*")
-REPORT_COMMANDS = {"-allsearch", "--open-allsearch-report", "--journal-html", "--journal-pdf"}
-GENERATED_PATHS = ["data", "charts", "chart_program/data", "Trojpolowki", "debug", "configs", ".docker-home"]
+if [[ "${1:-}" == "--fix-permissions" ]]; then
+  echo "Fixing ownership for StockHelper generated files..."
+  paths=(data charts chart_program/data Trojpolowki debug configs .docker-home)
+  existing=()
+  for path in "${paths[@]}"; do
+    [[ -e "$path" ]] && existing+=("$path")
+  done
+  if [[ "${#existing[@]}" -eq 0 ]]; then
+    echo "No generated StockHelper paths found."
+    exit 0
+  fi
+  if chown -R "$(id -u):$(id -g)" "${existing[@]}" 2>/dev/null; then
+    echo "Permissions fixed."
+  else
+    echo "Could not change every file as your user. Run this once:"
+    printf '  sudo chown -R %q:%q' "$(id -u)" "$(id -g)"
+    printf ' %q' "${existing[@]}"
+    printf '\n'
+    exit 1
+  fi
+  exit 0
+fi
 
+export STOCKHELPER_UID="${STOCKHELPER_UID:-$(id -u)}"
+export STOCKHELPER_GID="${STOCKHELPER_GID:-$(id -g)}"
 
-def _run(command: list[str], **kwargs) -> subprocess.CompletedProcess:
-    return subprocess.run(command, cwd=PROJECT_ROOT, **kwargs)
-
-
-def _cleanup() -> int:
-    print("Stopping StockHelper report containers...", flush=True)
-    subprocess.run(
-        "docker ps -aq --filter 'name=stockhelper' | xargs -r docker rm -f",
-        cwd=PROJECT_ROOT,
-        shell=True,
-        check=False,
-    )
-    print("Removing dangling Docker images...", flush=True)
-    _run(["docker", "image", "prune", "-f"], check=False)
-    print("Removing unused build cache...", flush=True)
-    _run(["docker", "builder", "prune", "-f"], check=False)
-    print("Done. Current StockHelper images:", flush=True)
-    _run(["docker", "images", "stockhelper*"], check=False)
+_stop_old_report_containers() {
+  if [[ "${STOCKHELPER_KEEP_OLD_REPORTS:-0}" == "1" ]]; then
     return 0
+  fi
+  docker ps -aq --filter "name=stockhelper" --filter "ancestor=stockhelper:latest" | xargs -r docker rm -f >/dev/null 2>&1 || true
+}
 
+_should_watch_for_report_url=0
+for arg in "$@"; do
+  case "$arg" in
+    -allsearch|--open-allsearch-report|--journal-html|--journal-pdf)
+      _should_watch_for_report_url=1
+      ;;
+  esac
+done
 
-def _fix_permissions() -> int:
-    print("Fixing ownership for StockHelper generated files...", flush=True)
-    existing = [PROJECT_ROOT / item for item in GENERATED_PATHS if (PROJECT_ROOT / item).exists()]
-    if not existing:
-        print("No generated StockHelper paths found.", flush=True)
-        return 0
+if [[ "$_should_watch_for_report_url" == "1" ]]; then
+  _stop_old_report_containers
+  _opened_url=""
+  docker compose run --rm --no-deps stockhelper "$@" 2>&1 | while IFS= read -r line; do
+    printf '%s\n' "$line"
+    if [[ -z "$_opened_url" && "$line" =~ (https?://(127\.0\.0\.1|localhost):[0-9]+[^[:space:]]*) ]]; then
+      _opened_url="${BASH_REMATCH[1]}"
+      if command -v google-chrome >/dev/null 2>&1; then
+        google-chrome --new-window "$_opened_url" >/dev/null 2>&1 &
+      elif command -v chromium >/dev/null 2>&1; then
+        chromium --new-window "$_opened_url" >/dev/null 2>&1 &
+      elif command -v chromium-browser >/dev/null 2>&1; then
+        chromium-browser --new-window "$_opened_url" >/dev/null 2>&1 &
+      elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$_opened_url" >/dev/null 2>&1 &
+      elif command -v gio >/dev/null 2>&1; then
+        gio open "$_opened_url" >/dev/null 2>&1 &
+      fi
+    fi
+  done
+  exit "${PIPESTATUS[0]}"
+fi
 
-    uid = os.getuid()
-    gid = os.getgid()
-    failures: list[Path] = []
-    for root in existing:
-        for current, dirs, files in os.walk(root):
-            current_path = Path(current)
-            try:
-                os.chown(current_path, uid, gid)
-            except PermissionError:
-                failures.append(current_path)
-            for name in [*dirs, *files]:
-                path = current_path / name
-                try:
-                    os.chown(path, uid, gid)
-                except PermissionError:
-                    failures.append(path)
-        try:
-            os.chown(root, uid, gid)
-        except PermissionError:
-            failures.append(root)
-
-    if not failures:
-        print("Permissions fixed.", flush=True)
-        return 0
-
-    rel_paths = [str(path.relative_to(PROJECT_ROOT)) for path in existing]
-    print("Could not change every file as your user. Run this once:", flush=True)
-    print(f"  sudo chown -R {uid}:{gid} " + " ".join(shlex_quote(p) for p in rel_paths), flush=True)
-    return 1
-
-
-def shlex_quote(value: str) -> str:
-    if not value:
-        return "''"
-    safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
-    if all(ch in safe for ch in value):
-        return value
-    return "'" + value.replace("'", "'\\''") + "'"
-
-
-def _stop_old_report_containers(env: dict[str, str]) -> None:
-    if env.get("STOCKHELPER_KEEP_OLD_REPORTS", "0") == "1":
-        return
-    subprocess.run(
-        "docker ps -aq --filter 'name=stockhelper' --filter 'ancestor=stockhelper:latest' | xargs -r docker rm -f >/dev/null 2>&1",
-        cwd=PROJECT_ROOT,
-        shell=True,
-        check=False,
-    )
-
-
-def _open_url(url: str) -> None:
-    for command in (["google-chrome", "--new-window"], ["chromium", "--new-window"], ["chromium-browser", "--new-window"], ["xdg-open"], ["gio", "open"]):
-        if shutil.which(command[0]):
-            subprocess.Popen([*command, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return
-
-
-def _run_stockhelper(args: list[str]) -> int:
-    env = os.environ.copy()
-    env.setdefault("STOCKHELPER_UID", str(os.getuid()))
-    env.setdefault("STOCKHELPER_GID", str(os.getgid()))
-
-    watch_for_report_url = any(arg in REPORT_COMMANDS for arg in args)
-    if watch_for_report_url:
-        _stop_old_report_containers(env)
-
-    command = ["docker", "compose", "run", "--rm", "--no-deps", "stockhelper", *args]
-    if not watch_for_report_url:
-        completed = subprocess.run(command, cwd=PROJECT_ROOT, env=env)
-        return completed.returncode
-
-    opened_url: str | None = None
-    process = subprocess.Popen(
-        command,
-        cwd=PROJECT_ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    assert process.stdout is not None
-    try:
-        for line in process.stdout:
-            print(line, end="", flush=True)
-            if opened_url is None:
-                match = REPORT_URL_RE.search(line)
-                if match:
-                    opened_url = match.group(0)
-                    _open_url(opened_url)
-    except KeyboardInterrupt:
-        process.terminate()
-        raise
-    return process.wait()
-
-
-def main(argv: list[str]) -> int:
-    os.chdir(PROJECT_ROOT)
-    if argv[:1] == ["--cleanup"]:
-        return _cleanup()
-    if argv[:1] == ["--fix-permissions"]:
-        return _fix_permissions()
-    return _run_stockhelper(argv)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+exec docker compose run --rm --no-deps stockhelper "$@"

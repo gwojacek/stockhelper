@@ -17,40 +17,40 @@ The project is practical and config-driven: most workflows start from a ticker/c
 
 ## Quick command table
 
-Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed. PyCharm detects `python run ...` as runnable in the README; on the host, `python run ...` delegates to the Docker `stock` launcher automatically. The terminal shortcut installed by `./scripts/install-stock-command.sh` still lets you type `stock ...`. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
+Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed. PyCharm can run fenced `shell` blocks such as `make allsearch` or `./stock -allsearch all`, while the terminal shortcut installed by `./scripts/install-stock-command.sh` still lets you type `stock ...`. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
 
 | Use case | Recommended command | Short description |
 | --- | --- | --- |
 | Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
 | Install/update `stock` shortcut | `./scripts/install-stock-command.sh` | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
-| Show launcher help | `python run --help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
-| Run a stock setup | `python run ena` | Auto-detects a stock config and prints position/risk output. |
-| Run a forex/commodity setup | `python run eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
-| Open chart editor | `python run -c ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
-| Open chart with Ichimoku | `python run -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
-| Open stock as CFD | `python run -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
-| Open transaction journal | `python run --journal-html` | Opens the live journal HTML through the local report server so update/delete/close buttons work. |
-| Prepare PDF journal | `python run --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
-| Run Ichimoku scan | `python run -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
-| Run Fibonacci scan | `python run -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
-| Build combined report | `python run -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
-| Reopen combined report | `python run --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
-| Explain one Fibo symbol | `python run -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
-| Check liquidity | `python run -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
-| Debug Stooq page | `python run --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Refresh WIG/WIG20 from Stooq bulk | `python run --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip. |
-| Trim WIG stock CSVs | `python run --trim-wig-csvs` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
-| Use cache only | `python run -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
-| Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig` | Ignores usable cache and refreshes market data. |
-| Extend history | `python run --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
-| Fix old Docker file ownership | `python run --fix-permissions` | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
-| Clean Docker disk usage | `python run --cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
+| Show launcher help | `make help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
+| Run a stock setup | `./stock ena` | Auto-detects a stock config and prints position/risk output. |
+| Run a forex/commodity setup | `./stock eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
+| Open chart editor | `make chart TARGET=ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
+| Open chart with Ichimoku | `./stock -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
+| Open stock as CFD | `./stock -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
+| Open transaction journal | `make journal` | Opens the live journal HTML through the local report server so update/delete/close buttons work. |
+| Prepare PDF journal | `make journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
+| Run Ichimoku scan | `make ichimoku MARKET=wig` | Scans a market group and writes an Ichimoku Markdown report. |
+| Run Fibonacci scan | `make fibo MARKET=wig` | Scans a market group and writes a Fibonacci Markdown report. |
+| Build combined report | `make allsearch` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
+| Reopen combined report | `make open-allsearch` | Opens the latest existing HTML all-search report in a new browser window. |
+| Explain one Fibo symbol | `./stock -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
+| Check liquidity | `./stock -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
+| Debug Stooq page | `./stock --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
+| Refresh WIG/WIG20 from Stooq bulk | `make wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip. |
+| Trim WIG stock CSVs | `make trim-wig` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
+| Use cache only | `make cache-only MARKET=wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
+| Force refresh | `make force-fibo MARKET=wig` | Ignores usable cache and refreshes market data. |
+| Extend history | `./stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
+| Fix old Docker file ownership | `make fix-permissions` | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
+| Clean Docker disk usage | `make cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
 
-If you intentionally use a local Poetry/Python install instead of Docker, run commands as `STOCKHELPER_RUN_LOCAL=1 python run ...` after installing dependencies with `poetry install` and `poetry run playwright install chromium`.
+If you intentionally use a local Poetry/Python install instead of Docker, use the original `python run ...` commands after installing dependencies with `poetry install` and `poetry run playwright install chromium`.
 
-### Click-to-run `python run` commands
+### Click-to-run shell commands
 
-PyCharm recognizes README commands that start with `python run ...` as runnable. These snippets keep that clickable behavior; when run on the host they delegate to Docker through the `stock` launcher, while inside Docker or with `STOCKHELPER_RUN_LOCAL=1` they execute the local Python app directly. In a normal terminal you can still use the installed `stock ...` shortcut.
+PyCharm can run shell commands from fenced Markdown code blocks when command detection is enabled. These snippets use `make ...` targets for common actions and `./stock ...` for generic launcher calls, so they do not depend on an interactive shell alias. In a normal terminal you can still use the installed `stock ...` shortcut.
 
 Build or rebuild the Docker image:
 
@@ -66,86 +66,86 @@ Install or update the `stock` shortcut:
 
 Show StockHelper help:
 
-```bash
-python run --help
+```shell
+make help
 ```
 
 Run a stock setup:
 
-```bash
-python run ena
+```shell
+./stock ena
 ```
 
 Open a chart editor:
 
-```bash
-python run -c ena
+```shell
+make chart TARGET=ena
 ```
 
 Open a chart with Ichimoku enabled:
 
-```bash
-python run -c EUR/USD --ichimoku-mode on
+```shell
+./stock -c EUR/USD --ichimoku-mode on
 ```
 
 Open the transaction journal:
 
-```bash
-python run --journal-html
+```shell
+make journal
 ```
 
 Run an Ichimoku scan:
 
-```bash
-python run -ichimoku_search wig
+```shell
+make ichimoku MARKET=wig
 ```
 
 Run a Fibonacci scan:
 
-```bash
-python run -fibo_search wig
+```shell
+make fibo MARKET=wig
 ```
 
 Run the default all-search flow and open the HTML report:
 
-```bash
-python run -allsearch all
+```shell
+make allsearch
 ```
 
 Reopen the latest all-search report:
 
-```bash
-python run --open-allsearch-report all
+```shell
+make open-allsearch
 ```
 
 Refresh WIG/WIG20 from Stooq bulk:
 
-```bash
-python run --download-wig-bulk
+```shell
+make wig-bulk
 ```
 
 Use cache only:
 
-```bash
-python run -onlycache -ichimoku_search wig
+```shell
+make cache-only MARKET=wig
 ```
 
 Force refresh:
 
-```bash
-STOCKHELPER_FORCE_REMOTE_REFRESH=1 python run -fibo_search wig
+```shell
+make force-fibo MARKET=wig
 ```
 
 Fix old Docker file ownership:
 
-```bash
-python run --fix-permissions
+```shell
+make fix-permissions
 ```
 
 Clean Docker disk usage:
 
-```bash
-python run --cleanup
+```shell
+make cleanup
 ```
 
 ## Features
@@ -255,7 +255,7 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-After that, use `stock ...` in a normal terminal, or keep using clickable `python run ...` from PyCharm/README:
+After that, use `stock ...` in a normal terminal, or use the clickable `make ...` / `./stock ...` snippets from PyCharm/README:
 
 ```bash
 stock --help
@@ -283,15 +283,15 @@ Regular code changes are mounted from your working tree, so they usually do not 
 
 #### Command translation
 
-With Docker, keep the same arguments you used before. In a terminal, use `stock ...`; in PyCharm/README click-to-run snippets, use `python run ...` because the host bootstrap delegates it to Docker automatically:
+With Docker, keep the same arguments you used before. In a terminal, use `stock ...`; in PyCharm/README click-to-run snippets, use `make ...` targets or `./stock ...` so the command points to project files directly:
 
 | Before Docker | Recommended Docker command |
 | --- | --- |
-| `python run ena` | `stock ena` (terminal) or clickable `python run ena` |
-| `python run -c ena` | `stock -c ena` (terminal) or clickable `python run -c ena` |
-| `python run -allsearch all` | `stock -allsearch all` (terminal) or clickable `python run -allsearch all` |
-| `python run --open-allsearch-report all` | `stock --open-allsearch-report all` (terminal) or clickable `python run --open-allsearch-report all` |
-| `python run -ichimoku_search wig` | `stock -ichimoku_search wig` (terminal) or clickable `python run -ichimoku_search wig` |
+| `./stock ena` | `stock ena` (terminal) or clickable `./stock ena` |
+| `make chart TARGET=ena` | `stock -c ena` (terminal) or clickable `make chart TARGET=ena` |
+| `make allsearch` | `stock -allsearch all` (terminal) or clickable `make allsearch` |
+| `make open-allsearch` | `stock --open-allsearch-report all` (terminal) or clickable `make open-allsearch` |
+| `make ichimoku MARKET=wig` | `stock -ichimoku_search wig` (terminal) or clickable `make ichimoku MARKET=wig` |
 
 If you do not use the helper, the equivalent Compose form is:
 
@@ -303,7 +303,7 @@ The Compose file sets the container entrypoint to `python run`, so arguments lik
 
 #### Reports, charts, and browser opening
 
-Use `python run -allsearch all` for the normal all-search workflow. When the HTML report is ready, the helper watches Docker output and opens the first local StockHelper report URL (`http://127.0.0.1:...` or `http://localhost:...`) in a new Chrome/Chromium window, falling back to `xdg-open`/`gio`.
+Use `make allsearch` for the normal all-search workflow. When the HTML report is ready, the helper watches Docker output and opens the first local StockHelper report URL (`http://127.0.0.1:...` or `http://localhost:...`) in a new Chrome/Chromium window, falling back to `xdg-open`/`gio`.
 
 The helper intentionally ignores non-localhost URLs printed in scraper diagnostics. For example, Stooq bulk logs may print `https://stooq.com/db/d/?b=d_pl_txt`; that URL is not a StockHelper report and should not be opened by the helper.
 
@@ -330,8 +330,8 @@ The Compose service runs as your host UID/GID through `STOCKHELPER_UID` and `STO
 
 If an older Docker run already created root-owned files such as `data/csv/stocks/ALL_WA.csv`, fix existing host file ownership once:
 
-```bash
-python run --fix-permissions
+```shell
+make fix-permissions
 ```
 
 If that prints a `sudo chown ...` command, run the printed command once. Future `stock ...` runs should create files as your user.
@@ -340,8 +340,8 @@ If that prints a `sudo chown ...` command, run the printed command once. Future 
 
 Report commands intentionally keep a container alive while the report server is open. Use this when you are done with reports or need disk space:
 
-```bash
-python run --cleanup
+```shell
+make cleanup
 ```
 
 It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. Manual equivalent:
@@ -500,8 +500,8 @@ Run the examples from the repository root.
 
 ### 1. Run analysis for an existing stock config
 
-```bash
-python run ena
+```shell
+./stock ena
 ```
 
 **Description:**
@@ -561,8 +561,8 @@ python main.py --config configs/commodities/Cocoa_short.py
 
 ### 3. Open the interactive chart/config tool
 
-```bash
-python run -c ena
+```shell
+make chart TARGET=ena
 ```
 
 **Description:**
@@ -572,7 +572,7 @@ python run -c ena
 - Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects; the active level can be cleared from the sidebar.
 - Includes a **Transaction journal** button for saving the current setup, selected technique/reason, transaction amount/currency, notes, calculated context, and chart screenshot.
 - When launched from the journal for closing a trade, the chart opens in a focused close-adjust mode where only ENTRY, SOLD, and SL lines are edited before saving the closing screenshot back into the journal.
-- Stock charts include a CFD mode toggle; `python run -c AAPL.US cfd` opens the same symbol directly with CFD sizing inputs enabled. Stock CFDs use lot/deposit cost plus spread entered as price units with pips shown as `spread / 0.01`, so no separate pip-value field is required.
+- Stock charts include a CFD mode toggle; `./stock -c AAPL.US cfd` opens the same symbol directly with CFD sizing inputs enabled. Stock CFDs use lot/deposit cost plus spread entered as price units with pips shown as `spread / 0.01`, so no separate pip-value field is required.
 - Saves a config and chart snapshot when you click **Finish**.
 
 **When to use it:**
@@ -595,11 +595,11 @@ python run --journal-pdf
 
 **Description:**
 
-- `python run --journal-html` writes `data/journal/transactions.html` and opens it through the local report server when possible. Use this served URL for update/delete/close buttons; opening the file directly is read-only for browser security.
+- `make journal` writes `data/journal/transactions.html` and opens it through the local report server when possible. Use this served URL for update/delete/close buttons; opening the file directly is read-only for browser security.
 - Journal entries are created from the chart sidebar with **Add journal entry** and stored in `data/journal/transactions.json`. Screenshots are stored in `data/journal/screenshots/`.
 - The journal supports editable Trade Summary fields, manual notes, compressed mode, year filtering, bulk delete, and closing entries with profit/loss estimation from entry, sold price, and long/short direction.
 - To capture a closing screenshot, open the close-adjust chart from a journal entry, adjust ENTRY/SOLD/SL lines, and accept the screenshot. This special chart mode is only for journal closing; normal `python run -c <symbol>` chart sessions keep all normal chart features.
-- `python run --journal-pdf` opens the same journal view and reminds you to use the PDF/download/print flow.
+- `make journal-pdf` opens the same journal view and reminds you to use the PDF/download/print flow.
 
 **Output files created/updated:**
 
@@ -619,8 +619,8 @@ python -m chart_program jsw --instrument stock --data-source stooq --no-run-afte
 
 ### 4. Run an Ichimoku scanner
 
-```bash
-python run -ichimoku_search wig
+```shell
+make ichimoku MARKET=wig
 ```
 
 **Description:**
@@ -656,8 +656,8 @@ STOCKHELPER_DEBUG_SYMBOL=XTB.WA python run -ichimoku_search wig
 
 ### 5. Run a Fibonacci scanner
 
-```bash
-python run -fibo_search wig
+```shell
+make fibo MARKET=wig
 ```
 
 **Description:**
@@ -713,8 +713,8 @@ python run -fibo_search commodities -explain GOLD
 
 ### 7. Run combined Ichimoku + Fibonacci reports
 
-```bash
-python run -allsearch all
+```shell
+make allsearch
 ```
 
 **Description:**
@@ -725,7 +725,7 @@ python run -allsearch all
 - Embeds four HTML tabs: `ALLSEARCH REPORT`, `3P FIBO`, `3P ICHIMOKU`, and `🔻 Kliny`.
 - Adds top-choice sections, sortable/filterable tables, a search toolbar with market buttons and Allsearch-only scanner buttons, group Stooq-open buttons, StockHelper chart-open buttons, and a PDF export button that works from every tab.
 - Opens/serves the HTML report via the local report server when possible.
-- Includes an **Open journal** button that runs `python run --journal-html` in a separate served window; the journal is separate from scanner result generation and does not remove instruments from the scanner report.
+- Includes an **Open journal** button that runs `make journal` in a separate served window; the journal is separate from scanner result generation and does not remove instruments from the scanner report.
 
 **When to use it:**
 
@@ -951,8 +951,8 @@ pip install kaleido
 
 Then re-run chart mode:
 
-```bash
-python run -c ena
+```shell
+make chart TARGET=ena
 ```
 
 ### `Instrument config not found`
@@ -1053,8 +1053,8 @@ Trojpolowki/
 
 Open the latest existing report manually:
 
-```bash
-python run --open-allsearch-report all
+```shell
+make open-allsearch
 ```
 
 Or open the HTML file directly from:
