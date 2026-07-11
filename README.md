@@ -122,7 +122,16 @@ poetry shell
 
 ### Install with Docker (easiest)
 
-Docker packages the Python runtime, runtime dependencies, CPU-only EasyOCR/PyTorch, and Playwright Chromium browser into one image, so you do not need to install Python/Poetry locally. Playwright browsers are installed in the image at `/ms-playwright`, separate from the writable per-user Docker home.
+Docker is the recommended installation path if you do not want to manage a local Python/Poetry/Playwright setup. The image contains:
+
+- Python 3.12 runtime dependencies needed by StockHelper.
+- Playwright Chromium installed inside the image at `/ms-playwright`.
+- CPU-only PyTorch plus EasyOCR for Stooq CAPTCHA OCR, avoiding the multi-GB GPU/CUDA wheel stack.
+- Native libraries needed by OpenCV, EasyOCR, Playwright/Chromium, and the local chart/report web UIs.
+
+The Compose setup mounts this repository into the container at `/app`, so generated CSVs, reports, screenshots, journal files, configs, and code changes from `git pull` stay on your host machine. It also runs the container as your host UID/GID so newly generated files are editable and deletable from your IDE/terminal.
+
+#### First-time Docker setup
 
 Build the image once:
 
@@ -130,49 +139,7 @@ Build the image once:
 docker compose build
 ```
 
-After building, run StockHelper through Docker. Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before, but replace `python run` with `docker compose run --rm --no-deps stockhelper`. The Compose file sets the container entrypoint to `python run`, so arguments like `-allsearch all` are passed to StockHelper, not treated as executables:
-
-```bash
-# Before Docker:
-python run -allsearch all
-
-# With Docker:
-docker compose run --rm --no-deps stockhelper -allsearch all
-```
-
-The compose file mounts the repository at `/app`, so generated reports, cached CSVs, journal files, screenshots, edited configs, and code updates from `git pull` stay on your host machine. It also runs the container as your host UID/GID (through the `stock` shortcut, or `STOCKHELPER_UID`/`STOCKHELPER_GID`) so new CSV/report files remain editable and deletable from your IDE. Rebuild the image only when Docker/package dependencies change.
-
-Common commands:
-
-```bash
-# Show all launcher options
-docker compose run --rm --no-deps stockhelper --help
-
-# Run a configured setup
-docker compose run --rm --no-deps stockhelper ena
-
-# Run the all-market scanner
-docker compose run --rm --no-deps stockhelper -allsearch all
-
-# Open chart mode for a symbol/config
-# The compose file uses host networking so the local browser UI is reachable on 127.0.0.1.
-docker compose run --rm --no-deps stockhelper -c ena
-
-# Run a scanner using only local cache
-docker compose run --rm --no-deps -e STOCKHELPER_CACHE_ONLY=1 stockhelper -ichimoku_search wig
-```
-
-Command translation table:
-
-| Before Docker | With Docker Compose |
-| --- | --- |
-| `python run ena` | `docker compose run --rm --no-deps stockhelper ena` |
-| `python run -c ena` | `docker compose run --rm --no-deps stockhelper -c ena` |
-| `python run -allsearch all` | `docker compose run --rm --no-deps stockhelper -allsearch all` |
-| `python run --open-allsearch-report all` | `docker compose run --rm --no-deps stockhelper --open-allsearch-report all` |
-| `python run -ichimoku_search wig` | `docker compose run --rm --no-deps stockhelper -ichimoku_search wig` |
-
-To shorten commands permanently, install the `stock` shortcut:
+Install the short `stock` command:
 
 ```bash
 ./scripts/install-stock-command.sh
@@ -184,37 +151,96 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then run the same Docker-backed commands more comfortably:
+After that, use `stock ...` instead of `python run ...`:
 
 ```bash
+stock --help
 stock -allsearch all
 stock --open-allsearch-report all
 stock -c ena
 ```
 
-For report commands, the `stock` shortcut watches the Docker output and opens the first printed localhost report URL (`http://127.0.0.1:...` or `http://localhost:...`) with your host Chrome/Chromium in a new window, falling back to `xdg-open`/`gio`. Non-localhost URLs printed in scraper diagnostics are ignored. Keep the terminal command running while the browser tab is open. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done viewing the report. Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container. If the served report is recent (default: 24 hours), chart buttons use fast cache mode because `-allsearch` already refreshed the latest candle before writing the HTML report; stale reports fall back to normal chart freshness checks.
+#### Updating after `git pull`
 
-#### Docker disk cleanup
-
-Report commands intentionally keep a container alive while the report server is open. The `stock` shortcut protects you from accumulating old report containers by stopping older StockHelper report containers before starting a new report command. If you want to keep multiple reports alive, set `STOCKHELPER_KEEP_OLD_REPORTS=1`.
-
-Use this cleanup command when you are done with reports or need disk space:
+After pulling code changes, reinstall the wrapper so `stock` gets the newest helper behavior:
 
 ```bash
-stock --cleanup
+git pull
+./scripts/install-stock-command.sh
 ```
 
-It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache.
+Rebuild the Docker image only when Docker/package dependencies changed (for example `Dockerfile`, `pyproject.toml`, `poetry.lock`, Playwright/browser setup, or CPU EasyOCR/PyTorch changes):
 
-If Docker previously created root-owned files such as `data/csv/stocks/ALL_WA.csv`, fix existing host file ownership once:
+```bash
+docker compose build
+```
+
+Regular code changes are mounted from your working tree, so they usually do not need an image rebuild.
+
+#### Command translation
+
+Do **not** run `python run ...` directly on the host unless you also installed Python locally. With Docker, keep the same arguments you used before and replace `python run` with `stock`:
+
+| Before Docker | Recommended Docker command |
+| --- | --- |
+| `python run ena` | `stock ena` |
+| `python run -c ena` | `stock -c ena` |
+| `python run -allsearch all` | `stock -allsearch all` |
+| `python run --open-allsearch-report all` | `stock --open-allsearch-report all` |
+| `python run -ichimoku_search wig` | `stock -ichimoku_search wig` |
+
+If you do not use the helper, the equivalent Compose form is:
+
+```bash
+docker compose run --rm --no-deps stockhelper -allsearch all
+```
+
+The Compose file sets the container entrypoint to `python run`, so arguments like `-allsearch all` are passed to StockHelper and are not treated as executables.
+
+#### Reports, charts, and browser opening
+
+Use `stock -allsearch all` for the normal all-search workflow. When the HTML report is ready, the helper watches Docker output and opens the first local StockHelper report URL (`http://127.0.0.1:...` or `http://localhost:...`) in a new Chrome/Chromium window, falling back to `xdg-open`/`gio`.
+
+The helper intentionally ignores non-localhost URLs printed in scraper diagnostics. For example, Stooq bulk logs may print `https://stooq.com/db/d/?b=d_pl_txt`; that URL is not a StockHelper report and should not be opened by the helper.
+
+Keep the terminal command running while you view the report. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done. The helper stops older StockHelper report containers before starting a new report command unless you set:
+
+```bash
+export STOCKHELPER_KEEP_OLD_REPORTS=1
+```
+
+Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container. If the served report is recent (default: 24 hours), chart buttons use fast cache mode because `-allsearch` already refreshed the latest candle before writing the HTML report; stale reports fall back to normal chart freshness checks.
+
+For commands that launch a local web UI, Compose uses host networking because StockHelper binds chart/report servers to dynamic `127.0.0.1` ports.
+
+#### Data freshness notes
+
+- Warsaw WIG/WIG20 data uses the Stooq `d_pl_txt` bulk archive when a bulk refresh is needed.
+- A successful WIG bulk refresh imports WIG stocks and WIG20/index data from the same zip, so the later indexes phase should reuse the refreshed local WIG20 CSV instead of downloading the same zip again.
+- Yahoo-only instruments now keep about 1.5 years of recent data in runtime/chart flows, rather than only about 1 year.
+- All-search is the default way to refresh latest candles before viewing the HTML report; report-launched charts can then open faster from the freshly generated cache.
+
+#### File ownership and permissions
+
+The Compose service runs as your host UID/GID through `STOCKHELPER_UID` and `STOCKHELPER_GID`, which the `stock` wrapper exports automatically. This prevents new files in `data/`, `charts/`, `chart_program/data/`, `Trojpolowki/`, `debug/`, and `configs/` from being created as root.
+
+If an older Docker run already created root-owned files such as `data/csv/stocks/ALL_WA.csv`, fix existing host file ownership once:
 
 ```bash
 stock --fix-permissions
 ```
 
-If that prints a `sudo chown ...` command, run the printed command once; future `stock ...` runs should create files as your user.
+If that prints a `sudo chown ...` command, run the printed command once. Future `stock ...` runs should create files as your user.
 
-If you need to clean up manually, run:
+#### Docker disk cleanup
+
+Report commands intentionally keep a container alive while the report server is open. Use this when you are done with reports or need disk space:
+
+```bash
+stock --cleanup
+```
+
+It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. Manual equivalent:
 
 ```bash
 docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f
@@ -222,23 +248,21 @@ docker image prune -f
 docker builder prune -f
 ```
 
-The Docker image avoids the Poetry lock's GPU-enabled EasyOCR/PyTorch/CUDA dependency path and installs CPU-only PyTorch plus EasyOCR directly. This keeps Stooq CAPTCHA OCR available for WIG bulk downloads without downloading or keeping the multi-GB CUDA packages in the final image. WIG20 is imported from the same Stooq bulk zip during successful WIG bulk refreshes, so the later indexes phase should reuse the refreshed local WIG20 CSV rather than downloading the same zip again.
+#### Plain Docker without Compose
 
-If you do not use Docker Compose, build and run the image directly:
+Compose is preferred. If you do not use Docker Compose, build and run the image directly:
 
 ```bash
 docker build -t stockhelper .
 docker run --rm -it --network host \
-  -v "$PWD/configs:/app/configs" \
-  -v "$PWD/data:/app/data" \
-  -v "$PWD/charts:/app/charts" \
-  -v "$PWD/chart_program/data:/app/chart_program/data" \
-  -v "$PWD/Trojpolowki:/app/Trojpolowki" \
-  -v "$PWD/debug:/app/debug" \
+  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+  -e HOME=/app/.docker-home \
+  -u "$(id -u):$(id -g)" \
+  -v "$PWD:/app" \
   stockhelper -allsearch all
 ```
 
-For commands that launch a local web UI, the Compose setup uses host networking because StockHelper binds chart/report servers to dynamic `127.0.0.1` ports. If you use plain Docker for chart mode on Linux, add `--network host`; on Docker Desktop, enable host networking first or prefer the Compose command above.
+For chart/report UI commands on Linux, keep `--network host`; on Docker Desktop, enable host networking first or prefer Compose.
 
 ### Install with `venv` + `pip` instead
 
