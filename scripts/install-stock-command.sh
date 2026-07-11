@@ -22,12 +22,12 @@ Installed StockHelper Docker shortcut (${INSTALL_KIND}):
 If 'stock' is not found, add this to your shell config and restart the terminal:
   export PATH="\$HOME/.local/bin:\$PATH"
 
-PyCharm/IDE click-to-run commands can use the repo-local executable:
-  ./stock --help
+PyCharm/IDE click-to-run commands can use the Python launcher form:
+  python3 stock --help
 
 Terminal commands can use either:
   stock --help
-  ./stock --help
+  python3 stock --help
 
 Try:
   stock --help
