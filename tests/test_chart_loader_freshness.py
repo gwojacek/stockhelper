@@ -691,3 +691,22 @@ def test_single_stock_refresh_probe_uses_yahoo_missing_candle_count(monkeypatch)
 
     assert scanner._should_refresh_group_data("single", ["PCO"], None) is True
     assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+
+
+def test_yahoo_only_download_keeps_about_18_months(monkeypatch):
+    dates = pd.date_range("2025-01-01", periods=700, freq="D")
+    full = _df(*(d.strftime("%Y-%m-%d") for d in dates))
+
+    def fake_window(symbol, instrument_type, *, period):
+        assert period == "max"
+        return full, "AAPL", "Apple Inc."
+
+    monkeypatch.setattr(loader, "_yahoo_download_window", fake_window)
+
+    df, candidate, name = loader._yahoo_download("AAPL.US", "stock")
+
+    assert candidate == "AAPL"
+    assert name == "Apple Inc."
+    assert df["Date"].min() == pd.Timestamp("2025-05-30")
+    assert df["Date"].max() == pd.Timestamp("2026-12-01")
+    assert len(df) == 551
