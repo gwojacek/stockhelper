@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v18"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v19"
 
 
 def main() -> int:
@@ -258,6 +258,7 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
+        env.setdefault("STOCKHELPER_CHART_FAST_CACHE", "1")
         if group_id:
             with chart_group_lock:
                 group_data = chart_groups.get(group_id, {})

@@ -498,18 +498,22 @@ def run_level_selector(raw_args=None):
     # First do a bounded latest-candle refresh with normal cache rules.
     # Search reports can discover a Yahoo candle before the bulk Stooq cache has
     # it; opening the chart should persist that newest candle instead of showing
-    # an older cache-only view.
+    # an older cache-only view. Report-launched Docker charts can opt into a fast
+    # cache-only path because the report has just been generated from local data.
     prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    fast_cache_chart = os.environ.get("STOCKHELPER_CHART_FAST_CACHE", "").strip().lower() in {"1", "true", "yes", "on"}
     try:
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-        _latest_df, data_path, latest_fetch_info = load_or_update_daily_data(
-            symbol=symbol,
-            instrument_type=instrument_type,
-            persist=True,
-            api_key=args.api_key,
-            data_source=args.data_source,
-            fetch_older_data=False,
-        )
+        latest_fetch_info = {"source": "skipped", "fallback_reason": "Fast report chart cache mode skipped latest refresh."}
+        if not fast_cache_chart:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            _latest_df, data_path, latest_fetch_info = load_or_update_daily_data(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=True,
+                api_key=args.api_key,
+                data_source=args.data_source,
+                fetch_older_data=False,
+            )
 
         # Then load the full cached history for charting without another remote
         # backfill.  The latest refresh above owns persistence; this cache-only
@@ -526,6 +530,8 @@ def run_level_selector(raw_args=None):
         fetch_info["source"] = "local_csv"
         fetch_info.setdefault("latest_refresh_source", latest_fetch_info.get("source"))
         fetch_info.setdefault("latest_refresh_reason", latest_fetch_info.get("fallback_reason"))
+        if fast_cache_chart:
+            fetch_info["fast_cache_chart"] = "1"
     finally:
         if prev_cache_only is None:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
