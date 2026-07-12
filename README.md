@@ -118,32 +118,6 @@ Reopen the latest all-search report:
 stock --open-allsearch-report all
 ```
 
-### PyCharm runnable report commands
-
-If PyCharm does not show a run icon for plain `stock ...`, use these two `bash -lc './stock ...'` blocks. They usually get a runnable icon because the command starts with `bash`, but they still call the repo-local `./stock` helper, so report URLs are auto-opened the same way as normal `stock ...` terminal commands.
-
-Run the default all-search flow and open the HTML report:
-
-```shell
-bash -lc './stock -allsearch all'
-```
-
-Reopen the latest all-search report:
-
-```shell
-bash -lc './stock --open-allsearch-report all'
-```
-
-If you specifically want the raw Docker Compose form, these are equivalent but do not use the `stock` helper's host-browser auto-open wrapper:
-
-```shell
-docker compose run --rm --no-deps stockhelper -allsearch all
-```
-
-```shell
-docker compose run --rm --no-deps stockhelper --open-allsearch-report all
-```
-
 Refresh WIG/WIG20 from Stooq bulk:
 
 ```shell
@@ -281,14 +255,7 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-After that, use `stock ...` in a normal terminal, or copy the `stock ...` snippets from the README preview:
-
-```bash
-stock --help
-stock -allsearch all
-stock --open-allsearch-report all
-stock -c ena
-```
+After that, use `stock ...` in a normal terminal, or copy the `stock ...` snippets from the [Copy-ready `stock` commands](#copy-ready-stock-commands) section above.
 
 #### Updating after `git pull`
 
