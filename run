@@ -1,4 +1,28 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+import os as _bootstrap_os
+import sys as _bootstrap_sys
+from pathlib import Path as _BootstrapPath
+
+_BOOTSTRAP_PROJECT_ROOT = _BootstrapPath(__file__).resolve().parent
+_BOOTSTRAP_RUNNING_IN_DOCKER = (
+    _bootstrap_os.environ.get("STOCKHELPER_IN_DOCKER") == "1"
+    or _BootstrapPath("/.dockerenv").exists()
+)
+
+# Preserve clickable/backward-compatible host commands such as:
+#   python3 run -allsearch all
+# On the host, redirect them to the Docker-backed ./stock launcher before any
+# project imports can require local Python dependencies. Inside Docker, continue
+# with the normal application code below.
+if not _BOOTSTRAP_RUNNING_IN_DOCKER:
+    _stock_launcher = _BOOTSTRAP_PROJECT_ROOT / "stock"
+    if not _stock_launcher.is_file():
+        raise SystemExit(f"Stock launcher not found: {_stock_launcher}")
+    _bootstrap_os.chdir(_BOOTSTRAP_PROJECT_ROOT)
+    _bootstrap_os.execv(str(_stock_launcher), [str(_stock_launcher), *_bootstrap_sys.argv[1:]])
+
 import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib
 from urllib.request import Request, urlopen
 from urllib.parse import quote
@@ -489,8 +513,8 @@ def _open_existing_allsearch_report(scope: str) -> int:
         print(f"[allsearch] report not found: {report_html}")
         return 1
     print(f"[allsearch] opening existing html report: {report_html}")
-    _open_html_report(report_html)
-    return 0
+    report_url = _open_html_report(report_html)
+    return _wait_for_report_server(report_url)
 
 def _drop_markdown_section(text: str, title_prefix: str) -> str:
     lines = text.splitlines()
@@ -659,10 +683,18 @@ def _patch_report_runtime_js(path: Path) -> None:
         count=1,
         flags=re.S,
     )
-    if count or group_count:
+    patched = patched.replace(
+        "fetch('/run-command?command=python%20run%20--journal-html').then(()=>setButtonText(this,'Opened'))",
+        "window.open('/journal-html','_blank')"
+    )
+    patched = patched.replace(
+        "fetch(&quot;/run-command?command=python%20run%20--journal-html&quot;).then(()=>setButtonText(this,&quot;Opened&quot;))",
+        "window.open('/journal-html','_blank')"
+    )
+    if count or group_count or patched != text:
         path.write_text(patched, encoding="utf-8")
 
-def _open_html_report(path: Path) -> None:
+def _open_html_report(path: Path) -> str | None:
     _patch_report_runtime_js(path)
     report_url = _serve_report_locally(path)
     file_url = report_url or path.resolve().as_uri()
@@ -671,7 +703,7 @@ def _open_html_report(path: Path) -> None:
         try:
             print(f"[allsearch] opening report: {path}")
             subprocess.Popen([chrome, "--new-window", "--app=" + file_url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            return
+            return report_url
         except Exception:
             pass
     firefox = shutil.which("firefox")
@@ -679,14 +711,35 @@ def _open_html_report(path: Path) -> None:
         try:
             print(f"[allsearch] opening report: {path}")
             subprocess.Popen([firefox, "--new-window", file_url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-            return
+            return report_url
         except Exception:
             pass
     print(f"[allsearch] opening report via xdg-open: {file_url}")
     subprocess.Popen(["xdg-open", file_url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return report_url
+
+def _should_keep_report_server_foreground() -> bool:
+    value = os.environ.get("STOCKHELPER_REPORT_SERVER_FOREGROUND", "").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return Path("/.dockerenv").exists()
+
+def _wait_for_report_server(report_url: str | None) -> int:
+    if not report_url or not _should_keep_report_server_foreground():
+        return 0
+    print(f"[allsearch] report server is running. Open this URL in your browser: {report_url}")
+    print("[allsearch] keeping Docker container alive for the report server. Press Ctrl+C to stop.")
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        print("\n[allsearch] stopping report server.")
+        return 0
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v15"
+    report_server_protocol = "stockhelper-report-server-v19"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"
@@ -795,6 +848,8 @@ def _serve_report_locally(path: Path) -> str | None:
             env.setdefault("STOCKHELPER_REPORT_CONSOLE_LOG_MAX_BYTES", str(5 * 1024 * 1024))
             env["STOCKHELPER_REPORT_CONSOLE_STDOUT"] = console_stdout
             env["STOCKHELPER_REPORT_CONSOLE_STDERR"] = console_stderr
+            env["STOCKHELPER_REPORT_HTML_PATH"] = str(path)
+            env.setdefault("STOCKHELPER_REPORT_FAST_CACHE_MAX_AGE_HOURS", "24")
             subprocess.Popen(
                 [
                     sys.executable,
@@ -2196,11 +2251,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
 
     def _journal_tab_html() -> str:
-        cmd = "python run --journal-html"
-        encoded = quote(cmd, safe="")
         button = (
-            f'<button class="btn troj-cta" type="button" '
-            f'onclick="fetch(&quot;/run-command?command={encoded}&quot;).then(()=>setButtonText(this,&quot;Opened&quot;))">'
+            '<button class="btn troj-cta" type="button" '
+            'onclick="window.open(\'/journal-html\',\'_blank\')">'
             'Open transaction journal</button>'
         )
         return (
@@ -2307,7 +2360,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "<select id='market' style='display:none'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
         "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>"
     )
-    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"fetch('/run-command?command=python%20run%20--journal-html').then(()=>setButtonText(this,'Opened'))\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"window.open('/journal-html','_blank')\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append(search_toolbar_html)
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
@@ -2492,7 +2545,10 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False) -> i
     reopen_scope = "all" if [s.lower() for s in scopes] == DEFAULT_ALLSEARCH_SCOPES else ",".join(scopes).lower()
     print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
     print(f"[allsearch] reopen html command: python run --open-allsearch-report {reopen_scope}")
-    _open_html_report(report_html)
+    report_url = _open_html_report(report_html)
+    keep_code = _wait_for_report_server(report_url)
+    if keep_code:
+        return keep_code
     if all_links:
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()

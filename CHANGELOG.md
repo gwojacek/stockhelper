@@ -2,7 +2,40 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently has six release tags: `1.0`, `2.0`, `3.0`, `4.0`, `5.0`, and `6.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+
+## [7.0] - 2026-07-11
+
+Tag: `7.0`
+Compare: [`6.0...7.0`](https://github.com/gwojacek/stockhelper/compare/6.0...7.0)
+
+### Added
+
+- Added a Docker-first installation workflow with a `Dockerfile`, `docker-compose.yml`, `.dockerignore`, and `scripts/install-stock-command.sh` helper so StockHelper can run without local Python/Poetry/Playwright setup.
+- Added the `stock` shortcut for day-to-day Docker-backed commands, report URL auto-opening, report-container cleanup, and generated-file permission repair.
+- Added Docker image support for Playwright Chromium, OpenCV/native browser libraries, CPU-only PyTorch, and EasyOCR so Stooq CAPTCHA OCR works without installing the GPU/CUDA wheel stack.
+- Added report-server support for Docker foreground mode, served report URL emission, `/journal-html` handling, direct report-launched chart execution, output-tail diagnostics, and fast-cache hints for recently generated reports.
+- Added chart CLI forwarding for Ichimoku and Fibonacci/report options, including `--ichimoku-mode`, `--fibo-lines`, `--fibo-anchor-start`, `--fibo-anchor-end`, and `--fibo-right`.
+- Added regression coverage for Yahoo-only instruments keeping about 18 months of recent history.
+
+### Changed
+
+- Updated README usage to make Docker + `stock` the easiest path, including a quick command table, copy-ready `stock ...` snippets for the repo-local Docker wrapper, update workflow after `git pull`, report/browser behavior, permissions, cleanup, and plain Docker alternatives.
+- Changed Yahoo-primary/Yahoo-only chart data trimming to keep about 1.5 years of recent data instead of about 1 year.
+- Improved all-search report behavior so local report URLs are printed/served for the host helper and report-launched charts can open faster from fresh all-search cache.
+- Changed Docker runs to use the host UID/GID and a writable project-local Docker home while keeping Playwright browsers installed at `/ms-playwright` in the image.
+- Reduced Docker image size and build fragility by bypassing the Poetry lock's GPU/CUDA PyTorch dependency path and installing CPU PyTorch/EasyOCR directly.
+- Improved WIG/WIG20 bulk refresh documentation and behavior expectations so WIG20/index data imported from a successful WIG bulk zip can be reused by later index scans.
+
+### Fixed
+
+- Fixed Docker Compose argument handling so commands like `stock -allsearch all` or `docker compose run --rm --no-deps stockhelper -allsearch all` pass arguments to the container `python3 run` entrypoint instead of treating flags as executables.
+- Fixed Docker report serving so containers stay alive while local HTML reports are being viewed.
+- Fixed unwanted browser redirects to Stooq diagnostic URLs by making the `stock` helper auto-open only localhost StockHelper report URLs.
+- Fixed Playwright browser lookup failures after non-root Docker runs by using the image-global `/ms-playwright` browser path.
+- Fixed root-owned generated files from Docker workflows by running containers as the host user and adding `stock --fix-permissions` for older files.
+- Hardened Stooq CSV writes with non-empty/required-column validation, atomic temp-file replacement, and readback sanity checks to avoid corrupt or truncated CSVs.
+- Improved report-server chart failure diagnostics by capturing and returning recent child-process output.
 
 ## [6.0] - 2026-07-10
 

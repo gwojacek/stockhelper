@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v15"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v19"
 
 
 def main() -> int:
@@ -169,10 +169,15 @@ def main() -> int:
                     close_console_out.close()
                 console_out, close_console_out, console_stdout_path = sys.stdout, None, ""
 
-    def _forward_process_output(pipe, *, err: bool = False) -> None:
+    def _forward_process_output(pipe, *, err: bool = False, tail: list[str] | None = None) -> None:
         try:
             for line in pipe:
-                _safe_print(line.rstrip("\n"), err=err)
+                clean = line.rstrip("\n")
+                if tail is not None:
+                    prefix = "stderr" if err else "stdout"
+                    tail.append(f"{prefix}: {clean}")
+                    del tail[:-80]
+                _safe_print(clean, err=err)
         except Exception as exc:
             _safe_print(f"[report] failed to forward process output: {exc}", err=True)
         finally:
@@ -181,7 +186,7 @@ def main() -> int:
             except Exception:
                 pass
 
-    def _start_process(argv: list[str], env: dict[str, str]) -> subprocess.Popen:
+    def _start_process(argv: list[str], env: dict[str, str], output_tail: list[str] | None = None) -> subprocess.Popen:
         proc = subprocess.Popen(
             argv,
             cwd=str(project_root),
@@ -195,9 +200,9 @@ def main() -> int:
             bufsize=1,
         )
         if proc.stdout is not None:
-            threading.Thread(target=_forward_process_output, args=(proc.stdout,), daemon=True).start()
+            threading.Thread(target=_forward_process_output, args=(proc.stdout,), kwargs={"tail": output_tail}, daemon=True).start()
         if proc.stderr is not None:
-            threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True}, daemon=True).start()
+            threading.Thread(target=_forward_process_output, args=(proc.stderr,), kwargs={"err": True, "tail": output_tail}, daemon=True).start()
         return proc
 
     # Open the launcher console once while the parent `run` process is still
@@ -208,18 +213,71 @@ def main() -> int:
         os.environ.get("STOCKHELPER_REPORT_CONSOLE_STDERR", ""),
     )
 
-    def _is_report_chart_command(argv: list[str]) -> bool:
+    def _is_run_chart_command(argv: list[str]) -> bool:
         return len(argv) >= 3 and Path(argv[1]).name == "run" and argv[2] in {"-c", "--chart"}
+
+    def _is_direct_chart_program_command(argv: list[str]) -> bool:
+        return len(argv) >= 3 and argv[1] == "-m" and argv[2] == "chart_program"
+
+    def _is_report_chart_command(argv: list[str]) -> bool:
+        return _is_run_chart_command(argv) or _is_direct_chart_program_command(argv)
+
+    def _direct_chart_argv(argv: list[str]) -> list[str]:
+        if os.environ.get("STOCKHELPER_REPORT_DIRECT_CHART", "1").strip().lower() in {"0", "false", "no", "off"}:
+            return argv
+        if not _is_run_chart_command(argv) or len(argv) < 4:
+            return argv
+        # Report buttons already carry chart_program-compatible flags. Avoid an
+        # extra nested `python run -c ...` process and launch chart_program directly
+        # from the warm report-server container.
+        return [sys.executable, "-m", "chart_program", *argv[3:]]
+
+    def _journal_response_payload() -> dict:
+        from journal import write_html
+        path = write_html()
+        rel = path.resolve().relative_to(root)
+        url = "/" + "/".join(rel.parts)
+        return {"ok": True, "url": url, "path": str(path)}
+
+    def _is_journal_html_command(command: str) -> bool:
+        try:
+            argv = shlex.split(command)
+        except Exception:
+            return False
+        return len(argv) >= 3 and argv[0] in {"python", "python3"} and argv[1] == "run" and argv[2] == "--journal-html"
+
+    def _should_use_fast_chart_cache() -> bool:
+        explicit = os.environ.get("STOCKHELPER_CHART_FAST_CACHE", "").strip().lower()
+        if explicit in {"1", "true", "yes", "on"}:
+            return True
+        if explicit in {"0", "false", "no", "off"}:
+            return False
+        report_path = os.environ.get("STOCKHELPER_REPORT_HTML_PATH", "").strip()
+        if not report_path:
+            return False
+        try:
+            max_age_h = float(os.environ.get("STOCKHELPER_REPORT_FAST_CACHE_MAX_AGE_HOURS", "24") or 24)
+            age_s = max(0.0, time.time() - Path(report_path).stat().st_mtime)
+            return age_s <= max_age_h * 3600
+        except Exception:
+            return False
 
     def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
         original_command = command
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
+        if _is_journal_html_command(command):
+            return 0, _journal_response_payload()
         if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
             argv = [sys.executable, str(project_root / "run"), *argv[2:]]
+        argv = _direct_chart_argv(argv)
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
+        if _should_use_fast_chart_cache():
+            env["STOCKHELPER_CHART_FAST_CACHE"] = "1"
+        else:
+            env.pop("STOCKHELPER_CHART_FAST_CACHE", None)
         if group_id:
             with chart_group_lock:
                 group_data = chart_groups.get(group_id, {})
@@ -243,7 +301,8 @@ def main() -> int:
             try:
                 env["STOCKHELPER_CHART_URL_FILE"] = url_path
                 env["STOCKHELPER_CHART_NO_AUTO_OPEN"] = "1"
-                proc = _start_process(argv, env)
+                output_tail: list[str] = []
+                proc = _start_process(argv, env, output_tail)
                 chart_url = ""
                 # Chart startup can take longer than a few seconds when the
                 # command has to import scanner modules or refresh/load a local
@@ -280,7 +339,7 @@ def main() -> int:
                     if not chart_ready:
                         rc = proc.poll()
                         _safe_print(f"[report] chart ui url did not respond, exit={rc}")
-                        return int(rc or 1), {"ok": False, "error": "chart UI URL did not respond", "url": chart_url, "pid": proc.pid}
+                        return int(rc or 1), {"ok": False, "error": "chart UI URL did not respond", "url": chart_url, "pid": proc.pid, "output_tail": "\n".join(output_tail[-40:])}
                     _safe_print(f"[report] chart ui url: {chart_url} pid={proc.pid}")
                     return 0, {"ok": True, "url": chart_url, "pid": proc.pid}
                 rc = proc.poll()
@@ -289,9 +348,9 @@ def main() -> int:
                         rc = proc.wait(timeout=30)
                     except subprocess.TimeoutExpired:
                         _safe_print(f"[report] chart command still running before UI url, pid={proc.pid}")
-                        return 1, {"ok": False, "error": "chart command is still starting and did not publish a UI URL yet", "pid": proc.pid}
+                        return 1, {"ok": False, "error": "chart command is still starting and did not publish a UI URL yet", "pid": proc.pid, "output_tail": "\n".join(output_tail[-40:])}
                 _safe_print(f"[report] chart command exited before UI url, exit={rc}")
-                return int(rc or 1), {"ok": False, "error": f"chart command exited before UI url (exit {rc})"}
+                return int(rc or 1), {"ok": False, "error": f"chart command exited before UI url (exit {rc})", "output_tail": "\n".join(output_tail[-40:])}
             finally:
                 try:
                     Path(url_path).unlink(missing_ok=True)
@@ -299,10 +358,11 @@ def main() -> int:
                     pass
 
         # Non-chart commands are rare here; keep them synchronous and status-backed.
-        proc = _start_process(argv, env)
+        output_tail: list[str] = []
+        proc = _start_process(argv, env, output_tail)
         rc = proc.wait()
         _safe_print(f"[report] chart command exit: {rc}")
-        return rc, {"ok": rc == 0, "exit": rc}
+        return rc, {"ok": rc == 0, "exit": rc, "output_tail": "\n".join(output_tail[-40:])}
 
 
     def _html_response(title: str, message: str, debug: dict | None = None, status: int = 500) -> bytes:
@@ -345,6 +405,15 @@ def main() -> int:
             if parsed.path == "/__stockhelper_report_server_info":
                 payload = {"protocol": REPORT_SERVER_PROTOCOL, "project_root": str(project_root), "root": str(root)}
                 self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/journal-html":
+                try:
+                    payload = _journal_response_payload()
+                    self.send_response(303)
+                    self.send_header("Location", str(payload["url"]))
+                    self.end_headers()
+                except Exception as exc:
+                    _send_html(self, "StockHelper journal failed", str(exc), {"error": str(exc)}, 500)
+                return
             if parsed.path == "/run-command":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()

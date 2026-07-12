@@ -521,7 +521,7 @@ def _is_stock_like_wig_symbol(symbol: str) -> bool:
 
 def _yahoo_download(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, str, str | None]:
     df, candidate, display_name = _yahoo_download_window(symbol, instrument_type, period="max")
-    return _last_year_only(df), candidate, display_name
+    return _last_18_months_only(df), candidate, display_name
 
 
 def _stock_local_cache_or_yahoo_download(
@@ -774,12 +774,20 @@ def _last_two_years_only(df: pd.DataFrame) -> pd.DataFrame:
     return trimmed.sort_values("Date").reset_index(drop=True)
 
 def _last_year_only(df: pd.DataFrame) -> pd.DataFrame:
+    return _recent_days_only(df, 370)
+
+
+def _last_18_months_only(df: pd.DataFrame) -> pd.DataFrame:
+    return _recent_days_only(df, 550)
+
+
+def _recent_days_only(df: pd.DataFrame, days: int) -> pd.DataFrame:
     if df.empty:
         return df
     latest = pd.to_datetime(df["Date"], errors="coerce").max()
     if pd.isna(latest):
         return df
-    cutoff = latest - pd.Timedelta(days=370)
+    cutoff = latest - pd.Timedelta(days=days)
     trimmed = df[df["Date"] >= cutoff]
     return trimmed.sort_values("Date").reset_index(drop=True)
 
