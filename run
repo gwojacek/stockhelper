@@ -1401,9 +1401,18 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         )
         return bearish_breakout_context
 
+    def _previous_respect_months(row: ScannerRow) -> float:
+        return _parse_float_text(row.metrics.get("previous_respect_months", "0"), 0.0)
+
+    def _is_valid_breakout(row: ScannerRow) -> bool:
+        # WYNIKI 2 is intended to contain flips after at least four months of
+        # respecting one cloud side. Keep that guard here too because older
+        # markdown fixtures/reports may still contain shorter pre-breakout runs.
+        return row.category == "retest_breakout" and _previous_respect_months(row) >= 4.0
+
     def _is_fresh_retest_window(row: ScannerRow) -> bool:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
-        return row.category == "retest_breakout" and months <= 4.0
+        return _is_valid_breakout(row) and months < 4.0
 
     def _short_retest_trigger(row: ScannerRow, info: dict[str, str]) -> bool:
         touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
@@ -1411,11 +1420,15 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return touches_cloud or touches_kijun
 
     def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
-        row, info = item
+        row, _info = item
         latest_pattern = _source_metric(row, "latest_retest_pattern")
         latest_pattern_date = _source_metric(row, "latest_retest_date")
         active_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
-        return (_is_fresh_retest_window(row) or active_pattern) and _short_retest_trigger(row, info)
+        # Fresh valid breakouts belong in the fourth 3P Ichimoku column while
+        # they wait for a retest/pattern. They must not fall back to the
+        # long-respect continuation/watch columns until four months after the
+        # breakout.
+        return _is_fresh_retest_window(row) or (_is_valid_breakout(row) and active_pattern)
 
     def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item
@@ -1435,10 +1448,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "short_retest"
         tk_cross_signal = info["tk_cross"] not in {"-", "none"}
         has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
+        if row.category == "retest_breakout" and not _is_valid_breakout(row):
+            return "skip"
+        if row.category == "position" and _parse_float_text(row.metrics.get("months", "0"), 0.0) < 4.0:
+            return "skip"
         if _is_fresh_retest_window(row):
-            if "breakout" in info["note"]:
-                return "cloud"
-            return "watch" if has_kijun_or_tk else "skip"
+            return "short_retest"
         if _has_current_cloud_context(item):
             return "cloud"
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
@@ -1578,7 +1593,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         "",
         "Legenda:",
         "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column.",
-        "- 🔁 Retest <4m contains fresh valid breakouts from the last 4 months only when the newest candle touches Kijun, touches the cloud, or is inside the cloud; we wait for patterns in the last two cases.",
+        "- 🔁 Retest <4m contains valid breakouts from the last 4 months (after >=4 months respecting one cloud side); they stay there while waiting for retest/pattern confirmation.",
         "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
         "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
         "- Chikou uses arrow-only direction: ⬆️ over price and ⬇️ under price (under price supports bearish breakout/retest context).",
