@@ -23,12 +23,12 @@ If 'stock' is not found, add this to your shell config and restart the terminal:
   export PATH="\$HOME/.local/bin:\$PATH"
 
 PyCharm/IDE click-to-run commands can keep using the old run form:
-  python run -allsearch all
-  python run --help
+  python3 run -allsearch all
+  python3 run --help
 
 Terminal commands can use either:
   stock --help
-  python3 stock --help
+  ./stock --help
 
 Try:
   stock --help

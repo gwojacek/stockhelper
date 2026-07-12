@@ -8,7 +8,7 @@ services:
     tty: true
     # Chart/report workflows bind to 127.0.0.1 on dynamic ports; host networking makes them reachable on the host.
     network_mode: host
-    entrypoint: ["python", "run"]
+    entrypoint: ["python3", "run"]
     # Run as the host user so generated CSV/report files are editable/deletable outside Docker.
     user: "${STOCKHELPER_UID:-1000}:${STOCKHELPER_GID:-1000}"
     environment:

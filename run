@@ -12,7 +12,7 @@ _BOOTSTRAP_RUNNING_IN_DOCKER = (
 )
 
 # Preserve clickable/backward-compatible host commands such as:
-#   python run -allsearch all
+#   python3 run -allsearch all
 # On the host, redirect them to the Docker-backed ./stock launcher before any
 # project imports can require local Python dependencies. Inside Docker, continue
 # with the normal application code below.
