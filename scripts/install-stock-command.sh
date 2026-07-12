@@ -10,9 +10,12 @@ mkdir -p "${INSTALL_DIR}"
 if ln -sfn "${SOURCE}" "${TARGET}" 2>/dev/null; then
   INSTALL_KIND="symlinked"
 else
-  cp "${SOURCE}" "${TARGET}"
+  cat >"${TARGET}" <<WRAPPER
+#!/usr/bin/env bash
+exec "${SOURCE}" "\$@"
+WRAPPER
   chmod +x "${TARGET}"
-  INSTALL_KIND="copied"
+  INSTALL_KIND="wrapped"
 fi
 
 cat <<MSG
@@ -22,7 +25,7 @@ Installed StockHelper Docker shortcut (${INSTALL_KIND}):
 If 'stock' is not found, add this to your shell config and restart the terminal:
   export PATH="\$HOME/.local/bin:\$PATH"
 
-README/PyCharm commands are copy-ready `stock ...` commands:
+README/PyCharm commands are copy-ready stock commands:
   stock -allsearch all
   stock --help
 

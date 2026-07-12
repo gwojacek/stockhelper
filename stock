@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -o pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_stock_source="${BASH_SOURCE[0]}"
+while [[ -L "$_stock_source" ]]; do
+  _stock_dir="$(cd -P "$(dirname "$_stock_source")" && pwd)"
+  _stock_link="$(readlink "$_stock_source")"
+  if [[ "$_stock_link" == /* ]]; then
+    _stock_source="$_stock_link"
+  else
+    _stock_source="$_stock_dir/$_stock_link"
+  fi
+done
+PROJECT_ROOT="$(cd -P "$(dirname "$_stock_source")" && pwd)"
 cd "$PROJECT_ROOT" || exit 1
 
 if [[ "${1:-}" == "--cleanup" ]]; then
