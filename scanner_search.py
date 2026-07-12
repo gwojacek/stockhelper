@@ -415,24 +415,24 @@ def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
 
 
 
-def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_side: int = 2) -> list[FiboScanResult]:
-    """Keep at most one broad and one small Fibo formation per ticker/direction."""
-    grouped: dict[tuple[str, str], list[FiboScanResult]] = {}
+def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_ticker: int = 2) -> list[FiboScanResult]:
+    """Keep at most two Fibo formations per ticker across both directions."""
+    grouped: dict[str, list[FiboScanResult]] = {}
     for item in items:
         if not _fibo_has_minimum_small_impulse(item):
             continue
-        grouped.setdefault((str(item.ticker).upper(), str(item.direction).lower()), []).append(item)
+        grouped.setdefault(str(item.ticker).upper(), []).append(item)
     limited: list[FiboScanResult] = []
     for group in grouped.values():
-        if len(group) <= max_per_side:
+        if len(group) <= max_per_ticker:
             limited.extend(group)
             continue
         ordered = sorted(
             group,
             key=lambda r: (int(r.incline_duration_days), _fibo_formation_size(r), str(r.incline_start_date)),
         )
-        keep = [ordered[0], ordered[-1]]
-        keep_ids = {id(x) for x in keep}
+        keep = [ordered[0], ordered[-1]] if max_per_ticker >= 2 else [ordered[-1]]
+        keep_ids = {id(x) for x in keep[:max_per_ticker]}
         limited.extend([item for item in group if id(item) in keep_ids])
     return limited
 

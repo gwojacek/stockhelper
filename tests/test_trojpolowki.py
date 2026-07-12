@@ -84,6 +84,21 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
         ),
         mod.ScannerRow(
+            market="COMMODITIES", scanner="FIBO", category="waiting", ticker="BRACOMP", status="reached_23_6_waiting_for_61_8",
+            direction="short", dates={"start": "2026-02-25", "incline": "2026-02-25->2026-04-14"},
+            metrics={"ratio_raw": "2.0", "incline_days": "48", "near61_raw": "45.3"}, chart_url="https://stooq.pl/bracomp",
+        ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="FIBO", category="waiting", ticker="BRACOMP", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2025-10-10", "incline": "2025-10-10->2026-04-10"},
+            metrics={"ratio_raw": "1.8", "incline_days": "120", "near61_raw": "33.4"}, chart_url="https://stooq.pl/bracomp",
+        ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="FIBO", category="waiting", ticker="BRACOMP", status="reached_23_6_waiting_for_61_8",
+            direction="short", dates={"start": "2026-04-14", "incline": "2026-04-14->2026-05-20"},
+            metrics={"ratio_raw": "1.7", "incline_days": "36", "near61_raw": "22.5"}, chart_url="https://stooq.pl/bracomp",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="valid", ticker="TPE", status="valid_reversal",
             direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-04-20"},
             metrics={"ratio_raw": "3.2", "incline_days": "28"}, chart_url="https://stooq.pl/tpe",
@@ -105,6 +120,10 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
     assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
     assert "CROSSED" not in text
+    assert text.count("**🛢️ BRACOMP") == 2
+    assert "**🛢️ BRACOMP ↘️ (2026-02-25) 45.3%**" in text
+    assert "**🛢️ BRACOMP ↗️ (2025-10-10) 33.4%**" in text
+    assert "**🛢️ BRACOMP ↘️ (2026-04-14) 22.5%**" not in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
     assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)
@@ -149,7 +168,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ current: 🔴 below cloud · Kijun: under<br>🕘 last: last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
