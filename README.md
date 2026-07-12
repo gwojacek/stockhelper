@@ -15,36 +15,201 @@ It helps you:
 
 The project is practical and config-driven: most workflows start from a ticker/config slug, write reusable files under `configs/`, cache market data under `data/`, and save reports under `chart_program/data/`.
 
-## Quick command table
+## Quick command list
 
-Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy commands directly from the **Recommended command** column: click the **Copy** button next to a command. If your Markdown preview blocks clipboard buttons, copy the inline command text next to it. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
+Use this as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy from the fenced code blocks below using the Markdown/PyCharm copy button. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
 
-| Use case | Recommended command (copy/paste) | Short description |
-| --- | --- | --- |
-| Build Docker image | <button onclick="navigator.clipboard.writeText('docker compose build')">Copy</button> <code>docker compose build</code> | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
-| Install/update `stock` shortcut | <button onclick="navigator.clipboard.writeText('./scripts/install-stock-command.sh')">Copy</button> <code>./scripts/install-stock-command.sh</code> | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
-| Show launcher help | <button onclick="navigator.clipboard.writeText('stock --help')">Copy</button> <code>stock --help</code> | Confirms the Docker-backed shortcut works and prints available launcher options. |
-| Run a stock setup | <button onclick="navigator.clipboard.writeText('stock ena')">Copy</button> <code>stock ena</code> | Auto-detects a stock config and prints position/risk output. |
-| Run a forex/commodity setup | <button onclick="navigator.clipboard.writeText('stock eurpln_long')">Copy</button> <code>stock eurpln_long</code> | Auto-detects a forex/commodity config and prints lot/risk output. |
-| Open chart editor | <button onclick="navigator.clipboard.writeText('stock -c ena')">Copy</button> <code>stock -c ena</code> | Opens the browser chart UI to select levels and save config/snapshot files. |
-| Open chart with Ichimoku | <button onclick="navigator.clipboard.writeText('stock -c EUR/USD --ichimoku-mode on')">Copy</button> <code>stock -c EUR/USD --ichimoku-mode on</code> | Opens chart mode with the Ichimoku overlay enabled. |
-| Open stock as CFD | <button onclick="navigator.clipboard.writeText('stock -c AAPL.US cfd')">Copy</button> <code>stock -c AAPL.US cfd</code> | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
-| Open transaction journal | <button onclick="navigator.clipboard.writeText('stock --journal-html')">Copy</button> <code>stock --journal-html</code> | Opens the live journal HTML through the local report server so update/delete/close buttons work. |
-| Prepare PDF journal | <button onclick="navigator.clipboard.writeText('stock --journal-pdf')">Copy</button> <code>stock --journal-pdf</code> | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
-| Run Ichimoku scan | <button onclick="navigator.clipboard.writeText('stock -ichimoku_search wig')">Copy</button> <code>stock -ichimoku_search wig</code> | Scans a market group and writes an Ichimoku Markdown report. |
-| Run Fibonacci scan | <button onclick="navigator.clipboard.writeText('stock -fibo_search wig')">Copy</button> <code>stock -fibo_search wig</code> | Scans a market group and writes a Fibonacci Markdown report. |
-| Build combined report | <button onclick="navigator.clipboard.writeText('stock -allsearch all')">Copy</button> <code>stock -allsearch all</code> | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
-| Reopen combined report | <button onclick="navigator.clipboard.writeText('stock --open-allsearch-report all')">Copy</button> <code>stock --open-allsearch-report all</code> | Opens the latest existing HTML all-search report in a new browser window. |
-| Explain one Fibo symbol | <button onclick="navigator.clipboard.writeText('stock -fibo_search single -explain MPWR.US')">Copy</button> <code>stock -fibo_search single -explain MPWR.US</code> | Shows why one symbol matched or failed Fibonacci rules. |
-| Check liquidity | <button onclick="navigator.clipboard.writeText('stock -checkavg XTB.WA')">Copy</button> <code>stock -checkavg XTB.WA</code> | Prints recent average turnover/liquidity for one instrument. |
-| Debug Stooq page | <button onclick="navigator.clipboard.writeText('stock --debug-stooq CB.F')">Copy</button> <code>stock --debug-stooq CB.F</code> | Saves Stooq debug JSON/HTML/screenshot artifacts. |
-| Refresh WIG/WIG20 from Stooq bulk | <button onclick="navigator.clipboard.writeText('stock --download-wig-bulk')">Copy</button> <code>stock --download-wig-bulk</code> | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip. |
-| Trim WIG stock CSVs | <button onclick="navigator.clipboard.writeText('stock --trim-wig-csvs')">Copy</button> <code>stock --trim-wig-csvs</code> | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
-| Use cache only | <button onclick="navigator.clipboard.writeText('stock -onlycache -ichimoku_search wig')">Copy</button> <code>stock -onlycache -ichimoku_search wig</code> | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
-| Force refresh | <button onclick="navigator.clipboard.writeText('STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig')">Copy</button> <code>STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig</code> | Ignores usable cache and refreshes market data. |
-| Extend history | <button onclick="navigator.clipboard.writeText('stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4')">Copy</button> <code>stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4</code> | Backfills older stock CSV history. |
-| Fix old Docker file ownership | <button onclick="navigator.clipboard.writeText('stock --fix-permissions')">Copy</button> <code>stock --fix-permissions</code> | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
-| Clean Docker disk usage | <button onclick="navigator.clipboard.writeText('stock --cleanup')">Copy</button> <code>stock --cleanup</code> | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
+### Build Docker image
+
+Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries.
+
+```bash
+docker compose build
+```
+
+### Install/update `stock` shortcut
+
+Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior.
+
+```bash
+./scripts/install-stock-command.sh
+```
+
+### Show launcher help
+
+Confirms the Docker-backed shortcut works and prints available launcher options.
+
+```shell
+stock --help
+```
+
+### Run a stock setup
+
+Auto-detects a stock config and prints position/risk output.
+
+```shell
+stock ena
+```
+
+### Run a forex/commodity setup
+
+Auto-detects a forex/commodity config and prints lot/risk output.
+
+```shell
+stock eurpln_long
+```
+
+### Open chart editor
+
+Opens the browser chart UI to select levels and save config/snapshot files.
+
+```shell
+stock -c ena
+```
+
+### Open chart with Ichimoku
+
+Opens chart mode with the Ichimoku overlay enabled.
+
+```shell
+stock -c EUR/USD --ichimoku-mode on
+```
+
+### Open stock as CFD
+
+Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units.
+
+```shell
+stock -c AAPL.US cfd
+```
+
+### Open transaction journal
+
+Opens the live journal HTML through the local report server so update/delete/close buttons work.
+
+```shell
+stock --journal-html
+```
+
+### Prepare PDF journal
+
+Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF.
+
+```shell
+stock --journal-pdf
+```
+
+### Run Ichimoku scan
+
+Scans a market group and writes an Ichimoku Markdown report.
+
+```shell
+stock -ichimoku_search wig
+```
+
+### Run Fibonacci scan
+
+Scans a market group and writes a Fibonacci Markdown report.
+
+```shell
+stock -fibo_search wig
+```
+
+### Build combined report
+
+Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL.
+
+```shell
+stock -allsearch all
+```
+
+### Reopen combined report
+
+Opens the latest existing HTML all-search report in a new browser window.
+
+```shell
+stock --open-allsearch-report all
+```
+
+### Explain one Fibo symbol
+
+Shows why one symbol matched or failed Fibonacci rules.
+
+```shell
+stock -fibo_search single -explain MPWR.US
+```
+
+### Check liquidity
+
+Prints recent average turnover/liquidity for one instrument.
+
+```shell
+stock -checkavg XTB.WA
+```
+
+### Debug Stooq page
+
+Saves Stooq debug JSON/HTML/screenshot artifacts.
+
+```shell
+stock --debug-stooq CB.F
+```
+
+### Refresh WIG/WIG20 from Stooq bulk
+
+Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip.
+
+```shell
+stock --download-wig-bulk
+```
+
+### Trim WIG stock CSVs
+
+Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data.
+
+```shell
+stock --trim-wig-csvs
+```
+
+### Use cache only
+
+Avoids remote refresh/probing when you want to rely on local CSVs, including commodities.
+
+```shell
+stock -onlycache -ichimoku_search wig
+```
+
+### Force refresh
+
+Ignores usable cache and refreshes market data.
+
+```shell
+STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig
+```
+
+### Extend history
+
+Backfills older stock CSV history.
+
+```shell
+stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4
+```
+
+### Fix old Docker file ownership
+
+Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed.
+
+```shell
+stock --fix-permissions
+```
+
+### Clean Docker disk usage
+
+Stops StockHelper report containers, removes dangling images, and prunes unused build cache.
+
+```shell
+stock --cleanup
+```
 
 If you intentionally use a local Poetry/Python install instead of Docker, run `STOCKHELPER_IN_DOCKER=1 python run ...` inside that environment to bypass the Docker redirect and execute the Python app directly.
 
@@ -155,7 +320,7 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-After that, use `stock ...` in a normal terminal. The fastest copy/paste examples are in the **Recommended command** column of the quick command table above.
+After that, use `stock ...` in a normal terminal. The fastest copy/paste examples are in the [Quick command list](#quick-command-list) above.
 
 #### Updating after `git pull`
 
