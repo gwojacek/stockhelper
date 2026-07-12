@@ -1613,6 +1613,15 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return f"{note} ({note_date})"
         return note
 
+    def _current_ichi_status_line(info: dict[str, str]) -> str:
+        current_bits: list[str] = []
+        if info["cloud_side"] != "-":
+            current_bits.append(info["cloud_side"])
+        if info["kijun"] != "-":
+            current_bits.append(f"Kijun: {info['kijun']}")
+        current_bits.append("Short trend" if is_short(info) else "Long trend")
+        return "🏷️ current: " + " · ".join(current_bits)
+
     def item_text(row: ScannerRow, info: dict[str, str], detailed: bool) -> str:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
@@ -1623,26 +1632,28 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             latest_pattern = _source_metric(row, "latest_retest_pattern")
             latest_pattern_date = _source_metric(row, "latest_retest_date")
             active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
-            if active_latest_pattern:
+            raw_status = row.metrics.get("raw_status", row.status)
+            fresh_breakout = _is_fresh_retest_window(row)
+            if fresh_breakout:
+                recent_line = _current_ichi_status_line(info)
+            elif active_latest_pattern:
                 recent_line = f"✨ pattern: {latest_pattern} ({latest_pattern_date})"
             elif note.startswith("last retest pattern"):
-                current_bits = []
-                if info["cloud_side"] != "-":
-                    current_bits.append(info["cloud_side"])
-                if info["kijun"] != "-":
-                    current_bits.append(f"Kijun: {info['kijun']}")
-                recent_line = "🏷️ current: " + (" · ".join(current_bits) if current_bits else "-")
+                recent_line = _current_ichi_status_line(info)
             else:
                 recent_line = f"🏷️ {note}"
             lines.append(recent_line)
-            raw_status = row.metrics.get("raw_status", row.status)
-            last_label = _last_ichi_status_label(str(raw_status))
-            last_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or "").strip()
+            if latest_pattern != "-" and latest_pattern_date != "-":
+                last_label = f"retest {latest_pattern}"
+                last_date = latest_pattern_date
+            else:
+                last_label = _last_ichi_status_label(str(raw_status))
+                last_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or "").strip()
             if last_label and last_date and last_date != "-":
                 last_line = f"🕘 last: {last_label} ({last_date})"
                 comparable_recent = recent_line.replace("🏷️ ", "").replace("✨ pattern: ", "")
                 comparable_last = last_line.replace("🕘 last: ", "")
-                if comparable_last != comparable_recent:
+                if fresh_breakout or comparable_last != comparable_recent:
                     lines.append(last_line)
             plus, minus = _factor_lists(info)
             lines.append(f"{_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}")
@@ -2058,8 +2069,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if "ichimoku" in section_id and "<br>" in rendered:
             parts = rendered.split("<br>")
             first = parts[0]
-            status = parts[1] if len(parts) > 1 else ""
-            details = "<br>".join(parts[2:])
+            status_parts = [parts[1]] if len(parts) > 1 else []
+            detail_start = 2
+            if len(parts) > 2 and parts[2].startswith("🕘 last:"):
+                status_parts.append(parts[2])
+                detail_start = 3
+            status = "<br>".join(status_parts)
+            details = "<br>".join(parts[detail_start:])
             status_html = f"<span class='troj-status-info'><br>{status}</span>" if status else ""
             detail_html = f"<span class='troj-detail-info'><br>{details}</span>" if details else ""
             return first + status_html + detail_html
