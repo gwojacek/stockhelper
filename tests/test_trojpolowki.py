@@ -149,7 +149,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ deep retest (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
@@ -267,8 +267,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "toggleTrojExtra" in text
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
-    assert "Hide additional info" in text
-    assert "troj-extra-info" in text
+    assert "troj-info-slider" in text
+    assert "troj-status-info" in text
+    assert "troj-detail-info" in text
+    assert "troj-info-name-only" in text
+    assert "troj-info-default" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
     assert "troj-table sortable" not in text
