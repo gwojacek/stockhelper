@@ -20,7 +20,7 @@ Compare: [`6.0...7.0`](https://github.com/gwojacek/stockhelper/compare/6.0...7.0
 
 ### Changed
 
-- Updated README usage to make Docker + `stock` the easiest path, including a quick command table, click-to-run `python3 run ...` snippets that redirect to the repo-local Docker `stock` wrapper on the host, update workflow after `git pull`, report/browser behavior, permissions, cleanup, and plain Docker alternatives.
+- Updated README usage to make Docker + `stock` the easiest path, including a quick command table, copy-ready `stock ...` snippets for the repo-local Docker wrapper, update workflow after `git pull`, report/browser behavior, permissions, cleanup, and plain Docker alternatives.
 - Changed Yahoo-primary/Yahoo-only chart data trimming to keep about 1.5 years of recent data instead of about 1 year.
 - Improved all-search report behavior so local report URLs are printed/served for the host helper and report-launched charts can open faster from fresh all-search cache.
 - Changed Docker runs to use the host UID/GID and a writable project-local Docker home while keeping Playwright browsers installed at `/ms-playwright` in the image.
@@ -29,7 +29,7 @@ Compare: [`6.0...7.0`](https://github.com/gwojacek/stockhelper/compare/6.0...7.0
 
 ### Fixed
 
-- Fixed Docker Compose argument handling so commands like `stock -allsearch all` or `docker compose run --rm --no-deps stockhelper -allsearch all` pass arguments to `python3 run` instead of treating flags as executables.
+- Fixed Docker Compose argument handling so commands like `stock -allsearch all` or `docker compose run --rm --no-deps stockhelper -allsearch all` pass arguments to the container `python3 run` entrypoint instead of treating flags as executables.
 - Fixed Docker report serving so containers stay alive while local HTML reports are being viewed.
 - Fixed unwanted browser redirects to Stooq diagnostic URLs by making the `stock` helper auto-open only localhost StockHelper report URLs.
 - Fixed Playwright browser lookup failures after non-root Docker runs by using the image-global `/ms-playwright` browser path.
@@ -186,7 +186,7 @@ Tag: `1.0` (`9d25779`)
 
 - Established the core StockHelper toolkit for checking trade ideas and scanning markets from reusable Python config files.
 - Added position and risk analysis for stocks, forex pairs, commodities, and CFD/index-like instruments, including position size, capital used, potential loss, and risk/reward output.
-- Added the short `python3 run <slug>` launcher that auto-detects stock, forex, or commodity configs and routes to the correct analysis workflow.
+- Added the short `python run <slug>` launcher that auto-detects stock, forex, or commodity configs and routes to the correct analysis workflow.
 - Added config-first instrument definitions under `configs/stocks/`, `configs/forex/`, and `configs/commodities/` so setups can be reused and updated from chart workflows.
 - Added market-data download and local CSV caching for stocks, forex, and commodities using Stooq, Yahoo Finance, and Stooq web/table fallback paths.
 - Added scanner workflows for Ichimoku cloud setups, Fibonacci formations, all-search combined reports, single-symbol Fibo explanations, and average-liquidity checks.

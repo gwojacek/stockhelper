@@ -22,9 +22,9 @@ Installed StockHelper Docker shortcut (${INSTALL_KIND}):
 If 'stock' is not found, add this to your shell config and restart the terminal:
   export PATH="\$HOME/.local/bin:\$PATH"
 
-PyCharm/IDE click-to-run commands can keep using the old run form:
-  python3 run -allsearch all
-  python3 run --help
+README/PyCharm commands are copy-ready `stock ...` commands:
+  stock -allsearch all
+  stock --help
 
 Terminal commands can use either:
   stock --help
