@@ -15,201 +15,36 @@ It helps you:
 
 The project is practical and config-driven: most workflows start from a ticker/config slug, write reusable files under `configs/`, cache market data under `data/`, and save reports under `chart_program/data/`.
 
-## Quick command list
-
-Use this as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy from the fenced code blocks below using the Markdown/PyCharm copy button. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
-
-### Build Docker image
-
-Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries.
-
-```bash
-docker compose build
-```
-
-### Install/update `stock` shortcut
-
-Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior.
-
-```bash
-./scripts/install-stock-command.sh
-```
-
-### Show launcher help
-
-Confirms the Docker-backed shortcut works and prints available launcher options.
-
-```shell
-stock --help
-```
-
-### Run a stock setup
-
-Auto-detects a stock config and prints position/risk output.
-
-```shell
-stock ena
-```
-
-### Run a forex/commodity setup
-
-Auto-detects a forex/commodity config and prints lot/risk output.
-
-```shell
-stock eurpln_long
-```
-
-### Open chart editor
-
-Opens the browser chart UI to select levels and save config/snapshot files.
-
-```shell
-stock -c ena
-```
-
-### Open chart with Ichimoku
-
-Opens chart mode with the Ichimoku overlay enabled.
-
-```shell
-stock -c EUR/USD --ichimoku-mode on
-```
-
-### Open stock as CFD
-
-Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units.
-
-```shell
-stock -c AAPL.US cfd
-```
-
-### Open transaction journal
-
-Opens the live journal HTML through the local report server so update/delete/close buttons work.
-
-```shell
-stock --journal-html
-```
-
-### Prepare PDF journal
-
-Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF.
-
-```shell
-stock --journal-pdf
-```
-
-### Run Ichimoku scan
-
-Scans a market group and writes an Ichimoku Markdown report.
-
-```shell
-stock -ichimoku_search wig
-```
-
-### Run Fibonacci scan
-
-Scans a market group and writes a Fibonacci Markdown report.
-
-```shell
-stock -fibo_search wig
-```
-
-### Build combined report
-
-Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL.
-
-```shell
-stock -allsearch all
-```
-
-### Reopen combined report
-
-Opens the latest existing HTML all-search report in a new browser window.
-
-```shell
-stock --open-allsearch-report all
-```
-
-### Explain one Fibo symbol
-
-Shows why one symbol matched or failed Fibonacci rules.
-
-```shell
-stock -fibo_search single -explain MPWR.US
-```
-
-### Check liquidity
-
-Prints recent average turnover/liquidity for one instrument.
-
-```shell
-stock -checkavg XTB.WA
-```
-
-### Debug Stooq page
-
-Saves Stooq debug JSON/HTML/screenshot artifacts.
-
-```shell
-stock --debug-stooq CB.F
-```
-
-### Refresh WIG/WIG20 from Stooq bulk
-
-Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip.
-
-```shell
-stock --download-wig-bulk
-```
-
-### Trim WIG stock CSVs
-
-Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data.
-
-```shell
-stock --trim-wig-csvs
-```
-
-### Use cache only
-
-Avoids remote refresh/probing when you want to rely on local CSVs, including commodities.
-
-```shell
-stock -onlycache -ichimoku_search wig
-```
-
-### Force refresh
-
-Ignores usable cache and refreshes market data.
-
-```shell
-STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig
-```
-
-### Extend history
-
-Backfills older stock CSV history.
-
-```shell
-stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4
-```
-
-### Fix old Docker file ownership
-
-Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed.
-
-```shell
-stock --fix-permissions
-```
-
-### Clean Docker disk usage
-
-Stops StockHelper report containers, removes dangling images, and prunes unused build cache.
-
-```shell
-stock --cleanup
-```
+## Quick command table
+
+Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy a command from the **Recommended command** column and paste it into the terminal. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
+
+| Use case | Recommended command | Short description |
+| --- | --- | --- |
+| Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
+| Install/update `stock` shortcut | `./scripts/install-stock-command.sh` | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
+| Show launcher help | `stock --help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
+| Run a stock setup | `stock ena` | Auto-detects a stock config and prints position/risk output. |
+| Run a forex/commodity setup | `stock eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
+| Open chart editor | `stock -c ena` | Opens the browser chart UI to select levels and save config/snapshot files. |
+| Open chart with Ichimoku | `stock -c EUR/USD --ichimoku-mode on` | Opens chart mode with the Ichimoku overlay enabled. |
+| Open stock as CFD | `stock -c AAPL.US cfd` | Opens a stock chart in CFD/commodity mode, with CFD sizing and spread as price units. |
+| Open transaction journal | `stock --journal-html` | Opens the live journal HTML through the local report server so update/delete/close buttons work. |
+| Prepare PDF journal | `stock --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
+| Run Ichimoku scan | `stock -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
+| Run Fibonacci scan | `stock -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
+| Build combined report | `stock -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
+| Reopen combined report | `stock --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
+| Explain one Fibo symbol | `stock -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
+| Check liquidity | `stock -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |
+| Debug Stooq page | `stock --debug-stooq CB.F` | Saves Stooq debug JSON/HTML/screenshot artifacts. |
+| Refresh WIG/WIG20 from Stooq bulk | `stock --download-wig-bulk` | Downloads Stooq `d_pl_txt`, solves consent/CAPTCHA with Playwright/EasyOCR, refreshes WIG stock CSVs, and imports WIG20/index data from the same zip. |
+| Trim WIG stock CSVs | `stock --trim-wig-csvs` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
+| Use cache only | `stock -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
+| Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig` | Ignores usable cache and refreshes market data. |
+| Extend history | `stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
+| Fix old Docker file ownership | `stock --fix-permissions` | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
+| Clean Docker disk usage | `stock --cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
 
 If you intentionally use a local Poetry/Python install instead of Docker, run `STOCKHELPER_IN_DOCKER=1 python run ...` inside that environment to bypass the Docker redirect and execute the Python app directly.
 
@@ -320,7 +155,7 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-After that, use `stock ...` in a normal terminal. The fastest copy/paste examples are in the [Quick command list](#quick-command-list) above.
+After that, use `stock ...` in a normal terminal. The fastest examples are in the [Quick command table](#quick-command-table) above.
 
 #### Updating after `git pull`
 
