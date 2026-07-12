@@ -17,9 +17,9 @@ The project is practical and config-driven: most workflows start from a ticker/c
 
 ## Quick command table
 
-Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. PyCharm may not show a run icon for `stock ...`, but fenced `shell` blocks in the README preview are easy to copy with the code-block copy button, and the terminal shortcut installed by `./scripts/install-stock-command.sh` lets you paste/run the same commands. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
+Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy commands directly from the **Recommended command** column (select the inline command text and paste it into the terminal). Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
 
-| Use case | Recommended command | Short description |
+| Use case | Recommended command (copy/paste) | Short description |
 | --- | --- | --- |
 | Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
 | Install/update `stock` shortcut | `./scripts/install-stock-command.sh` | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
@@ -47,106 +47,6 @@ Use this table as the fastest path to the commands you will run most often. The 
 | Clean Docker disk usage | `stock --cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |
 
 If you intentionally use a local Poetry/Python install instead of Docker, run `STOCKHELPER_IN_DOCKER=1 python run ...` inside that environment to bypass the Docker redirect and execute the Python app directly.
-
-### Copy-ready `stock` commands
-
-These `stock ...` snippets are the recommended commands now. In PyCharm, use the copy button on each fenced `shell` block (or select the command text) and paste it into the terminal. The `stock` helper then runs Docker Compose, so project Python dependencies are loaded only inside Docker.
-
-Build or rebuild the Docker image:
-
-```bash
-docker compose build
-```
-
-Install or update the `stock` shortcut:
-
-```bash
-./scripts/install-stock-command.sh
-```
-
-Show StockHelper help:
-
-```shell
-stock --help
-```
-
-Run a stock setup:
-
-```shell
-stock ena
-```
-
-Open a chart editor:
-
-```shell
-stock -c ena
-```
-
-Open a chart with Ichimoku enabled:
-
-```shell
-stock -c EUR/USD --ichimoku-mode on
-```
-
-Open the transaction journal:
-
-```shell
-stock --journal-html
-```
-
-Run an Ichimoku scan:
-
-```shell
-stock -ichimoku_search wig
-```
-
-Run a Fibonacci scan:
-
-```shell
-stock -fibo_search wig
-```
-
-Run the default all-search flow and open the HTML report:
-
-```shell
-stock -allsearch all
-```
-
-Reopen the latest all-search report:
-
-```shell
-stock --open-allsearch-report all
-```
-
-Refresh WIG/WIG20 from Stooq bulk:
-
-```shell
-stock --download-wig-bulk
-```
-
-Use cache only:
-
-```shell
-stock -onlycache -ichimoku_search wig
-```
-
-Force refresh:
-
-```shell
-STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig
-```
-
-Fix old Docker file ownership:
-
-```shell
-stock --fix-permissions
-```
-
-Clean Docker disk usage:
-
-```shell
-stock --cleanup
-```
 
 ## Features
 
@@ -255,7 +155,7 @@ The installer writes `~/.local/bin/stock`. If your shell cannot find `stock`, ad
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-After that, use `stock ...` in a normal terminal, or copy the `stock ...` snippets from the [Copy-ready `stock` commands](#copy-ready-stock-commands) section above.
+After that, use `stock ...` in a normal terminal. The fastest copy/paste examples are in the **Recommended command** column of the quick command table above.
 
 #### Updating after `git pull`
 
