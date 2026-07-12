@@ -134,7 +134,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
         ),
         mod.ScannerRow(
             market="US100", scanner="ICHIMOKU", category="retest_breakout", ticker="MSFT.US", status="⚪ above",
-            dates={"flip_date": "2026-04-01"}, metrics={"months": "2.0", "ichimoku_status": "Touched the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "shallow", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "retest_breakout", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/msft",
+            dates={"flip_date": "2026-04-01"}, metrics={"months": "2.0", "ichimoku_status": "Touched the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "shallow", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "retest_breakout", "latest_retest_date": "2026-05-29", "latest_retest_pattern": "hammer", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/msft",
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
@@ -153,6 +153,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
+    assert "✨ pattern: hammer (2026-05-29)<br>🕘 last: retest breakout (2026-05-29)" in text
     assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
     assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
     assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn high · cloud normal" in text

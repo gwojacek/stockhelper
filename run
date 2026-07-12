@@ -1570,28 +1570,66 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             minus.append("cloud shallow")
         return plus, minus
 
+    def _last_ichi_status_label(raw_status: str) -> str:
+        status_norm = _status_plain(raw_status).lower().replace(" ", "_")
+        if "(" in status_norm:
+            status_norm = status_norm.split("(", 1)[0].strip()
+        if status_norm.endswith("_retest_pattern"):
+            return "last retest pattern"
+        if status_norm == "returned_to_cloud_waiting_for_pattern":
+            return "returned to cloud, waiting"
+        if status_norm == "breakout_confirmed":
+            return "breakout confirmed"
+        if status_norm == "breakout_aged":
+            return "breakout aged"
+        if status_norm == "retest_breakout":
+            return "retest breakout"
+        if status_norm in {"no_breakout", "", "-"}:
+            return ""
+        return status_norm.replace("_", " ")
+
+    def _note_with_date(row: ScannerRow, note: str) -> str:
+        if note == "-" or not any(token in note.lower() for token in ("breakout", "retest", "pattern", "returned")):
+            return note
+        if note == "breakout confirmed":
+            note_date = str(row.dates.get("flip_date") or row.metrics.get("latest_retest_date") or row.dates.get("start_date") or "").strip()
+        else:
+            note_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or row.dates.get("start_date") or "").strip()
+        if note_date and note_date != "-":
+            return f"{note} ({note_date})"
+        return note
+
     def item_text(row: ScannerRow, info: dict[str, str], detailed: bool) -> str:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
         note = info["note"] if info["note"] != "-" else "-"
-        if note != "-" and any(token in note.lower() for token in ("breakout", "retest", "pattern", "returned")):
-            if note == "breakout confirmed":
-                note_date = str(row.dates.get("flip_date") or row.metrics.get("latest_retest_date") or row.dates.get("start_date") or "").strip()
-            else:
-                note_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or row.dates.get("start_date") or "").strip()
-            if note_date and note_date != "-":
-                note = f"{note} ({note_date})"
+        note = _note_with_date(row, note)
         lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**"]
-        lines.append(f"🏷️ {note}")
         if detailed:
+            latest_pattern = _source_metric(row, "latest_retest_pattern")
+            latest_pattern_date = _source_metric(row, "latest_retest_date")
+            active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
+            recent_line = f"✨ pattern: {latest_pattern} ({latest_pattern_date})" if active_latest_pattern else f"🏷️ {note}"
+            lines.append(recent_line)
+            raw_status = row.metrics.get("raw_status", row.status)
+            last_label = _last_ichi_status_label(str(raw_status))
+            last_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or "").strip()
+            if last_label and last_date and last_date != "-":
+                last_line = f"🕘 last: {last_label} ({last_date})"
+                comparable_recent = recent_line.replace("🏷️ ", "").replace("✨ pattern: ", "")
+                comparable_last = last_line.replace("🕘 last: ", "")
+                if comparable_last != comparable_recent:
+                    lines.append(last_line)
             plus, minus = _factor_lists(info)
             lines.append(f"{_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}")
             if plus:
                 lines.append("➕ " + " · ".join(plus))
             if minus:
                 lines.append("➖ " + " · ".join(minus))
-        elif info["kijun"] != "-":
-            lines.append(f"Kijun: {info['kijun']}")
+        else:
+            lines.append(f"🏷️ {note}")
+            if info["kijun"] != "-":
+                lines.append(f"Kijun: {info['kijun']}")
         lines.append(_links_for_troj(row))
         return "<br>".join(lines)
 
