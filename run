@@ -2529,6 +2529,51 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
     html_parts.append(_liquidity_legend_html())
+    def _allsearch_ichi_current_html(row: ScannerRow) -> str:
+        raw_status = str(row.status or "")
+        ichi_status = str(row.metrics.get("ichimoku_status", "") or "")
+        cloud_text = " ".join([
+            raw_status,
+            str(row.metrics.get("current_side", "") or ""),
+            ichi_status,
+            str(row.metrics.get("cloud", "") or ""),
+        ]).lower()
+        pieces: list[str] = []
+        if "inside" in cloud_text and "cloud" in cloud_text:
+            pieces.append("inside cloud")
+        elif "touch" in cloud_text and "cloud" in cloud_text:
+            pieces.append("touched cloud")
+        elif "above" in cloud_text or "over cloud" in cloud_text:
+            pieces.append("above cloud")
+        elif "below" in cloud_text or "under cloud" in cloud_text:
+            pieces.append("below cloud")
+        kijun_text = ichi_status.lower()
+        if "over kijun" in kijun_text or "kijun: over" in kijun_text:
+            pieces.append("Kijun: over")
+        elif "under kijun" in kijun_text or "kijun: under" in kijun_text:
+            pieces.append("Kijun: under")
+        elif "touch" in kijun_text and "kijun" in kijun_text:
+            pieces.append("Kijun: touched")
+        if not any(p.endswith("trend") for p in pieces):
+            if "short" in cloud_text or "below cloud" in pieces or "under kijun" in kijun_text:
+                pieces.append("Short trend")
+            elif "long" in cloud_text or "above cloud" in pieces or "over kijun" in kijun_text:
+                pieces.append("Long trend")
+        if pieces:
+            return _ichi_status_line_to_html("🏷️ current: " + " · ".join(dict.fromkeys(pieces)))
+        return _color_ichimoku_status(ichi_status or raw_status)
+
+    def _latest_retest_summary_html(row: ScannerRow, recent_retest: bool) -> str:
+        pattern = str(row.metrics.get("latest_retest_pattern", "") or "").strip()
+        if not pattern or pattern in {"-", "—"}:
+            return "-"
+        status = str(row.status or "").strip()
+        date = str(row.metrics.get("latest_retest_date", "") or "").strip()
+        label = f"{status}: {pattern}" if status and status not in {"-", "—"} else pattern
+        if date and date not in {"-", "—"}:
+            label += f" ({date})"
+        return _maybe_green_recent(label, recent_retest)
+
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
@@ -2544,7 +2589,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if is_i1:
                 thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Ichimoku status</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_i2:
-                thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Avg10d PLN</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f0:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Near61.8</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f1:
@@ -2563,11 +2608,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_current_html(r)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_current_html(r)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f0:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":

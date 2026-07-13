@@ -290,6 +290,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-info-slider" in text
     assert "troj-status-info" in text
     assert "troj-detail-info" in text
+    assert "<th>Ichimoku status</th><th>Data wybicia</th>" in text
+    assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
+    assert "Latest Retest status</th>" not in text
+    assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
+    assert "<span class='ichi-status-label'>current:</span>" in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
     assert "troj-info-name-only" in text
     assert "troj-info-default" in text
     assert "Why top choice" in text
