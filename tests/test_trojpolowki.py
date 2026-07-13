@@ -190,7 +190,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇵🇱 CRI" in data_rows[0]
     assert "**🇵🇱 ABC" in text
     assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
-    assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>Kijun: over" not in text
+    assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 

@@ -1484,6 +1484,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return True
         return info["note"] not in {"-", "above cloud", "below cloud"} and ("breakout" in info["note"] or "retest" in info["note"] or "returned" in info["note"] or "unsuccessful" in info["note"])
 
+    def _current_continuation(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        _row, info = item
+        side = info["cloud_side"]
+        kijun = info["kijun"]
+        return ("above" in side and kijun == "over") or ("below" in side and kijun == "under")
+
     def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
         row, info = item
         if _is_retest_under_4m(item):
@@ -1492,13 +1498,18 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
         if row.category == "retest_breakout" and not _is_valid_breakout(row):
             return "skip"
-        if row.category == "position" and _parse_float_text(row.metrics.get("months", "0"), 0.0) < 4.0:
-            return "skip"
         if _is_fresh_retest_window(row):
             return "short_retest"
         if _has_current_cloud_context(item):
             return "cloud"
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
+        # Column placement follows the latest/current setup state. If price has
+        # already crossed Kijun but then retraced back into a normal above/over
+        # or below/under continuation, move it back from watch to strong.
+        if _current_continuation(item):
+            return "strong"
+        if row.category == "position" and months < 4.0:
+            return "skip"
         if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")) and info["kijun"] != "touched":
             return "strong"
         if info["kijun"] == "touched" or tk_cross_signal or (has_kijun_or_tk and months < 4.0):
