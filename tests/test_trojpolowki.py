@@ -298,7 +298,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert ".stooq-links-hidden .stooq-chart-link{display:none}" in text
     assert "toggleStooqLinks" in text
     assert "📈 Show stooq" in text
-    assert "<span class='ichi-status-icon'>🏷️</span> <span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <span class='ichi-status-chip ichi-good'>Long trend</span>" in text
+    assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
+    assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
     assert "<span class='ichi-status-label'>last:</span>" not in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
