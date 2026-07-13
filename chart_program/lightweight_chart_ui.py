@@ -544,7 +544,7 @@ class LightweightChartLevelSelectorUI:
     #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#0f766e,#22c55e) !important; border:1px solid rgba(134,239,172,.80); box-shadow:0 16px 34px rgba(34,197,94,.24), inset 0 1px 0 rgba(255,255,255,.14); }}
     #calculate-btn .btn-icon {{ background:rgba(220,252,231,.18); color:#dcfce7; }}
     #calculate-btn::after {{ content:none; }}
-    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
     #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; min-height:66px; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
@@ -665,7 +665,7 @@ class LightweightChartLevelSelectorUI:
         <button id="delete-object" style="display:none">Delete selected object</button>
         <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span>Calculate position</span></button>
         <div class="action-grid">
-          <button id="wedge-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Wedge information</span></button>
+          <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Setup information</span></button>
           <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
         </div>
         <button id="finish-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save &amp; Close</span></button>
@@ -1062,7 +1062,54 @@ class LightweightChartLevelSelectorUI:
     return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
   }}
 
-  function wedgeDebugSnapshot() {{
+  function scannerCandlesCsv(limit = 140) {{
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
+    const rows = realCandles.slice(Math.max(0, realCandles.length - limit));
+    const lines = ['Date,Open,High,Low,Close,Volume'];
+    rows.forEach(row => lines.push([row.time, fmt(row.open), fmt(row.high), fmt(row.low), fmt(row.close), row.volume ?? ''].join(',')));
+    return lines.join('\n');
+  }}
+
+  function ichimokuDebugSnapshot() {{
+    const lines = [];
+    lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
+    lines.push(`Generated: ${{new Date().toISOString()}}`);
+    lines.push(`Visible: ${{levels.__show_ichimoku__ ? 'yes' : 'no'}}`);
+    lines.push('Latest values:');
+    ['tenkan','kijun','spanA','spanB','chikou'].forEach(k => {{
+      const arr = P.ichimoku?.[k] || [];
+      const last = arr.length ? arr[arr.length - 1] : null;
+      lines.push(`  ${{k}}: ${{last ? `${{last.time}} @ ${{fmt(last.value)}}` : '-'}}`);
+    }});
+    lines.push('');
+    lines.push('Candles data for scanner formations (latest candles):');
+    lines.push(scannerCandlesCsv());
+    return lines.join('\n');
+  }}
+
+  function fiboDebugSnapshot() {{
+    const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
+    const lines = [];
+    lines.push(`FIBO DEBUG: ${{P.symbol || ''}}`);
+    lines.push(`Generated: ${{new Date().toISOString()}}`);
+    if (!fibs.length) lines.push('No Fibonacci lines on chart.');
+    const groups = new Map();
+    fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
+    groups.forEach((items, gid) => {{
+      lines.push('');
+      lines.push(`FIB group: ${{gid}}`);
+      items.forEach(obj => lines.push(`  ${{obj.label || obj.type}}: ${{obj.x0 || ''}}->${{obj.x1 || ''}} ${{fmt(obj.y0)}}${{obj.y1 !== obj.y0 ? `->${{fmt(obj.y1)}}` : ''}} ${{obj.direction || ''}}`));
+    }});
+    lines.push('');
+    lines.push('Candles data for scanner formations (latest candles):');
+    lines.push(scannerCandlesCsv());
+    return lines.join('\n');
+  }}
+
+  function setupDebugSnapshot() {{
+    const tech = selectedJournalTechnique();
+    if (tech === 'Ichimoku') return ichimokuDebugSnapshot();
+    if (tech === 'Fibo') return fiboDebugSnapshot();
     const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
     const upper = wedges.find(obj => wedgeSide(obj) === 'upper') || null;
     const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
@@ -1142,30 +1189,30 @@ class LightweightChartLevelSelectorUI:
     return lines.join('\\n');
   }}
 
-  function updateWedgeDebugPanel(message = '') {{
+  function updateSetupDebugPanel(message = '') {{
     const panel = $('wedge-debug-panel');
     if (!panel || !panel.classList.contains('open')) return;
-    const text = wedgeDebugSnapshot();
+    const text = setupDebugSnapshot();
     panel.textContent = message ? `${{message}}\\n\\n${{text}}` : text;
   }}
 
-  async function copyWedgeDebug() {{
+  async function copySetupDebug() {{
     const panel = $('wedge-debug-panel');
     if (panel?.classList.contains('open')) {{
       panel.classList.remove('open');
       panel.textContent = '';
       return;
     }}
-    const text = wedgeDebugSnapshot();
+    const text = setupDebugSnapshot();
     if (panel) {{
       panel.classList.add('open');
       panel.textContent = text;
     }}
     try {{
       await navigator.clipboard.writeText(text);
-      updateWedgeDebugPanel('Copied wedge debug to clipboard.');
+      updateSetupDebugPanel('Copied setup debug to clipboard.');
     }} catch (err) {{
-      updateWedgeDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
+      updateSetupDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
     }}
   }}
 
@@ -1596,7 +1643,7 @@ class LightweightChartLevelSelectorUI:
         try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('line drag viewport restore failed', e); }}
       }}
       drawCloud();
-      updateWedgeDebugPanel();
+      updateSetupDebugPanel();
     }});
   }}
 
@@ -1915,7 +1962,7 @@ class LightweightChartLevelSelectorUI:
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
-    updateWedgeDebugPanel('Restored the original scanner wedge.');
+    updateSetupDebugPanel('Restored the original scanner wedge.');
     return true;
   }}
 
@@ -1924,7 +1971,7 @@ class LightweightChartLevelSelectorUI:
     if (!candidate) {{
       if (side === 'both' && wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
       wedgeRouletteNoAlternative = true;
-      updateWedgeDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. ${{side === 'both' ? 'Click 🎲 Find new wedge again to restore the scanner wedge.' : 'Current wedge was left unchanged.'}}`);
+      updateSetupDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. ${{side === 'both' ? 'Click 🎲 Find new wedge again to restore the scanner wedge.' : 'Current wedge was left unchanged.'}}`);
       return;
     }}
     wedgeRouletteNoAlternative = false;
@@ -1933,7 +1980,7 @@ class LightweightChartLevelSelectorUI:
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
     const sizeText = candidate.biggerThanCurrent ? 'larger' : 'smaller';
-    updateWedgeDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
+    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
   }}
 
 
@@ -2118,8 +2165,14 @@ class LightweightChartLevelSelectorUI:
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
-    const wedgeInfoBtn = $('wedge-debug-btn');
-    if (wedgeInfoBtn) {{ const showWedge = levels.__journal_source_technique__ === 'Kliny'; wedgeInfoBtn.style.display = showWedge ? 'flex' : 'none'; wedgeInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showWedge); }}
+    const setupInfoBtn = $('setup-debug-btn');
+    if (setupInfoBtn) {{
+      const tech = selectedJournalTechnique();
+      const showInfo = ['Kliny', 'Ichimoku', 'Fibo'].includes(tech);
+      setupInfoBtn.style.display = showInfo ? 'flex' : 'none';
+      setupInfoBtn.querySelector('span:last-child').textContent = `${{tech}} information`;
+      setupInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showInfo);
+    }}
     const findNewWedgeBtn = $('find-new-wedge');
     if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
     ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
@@ -2128,7 +2181,7 @@ class LightweightChartLevelSelectorUI:
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
       picker.add(new Option(`${{obj.label || 'OBJ'}} (${{String(obj.id || idx).slice(0,8)}})`, obj.id || `obj-index:${{idx}}`));
     }});
-    updateWedgeDebugPanel();
+    updateSetupDebugPanel();
   }}
 
   const FX_TO_PLN = {{PLN:1, USD:3.92, EUR:4.25, GBP:5.05}};
@@ -2274,7 +2327,7 @@ class LightweightChartLevelSelectorUI:
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
-  $('wedge-debug-btn').onclick = () => copyWedgeDebug();
+  $('setup-debug-btn').onclick = () => copySetupDebug();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
   $('find-new-lower-wedge').onclick = () => findNewWedge('lower');

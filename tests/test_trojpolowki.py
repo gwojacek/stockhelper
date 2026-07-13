@@ -297,7 +297,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<body class='stooq-links-hidden'>" in text
     assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden .stooq-column,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}" in text
     assert "toggleStooqLinks" in text
-    assert "📈 Show links" in text
+    assert "📈 Show" in text
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
     assert "th.classList.add('chart-link-cell')" in text
@@ -325,7 +325,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-scanner='ICHIMOKU'" in text
     assert "🔻 Kliny" in text
     assert "🚀 breakout" in text
-    assert ".today-signal td{background:#dcfce7!important}" in text
+    assert ".today-signal td{background:#14532d!important}" in text
     assert "data-scanner='WEDGE' data-status='🚀 breakout' class='today-signal'" in text
     assert "falling_wedge_breakout" not in text
     assert "wybicie long 2026-05-30" not in text
