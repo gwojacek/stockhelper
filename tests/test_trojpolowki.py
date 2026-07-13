@@ -168,11 +168,11 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE (5.1m)**<br>🏷️ 🔴 below cloud · Kijun: under · Short trend<br>🕘 last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE (5.1m)**<br>🏷️ below cloud · Kijun: under · Short trend<br>🕘 last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US (2.0m)**" in text
-    assert "🏷️ ☁️ touched cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
+    assert "🏷️ touched cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
     assert "**🇩🇪 RWE.DE (4.0m)**" in text
     assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
     assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn high · cloud normal" in text
@@ -295,10 +295,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
     assert "<body class='stooq-links-hidden'>" in text
-    assert ".stooq-links-hidden .stooq-chart-link{display:none}" in text
+    assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden button[title*='stooq']{display:none!important}" in text
     assert "toggleStooqLinks" in text
     assert "📈 Show stooq" in text
-    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <span class='ichi-status-chip ichi-good'>Long trend</span>" in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>Long trend</span>" in text
     assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
