@@ -1,3 +1,6 @@
+import sys
+import types
+
 import pandas as pd
 
 import chart_program.chart_loader as loader
@@ -458,6 +461,28 @@ def test_indexes_refresh_triggers_stooq_bulk_when_wig20_missing_multiple_session
     assert calls
     assert calls[0][0] == "indexes"
     assert "missing 4 sessions" in calls[0][1]
+
+
+def test_wig_bulk_download_is_attempted_once_per_process(monkeypatch):
+    import scanner_search as scanner
+
+    calls = []
+    fake_module = types.SimpleNamespace(
+        download_and_import_stooq_wig_bulk_data=lambda **_kwargs: calls.append(_kwargs)
+        or {"written": 1, "skipped": 0, "members": 1, "indices_written": 1, "indices_members": 1}
+    )
+    monkeypatch.setitem(sys.modules, "utilities.stooq_playwright", fake_module)
+    monkeypatch.setenv("STOCKHELPER_STOOQ_BULK_ATTEMPTED_BUCKET", "")
+    monkeypatch.setattr(scanner, "_warsaw_daily_bulk_day", lambda: "2026-07-13")
+    state = {}
+    monkeypatch.setattr(scanner, "_read_refresh_state", lambda: dict(state))
+    monkeypatch.setattr(scanner, "_write_refresh_state", lambda new_state: state.update(new_state))
+
+    assert scanner._try_refresh_wig_with_stooq_bulk("wig", "daily allsearch warm-up") is True
+    assert scanner._try_refresh_wig_with_stooq_bulk("indexes", "later indexes probe found newer data") is False
+
+    assert len(calls) == 1
+    assert state["stooq_bulk:2026-07-13"]["result"] == "bulk"
 
 
 def test_wig20_freshness_probe_uses_kgh_reference_dates(monkeypatch, tmp_path):
