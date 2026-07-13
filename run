@@ -1627,7 +1627,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
         note = info["note"] if info["note"] != "-" else "-"
         note = _note_with_date(row, note)
-        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**"]
+        bias_txt = "" if detailed and info["bias"] in {"👀 watch", "🔁 retest"} else f" {info['bias']}"
+        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker}{bias_txt} ({months_txt})**"]
         if detailed:
             latest_pattern = _source_metric(row, "latest_retest_pattern")
             latest_pattern_date = _source_metric(row, "latest_retest_date")
@@ -2025,6 +2026,31 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return " ".join(part for part in [icon, row.ticker, _direction_icon(row.direction or row.status), months_label] if part)
         return " ".join(part for part in [icon, row.ticker] if part)
 
+    def _ichi_status_piece_html(piece: str) -> str:
+        txt = str(piece or "").strip()
+        low = txt.lower()
+        cls = "ichi-status-chip"
+        if "above cloud" in low or "long trend" in low:
+            cls += " ichi-good"
+        elif "below cloud" in low or "short trend" in low:
+            cls += " ichi-bad"
+        elif "inside cloud" in low:
+            cls += " ichi-warn"
+        elif "touched cloud" in low or "kijun" in low:
+            cls += " ichi-neutral"
+        return f"<span class='{cls}'>{html.escape(txt)}</span>"
+
+    def _ichi_status_line_to_html(line: str) -> str:
+        txt = str(line or "").strip()
+        if txt.startswith("🏷️ current:"):
+            rest = txt.split(":", 1)[1].strip()
+            pieces = [_ichi_status_piece_html(part) for part in rest.split(" · ") if part.strip()]
+            return "<span class='ichi-status-icon'>🏷️</span> <span class='ichi-status-label'>current:</span> " + " <span class='ichi-dot'>•</span> ".join(pieces)
+        if txt.startswith("🕘 last:"):
+            rest = txt.split(":", 1)[1].strip()
+            return f"<span class='ichi-status-icon'>🕘</span> <span class='ichi-status-label'>last:</span> <span class='ichi-last-text'>{html.escape(rest)}</span>"
+        return html.escape(txt)
+
     def _fibo_row_for_troj_cell(ticker: str, raw: str) -> ScannerRow | None:
         direction = "short" if "↘️" in raw else ("long" if "↗️" in raw else "")
         start_match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", raw)
@@ -2074,7 +2100,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if len(parts) > 2 and parts[2].startswith("🕘 last:"):
                 status_parts.append(parts[2])
                 detail_start = 3
-            status = "<br>".join(status_parts)
+            status = "<br>".join(_ichi_status_line_to_html(part) for part in status_parts)
             details = "<br>".join(parts[detail_start:])
             status_html = f"<span class='troj-status-info'><br>{status}</span>" if status else ""
             detail_html = f"<span class='troj-detail-info'><br>{details}</span>" if details else ""
@@ -2484,7 +2510,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
 
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}.today-signal td{background:#dcfce7!important}.today-signal td:first-child{box-shadow:inset 4px 0 #16a34a}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}.pdfbtn{font-size:12px;font-weight:700;padding:4px 7px;align-self:center}.compactbtn{font-size:12px;padding:3px 7px}.troj-toolbar{margin:8px 0 10px}.troj-info-slider-label{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700}.troj-info-slider{width:92px}.troj-info-name-only .troj-status-info,.troj-info-name-only .troj-detail-info,.troj-info-default .troj-detail-info{display:none}@media print{@page{size:A4 landscape;margin:6mm}body{max-width:none;padding:0;zoom:.78;background:#fff}.troj-hero,.market{box-shadow:none}.btn,.iconbtn{display:none!important}table{font-size:9px}th,td{padding:3px}.troj-table td{min-width:120px;line-height:1.25}.tab-panel:not(.active){display:none!important}}</style>",
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}.today-signal td{background:#dcfce7!important}.today-signal td:first-child{box-shadow:inset 4px 0 #16a34a}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}.pdfbtn{font-size:12px;font-weight:700;padding:4px 7px;align-self:center}.compactbtn{font-size:12px;padding:3px 7px}.troj-toolbar{margin:8px 0 10px}.troj-info-slider-label{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700}.troj-info-slider{width:92px}.troj-info-name-only .troj-status-info,.troj-info-name-only .troj-detail-info,.troj-info-default .troj-detail-info{display:none}.troj-status-info{display:block;margin-top:6px;line-height:1.9}.ichi-status-icon{margin-right:6px}.ichi-status-label{color:#475569;font-weight:700;margin-right:6px}.ichi-status-chip{display:inline-block;border:1px solid #cbd5e1;border-radius:7px;padding:1px 7px;background:#f8fafc}.ichi-good{background:#ecfdf3;border-color:#bbf7d0;color:#166534}.ichi-bad{background:#fef2f2;border-color:#fecaca;color:#991b1b}.ichi-warn{background:#fffbeb;border-color:#fde68a;color:#92400e}.ichi-neutral{background:#f8fafc;border-color:#cbd5e1;color:#334155}.ichi-dot{color:#64748b;margin:0 5px}.ichi-last-text{color:#475569}@media print{@page{size:A4 landscape;margin:6mm}body{max-width:none;padding:0;zoom:.78;background:#fff}.troj-hero,.market{box-shadow:none}.btn,.iconbtn{display:none!important}table{font-size:9px}th,td{padding:3px}.troj-table td{min-width:120px;line-height:1.25}.tab-panel:not(.active){display:none!important}}</style>",
                   "</head><body>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     market_buttons_html = "".join([f"<button class='btn market-filter-btn' type='button' data-market='{html.escape(m)}'>{html.escape(_scope_label(m.lower()))}</button>" for m in by_market])
