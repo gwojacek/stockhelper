@@ -295,9 +295,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
     assert "<body class='stooq-links-hidden'>" in text
-    assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden button[title*='stooq']{display:none!important}" in text
+    assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}" in text
     assert "toggleStooqLinks" in text
-    assert "📈 Show stooq" in text
+    assert "📈 Show links" in text
+    assert "td.dataset.originalHtml" in text
+    assert "dataset.cellHit" in text
+    assert "th.classList.add('chart-link-cell')" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>Long trend</span>" in text
     assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
@@ -358,6 +361,36 @@ def test_allsearch_all_scopes_include_indexes():
     assert mod._allsearch_report_stem(mod.DEFAULT_ALLSEARCH_SCOPES) == "allsearch_latest_all"
     assert mod._scope_file_keys("indices") == ["indexes", "indices", "index"]
     assert "📊 INDEXES" == mod._scope_label("indexes")
+
+
+def test_chart_program_accepts_journal_close_arguments():
+    loader = importlib.machinery.SourceFileLoader("chart_program_main_test", "chart_program/main.py")
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+
+    parser = module.build_parser()
+    args, unknown = parser.parse_known_args([
+        "KC.F",
+        "--journal-close-mode",
+        "--journal-entry-id",
+        "2cbc8ba54a9b43c5881af83b9343e247",
+        "--journal-entry-price",
+        "280.48",
+        "--journal-direction",
+        "long",
+        "--journal-stop-loss",
+        "285.29",
+    ])
+
+    assert args.target == "KC.F"
+    assert args.chart_modifier is None
+    assert args.journal_close_mode is True
+    assert args.journal_entry_id == "2cbc8ba54a9b43c5881af83b9343e247"
+    assert args.journal_entry_price == "280.48"
+    assert args.journal_direction == "long"
+    assert args.journal_stop_loss == "285.29"
+    assert unknown == []
 
 
 def test_bullish_harami_retest_can_stay_inside_cloud():
