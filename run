@@ -1197,6 +1197,20 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
                         picked[duplicate_idx] = row
         return picked
     fibo = _dedupe_nearby_same_scale_display(_dedupe_same_fibo_start(fibo))
+    def _limit_fibo_display_per_ticker(items: list[ScannerRow], max_per_ticker: int = 2) -> list[ScannerRow]:
+        grouped: dict[str, list[ScannerRow]] = {}
+        for row in items:
+            grouped.setdefault(str(row.ticker or "").upper(), []).append(row)
+        kept: list[ScannerRow] = []
+        def priority(row: ScannerRow) -> tuple[int, float, float, str]:
+            category_rank = {"valid": 0, "waiting": 1, "steep": 2}.get(row.category, 9)
+            near = _parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0)
+            ratio = _parse_float_text(row.metrics.get("ratio_raw", "0"), 0.0)
+            return (category_rank, -near, -ratio, str(row.dates.get("start") or ""))
+        for group in grouped.values():
+            kept.extend(sorted(group, key=priority)[:max_per_ticker])
+        return kept
+    fibo = _limit_fibo_display_per_ticker(fibo)
     def _fibo_near(row: ScannerRow) -> float:
         return _parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0)
     def _fibo_steep(row: ScannerRow) -> bool:
@@ -1281,13 +1295,13 @@ def _readable_breakout_note(status: str, ichimoku_status: str = "") -> str:
 def _cloud_side_label(row: ScannerRow) -> str:
     text = f"{row.status} {row.metrics.get('current_side','')} {row.metrics.get('ichimoku_status','')} {row.metrics.get('raw_status','')}".lower()
     if "inside" in text and "cloud" in text:
-        return "🟡 inside cloud"
+        return "inside cloud"
     if "touch" in text and "cloud" in text:
-        return "☁️ touched cloud"
+        return "touched cloud"
     if "above" in text or "over kijun" in text:
-        return "🟢 above cloud"
+        return "above cloud"
     if "below" in text or "under kijun" in text:
-        return "🔴 below cloud"
+        return "below cloud"
     return "-"
 
 
@@ -1338,7 +1352,22 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         raw_kijun = _source_metric(row, "ichimoku_status")
         kijun = _kijun_label(raw_kijun)
         cloud_side = _cloud_side_label(row)
-        note = _readable_breakout_note(raw_status, raw_kijun)
+        latest_pattern = _source_metric(row, "latest_retest_pattern")
+        latest_pattern_date = _source_metric(row, "latest_retest_date")
+        active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
+        status_norm = _status_plain(raw_status).lower().replace(" ", "_")
+        if "(" in status_norm:
+            status_norm = status_norm.split("(", 1)[0].strip()
+        pattern_status = status_norm.endswith("_retest_pattern")
+        if pattern_status and not active_latest_pattern:
+            # Shallow/medium/deep retest labels are actionable only when the
+            # pattern around a cloud touch/entry is still fresh. Older pattern
+            # rows keep a neutral last-status note with the date instead.
+            note = "last retest pattern"
+        elif status_norm == "returned_to_cloud_waiting_for_pattern":
+            note = "returned to cloud, waiting"
+        else:
+            note = _readable_breakout_note(raw_status, raw_kijun)
         if note == "-":
             if "inside" in cloud_side:
                 note = "inside cloud"
@@ -1350,10 +1379,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
                 note = "below cloud"
             elif raw_kijun != "-":
                 note = raw_kijun
-        latest_pattern = _source_metric(row, "latest_retest_pattern")
-        latest_pattern_date = _source_metric(row, "latest_retest_date")
-        active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
-        if active_latest_pattern and note in {"-", "inside cloud", "touched cloud"}:
+        if active_latest_pattern and note in {"-", "inside cloud", "touched cloud", "last retest pattern"}:
             note = latest_pattern
         info = {
             "cloud_side": cloud_side,
@@ -1401,9 +1427,18 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         )
         return bearish_breakout_context
 
+    def _previous_respect_months(row: ScannerRow) -> float:
+        return _parse_float_text(row.metrics.get("previous_respect_months", "0"), 0.0)
+
+    def _is_valid_breakout(row: ScannerRow) -> bool:
+        # WYNIKI 2 is intended to contain flips after at least four months of
+        # respecting one cloud side. Keep that guard here too because older
+        # markdown fixtures/reports may still contain shorter pre-breakout runs.
+        return row.category == "retest_breakout" and _previous_respect_months(row) >= 4.0
+
     def _is_fresh_retest_window(row: ScannerRow) -> bool:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
-        return row.category == "retest_breakout" and months <= 4.0
+        return _is_valid_breakout(row) and months < 4.0
 
     def _short_retest_trigger(row: ScannerRow, info: dict[str, str]) -> bool:
         touches_cloud = any(token in info["cloud_side"] for token in ("inside", "touched"))
@@ -1411,11 +1446,15 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return touches_cloud or touches_kijun
 
     def _is_retest_under_4m(item: tuple[ScannerRow, dict[str, str]]) -> bool:
-        row, info = item
+        row, _info = item
         latest_pattern = _source_metric(row, "latest_retest_pattern")
         latest_pattern_date = _source_metric(row, "latest_retest_date")
         active_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
-        return (_is_fresh_retest_window(row) or active_pattern) and _short_retest_trigger(row, info)
+        # Fresh valid breakouts belong in the fourth 3P Ichimoku column while
+        # they wait for a retest/pattern. They must not fall back to the
+        # long-respect continuation/watch columns until four months after the
+        # breakout.
+        return _is_fresh_retest_window(row) or (_is_valid_breakout(row) and active_pattern)
 
     def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item
@@ -1435,10 +1474,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             return "short_retest"
         tk_cross_signal = info["tk_cross"] not in {"-", "none"}
         has_kijun_or_tk = info["kijun"] in {"over", "under", "touched"} or tk_cross_signal
+        if row.category == "retest_breakout" and not _is_valid_breakout(row):
+            return "skip"
+        if row.category == "position" and _parse_float_text(row.metrics.get("months", "0"), 0.0) < 4.0:
+            return "skip"
         if _is_fresh_retest_window(row):
-            if "breakout" in info["note"]:
-                return "cloud"
-            return "watch" if has_kijun_or_tk else "skip"
+            return "short_retest"
         if _has_current_cloud_context(item):
             return "cloud"
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
@@ -1543,25 +1584,88 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             minus.append("cloud shallow")
         return plus, minus
 
+    def _last_ichi_status_label(raw_status: str) -> str:
+        status_norm = _status_plain(raw_status).lower().replace(" ", "_")
+        if "(" in status_norm:
+            status_norm = status_norm.split("(", 1)[0].strip()
+        if status_norm.endswith("_retest_pattern"):
+            return "last retest pattern"
+        if status_norm == "returned_to_cloud_waiting_for_pattern":
+            return "returned to cloud, waiting"
+        if status_norm == "breakout_confirmed":
+            return "breakout confirmed"
+        if status_norm == "breakout_aged":
+            return "breakout aged"
+        if status_norm == "retest_breakout":
+            return "retest breakout"
+        if status_norm in {"no_breakout", "", "-"}:
+            return ""
+        return status_norm.replace("_", " ")
+
+    def _note_with_date(row: ScannerRow, note: str) -> str:
+        if note == "-" or not any(token in note.lower() for token in ("breakout", "retest", "pattern", "returned")):
+            return note
+        if note == "breakout confirmed":
+            note_date = str(row.dates.get("flip_date") or row.metrics.get("latest_retest_date") or row.dates.get("start_date") or "").strip()
+        else:
+            note_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or row.dates.get("start_date") or "").strip()
+        if note_date and note_date != "-":
+            return f"{note} ({note_date})"
+        return note
+
+    def _current_ichi_status_line(info: dict[str, str]) -> str:
+        current_bits: list[str] = []
+        if info["cloud_side"] != "-":
+            current_bits.append(info["cloud_side"])
+        if info["kijun"] != "-":
+            current_bits.append(f"Kijun: {info['kijun']}")
+        current_bits.append("Short trend" if is_short(info) else "Long trend")
+        return "🏷️ " + " · ".join(current_bits)
+
     def item_text(row: ScannerRow, info: dict[str, str], detailed: bool) -> str:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
         months_txt = f"{months:.1f}m" if str(row.metrics.get("months", "")).strip() else "-"
         note = info["note"] if info["note"] != "-" else "-"
-        if note != "-" and any(token in note.lower() for token in ("breakout", "retest", "pattern")):
-            note_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or row.dates.get("start_date") or "").strip()
-            if note_date and note_date != "-":
-                note = f"{note} ({note_date})"
-        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker} {info['bias']} ({months_txt})**"]
-        lines.append(f"🏷️ {note}")
+        note = _note_with_date(row, note)
+        bias_txt = "" if detailed and info["bias"] in {"👀 watch", "🔁 retest"} else f" {info['bias']}"
+        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker}{bias_txt} ({months_txt})**"]
         if detailed:
+            latest_pattern = _source_metric(row, "latest_retest_pattern")
+            latest_pattern_date = _source_metric(row, "latest_retest_date")
+            active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
+            raw_status = row.metrics.get("raw_status", row.status)
+            fresh_breakout = _is_fresh_retest_window(row)
+            if fresh_breakout:
+                recent_line = _current_ichi_status_line(info)
+            elif active_latest_pattern:
+                recent_line = f"✨ pattern: {latest_pattern} ({latest_pattern_date})"
+            elif note.startswith("last retest pattern"):
+                recent_line = _current_ichi_status_line(info)
+            else:
+                recent_line = f"🏷️ {note}"
+            lines.append(recent_line)
+            if latest_pattern != "-" and latest_pattern_date != "-":
+                last_label = f"retest {latest_pattern}"
+                last_date = latest_pattern_date
+            else:
+                last_label = _last_ichi_status_label(str(raw_status))
+                last_date = str(row.metrics.get("latest_retest_date") or row.dates.get("flip_date") or "").strip()
+            if last_label and last_date and last_date != "-":
+                last_line = f"🕘 {last_label} ({last_date})"
+                comparable_recent = recent_line.replace("🏷️ ", "").replace("✨ pattern: ", "")
+                comparable_last = last_line.replace("🕘 ", "")
+                if fresh_breakout or comparable_last != comparable_recent:
+                    lines.append(last_line)
             plus, minus = _factor_lists(info)
             lines.append(f"{_risk_icon(info['risk'])} risk: {_risk_text(info['risk'])} · {_chikou_text(info)} · {_twist_text(info)}")
             if plus:
                 lines.append("➕ " + " · ".join(plus))
             if minus:
                 lines.append("➖ " + " · ".join(minus))
-        elif info["kijun"] != "-":
-            lines.append(f"Kijun: {info['kijun']}")
+        else:
+            lines.append(f"🏷️ {note}")
+            if info["kijun"] != "-":
+                lines.append(f"Kijun: {info['kijun']}")
         lines.append(_links_for_troj(row))
         return "<br>".join(lines)
 
@@ -1578,7 +1682,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         "",
         "Legenda:",
         "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column.",
-        "- 🔁 Retest <4m contains fresh valid breakouts from the last 4 months only when the newest candle touches Kijun, touches the cloud, or is inside the cloud; we wait for patterns in the last two cases.",
+        "- 🔁 Retest <4m contains valid breakouts from the last 4 months (after >=4 months respecting one cloud side); they stay there while waiting for retest/pattern confirmation.",
         "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
         "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
         "- Chikou uses arrow-only direction: ⬆️ over price and ⬇️ under price (under price supports bearish breakout/retest context).",
@@ -1876,7 +1980,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _stooq_link_with_cell_button(stooq_url: str | None, ticker: str | None, extra_class: str = "") -> str:
         if not stooq_url:
             return ""
-        class_attr = f"btn {extra_class}".strip()
+        class_attr = f"btn stooq-chart-link {extra_class}".strip()
         link = f"<a class='{html.escape(class_attr, quote=True)}' href='{html.escape(str(stooq_url), quote=True)}' target='_blank' title='Open stooq chart'>📈</a>"
         return link + _sheets_cell_button(str(stooq_url), ticker)
 
@@ -1885,7 +1989,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     troj_ichi_path = _write_trojpolowki_ichimoku(rows, TROJPOLLOWKI_DIR, troj_timestamp)
     troj_row_by_ticker = {r.ticker: r for r in rows if r.ticker}
     troj_ichi_row_by_ticker = {r.ticker: r for r in rows if r.ticker and r.scanner == "ICHIMOKU"}
-    troj_fibo_row_by_ticker = {r.ticker: r for r in rows if r.ticker and r.scanner == "FIBO"}
+    troj_fibo_rows = [r for r in rows if r.ticker and r.scanner == "FIBO"]
 
     def _md_inline_to_html(text: str) -> str:
         rendered = html.escape(str(text or ""))
@@ -1922,6 +2026,65 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return " ".join(part for part in [icon, row.ticker, _direction_icon(row.direction or row.status), months_label] if part)
         return " ".join(part for part in [icon, row.ticker] if part)
 
+    def _ichi_status_piece_html(piece: str) -> str:
+        txt = str(piece or "").strip()
+        low = txt.lower()
+        cls = "ichi-status-chip"
+        if "above cloud" in low or "long trend" in low:
+            cls += " ichi-good"
+        elif "below cloud" in low or "short trend" in low:
+            cls += " ichi-bad"
+        elif "inside cloud" in low:
+            cls += " ichi-warn"
+        elif "touched cloud" in low or "kijun" in low:
+            cls += " ichi-neutral"
+        return f"<span class='{cls}'>{html.escape(txt)}</span>"
+
+    def _ichi_status_line_to_html(line: str) -> str:
+        txt = str(line or "").strip()
+        if txt.startswith("🏷️"):
+            rest = txt.replace("🏷️", "", 1).strip()
+            if rest.startswith("current:"):
+                rest = rest.split(":", 1)[1].strip()
+            pieces = [_ichi_status_piece_html(part) for part in rest.split(" · ") if part.strip()]
+            return "<span class='ichi-status-icon ichi-status-spacer'>🏷️</span> " + " ".join(pieces)
+        if txt.startswith("🕘"):
+            rest = txt.replace("🕘", "", 1).strip()
+            if rest.startswith("last:"):
+                rest = rest.split(":", 1)[1].strip()
+            return f"<span class='ichi-status-icon'>🕘</span> {_ichi_status_piece_html(rest)}"
+        if txt.startswith("✨ pattern:"):
+            rest = txt.split(":", 1)[1].strip()
+            return f"<span class='ichi-status-icon'>✨</span> {_ichi_status_piece_html('pattern: ' + rest)}"
+        return html.escape(txt)
+
+    def _ichi_status_chips_only_html(parts: list[str], *, break_before_trend: bool = False) -> str:
+        rendered: list[str] = []
+        for part in parts:
+            txt = str(part or "").strip()
+            if not txt:
+                continue
+            chip = _ichi_status_piece_html(txt)
+            if break_before_trend and rendered and txt.lower() in {"long trend", "short trend"}:
+                chip = "<br>" + chip
+            rendered.append(chip)
+        return " ".join(rendered)
+
+    def _fibo_row_for_troj_cell(ticker: str, raw: str) -> ScannerRow | None:
+        direction = "short" if "↘️" in raw else ("long" if "↗️" in raw else "")
+        start_match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", raw)
+        start = start_match.group(1) if start_match else ""
+        candidates = [r for r in troj_fibo_rows if str(r.ticker or "").upper() == str(ticker or "").upper()]
+        if direction:
+            directional = [r for r in candidates if str(r.direction or "").lower() == direction]
+            if directional:
+                candidates = directional
+        if start:
+            exact = [r for r in candidates if str(r.dates.get("start") or "") == start or str(r.dates.get("incline") or "").startswith(start + "->")]
+            if exact:
+                return exact[0]
+        return candidates[0] if candidates else None
+
     def _troj_cell_to_html(cell: str, section_id: str = "") -> str:
         raw = str(cell or "")
         stooq_match = re.search(r"\[🔗 stooq\]\(([^)]+)\)", raw)
@@ -1935,7 +2098,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if "ichimoku" in section_id:
             row = troj_ichi_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
         elif "fibo" in section_id:
-            row = troj_fibo_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
+            row = _fibo_row_for_troj_cell(ticker, raw) or troj_row_by_ticker.get(ticker)
         else:
             row = troj_row_by_ticker.get(ticker)
         cmd = html.escape(_chart_command_for_row(row)) if row else html.escape(f"python run -c {ticker}")
@@ -1949,8 +2112,18 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         else:
             rendered = controls + rendered
         if "ichimoku" in section_id and "<br>" in rendered:
-            first, rest = rendered.split("<br>", 1)
-            return first + "<span class='troj-extra-info'><br>" + rest + "</span>"
+            parts = rendered.split("<br>")
+            first = parts[0]
+            status_parts = [parts[1]] if len(parts) > 1 else []
+            detail_start = 2
+            if len(parts) > 2 and parts[2].startswith("🕘"):
+                status_parts.append(parts[2])
+                detail_start = 3
+            status = "<br>".join(_ichi_status_line_to_html(part) for part in status_parts)
+            details = "<br>".join(parts[detail_start:])
+            status_html = f"<span class='troj-status-info'>{status}</span>" if status else ""
+            detail_html = f"<span class='troj-detail-info'>{details}</span>" if details else ""
+            return first + status_html + detail_html
         return rendered
 
     def _read_troj_md_table(md_path: Path, fallback_title: str) -> dict[str, object]:
@@ -2143,7 +2316,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if "ichimoku" in section_id:
             return troj_ichi_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
         if "fibo" in section_id:
-            return troj_fibo_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
+            return _fibo_row_for_troj_cell(ticker, raw) or troj_row_by_ticker.get(ticker)
         return troj_row_by_ticker.get(ticker)
 
     def _troj_cell_attrs(cell: str, section_id: str = "") -> str:
@@ -2165,7 +2338,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 legend_html = f"<div class='legend troj-legend'><ul>{legend_items}</ul></div>"
         toolbar_buttons = []
         if "ichimoku" in section_id:
-            toolbar_buttons.append(f'<button class=\'btn compactbtn\' type=\'button\' onclick="toggleTrojExtra(\'{html.escape(section_id, quote=True)}\', this)">Hide additional info</button>')
+            escaped_section = html.escape(section_id, quote=True)
+            toolbar_buttons.append(
+                f"<label class='troj-info-slider-label'>Info: "
+                f"<span class='troj-info-slider-text'>Default</span> "
+                f"<input class='troj-info-slider' type='range' min='0' max='2' step='1' value='1' "
+                f"title='0=name only, 1=default status, 2=full info' "
+                f"onclick=\"toggleTrojExtra('{escaped_section}', this)\" "
+                f"oninput=\"toggleTrojExtra('{escaped_section}', this)\"></label>"
+            )
         toolbar_buttons.append("<button class='btn compactbtn' type='button' title='Open all stockhelper charts from this table' onclick='openClosestStockhelperCharts(this)'>📊</button>")
         table_controls = f"<div class='troj-toolbar'>{' '.join(toolbar_buttons)}</div>"
         table_html = table_controls + "<div style='overflow:auto'><table class='troj-table'><thead><tr>"
@@ -2184,8 +2365,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             table_html += "<tr>" + "".join(f"<td{_troj_cell_attrs(str(cell), section_id)}>{_troj_cell_to_html(str(cell), section_id)}</td>" for cell in row) + "</tr>"
         table_html += "</tbody></table></div>"
         top_html = _top_choice_table_html("Top choices", _troj_top_choices(parsed, top_choice_cols or []), section_id) if top_choice_cols else ""
+        section_class = "market troj-section" + (" troj-info-default" if "ichimoku" in section_id else "")
+        info_attr = " data-info-level='1'" if "ichimoku" in section_id else ""
         return (
-            f"<section class='market troj-section' id='{section_id}'>"
+            f"<section class='{section_class}' id='{section_id}'{info_attr}>"
             f"<h2>{html.escape(str(parsed.get('title') or 'Trójpolówki'))}</h2>"
             f"<p class='muted'>{html.escape(str(parsed.get('updated') or ''))}</p>"
             f"{legend_html}{table_html}{top_html}</section>"
@@ -2205,7 +2388,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             breakout_date = (row.metrics.get("breakout_date", "-") or "-").strip()
             breakout_direction = (row.metrics.get("breakout_direction", "-") or "-").strip()
             breakout_rank = 1 if breakout_direction in {"long", "short"} and breakout_date not in {"", "-"} else 0
-            return ((0, -breakout_rank, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}, score {score:.0f}")
+            return ((0, -breakout_rank, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}")
         if row.scanner == "FIBO":
             if row.category == "valid":
                 return None
@@ -2282,18 +2465,18 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         parts = ["<section class='market'><h2>🔻 Kliny opadające</h2><p class='muted'>Osobna lista klinów: w marketach najwyżej są świeże wybicia, a dalej formacje z dobrymi stykami linii, rozmiarem i nachyleniem.</p>"]
         top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:5]
         top_rows = "".join(
-            f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('upper_touches','?') + '/' + r.metrics.get('lower_touches','?'))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>"
+            f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('upper_touches','?') + '/' + r.metrics.get('lower_touches','?'))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>"
             for r in top
         )
-        parts.append(f"<div class='top-choice'><h3>Top choices <button class='iconbtn' title='Open stooq links from top choices' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Copy Google Sheets links from top choices' onclick='copyClosestSheetsCells(this)'>📋</button> <button class='iconbtn' title='Open stockhelper charts from top choices' onclick='openClosestStockhelperCharts(this)'>📊</button></h3><table class='data'><thead><tr><th>Instrument</th><th>Market</th><th>Status</th><th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th><th>Start width</th><th>End width</th><th>Score</th><th>Avg10d PLN</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{top_rows}</tbody></table></div>")
+        parts.append(f"<div class='top-choice'><h3>Top choices <button class='iconbtn' title='Open stooq links from top choices' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Copy Google Sheets links from top choices' onclick='copyClosestSheetsCells(this)'>📋</button> <button class='iconbtn' title='Open stockhelper charts from top choices' onclick='openClosestStockhelperCharts(this)'>📊</button></h3><table class='data'><thead><tr><th>Instrument</th><th>Market</th><th>Status</th><th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th><th>Start width</th><th>End width</th><th>Avg10d PLN</th><th class='chart-link-cell'>Stooq</th><th class='chart-action-cell'>Chart</th></tr></thead><tbody>{top_rows}</tbody></table></div>")
         for market in by_market:
             group = [r for r in wedge if r.market == market]
             if not group:
                 continue
-            parts.append(f"<div class='wedge-market-group' data-market-block='{html.escape(market)}'><h3>{html.escape(_scope_label(market.lower()))} ({len(group)}) <button class='iconbtn' title='Open stooq links from this table' onclick='openNextTableStooqLinks(this)'>🔗</button> <button class='iconbtn' title='Copy Google Sheets links from this table' onclick='copyNextTableSheetsCells(this)'>📋</button> <button class='iconbtn' title='Open stockhelper charts from this table' onclick='openNextTableStockhelperCharts(this)'>📊</button></h3><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Status</th><th>Wedge</th><th>Months</th><th>Touches U/L</th><th>Start width</th><th>End width</th><th>Slope</th><th>Breakout</th><th>Dir</th><th>Score</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
+            parts.append(f"<div class='wedge-market-group' data-market-block='{html.escape(market)}'><h3>{html.escape(_scope_label(market.lower()))} ({len(group)}) <button class='iconbtn' title='Open stooq links from this table' onclick='openNextTableStooqLinks(this)'>🔗</button> <button class='iconbtn' title='Copy Google Sheets links from this table' onclick='copyNextTableSheetsCells(this)'>📋</button> <button class='iconbtn' title='Open stockhelper charts from this table' onclick='openNextTableStockhelperCharts(this)'>📊</button></h3><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Status</th><th>Wedge</th><th>Months</th><th>Touches U/L</th><th>Start width</th><th>End width</th><th>Slope</th><th>Breakout</th><th>Dir</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
             for r in group:
                 touches = f"{r.metrics.get('upper_touches','')}/{r.metrics.get('lower_touches','')}"
-                parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.dates.get('wedge',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(touches)}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('score',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>")
+                parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.dates.get('wedge',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(touches)}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>")
             parts.append("</tbody></table></div></div>")
         parts.append("</section>")
         return "".join(parts)
@@ -2333,11 +2516,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 cmd = html.escape(_chart_command_for_row(r))
                 stooq = r.chart_url or _stooq_chart_url(r.ticker)
                 stooq_btn = _stooq_link_with_cell_button(stooq, r.ticker)
-                rows_html += f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td>{stooq_btn}</td><td>{_stockhelper_chart_button(cmd, f'{_market_icon(r.market, r.ticker)} {r.ticker} {reason}', label)}</td></tr>"
+                rows_html += f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(reason)}</td><td class='chart-link-cell'>{stooq_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f'{_market_icon(r.market, r.ticker)} {r.ticker} {reason}', label)}</td></tr>"
             if rows_html:
                 group_sections.append(
                     f"<div class='top-choice-group'><h3>{html.escape(label)} <button class='iconbtn' title='Open stooq links from this top group' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice-group&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from this top group' onclick='openClosestStockhelperCharts(this)'>📊</button></h3>"
-                    f"<table class='data top-choice-compact'><thead><tr><th>Instrument</th><th>Why top choice</th><th>Stooq</th><th>Chart</th></tr></thead><tbody>{rows_html}</tbody></table></div>"
+                    f"<table class='data top-choice-compact'><thead><tr><th>Instrument</th><th>Why top choice</th><th class='chart-link-cell'>Stooq</th><th class='chart-action-cell'>Chart</th></tr></thead><tbody>{rows_html}</tbody></table></div>"
                 )
         if not group_sections:
             return ""
@@ -2346,8 +2529,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
 
     html_parts = ["<html><head><meta charset='utf-8'><title>StockHelper Scanner Report</title>",
-                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}.today-signal td{background:#dcfce7!important}.today-signal td:first-child{box-shadow:inset 4px 0 #16a34a}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}.pdfbtn{font-size:12px;font-weight:700;padding:4px 7px;align-self:center}.compactbtn{font-size:12px;padding:3px 7px}.troj-toolbar{margin:8px 0 10px}.troj-hide-extra .troj-extra-info{display:none}@media print{@page{size:A4 landscape;margin:6mm}body{max-width:none;padding:0;zoom:.78;background:#fff}.troj-hero,.market{box-shadow:none}.btn,.iconbtn{display:none!important}table{font-size:9px}th,td{padding:3px}.troj-table td{min-width:120px;line-height:1.25}.tab-panel:not(.active){display:none!important}}</style>",
-                  "</head><body>"]
+                  "<style>body{font-family:Inter,Arial;margin:0 auto;max-width:1400px;padding:16px;background:#f6f8fb}.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px}.market{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-top:16px}table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid #cbd5e1}th{position:sticky;top:0;background:#f1f5f9}th,td{border:1px solid #e5e7eb;padding:6px;text-align:left;vertical-align:top}tr:nth-child(even){background:#fafafa}.num{text-align:right}.badge{padding:2px 8px;border-radius:8px;font-size:11px}.high{background:#dcfce7}.medium{background:#fef9c3}.low{background:#e2e8f0}.btn{padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;text-decoration:none;display:inline-block;background:#fff;color:#0f172a}.muted{color:#64748b}.subhead{margin:12px 0 6px;font-size:14px;color:#334155;background:#eef2ff;padding:6px 8px;border-left:3px solid #6366f1;border-radius:6px}.legend{background:#fff;border:none;border-radius:8px;padding:10px 12px}.iconbtn{margin-left:8px;border:none;background:transparent;cursor:pointer;font-size:16px;vertical-align:middle}.chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}.top-choice .chart-action-cell{width:68px;min-width:68px;max-width:68px}.stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden .stooq-column,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}.today-signal td{background:#dcfce7!important}.today-signal td:first-child{box-shadow:inset 4px 0 #16a34a}.troj-hero{background:linear-gradient(90deg,#ff5f6d 0%,#ffc371 16%,#fff176 32%,#64dd17 48%,#40c4ff 64%,#7c4dff 80%,#ff5fd2 100%);color:#111827;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 8px 24px rgba(15,23,42,.18)}.troj-hero h2{margin:0 0 8px}.troj-nav{display:flex;gap:12px;flex-wrap:wrap}.troj-cta{font-size:16px;font-weight:800;padding:10px 14px;border-color:rgba(255,255,255,.6);background:#fff;color:#1e1b4b}.troj-section{border:2px solid #6366f1;box-shadow:0 8px 20px rgba(99,102,241,.12)}.troj-section h2{margin-top:0}.troj-table th{background:#dbeafe;color:#1e3a8a;text-align:center}.troj-table td{min-width:230px;line-height:1.45}.troj-legend{margin:8px 0 12px}.troj-legend ul{margin:8px 0 0;padding-left:20px}.troj-legend summary{cursor:pointer}.tabbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.tabbtn{font-size:16px;font-weight:800;padding:10px 14px}.tabbtn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.tab-panel{display:none}.tab-panel.active{display:block}.troj-name-actions{display:inline-flex;gap:5px;margin-left:8px;vertical-align:middle}.troj-name-actions .btn{font-size:11px;padding:2px 6px}.top-choice{border-color:#f59e0b;background:#fffbeb}.top-choice h2,.top-choice h3{color:#92400e}.pdfbtn{font-size:12px;font-weight:700;padding:4px 7px;align-self:center}.compactbtn{font-size:12px;padding:3px 7px}.troj-toolbar{margin:8px 0 10px}.troj-info-slider-label{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700}.troj-info-slider{width:92px}.troj-info-name-only .troj-status-info,.troj-info-name-only .troj-detail-info,.troj-info-default .troj-detail-info{display:none}.troj-status-info{display:block;margin-top:3px;line-height:1.45}.ichi-status-icon{display:inline-block;width:18px;margin-right:6px;text-align:center}.ichi-status-spacer{visibility:hidden}.ichi-status-label{color:#475569;font-weight:700;margin-right:6px}.ichi-status-chip{display:inline-block;border:1px solid #cbd5e1;border-radius:7px;padding:1px 7px;background:#f8fafc}.ichi-good{background:#ecfdf3;border-color:#bbf7d0;color:#166534}.ichi-bad{background:#fef2f2;border-color:#fecaca;color:#991b1b}.ichi-warn{background:#fffbeb;border-color:#fde68a;color:#92400e}.ichi-neutral{background:#f8fafc;border-color:#cbd5e1;color:#334155}.ichi-dot{color:#64748b;margin:0 5px}.troj-detail-info{display:block;margin-top:2px;line-height:1.35}.ichi-last-text{color:#475569}@media print{@page{size:A4 landscape;margin:6mm}body{max-width:none;padding:0;zoom:.78;background:#fff}.troj-hero,.market{box-shadow:none}.btn,.iconbtn{display:none!important}table{font-size:9px}th,td{padding:3px}.troj-table td{min-width:120px;line-height:1.25}.tab-panel:not(.active){display:none!important}}</style>",
+                  "</head><body class='stooq-links-hidden'>"]
     html_parts.append(f"<h1>StockHelper Scanner Report</h1><p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}</p>")
     market_buttons_html = "".join([f"<button class='btn market-filter-btn' type='button' data-market='{html.escape(m)}'>{html.escape(_scope_label(m.lower()))}</button>" for m in by_market])
     search_toolbar_html = (
@@ -2360,11 +2543,63 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "<select id='market' style='display:none'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
         "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>"
     )
-    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"window.open('/journal-html','_blank')\">🧾 Open journal</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>🌈🐱 Scanner workspace</h2><p>Use tabs to switch between the full allsearch report and embedded Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"window.open('/journal-html','_blank')\">🧾 Open journal</button><button class='btn compactbtn' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show stooq</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append(search_toolbar_html)
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
     html_parts.append(_liquidity_legend_html())
+    def _allsearch_ichi_current_html(row: ScannerRow, *, compact_position: bool = False) -> str:
+        raw_status = str(row.status or "")
+        ichi_status = str(row.metrics.get("ichimoku_status", "") or "")
+        cloud_text = " ".join([
+            raw_status,
+            str(row.metrics.get("current_side", "") or ""),
+            ichi_status,
+            str(row.metrics.get("cloud", "") or ""),
+        ]).lower()
+        pieces: list[str] = []
+        if "inside" in cloud_text and "cloud" in cloud_text:
+            pieces.append("inside cloud")
+        elif "touch" in cloud_text and "cloud" in cloud_text:
+            pieces.append("touched cloud")
+        elif "above" in cloud_text or "over cloud" in cloud_text:
+            pieces.append("above cloud")
+        elif "below" in cloud_text or "under cloud" in cloud_text:
+            pieces.append("below cloud")
+        if compact_position:
+            status = raw_status.replace("⚪", "").replace("🟢", "").replace("🔴", "").strip()
+            if status and status not in {"-", "above", "below"}:
+                pieces.append(status)
+            if pieces:
+                return _ichi_status_chips_only_html(list(dict.fromkeys(pieces)))
+            return html.escape(raw_status or "-")
+        kijun_text = ichi_status.lower()
+        if "over kijun" in kijun_text or "kijun: over" in kijun_text:
+            pieces.append("Kijun: over")
+        elif "under kijun" in kijun_text or "kijun: under" in kijun_text:
+            pieces.append("Kijun: under")
+        elif "touch" in kijun_text and "kijun" in kijun_text:
+            pieces.append("Kijun: touched")
+        if not any(p.endswith("trend") for p in pieces):
+            if "short" in cloud_text or "below cloud" in pieces or "under kijun" in kijun_text:
+                pieces.append("Short trend")
+            elif "long" in cloud_text or "above cloud" in pieces or "over kijun" in kijun_text:
+                pieces.append("Long trend")
+        if pieces:
+            return _ichi_status_chips_only_html(list(dict.fromkeys(pieces)), break_before_trend=True)
+        return _color_ichimoku_status(ichi_status or raw_status)
+
+    def _latest_retest_summary_html(row: ScannerRow, recent_retest: bool) -> str:
+        pattern = str(row.metrics.get("latest_retest_pattern", "") or "").strip()
+        if not pattern or pattern in {"-", "—"}:
+            return "-"
+        status = str(row.status or "").strip()
+        date = str(row.metrics.get("latest_retest_date", "") or "").strip()
+        label = f"{status}: {pattern}" if status and status not in {"-", "—"} else pattern
+        if date and date not in {"-", "—"}:
+            label += f" ({date})"
+        return _maybe_green_recent(label, recent_retest)
+
     for mkt, mrows in by_market.items():
         html_parts.append(f"<div class='market' data-market-block='{html.escape(mkt)}'><h2>{html.escape(_scope_label(mkt.lower()))}</h2>")
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
@@ -2380,7 +2615,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if is_i1:
                 thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Ichimoku status</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_i2:
-                thead = "<tr><th>Ticker</th><th>Latest Retest status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Avg10d PLN</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f0:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Near61.8</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f1:
@@ -2399,11 +2634,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_current_html(r, compact_position=True)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.status)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_current_html(r)}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f0:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
@@ -2426,7 +2661,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div>")
-    html_parts.append("<script>function showReportTab(name){document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));const el=document.getElementById('tab-'+name);if(el)el.classList.add('active');const sw=document.getElementById('scanner-filter-wrap');if(sw)sw.style.display=(name==='allsearch')?'inline-flex':'none';}function toggleTrojExtra(sectionId,btn){const el=document.getElementById(sectionId);if(!el)return;const hidden=el.classList.toggle('troj-hide-extra');if(btn)btn.textContent=hidden?'Show additional info':'Hide additional info';}function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function copySheetsCell(btn){const text=btn?.dataset?.formula||'';if(!text)return;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(btn,'Copied');}catch(e){setButtonText(btn,'Failed');}}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;const endpoint=new URL('/open-chart?command='+encodeURIComponent(c),window.location.href).href;window.open(endpoint,'_blank');setButtonText(btn,'Opened');}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function _stockhelperButtons(container){if(!container)return[];return [...container.querySelectorAll('.stockhelper-chart-btn[data-cmd]')].filter(b=>b.closest('tr')?.style.display!=='none');}async function _openStockhelperButtons(buttons,labelOverride){const uniq=[...new Map(buttons.map(b=>[b.dataset.cmd,b])).values()];const items=uniq.map(b=>({command:b.dataset.cmd||'',label:(b.dataset.groupLabel||b.closest('tr')?.querySelector('td,th')?.innerText||b.dataset.cmd||'').trim(),section:(b.dataset.groupSection||'').trim()})).filter(x=>x.command);if(!items.length)return;const first=uniq[0];const autoLabel=(first?.closest('section.top-choice')?'Top choices from Allsearch Report':(first?.closest('.top-choice')?.querySelector('h3')?.childNodes?.[0]?.textContent||first?.closest('.subhead')?.childNodes?.[0]?.textContent||first?.closest('h3')?.childNodes?.[0]?.textContent||first?.closest('.market')?.querySelector('h2')?.textContent||'Quick charts'));const label=(labelOverride||autoLabel).trim();const popup=window.open('about:blank','_blank');try{const res=await fetch('/chart-group',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items,label})});if(!res.ok)throw new Error('chart-group '+res.status);const data=await res.json();const url=data.url||new URL('/open-chart?command='+encodeURIComponent(items[0].command)+'&group='+encodeURIComponent(data.group||''),window.location.href).href;if(popup){popup.location=url;}else{window.open(url,'_blank');}uniq.forEach(b=>setButtonText(b,'Grouped'));}catch(e){const url=new URL('/open-chart?command='+encodeURIComponent(items[0].command),window.location.href).href;if(popup){popup.location=url;}else{window.open(url,'_blank');}uniq.forEach(b=>setButtonText(b,'Opened'));}}function openClosestStockhelperCharts(btn){_openStockhelperButtons(_stockhelperButtons(btn?.closest('.top-choice')||btn?.closest('.market')||document));}function openTableStockhelperCharts(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openStockhelperButtons(_stockhelperButtons(table));}function openNextTableStooqLinks(btn){const table=btn?.closest('h3')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openNextTableStockhelperCharts(btn){const table=btn?.closest('h3')?.nextElementSibling?.querySelector('table.data');_openStockhelperButtons(_stockhelperButtons(table));}function openTrojColumnStockhelperCharts(btn,col){const table=btn?.closest('table');if(!table)return;const th=btn?.closest('th');const actual=th?.cellIndex??col;const header=(th?.dataset?.base||th?.innerText||'').replace(/[\\u{1F4CA}\\u{1F517}\\u{1F4CB}\\u2195\\u2191\\u2193]/gu,'').trim();const section=btn?.closest('.troj-section')?.querySelector('h2')?.childNodes?.[0]?.textContent?.trim()||'Trójpolówki';const buttons=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[actual]?.querySelector('.stockhelper-chart-btn[data-cmd]')).filter(Boolean);_openStockhelperButtons(buttons,`${section} — ${header}`);}function openTrojColumnStooqLinks(btn,col){const table=btn?.closest('table');if(!table)return;const actual=btn?.closest('th')?.cellIndex??col;const links=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[actual]?.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);_openLinks(links);}async function copyTrojColumnSheetsCells(btn,col){const table=btn?.closest('table');if(!table)return;const actual=btn?.closest('th')?.cellIndex??col;const formulas=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[actual]?.querySelector('.sheets-cell-btn')?.dataset?.formula||'').filter(Boolean);if(!formulas.length)return;const text=formulas.join(String.fromCharCode(10));try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(btn,'Copied');}catch(e){setButtonText(btn,'Failed');}}async function copySheetsFormulasFromButtons(buttons,trigger){const formulas=[...new Set(buttons.map(b=>b?.dataset?.formula||'').filter(Boolean))];if(!formulas.length)return;const text=formulas.join(String.fromCharCode(10));try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(trigger,'Copied');}catch(e){setButtonText(trigger,'Failed');}}function _sheetsButtons(container){if(!container)return[];return [...container.querySelectorAll('.sheets-cell-btn[data-formula]')].filter(b=>b.closest('tr')?.style.display!=='none');}function copyClosestSheetsCells(btn){copySheetsFormulasFromButtons(_sheetsButtons(btn?.closest('.top-choice')||btn?.closest('.market')||document),btn);}function copyNextTableSheetsCells(btn){const table=btn?.closest('h3')?.nextElementSibling?.querySelector('table.data');copySheetsFormulasFromButtons(_sheetsButtons(table),btn);}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner'),clearQ=document.getElementById('clear-q');const marketBtns=[...document.querySelectorAll('.market-filter-btn')],scanBtns=[...document.querySelectorAll('.scanner-filter-btn')];function markActive(){marketBtns.forEach(b=>{const on=(b.dataset.market||'')===(m.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const hasMarket=!!r.dataset.market;const hasScanner=!!r.dataset.scanner;const okM=!m.value||!hasMarket||r.dataset.market===m.value;const okS=!sc.value||!hasScanner||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('table.troj-table tbody tr').forEach(r=>{let any=false;[...r.cells].forEach(td=>{const hitText=!s||td.innerText.toLowerCase().includes(s);const cellMarket=td.dataset.market||'';const hitMarket=!m.value||!cellMarket||cellMarket===m.value;const hit=hitText&&hitMarket;td.style.visibility=hit?'':'hidden';if(hit)any=true;});r.style.display=any?'':'none';});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr,table.troj-table tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});[...b.querySelectorAll('.subhead:not([data-empty=\"1\"])')].forEach(el=>{const wrapper=el.nextElementSibling;const rows=wrapper?[...wrapper.querySelectorAll('tbody tr')]:[];const any=rows.some(tr=>tr.style.display!=='none');el.style.display=any?'':'none';if(wrapper)wrapper.style.display=any?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});document.querySelectorAll('.wedge-market-group').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});document.querySelectorAll('.troj-section').forEach(b=>{const rows=[...b.querySelectorAll('table.troj-table tbody tr')];if(rows.length)b.style.display=rows.some(tr=>tr.style.display!=='none')?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});marketBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();const v=b.dataset.market||'';m.value=(m.value===v)?'':v;markActive();f();});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();const v=b.dataset.scanner||'';sc.value=(sc.value===v)?'':v;markActive();f();});q.oninput=f;if(clearQ)clearQ.onclick=()=>{q.value='';f();q.focus();};m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
+    html_parts.append("<script>function toggleStooqLinks(btn){const hidden=document.body.classList.toggle('stooq-links-hidden');if(btn)btn.textContent=hidden?'📈 Show links':'📈 Hide links';}function showReportTab(name){document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));const el=document.getElementById('tab-'+name);if(el)el.classList.add('active');const sw=document.getElementById('scanner-filter-wrap');if(sw)sw.style.display=(name==='allsearch')?'inline-flex':'none';}function toggleTrojExtra(sectionId,btn){const el=document.getElementById(sectionId);if(!el)return;let level=btn&&btn.value!==undefined?parseInt(btn.value,10):Number(el.dataset.infoLevel||1)+1;if(!Number.isFinite(level))level=1;if(level>2)level=0;if(level<0)level=0;el.dataset.infoLevel=String(level);el.classList.toggle('troj-info-name-only',level===0);el.classList.toggle('troj-info-default',level===1);el.classList.toggle('troj-info-full',level===2);if(btn&&btn.value!==undefined)btn.value=String(level);const label=el.querySelector('.troj-info-slider-text');if(label)label.textContent=level===0?'Name only':level===2?'Full':'Default';}function setButtonText(btn,text){const old=btn.textContent;btn.textContent=text;setTimeout(()=>btn.textContent=old,1200);}async function copySheetsCell(btn){const text=btn?.dataset?.formula||'';if(!text)return;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(btn,'Copied');}catch(e){setButtonText(btn,'Failed');}}async function openStockhelperChart(btn){const c=btn.dataset.cmd||'';if(!c)return;const endpoint=new URL('/open-chart?command='+encodeURIComponent(c),window.location.href).href;window.open(endpoint,'_blank');setButtonText(btn,'Opened');}function _tableLinks(table){if(!table)return[];return [...table.querySelectorAll('tbody tr')].filter(r=>r.style.display!=='none').map(r=>r.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);}async function _openLinks(links){const uniq=[...new Set(links)];if(!uniq.length)return;try{const res=await fetch('/open-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({links:uniq})});const data=await res.json();alert('Opened '+(data.opened||0)+' link(s) using local StockHelper server.');}catch(e){alert('Failed to open links via local server.');}}function openTableStooqLinks(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function _stockhelperButtons(container){if(!container)return[];return [...container.querySelectorAll('.stockhelper-chart-btn[data-cmd]')].filter(b=>b.closest('tr')?.style.display!=='none');}async function _openStockhelperButtons(buttons,labelOverride){const uniq=[...new Map(buttons.map(b=>[b.dataset.cmd,b])).values()];const items=uniq.map(b=>({command:b.dataset.cmd||'',label:(b.dataset.groupLabel||b.closest('tr')?.querySelector('td,th')?.innerText||b.dataset.cmd||'').trim(),section:(b.dataset.groupSection||'').trim()})).filter(x=>x.command);if(!items.length)return;const first=uniq[0];const autoLabel=(first?.closest('section.top-choice')?'Top choices from Allsearch Report':(first?.closest('.top-choice')?.querySelector('h3')?.childNodes?.[0]?.textContent||first?.closest('.subhead')?.childNodes?.[0]?.textContent||first?.closest('h3')?.childNodes?.[0]?.textContent||first?.closest('.market')?.querySelector('h2')?.textContent||'Quick charts'));const label=(labelOverride||autoLabel).trim();const popup=window.open('about:blank','_blank');try{const res=await fetch('/chart-group',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({items,label})});if(!res.ok)throw new Error('chart-group '+res.status);const data=await res.json();const url=data.url||new URL('/open-chart?command='+encodeURIComponent(items[0].command)+'&group='+encodeURIComponent(data.group||''),window.location.href).href;if(popup){popup.location=url;}else{window.open(url,'_blank');}uniq.forEach(b=>setButtonText(b,'Grouped'));}catch(e){const url=new URL('/open-chart?command='+encodeURIComponent(items[0].command),window.location.href).href;if(popup){popup.location=url;}else{window.open(url,'_blank');}uniq.forEach(b=>setButtonText(b,'Opened'));}}function openClosestStockhelperCharts(btn){_openStockhelperButtons(_stockhelperButtons(btn?.closest('.top-choice')||btn?.closest('.market')||document));}function openTableStockhelperCharts(btn){const table=btn?.closest('.subhead')?.nextElementSibling?.querySelector('table.data');_openStockhelperButtons(_stockhelperButtons(table));}function openNextTableStooqLinks(btn){const table=btn?.closest('h3')?.nextElementSibling?.querySelector('table.data');_openLinks(_tableLinks(table));}function openNextTableStockhelperCharts(btn){const table=btn?.closest('h3')?.nextElementSibling?.querySelector('table.data');_openStockhelperButtons(_stockhelperButtons(table));}function openTrojColumnStockhelperCharts(btn,col){const table=btn?.closest('table');if(!table)return;const th=btn?.closest('th');const actual=th?.cellIndex??col;const header=(th?.dataset?.base||th?.innerText||'').replace(/[\\u{1F4CA}\\u{1F517}\\u{1F4CB}\\u2195\\u2191\\u2193]/gu,'').trim();const section=btn?.closest('.troj-section')?.querySelector('h2')?.childNodes?.[0]?.textContent?.trim()||'Trójpolówki';const buttons=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[actual]?.querySelector('.stockhelper-chart-btn[data-cmd]')).filter(Boolean);_openStockhelperButtons(buttons,`${section} — ${header}`);}function openTrojColumnStooqLinks(btn,col){const table=btn?.closest('table');if(!table)return;const actual=btn?.closest('th')?.cellIndex??col;const links=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[actual]?.querySelector('a[href*=\"stooq.pl\"]')?.href||'').filter(Boolean);_openLinks(links);}async function copyTrojColumnSheetsCells(btn,col){const table=btn?.closest('table');if(!table)return;const actual=btn?.closest('th')?.cellIndex??col;const formulas=[...table.querySelectorAll('tbody tr')].map(r=>r.cells[actual]?.querySelector('.sheets-cell-btn')?.dataset?.formula||'').filter(Boolean);if(!formulas.length)return;const text=formulas.join(String.fromCharCode(10));try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(btn,'Copied');}catch(e){setButtonText(btn,'Failed');}}async function copySheetsFormulasFromButtons(buttons,trigger){const formulas=[...new Set(buttons.map(b=>b?.dataset?.formula||'').filter(Boolean))];if(!formulas.length)return;const text=formulas.join(String.fromCharCode(10));try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');ta.remove();}setButtonText(trigger,'Copied');}catch(e){setButtonText(trigger,'Failed');}}function _sheetsButtons(container){if(!container)return[];return [...container.querySelectorAll('.sheets-cell-btn[data-formula]')].filter(b=>b.closest('tr')?.style.display!=='none');}function copyClosestSheetsCells(btn){copySheetsFormulasFromButtons(_sheetsButtons(btn?.closest('.top-choice')||btn?.closest('.market')||document),btn);}function copyNextTableSheetsCells(btn){const table=btn?.closest('h3')?.nextElementSibling?.querySelector('table.data');copySheetsFormulasFromButtons(_sheetsButtons(table),btn);}function openAllStooqLinks(){const links=[...document.querySelectorAll('table.data')].flatMap(t=>_tableLinks(t));_openLinks(links);}function downloadPdfReport(){const d=new Date();const iso=d.toISOString().slice(0,10);const oldTitle=document.title;document.title='stockhelper_report_'+iso;window.print();setTimeout(()=>{document.title=oldTitle;},250);}function num(v){const n=parseFloat((v||'').replace(/[^0-9+\\-.]/g,''));return Number.isFinite(n)?n:null;}function sortTable(table,col){const tb=table.tBodies[0];if(!tb)return;const rows=[...tb.rows];const asc=table.dataset.sortCol==String(col)?(table.dataset.sortDir!=='asc'):true;table.dataset.sortCol=String(col);table.dataset.sortDir=asc?'asc':'desc';rows.sort((a,b)=>{const av=(a.cells[col]?.innerText||'').trim();const bv=(b.cells[col]?.innerText||'').trim();const an=num(av),bn=num(bv);let cmp=0;if(an!==null&&bn!==null){cmp=an-bn;}else{cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});}return asc?cmp:-cmp;});rows.forEach(r=>tb.appendChild(r));table.querySelectorAll('thead th').forEach((h,idx)=>{h.dataset.arrow=idx===col?(asc?'↑':'↓'):'↕';h.textContent=h.dataset.base+' '+h.dataset.arrow;});}const q=document.getElementById('q'),m=document.getElementById('market'),sc=document.getElementById('scanner'),clearQ=document.getElementById('clear-q');const marketBtns=[...document.querySelectorAll('.market-filter-btn')],scanBtns=[...document.querySelectorAll('.scanner-filter-btn')];function markActive(){marketBtns.forEach(b=>{const on=(b.dataset.market||'')===(m.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});scanBtns.forEach(b=>{const on=(b.dataset.scanner||'')===(sc.value||'');b.style.background=on?'#dbeafe':'#fff';b.style.borderColor=on?'#2563eb':'#cbd5e1';});}function f(){const s=(q.value||'').toLowerCase();document.querySelectorAll('table.data tbody tr').forEach(r=>{const okText=r.innerText.toLowerCase().includes(s);const hasMarket=!!r.dataset.market;const hasScanner=!!r.dataset.scanner;const okM=!m.value||!hasMarket||r.dataset.market===m.value;const okS=!sc.value||!hasScanner||r.dataset.scanner===sc.value;r.style.display=(okText&&okM&&okS)?'':'none';});document.querySelectorAll('table.troj-table').forEach(table=>{const tbody=table.tBodies[0];if(!tbody)return;const rows=[...tbody.rows];rows.forEach((r,idx)=>{if(!r.dataset.originalIndex)r.dataset.originalIndex=String(idx);[...r.cells].forEach(td=>{if(!td.dataset.originalHtml){td.dataset.originalHtml=td.innerHTML;td.dataset.originalMarket=td.dataset.market||'';}td.innerHTML=td.dataset.originalHtml;td.dataset.market=td.dataset.originalMarket||'';});});rows.forEach((r,idx)=>{let any=false;[...r.cells].forEach(td=>{const hitText=!s||td.innerText.toLowerCase().includes(s);const cellMarket=td.dataset.market||'';const hitMarket=!m.value||!cellMarket||cellMarket===m.value;const hit=hitText&&hitMarket;td.dataset.cellHit=hit?'1':'0';td.style.visibility=hit?'':'hidden';if(hit)any=true;});r.style.display=any?'':'none';r.dataset.filterHit=any?'1':'0';});if(s||m.value){const colCount=Math.max(0,...rows.map(r=>r.cells.length));for(let col=0;col<colCount;col++){const items=rows.map((r,idx)=>{const td=r.cells[col];return td?{html:td.dataset.originalHtml||td.innerHTML,market:td.dataset.originalMarket||td.dataset.market||'',hit:td.dataset.cellHit==='1',idx}:null;}).filter(Boolean).sort((a,b)=>(Number(b.hit)-Number(a.hit))||(a.idx-b.idx));rows.forEach((r,idx)=>{const td=r.cells[col],item=items[idx];if(!td||!item)return;td.innerHTML=item.html;td.dataset.market=item.market;td.dataset.cellHit=item.hit?'1':'0';td.style.visibility=item.hit?'':'hidden';});}rows.forEach(r=>{const any=[...r.cells].some(td=>td.dataset.cellHit==='1');r.style.display=any?'':'none';r.dataset.filterHit=any?'1':'0';});rows.sort((a,b)=>(Number(b.dataset.filterHit||0)-Number(a.dataset.filterHit||0))||(Number(a.dataset.originalIndex||0)-Number(b.dataset.originalIndex||0))).forEach(r=>tbody.appendChild(r));}else{rows.sort((a,b)=>Number(a.dataset.originalIndex||0)-Number(b.dataset.originalIndex||0)).forEach(r=>tbody.appendChild(r));}});document.querySelectorAll('.market[data-market-block]').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr,table.troj-table tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');const emptyGroups=[...b.querySelectorAll('.subhead[data-empty=\"1\"]')];const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value;emptyGroups.forEach(el=>{const wrapper=el.nextElementSibling;el.style.display=showEmptyGroups?'':'none';if(wrapper)wrapper.style.display=showEmptyGroups?'':'none';});[...b.querySelectorAll('.subhead:not([data-empty=\"1\"])')].forEach(el=>{const wrapper=el.nextElementSibling;const rows=wrapper?[...wrapper.querySelectorAll('tbody tr')]:[];const any=rows.some(tr=>tr.style.display!=='none');el.style.display=any?'':'none';if(wrapper)wrapper.style.display=any?'':'none';});if(!visibleBySelect){b.style.display='';b.style.display='none';return;}if(m.value){b.style.display='';}else{b.style.display=anyVisibleRow?'':'none';}});document.querySelectorAll('.wedge-market-group').forEach(b=>{const bm=b.dataset.marketBlock;const visibleBySelect=(!m.value||bm===m.value);const rows=[...b.querySelectorAll('table.data tbody tr')];const anyVisibleRow=rows.some(tr=>tr.style.display!=='none');b.style.display=(visibleBySelect&&anyVisibleRow)?'':'none';});document.querySelectorAll('.troj-section').forEach(b=>{const rows=[...b.querySelectorAll('table.troj-table tbody tr')];if(rows.length)b.style.display=rows.some(tr=>tr.style.display!=='none')?'':'none';});}document.querySelectorAll('table.data').forEach(table=>{table.querySelectorAll('thead th').forEach((th,colIdx)=>{th.style.cursor='pointer';th.title='Sort';th.dataset.base=th.textContent.trim();if(/stooq|chart|stockhelper/i.test(th.dataset.base))th.classList.add('chart-link-cell');if(/stooq/i.test(th.dataset.base)){th.classList.add('stooq-column');[...table.querySelectorAll('tbody tr')].forEach(r=>r.cells[colIdx]?.classList.add('stooq-column'));}th.dataset.arrow='↕';th.textContent=th.dataset.base+' '+th.dataset.arrow;th.addEventListener('click',()=>sortTable(table,colIdx));});});marketBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();const v=b.dataset.market||'';m.value=(m.value===v)?'':v;markActive();f();});scanBtns.forEach(b=>b.onclick=(e)=>{e.preventDefault();const v=b.dataset.scanner||'';sc.value=(sc.value===v)?'':v;markActive();f();});q.oninput=f;if(clearQ)clearQ.onclick=()=>{q.value='';f();q.focus();};m.onchange=f;sc.onchange=()=>{markActive();f();};markActive();f();</script></body></html>")
     output_path.write_text("".join(html_parts), encoding="utf-8")
 
 

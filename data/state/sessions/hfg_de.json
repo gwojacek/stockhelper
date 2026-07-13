@@ -2,7 +2,7 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -107,5 +107,6 @@
   "line_cross_value": 4.09,
   "__wedge_auto_line_cross__": true,
   "stop_loss": 4.12,
-  "__wedge_auto_stop_loss__": true
+  "__wedge_auto_stop_loss__": true,
+  "__journal_source_technique__": "Ichimoku"
 }

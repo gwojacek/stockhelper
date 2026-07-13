@@ -31,6 +31,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wedge-lower-start")
     parser.add_argument("--wedge-lower-end")
     parser.add_argument("--wedge-right", action="store_true")
+    parser.add_argument("--journal-close-mode", action="store_true")
+    parser.add_argument("--journal-entry-id")
+    parser.add_argument("--journal-entry-price")
+    parser.add_argument("--journal-direction", choices=["long", "short"])
+    parser.add_argument("--journal-close-price")
+    parser.add_argument("--journal-stop-loss")
     return parser
 
 
@@ -97,6 +103,17 @@ def main() -> int:
             forwarded.extend([flag, value])
     if args.wedge_right:
         forwarded.append("--wedge-right")
+    if args.journal_close_mode:
+        forwarded.append("--journal-close-mode")
+    for flag, value in [
+        ("--journal-entry-id", args.journal_entry_id),
+        ("--journal-entry-price", args.journal_entry_price),
+        ("--journal-direction", args.journal_direction),
+        ("--journal-close-price", args.journal_close_price),
+        ("--journal-stop-loss", args.journal_stop_loss),
+    ]:
+        if value:
+            forwarded.extend([flag, value])
     forwarded.extend(unknown)
 
     from chart_program.level_selector import run_level_selector

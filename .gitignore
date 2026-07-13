@@ -21,3 +21,5 @@ dist/
 build/
 # Large Stooq bulk downloads are temporary import artifacts
 data/downloads/stooq/*.zip
+
+.docker-home/

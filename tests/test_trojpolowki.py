@@ -84,6 +84,21 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
             metrics={"ratio_raw": "30.0", "incline_days": "45", "near61_raw": "14.5"}, chart_url="https://stooq.pl/gpw",
         ),
         mod.ScannerRow(
+            market="COMMODITIES", scanner="FIBO", category="waiting", ticker="BRACOMP", status="reached_23_6_waiting_for_61_8",
+            direction="short", dates={"start": "2026-02-25", "incline": "2026-02-25->2026-04-14"},
+            metrics={"ratio_raw": "2.0", "incline_days": "48", "near61_raw": "45.3"}, chart_url="https://stooq.pl/bracomp",
+        ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="FIBO", category="waiting", ticker="BRACOMP", status="reached_23_6_waiting_for_61_8",
+            direction="long", dates={"start": "2025-10-10", "incline": "2025-10-10->2026-04-10"},
+            metrics={"ratio_raw": "1.8", "incline_days": "120", "near61_raw": "33.4"}, chart_url="https://stooq.pl/bracomp",
+        ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="FIBO", category="waiting", ticker="BRACOMP", status="reached_23_6_waiting_for_61_8",
+            direction="short", dates={"start": "2026-04-14", "incline": "2026-04-14->2026-05-20"},
+            metrics={"ratio_raw": "1.7", "incline_days": "36", "near61_raw": "22.5"}, chart_url="https://stooq.pl/bracomp",
+        ),
+        mod.ScannerRow(
             market="WIG", scanner="FIBO", category="valid", ticker="TPE", status="valid_reversal",
             direction="long", dates={"start": "2026-03-23", "incline": "2026-03-23->2026-04-20"},
             metrics={"ratio_raw": "3.2", "incline_days": "28"}, chart_url="https://stooq.pl/tpe",
@@ -105,6 +120,10 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
     assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
     assert "CROSSED" not in text
+    assert text.count("**🛢️ BRACOMP") == 2
+    assert "**🛢️ BRACOMP ↘️ (2026-02-25) 45.3%**" in text
+    assert "**🛢️ BRACOMP ↗️ (2025-10-10) 33.4%**" in text
+    assert "**🛢️ BRACOMP ↘️ (2026-04-14) 22.5%**" not in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
     assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)
@@ -118,7 +137,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     rows = [
         mod.ScannerRow(
             market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker="CRI", status="⚪ above",
-            dates={"flip_date": "2026-01-01"}, metrics={"months": "8.9", "ichimoku_status": "Over Kijun-sen", "risk": "3%", "tk_cross": "none", "dynamic": "aggressive", "cloud": "thick", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "no", "raw_status": "breakout_confirmed"}, chart_url="https://stooq.pl/cri",
+            dates={"flip_date": "2026-01-01"}, metrics={"months": "8.9", "ichimoku_status": "Over Kijun-sen", "risk": "3%", "tk_cross": "none", "dynamic": "aggressive", "cloud": "thick", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "no", "raw_status": "breakout_confirmed", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/cri",
         ),
         mod.ScannerRow(
             market="WIG", scanner="ICHIMOKU", category="position", ticker="ABC", status="🟢 above",
@@ -130,33 +149,34 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="HFG.DE", status="🔴 below",
-            dates={"flip_date": "2026-02-01"}, metrics={"months": "5.1", "ichimoku_status": "Under Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "high", "cloud": "normal", "chikou": "yes", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "deep_retest_pattern"}, chart_url="https://stooq.pl/hfg",
+            dates={"flip_date": "2026-02-01"}, metrics={"months": "5.1", "ichimoku_status": "Under Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "high", "cloud": "normal", "chikou": "yes", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "deep_retest_pattern", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/hfg",
         ),
         mod.ScannerRow(
             market="US100", scanner="ICHIMOKU", category="retest_breakout", ticker="MSFT.US", status="⚪ above",
-            dates={"flip_date": "2026-04-01"}, metrics={"months": "2.0", "ichimoku_status": "Touched the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "shallow", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "retest_breakout"}, chart_url="https://stooq.pl/msft",
+            dates={"flip_date": "2026-04-01"}, metrics={"months": "2.0", "ichimoku_status": "Touched the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "shallow", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "retest_breakout", "latest_retest_date": "2026-05-29", "latest_retest_pattern": "hammer", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/msft",
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="RWE.DE", status="⚪ above",
-            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "previous_side": "below"}, chart_url="https://stooq.pl/rwe",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "4.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "previous_side": "below", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/rwe",
         ),
         mod.ScannerRow(
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="BEAR.DE", status="breakout_confirmed",
-            dates={"flip_date": "2026-05-29"}, metrics={"months": "0.0", "ichimoku_status": "Touched Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "current_side": "🔴 below"}, chart_url="https://stooq.pl/bear",
+            dates={"flip_date": "2026-05-29"}, metrics={"months": "0.0", "ichimoku_status": "Touched Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "current_side": "🔴 below", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/bear",
         ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ deep retest (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE (5.1m)**<br>🏷️ below cloud · Kijun: under · Short trend<br>🕘 last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
-    assert "**🇺🇸 MSFT.US 🔁 retest (2.0m)**" in text
-    assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
+    assert "**🇺🇸 MSFT.US (2.0m)**" in text
+    assert "🏷️ touched cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
+    assert "**🇩🇪 RWE.DE (4.0m)**" in text
     assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
     assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn high · cloud normal" in text
-    assert "**🇩🇪 BEAR.DE 🔁 retest (0.0m)**" in text
+    assert "**🇩🇪 BEAR.DE (0.0m)**" in text
     assert "🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn mild · cloud normal" in text
     assert "➕ 🟢 TK cross bullish · Tenkan_in_☁: yes · dyn mild" in text
@@ -267,8 +287,31 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "toggleTrojExtra" in text
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
-    assert "Hide additional info" in text
-    assert "troj-extra-info" in text
+    assert "troj-info-slider" in text
+    assert "troj-status-info" in text
+    assert "troj-detail-info" in text
+    assert "<th>Ichimoku status</th><th>Data wybicia</th>" in text
+    assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
+    assert "Latest Retest status</th>" not in text
+    assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
+    assert "<body class='stooq-links-hidden'>" in text
+    assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden .stooq-column,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}" in text
+    assert "toggleStooqLinks" in text
+    assert "📈 Show links" in text
+    assert "td.dataset.originalHtml" in text
+    assert "dataset.cellHit" in text
+    assert "th.classList.add('chart-link-cell')" in text
+    assert "th.classList.add('stooq-column')" in text
+    assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
+    assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>Long trend</span>" in text
+    assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
+    assert "class='btn stooq-chart-link'" in text
+    assert "<span class='ichi-status-label'>current:</span>" not in text
+    assert "<span class='ichi-status-label'>last:</span>" not in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
+    assert "troj-info-name-only" in text
+    assert "troj-info-default" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
     assert "troj-table sortable" not in text
@@ -290,7 +333,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Proximity</th>" not in text
     assert "<th>Compression</th>" not in text
     assert "<th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th>" in text
-    assert "<th>Score</th><th>Avg10d PLN</th>" in text
+    assert "<th>Score</th><th>Avg10d PLN</th>" not in text
+    assert "<th>Dir</th><th>Avg10d PLN</th>" in text
+    assert ".top-choice .chart-action-cell{width:68px;min-width:68px;max-width:68px}" in text
     assert "1.000.000" in text
     assert "copyNextTableSheetsCells" in text
     assert "Copy Google Sheets links from this table" in text
@@ -321,6 +366,36 @@ def test_allsearch_all_scopes_include_indexes():
     assert mod._allsearch_report_stem(mod.DEFAULT_ALLSEARCH_SCOPES) == "allsearch_latest_all"
     assert mod._scope_file_keys("indices") == ["indexes", "indices", "index"]
     assert "📊 INDEXES" == mod._scope_label("indexes")
+
+
+def test_chart_program_accepts_journal_close_arguments():
+    loader = importlib.machinery.SourceFileLoader("chart_program_main_test", "chart_program/main.py")
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+
+    parser = module.build_parser()
+    args, unknown = parser.parse_known_args([
+        "KC.F",
+        "--journal-close-mode",
+        "--journal-entry-id",
+        "2cbc8ba54a9b43c5881af83b9343e247",
+        "--journal-entry-price",
+        "280.48",
+        "--journal-direction",
+        "long",
+        "--journal-stop-loss",
+        "285.29",
+    ])
+
+    assert args.target == "KC.F"
+    assert args.chart_modifier is None
+    assert args.journal_close_mode is True
+    assert args.journal_entry_id == "2cbc8ba54a9b43c5881af83b9343e247"
+    assert args.journal_entry_price == "280.48"
+    assert args.journal_direction == "long"
+    assert args.journal_stop_loss == "285.29"
+    assert unknown == []
 
 
 def test_bullish_harami_retest_can_stay_inside_cloud():

@@ -1,8 +1,8 @@
 {
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "lot_cost": 12379.74,
   "pip_value": 36.19,
-  "__journal_source_technique__": "Kliny",
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",

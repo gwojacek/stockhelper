@@ -415,24 +415,24 @@ def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
 
 
 
-def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_side: int = 2) -> list[FiboScanResult]:
-    """Keep at most one broad and one small Fibo formation per ticker/direction."""
-    grouped: dict[tuple[str, str], list[FiboScanResult]] = {}
+def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_ticker: int = 2) -> list[FiboScanResult]:
+    """Keep at most two Fibo formations per ticker across both directions."""
+    grouped: dict[str, list[FiboScanResult]] = {}
     for item in items:
         if not _fibo_has_minimum_small_impulse(item):
             continue
-        grouped.setdefault((str(item.ticker).upper(), str(item.direction).lower()), []).append(item)
+        grouped.setdefault(str(item.ticker).upper(), []).append(item)
     limited: list[FiboScanResult] = []
     for group in grouped.values():
-        if len(group) <= max_per_side:
+        if len(group) <= max_per_ticker:
             limited.extend(group)
             continue
         ordered = sorted(
             group,
             key=lambda r: (int(r.incline_duration_days), _fibo_formation_size(r), str(r.incline_start_date)),
         )
-        keep = [ordered[0], ordered[-1]]
-        keep_ids = {id(x) for x in keep}
+        keep = [ordered[0], ordered[-1]] if max_per_ticker >= 2 else [ordered[-1]]
+        keep_ids = {id(x) for x in keep[:max_per_ticker]}
         limited.extend([item for item in group if id(item) in keep_ids])
     return limited
 
@@ -1173,6 +1173,27 @@ def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
     return missing
 
 
+def _stooq_bulk_bucket(day: str | None = None) -> str | None:
+    daily_bulk_day = day or _warsaw_daily_bulk_day()
+    if not daily_bulk_day:
+        return None
+    return f"stooq_bulk:{daily_bulk_day}"
+
+
+def _mark_stooq_bulk_attempt(bucket: str, result: str) -> None:
+    state = _read_refresh_state()
+    state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": result}
+    _write_refresh_state(state)
+    os.environ["STOCKHELPER_STOOQ_BULK_ATTEMPTED_BUCKET"] = bucket
+
+
+def _stooq_bulk_already_attempted(bucket: str | None) -> bool:
+    if not bucket:
+        return False
+    if os.environ.get("STOCKHELPER_STOOQ_BULK_ATTEMPTED_BUCKET") == bucket:
+        return True
+    return bool(_read_refresh_state().get(bucket))
+
 
 def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
     """Refresh Warsaw stock/index CSVs from Stooq bulk before per-symbol Yahoo merging."""
@@ -1181,6 +1202,15 @@ def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
         return False
     if os.environ.get("STOCKHELPER_DISABLE_WIG_BULK_REFRESH") == "1":
         return False
+    bucket = _stooq_bulk_bucket()
+    if _stooq_bulk_already_attempted(bucket):
+        print(
+            f"[refresh-check] {group_name}: Stooq d_pl_txt bulk already attempted for this Warsaw day; "
+            "skipping duplicate bulk download and using per-symbol/Yahoo refresh if needed."
+        )
+        return False
+    if bucket:
+        _mark_stooq_bulk_attempt(bucket, "attempted")
     try:
         from utilities.stooq_playwright import download_and_import_stooq_wig_bulk_data
         label = "indexes" if group_l == "indexes" else "WIG"
@@ -1198,6 +1228,8 @@ def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
         )
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        if bucket:
+            _mark_stooq_bulk_attempt(bucket, "bulk")
         return True
     except Exception as exc:
         print(f"[refresh-check] WIG: bulk refresh failed ({_retry_error_brief(exc)}); falling back to per-symbol refresh.")
@@ -1240,13 +1272,9 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
 
     daily_bulk_day = _warsaw_daily_bulk_day()
     if daily_bulk_day and (group_l.startswith("wig") or group_l == "indexes"):
-        state = _read_refresh_state()
-        bucket = f"stooq_bulk:{daily_bulk_day}"
-        if not state.get(bucket):
+        bucket = _stooq_bulk_bucket(daily_bulk_day)
+        if not _stooq_bulk_already_attempted(bucket):
             if _try_refresh_wig_with_stooq_bulk(group_name, f"first WIG/index search after 03:00 Warsaw on {daily_bulk_day}"):
-                state = _read_refresh_state()
-                state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "bulk"}
-                _write_refresh_state(state)
                 return True
 
     if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
