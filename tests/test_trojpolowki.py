@@ -295,12 +295,15 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
     assert "<body class='stooq-links-hidden'>" in text
-    assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}" in text
+    assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden .stooq-column,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}" in text
     assert "toggleStooqLinks" in text
     assert "📈 Show links" in text
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
     assert "th.classList.add('chart-link-cell')" in text
+    assert "th.classList.add('stooq-column')" in text
+    assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
+    assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>Long trend</span>" in text
     assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
