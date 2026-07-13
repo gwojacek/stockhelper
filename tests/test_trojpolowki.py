@@ -239,7 +239,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         mod._build_html_report(["wig"], out)
     text = out.read_text(encoding="utf-8")
     assert "ALLSEARCH REPORT" in text
-    assert "🌈🐱 Scanner workspace" in text
+    assert "📈 StockHelper scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
     assert "📄 PDF" in text
@@ -268,7 +268,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "border:none" in text
     assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
     assert "Open stooq links from top choices" in text
-    assert "Open stockhelper charts from this top-choice column" in text
+    assert "Open stockhelper charts from this top-choice column" not in text
     assert "Open stockhelper charts from this column" in text
     assert "Open stooq links from this column" in text
     assert "event.stopPropagation();openTrojColumnStockhelperCharts" in text

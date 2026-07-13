@@ -223,13 +223,13 @@ def main() -> int:
         return _is_run_chart_command(argv) or _is_direct_chart_program_command(argv)
 
     def _direct_chart_argv(argv: list[str]) -> list[str]:
-        if os.environ.get("STOCKHELPER_REPORT_DIRECT_CHART", "1").strip().lower() in {"0", "false", "no", "off"}:
+        if os.environ.get("STOCKHELPER_REPORT_DIRECT_CHART", "0").strip().lower() not in {"1", "true", "yes", "on"}:
             return argv
         if not _is_run_chart_command(argv) or len(argv) < 4:
             return argv
-        # Report buttons already carry chart_program-compatible flags. Avoid an
-        # extra nested `python run -c ...` process and launch chart_program directly
-        # from the warm report-server container.
+        # Optional fast path. It is disabled by default because the top-level
+        # run launcher applies symbol/config normalization that chart_program
+        # alone does not always reproduce for report-launched instruments.
         return [sys.executable, "-m", "chart_program", *argv[3:]]
 
     def _journal_response_payload() -> dict:
