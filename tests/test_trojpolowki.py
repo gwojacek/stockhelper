@@ -333,7 +333,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Proximity</th>" not in text
     assert "<th>Compression</th>" not in text
     assert "<th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th>" in text
-    assert "<th>Score</th><th>Avg10d PLN</th>" in text
+    assert "<th>Score</th><th>Avg10d PLN</th>" not in text
+    assert "<th>Dir</th><th>Avg10d PLN</th>" in text
+    assert ".top-choice .chart-action-cell{width:68px;min-width:68px;max-width:68px}" in text
     assert "1.000.000" in text
     assert "copyNextTableSheetsCells" in text
     assert "Copy Google Sheets links from this table" in text
