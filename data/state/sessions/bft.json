@@ -1,0 +1,85 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (5045.0)",
+      "x0": "2026-07-08",
+      "x1": "2034-06-01",
+      "y0": 5045.0,
+      "y1": 5045.0,
+      "price": 5045.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (4365.04)",
+      "x0": "2026-05-28",
+      "x1": "2034-06-01",
+      "y0": 4365.04,
+      "y1": 4365.04,
+      "price": 4365.04,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (4155.0)",
+      "x0": "2026-05-15",
+      "x1": "2034-06-01",
+      "y0": 4155.0,
+      "y1": 4155.0,
+      "price": 4155.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (3944.96)",
+      "x0": "2026-05-05",
+      "x1": "2034-06-01",
+      "y0": 3944.96,
+      "y1": 3944.96,
+      "price": 3944.96,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (3265.0)",
+      "x0": "2026-03-23",
+      "x1": "2034-06-01",
+      "y0": 3265.0,
+      "y1": 3265.0,
+      "price": 3265.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-03-23",
+      "x1": "2026-07-08",
+      "y0": 3265.0,
+      "y1": 5045.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}
