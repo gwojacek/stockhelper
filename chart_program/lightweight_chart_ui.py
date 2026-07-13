@@ -1067,7 +1067,7 @@ class LightweightChartLevelSelectorUI:
     const rows = realCandles.slice(Math.max(0, realCandles.length - limit));
     const lines = ['Date,Open,High,Low,Close,Volume'];
     rows.forEach(row => lines.push([row.time, fmt(row.open), fmt(row.high), fmt(row.low), fmt(row.close), row.volume ?? ''].join(',')));
-    return lines.join('\n');
+    return lines.join('\\n');
   }}
 
   function ichimokuDebugSnapshot() {{
@@ -1084,7 +1084,7 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push('Candles data for scanner formations (latest candles):');
     lines.push(scannerCandlesCsv());
-    return lines.join('\n');
+    return lines.join('\\n');
   }}
 
   function fiboDebugSnapshot() {{
@@ -1103,7 +1103,7 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push('Candles data for scanner formations (latest candles):');
     lines.push(scannerCandlesCsv());
-    return lines.join('\n');
+    return lines.join('\\n');
   }}
 
   function setupDebugSnapshot() {{
