@@ -2,7 +2,30 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.0`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+
+## [Unreleased]
+
+Compare: [`7.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.0...HEAD)
+
+### Added
+
+- Added unified setup-information debug snapshots across Ichimoku, Fibonacci, and wedge scanner results so report and chart views expose richer context for detected setups.
+- Added scanner metadata flags to the chart UI/report pipeline for clearer setup provenance and downstream rendering.
+- Added PyCharm/IDE-friendly runnable report command documentation and copy-ready stock launcher examples.
+
+### Changed
+
+- Improved Trójpołówki, Fibonacci, and Ichimoku report presentation with per-ticker Fibonacci limiting, richer status labels, refined retest notes, info-level controls, and cleaner hidden-link/filtered-section handling.
+- Refined report UI behavior with dark-mode styling, normalized top-chart widths, removed wedge score display noise, deduplicated Fibonacci columns/results, and improved report rendering JavaScript.
+- Updated report/chart command handling so Docker-backed clickable `python run` flows and the local `stock` wrapper behave more consistently from IDEs and generated reports.
+
+### Fixed
+
+- Fixed journal/report server connection handling so generated HTML reports and journal actions stay reachable while being viewed.
+- Fixed Ichimoku breakout bucketing and improved retest handling to reduce misleading Trójpołówki report groupings.
+- Guarded Stooq bulk refresh attempts to avoid repeated duplicate downloads during scans.
+- Removed repository-tracked Docker home cache artifacts.
 
 ## [7.0] - 2026-07-11
 
