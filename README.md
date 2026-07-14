@@ -61,13 +61,15 @@ If you intentionally use a local Poetry/Python install instead of Docker, run `S
   - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder, automatically trimmed to two years from the run date;
   - Stooq bulk `wse indices/wig20.txt` import as `data/csv/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
   - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
-- **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument.
+- **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument, with breakout/retest metadata that can be forwarded into chart Setup information.
 - **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, stale-anchor rejection when the first month after an anchor is flat, and an explain/debug mode.
+- **Scanner candle-pattern checks** for hammer/shooting-star style one-candle rejections, engulfing, harami, piercing-line/dark-cloud-cover, and morning/evening star variants used by Ichimoku retests and Fibo 61.8 reversals.
 - **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, stricter wick/contact validation, improved anchor scoring, and chart commands that preload wedge lines.
 - **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner metadata for filtering, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
 - **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
+- **Setup information panel** in the chart UI for scanner-loaded setups: Ichimoku shows scanner breakout/retest context plus CSV candles from the scanner check window, Fibo shows anchor dates/values and 61.8 diagnostics, and wedge/Kliny shows touch diagnostics plus CSV candles since the oldest wedge anchor.
 - **Transaction journal** stored locally under `data/journal/`, with opening screenshots, close-adjust chart screenshots, Trade Summary autosave, long/short direction, estimated profit/loss, compressed review mode, year filtering, delete/update/close actions, and PDF-friendly HTML output.
 - **Reports and artifacts**:
   - Markdown scanner reports in `chart_program/data/search/ichimoku/` and `chart_program/data/search/fibo/`;
@@ -80,6 +82,17 @@ If you intentionally use a local Poetry/Python install instead of Docker, run `S
 - **CAPTCHA/rate-limit support** for Stooq web and bulk-download fallback, including OCR attempts, saved artifacts, and optional Playwright inspector/manual mode.
 
 Falling wedges are first-class scanner/report items. A separate generic triangle scanner is not documented as an available feature.
+
+## Scanner candle patterns
+
+StockHelper's scanner pattern names are intentionally stored as machine-friendly strings in reports and debug output. The scanner currently recognizes:
+
+| Direction | Pattern names | Where used | Summary |
+| --- | --- | --- | --- |
+| Bullish / long | `hammer`, `bullish_engulfing`, `bullish_piercing_line`, `bullish_harami`, `morning_star`, `morning_doji_star` | Ichimoku above-cloud retests and long Fibo 61.8 reversals | Bullish rejection/reversal patterns that must touch the active cloud/level zone and reclaim the relevant threshold. |
+| Bearish / short | `shooting_star`, `bearish_hammer`, `bearish_engulfing`, `bearish_harami`, `dark_cloud_cover`, `evening_star`, `evening_doji_star` | Ichimoku below-cloud retests and short Fibo 61.8 reversals | Bearish rejection/reversal patterns that must touch the active cloud/level zone and lose the relevant threshold. |
+
+For Ichimoku, retest patterns are tied to the current cloud side: above-cloud setups search bullish patterns against the cloud top/bottom zone, while below-cloud setups search bearish patterns against the cloud bottom/top zone. For Fibo, patterns are tied to the 61.8 retracement and must include the first 61.8 touch window. The chart Setup information panel prefers scanner-provided pattern metadata when it is available.
 
 ## Repository layout
 
