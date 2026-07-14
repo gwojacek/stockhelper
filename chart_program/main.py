@@ -20,6 +20,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", help="Optional API key passed to data provider")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
+    parser.add_argument("--scanner-breakout-date")
+    parser.add_argument("--scanner-retest-count")
+    parser.add_argument("--scanner-latest-retest-date")
+    parser.add_argument("--scanner-latest-retest-pattern")
+    parser.add_argument("--scanner-previous-respect-months")
     parser.add_argument("--fibo-lines", type=int, default=0)
     parser.add_argument("--fibo-anchor-start")
     parser.add_argument("--fibo-anchor-end")
@@ -83,6 +88,15 @@ def main() -> int:
         forwarded.extend(["--api-key", args.api_key])
     forwarded.extend(["--data-source", args.data_source])
     forwarded.extend(["--ichimoku-mode", args.ichimoku_mode])
+    for flag, value in [
+        ("--scanner-breakout-date", args.scanner_breakout_date),
+        ("--scanner-retest-count", args.scanner_retest_count),
+        ("--scanner-latest-retest-date", args.scanner_latest_retest_date),
+        ("--scanner-latest-retest-pattern", args.scanner_latest_retest_pattern),
+        ("--scanner-previous-respect-months", args.scanner_previous_respect_months),
+    ]:
+        if value:
+            forwarded.extend([flag, value])
     if args.fibo_lines:
         forwarded.extend(["--fibo-lines", str(args.fibo_lines)])
     if args.fibo_anchor_start:

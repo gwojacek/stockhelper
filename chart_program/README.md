@@ -72,6 +72,7 @@ Each generated config includes:
   - level selection buttons: `HIGH`, `LOW`, `ENTRY`, `STOP LOSS`, `CHECK_ZR`, `LINE_CROSS`
   - drawing tools: `Line`, `Fib 61.8`, `Half→SL`
   - scanner-preloaded Fibonacci/wedge lines when opened from reports
+  - scanner-aware `Setup information` for Ichimoku, Fibo, and falling wedges
   - falling-wedge debug and alternate-candidate controls when scanner metadata is available
   - Ichimoku cloud toggle
 - Right panel:
@@ -82,6 +83,16 @@ Each generated config includes:
   - manual fields (`capital`, `lot_cost`, `pip_value`, `spread`; stock CFD hides `pip_value` and uses spread as price units)
   - `FX conversion fee 1%` toggle (default ON for foreign stocks and forex pairs without PLN)
   - drawn object management
+
+### Setup information
+
+When a chart is opened from scanner/report output, the right-panel **Setup information** button shows setup-specific diagnostics:
+
+- **Ichimoku**: scanner breakout day, retest count/latest scanner pattern when available, previous-respect/check-window context, and CSV candles from the scanner check start.
+- **Fibo**: auto/manual Fibo anchor dates and values, 61.8 value, any detected 61.8 pattern, and CSV candles from the first anchor.
+- **Kliny / wedge**: wedge anchors/touches, breakout diagnostics, touched-candle CSV, and full candle CSV since the oldest wedge anchor with upper/lower line values.
+
+The panel is generated on demand when clicked, so normal chart rendering stays lightweight.
 
 ### Drawing behavior
 

@@ -544,7 +544,7 @@ class LightweightChartLevelSelectorUI:
     #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#0f766e,#22c55e) !important; border:1px solid rgba(134,239,172,.80); box-shadow:0 16px 34px rgba(34,197,94,.24), inset 0 1px 0 rgba(255,255,255,.14); }}
     #calculate-btn .btn-icon {{ background:rgba(220,252,231,.18); color:#dcfce7; }}
     #calculate-btn::after {{ content:none; }}
-    #wedge-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
     #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; min-height:66px; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
@@ -665,7 +665,7 @@ class LightweightChartLevelSelectorUI:
         <button id="delete-object" style="display:none">Delete selected object</button>
         <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span>Calculate position</span></button>
         <div class="action-grid">
-          <button id="wedge-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Wedge information</span></button>
+          <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Setup information</span></button>
           <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
         </div>
         <button id="finish-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save &amp; Close</span></button>
@@ -1062,14 +1062,256 @@ class LightweightChartLevelSelectorUI:
     return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
   }}
 
-  function wedgeDebugSnapshot() {{
+  function scannerCandlesCsv(limit = 140, sinceDate = null) {{
+    const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
+    const filtered = sinceDate ? realCandles.filter(row => String(row.time) >= String(sinceDate)) : realCandles;
+    const rows = filtered.slice(Math.max(0, filtered.length - limit));
+    const lines = ['Date,Open,High,Low,Close,Volume'];
+    rows.forEach(row => lines.push([row.time, fmt(row.open), fmt(row.high), fmt(row.low), fmt(row.close), row.volume ?? ''].join(',')));
+    return lines.join('\\n');
+  }}
+
+  function candlePatternForRow(row, idx = null, rows = ohlc) {{
+    if (!row) return '-';
+    const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
+    if (![open, high, low, close].every(Number.isFinite)) return '-';
+    if (Number.isInteger(idx) && idx >= 2 && Array.isArray(rows)) {{
+      const a = rows[idx - 2], b = rows[idx - 1];
+      const ao = Number(a?.open), ac = Number(a?.close), bo = Number(b?.open), bc = Number(b?.close);
+      const bh = Number(b?.high), bl = Number(b?.low);
+      if ([ao, ac, bo, bc, bh, bl].every(Number.isFinite)) {{
+        const firstBody = Math.abs(ac - ao);
+        const middleBody = Math.abs(bc - bo);
+        const middleRange = Math.max(0.000001, bh - bl);
+        const firstMid = (ao + ac) / 2;
+        if (ac < ao && middleBody <= Math.max(firstBody * 0.55, middleRange * 0.45) && close > open && close >= firstMid) return 'morning star';
+        if (ac > ao && middleBody <= Math.max(firstBody * 0.55, middleRange * 0.45) && close < open && close <= firstMid) return 'evening star';
+      }}
+    }}
+    const body = Math.abs(close - open);
+    const range = Math.max(0.000001, high - low);
+    const upper = high - Math.max(open, close);
+    const lower = Math.min(open, close) - low;
+    if (lower > body * 2 && upper < range * 0.35) return close >= open ? 'bullish hammer' : 'hammer';
+    if (upper > body * 2 && lower < range * 0.35) return close <= open ? 'bearish shooting star' : 'shooting star';
+    return '-';
+  }}
+
+  function ichiValueAt(series, time) {{
+    const arr = P.ichimoku?.[series] || [];
+    return arr.find(pt => pt.time === time)?.value ?? null;
+  }}
+
+  function scannerMetaValue(key) {{
+    const value = levels?.[key];
+    const text = String(value ?? '').trim();
+    return text && text !== '-' && text.toLowerCase() !== 'none' ? text : '';
+  }}
+
+  function isValidScannerPattern(pattern) {{
+    const text = String(pattern || '').trim().replace(/_/g, ' ');
+    if (!text || text === '-' || text.toLowerCase() === 'none') return false;
+    return /(hammer|engulfing|morning star|evening star|piercing|harami|doji|shooting star|pin bar)/i.test(text);
+  }}
+
+  function scannerPatternLabel(pattern) {{
+    return String(pattern || '').trim().replace(/_/g, ' ');
+  }}
+
+  function detectIchimokuBreakout() {{
+    const realCandles = ohlc.filter(c => c && c.time);
+    let prevSide = null;
+    const transitions = [];
+    realCandles.forEach(row => {{
+      const kijun = Number(ichiValueAt('kijun', row.time));
+      if (!Number.isFinite(kijun)) return;
+      const side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
+      if (prevSide && side !== prevSide) transitions.push({{time: row.time, side, close: row.close, kijun}});
+      prevSide = side;
+    }});
+    if (!transitions.length) return null;
+    const latest = transitions[transitions.length - 1];
+    const latestDate = new Date(`${{latest.time}}T00:00:00Z`);
+    const lastCandleDate = new Date(`${{realCandles[realCandles.length - 1]?.time || latest.time}}T00:00:00Z`);
+    const ageDays = Math.round((lastCandleDate - latestDate) / 86400000);
+    if (ageDays >= 0 && ageDays < 122 && transitions.length >= 2) {{
+      const previous = transitions[transitions.length - 2];
+      previous.followed_by_recent_breakout = latest;
+      return previous;
+    }}
+    return latest;
+  }}
+
+  function ichimokuTransitions() {{
+    const realCandles = ohlc.filter(c => c && c.time);
+    let prevSide = null;
+    const transitions = [];
+    realCandles.forEach(row => {{
+      const spanA = Number(ichiValueAt('spanA', row.time));
+      const spanB = Number(ichiValueAt('spanB', row.time));
+      const kijun = Number(ichiValueAt('kijun', row.time));
+      let side = null;
+      if (Number.isFinite(spanA) && Number.isFinite(spanB)) {{
+        const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
+        side = Number(row.close) > top ? 'above_cloud' : (Number(row.close) < bottom ? 'below_cloud' : 'inside_cloud');
+      }} else if (Number.isFinite(kijun)) {{
+        side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
+      }}
+      if (!side) return;
+      if (prevSide && side !== prevSide) transitions.push({{time: row.time, side, close: row.close, kijun}});
+      prevSide = side;
+    }});
+    return transitions;
+  }}
+
+  function daysBetween(a, b) {{
+    const da = new Date(`${{a}}T00:00:00Z`);
+    const db = new Date(`${{b}}T00:00:00Z`);
+    const diff = Math.round((db - da) / 86400000);
+    return Number.isFinite(diff) ? diff : null;
+  }}
+
+  function ichimokuScannerBreakoutContext(scannerDate) {{
+    if (!scannerDate) return {{displayDate: '', csvStartDate: '', note: ''}};
+    const transitions = ichimokuTransitions();
+    const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
+    const scanner = String(scannerDate).slice(0, 10);
+    let near = null;
+    transitions.forEach(t => {{
+      const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
+      if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time < near.time))) near = {{...t, diff}};
+    }});
+    let displayDate = near?.time || scanner;
+    const realCandles = ohlc.filter(c => c && c.time);
+    const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
+    const ageDays = daysBetween(scanner, lastDate);
+    if (displayDate === scanner && Number.isFinite(previousRespectMonths) && previousRespectMonths > 0 && ageDays !== null && ageDays >= 0 && ageDays < 122) {{
+      const previousCandle = [...realCandles].reverse().find(c => String(c.time) < scanner);
+      if (previousCandle?.time) displayDate = previousCandle.time;
+    }}
+    let previous = null;
+    if (ageDays !== null && ageDays >= 0 && ageDays < 122) {{
+      previous = [...transitions].reverse().find(t => String(t.time) < displayDate) || null;
+    }}
+    let respectStartDate = '';
+    if (Number.isFinite(previousRespectMonths) && previousRespectMonths > 0) {{
+      const dt = new Date(`${{displayDate || scanner}}T00:00:00Z`);
+      dt.setUTCDate(dt.getUTCDate() - Math.round(previousRespectMonths * 30.44));
+      respectStartDate = dt.toISOString().slice(0, 10);
+    }}
+    const csvStartDate = respectStartDate || previous?.time || displayDate || scanner;
+    const note = respectStartDate
+      ? `Previous respect before breakout: ${{previousRespectMonths.toFixed(1)}}m; CSV start uses scanner respect window: ${{respectStartDate}}`
+      : (previous ? `Recent breakout <4m; CSV start uses previous breakout: ${{previous.time}}` : '');
+    return {{displayDate, csvStartDate, note, scannerDate: scanner}};
+  }}
+
+  function ichimokuRetestsSince(startDate) {{
+    const realCandles = ohlc.filter(c => c && c.time && (!startDate || String(c.time) >= String(startDate)));
+    const events = [];
+    realCandles.forEach((row, idx) => {{
+      const kijun = Number(ichiValueAt('kijun', row.time));
+      const spanA = Number(ichiValueAt('spanA', row.time));
+      const spanB = Number(ichiValueAt('spanB', row.time));
+      const parts = [];
+      if (Number.isFinite(kijun) && Number(row.low) <= kijun && Number(row.high) >= kijun) parts.push(`Kijun @ ${{fmt(kijun)}}`);
+      if (Number.isFinite(spanA) && Number.isFinite(spanB)) {{
+        const cloudTop = Math.max(spanA, spanB), cloudBottom = Math.min(spanA, spanB);
+        if (Number(row.low) <= cloudTop && Number(row.high) >= cloudBottom) parts.push(`cloud ${{fmt(cloudBottom)}}-${{fmt(cloudTop)}}`);
+      }}
+      const pattern = candlePatternForRow(row, idx, realCandles);
+      if (parts.length && pattern !== '-') events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{pattern}}`);
+    }});
+    return events;
+  }}
+
+  function ichimokuDebugSnapshot() {{
+    const scannerBreakout = scannerMetaValue('__scanner_breakout_date__');
+    const scannerContext = ichimokuScannerBreakoutContext(scannerBreakout);
+    const breakout = scannerBreakout ? null : detectIchimokuBreakout();
+    const startDate = scannerContext.csvStartDate || breakout?.time || (ohlc[0]?.time || null);
+    const retestCount = scannerMetaValue('__scanner_retest_count__');
+    const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
+    const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    const lines = [];
+    lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
+    if (scannerBreakout) {{
+      const suffix = scannerContext.displayDate && scannerContext.displayDate !== scannerContext.scannerDate ? ` (scanner: ${{scannerContext.scannerDate}})` : ' (scanner)';
+      lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}${{suffix}}`);
+      if (scannerContext.note) lines.push(scannerContext.note);
+    }} else {{
+      lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
+      if (breakout?.followed_by_recent_breakout) lines.push(`Recent opposite breakout <4m ignored for CSV start: ${{breakout.followed_by_recent_breakout.time}} (${{breakout.followed_by_recent_breakout.side.replace('_', ' ')}})`);
+    }}
+    if (retestCount) lines.push(`Retest count: ${{retestCount}}`);
+    lines.push('');
+    lines.push('Retests / patterns since breakout:');
+    if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
+      const wanted = Math.max(0, parseInt(retestCount || '0', 10) || 0);
+      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
+        lines.push(`  ${{latestRetestDate}}: pattern=${{scannerPatternLabel(latestRetestPattern)}} (scanner latest)`);
+        if (wanted > 1) lines.push(`  scanner reported ${{wanted}} valid retests total; older retest event details are not available in this chart command`);
+      }} else {{
+        const inferredAfterBreakout = !wanted ? ichimokuRetestsSince(scannerContext.displayDate || scannerBreakout).filter(event => /engulfing|morning|evening/i.test(event)) : [];
+        if (inferredAfterBreakout.length) inferredAfterBreakout.forEach(event => lines.push(`  ${{event}}`));
+        else lines.push(wanted > 0 ? `  scanner reported ${{wanted}} valid retests total, but no latest valid pattern was provided` : '  -');
+      }}
+    }} else {{
+      const retests = ichimokuRetestsSince(startDate);
+      if (retests.length) retests.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
+    }}
+    lines.push('');
+    lines.push(`CSV candles since breakout/check start (${{startDate || '-'}}):`);
+    lines.push(scannerCandlesCsv(500, startDate));
+    return lines.join('\\n');
+  }}
+
+  function fiboDebugSnapshot() {{
+    const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
+    const lines = [];
+    lines.push(`FIBO DEBUG: ${{P.symbol || ''}}`);
+    if (!fibs.length) lines.push('No Fibonacci lines on chart.');
+    const groups = new Map();
+    fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
+    let earliestAnchor = null;
+    groups.forEach((items, gid) => {{
+      const boundary = items.find(obj => obj.type === 'fib-boundary') || null;
+      const fib618 = items.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio) - 0.618) < 0.002) || items.find(obj => String(obj.label || '').includes('61.8')) || null;
+      const anchorDates = [boundary?.x0, boundary?.x1].filter(Boolean).map(x => String(x).slice(0,10));
+      anchorDates.forEach(d => {{ if (!earliestAnchor || d < earliestAnchor) earliestAnchor = d; }});
+      const value618 = Number(fib618?.price ?? fib618?.y0);
+      let touch = null;
+      if (Number.isFinite(value618)) {{
+        const since = anchorDates[0] || null;
+        touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
+      }}
+      const anchorDatesLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}}` : '-';
+      const anchorValuesLine = boundary ? `${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
+      const pattern = touch ? candlePatternForRow(touch) : '-';
+      lines.push('');
+      lines.push(`FIB group: ${{gid}}`);
+      lines.push('  FIB anchor:');
+      lines.push(`  ${{anchorDatesLine}}`);
+      lines.push(`  ${{anchorValuesLine}}`);
+      lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
+      lines.push(`  61.8 pattern: ${{touch && pattern !== '-' ? `${{pattern}} (${{touch.time}})` : '-'}}`);
+    }});
+    lines.push('');
+    lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
+    lines.push(scannerCandlesCsv(500, earliestAnchor));
+    return lines.join('\\n');
+  }}
+
+  function setupDebugSnapshot() {{
+    const tech = selectedJournalTechnique();
+    if (tech === 'Ichimoku') return ichimokuDebugSnapshot();
+    if (tech === 'Fibo') return fiboDebugSnapshot();
     const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
     const upper = wedges.find(obj => wedgeSide(obj) === 'upper') || null;
     const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
     lines.push(`WEDGE DEBUG: ${{P.symbol || ''}}`);
-    lines.push(`Generated: ${{new Date().toISOString()}}`);
     if (!wedges.length) {{
       lines.push('No wedge lines on chart.');
       return lines.join('\\n');
@@ -1139,33 +1381,54 @@ class LightweightChartLevelSelectorUI:
         touchSide,
       ].join(','));
     }});
+    const oldestAnchorDate = [...upperTouches, ...lowerTouches]
+      .filter(pt => pt.anchor && pt.time)
+      .map(pt => String(pt.time).slice(0, 10))
+      .sort()[0] || '';
+    lines.push('');
+    lines.push(`CSV candles since oldest wedge anchor (${{oldestAnchorDate || '-'}}):`);
+    lines.push('Date,Open,High,Low,Close,Volume,UpperLine,LowerLine');
+    realCandles.filter(row => !oldestAnchorDate || String(row.time) >= oldestAnchorDate).forEach(row => {{
+      const up = upper ? lineValueForDate(upper, row.time) : null;
+      const lo = lower ? lineValueForDate(lower, row.time) : null;
+      lines.push([
+        row.time,
+        fmt(row.open),
+        fmt(row.high),
+        fmt(row.low),
+        fmt(row.close),
+        row.volume ?? '',
+        Number.isFinite(up) ? fmt(up) : '',
+        Number.isFinite(lo) ? fmt(lo) : '',
+      ].join(','));
+    }});
     return lines.join('\\n');
   }}
 
-  function updateWedgeDebugPanel(message = '') {{
+  function updateSetupDebugPanel(message = '') {{
     const panel = $('wedge-debug-panel');
     if (!panel || !panel.classList.contains('open')) return;
-    const text = wedgeDebugSnapshot();
+    const text = setupDebugSnapshot();
     panel.textContent = message ? `${{message}}\\n\\n${{text}}` : text;
   }}
 
-  async function copyWedgeDebug() {{
+  async function copySetupDebug() {{
     const panel = $('wedge-debug-panel');
     if (panel?.classList.contains('open')) {{
       panel.classList.remove('open');
       panel.textContent = '';
       return;
     }}
-    const text = wedgeDebugSnapshot();
+    const text = setupDebugSnapshot();
     if (panel) {{
       panel.classList.add('open');
       panel.textContent = text;
     }}
     try {{
       await navigator.clipboard.writeText(text);
-      updateWedgeDebugPanel('Copied wedge debug to clipboard.');
+      updateSetupDebugPanel('Copied setup debug to clipboard.');
     }} catch (err) {{
-      updateWedgeDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
+      updateSetupDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
     }}
   }}
 
@@ -1596,7 +1859,7 @@ class LightweightChartLevelSelectorUI:
         try {{ chart.timeScale().setVisibleLogicalRange(viewport); }} catch(e) {{ console.warn('line drag viewport restore failed', e); }}
       }}
       drawCloud();
-      updateWedgeDebugPanel();
+      updateSetupDebugPanel();
     }});
   }}
 
@@ -1915,7 +2178,7 @@ class LightweightChartLevelSelectorUI:
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
-    updateWedgeDebugPanel('Restored the original scanner wedge.');
+    updateSetupDebugPanel('Restored the original scanner wedge.');
     return true;
   }}
 
@@ -1924,7 +2187,7 @@ class LightweightChartLevelSelectorUI:
     if (!candidate) {{
       if (side === 'both' && wedgeRouletteNoAlternative && restoreScannerWedgeFromRoulette()) return;
       wedgeRouletteNoAlternative = true;
-      updateWedgeDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. ${{side === 'both' ? 'Click 🎲 Find new wedge again to restore the scanner wedge.' : 'Current wedge was left unchanged.'}}`);
+      updateSetupDebugPanel(`No larger valid ${{side === 'upper' ? 'upper-line ' : (side === 'lower' ? 'lower-line ' : '')}}alternative wedge found. ${{side === 'both' ? 'Click 🎲 Find new wedge again to restore the scanner wedge.' : 'Current wedge was left unchanged.'}}`);
       return;
     }}
     wedgeRouletteNoAlternative = false;
@@ -1933,7 +2196,7 @@ class LightweightChartLevelSelectorUI:
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
     const sizeText = candidate.biggerThanCurrent ? 'larger' : 'smaller';
-    updateWedgeDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
+    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
   }}
 
 
@@ -2118,8 +2381,14 @@ class LightweightChartLevelSelectorUI:
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
-    const wedgeInfoBtn = $('wedge-debug-btn');
-    if (wedgeInfoBtn) {{ const showWedge = levels.__journal_source_technique__ === 'Kliny'; wedgeInfoBtn.style.display = showWedge ? 'flex' : 'none'; wedgeInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showWedge); }}
+    const setupInfoBtn = $('setup-debug-btn');
+    if (setupInfoBtn) {{
+      const tech = selectedJournalTechnique();
+      const showInfo = ['Kliny', 'Ichimoku', 'Fibo'].includes(tech);
+      setupInfoBtn.style.display = showInfo ? 'flex' : 'none';
+      setupInfoBtn.querySelector('span:last-child').textContent = `${{tech}} information`;
+      setupInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showInfo);
+    }}
     const findNewWedgeBtn = $('find-new-wedge');
     if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
     ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
@@ -2128,7 +2397,7 @@ class LightweightChartLevelSelectorUI:
       if (obj.type === 'fib' && obj.group_id) {{ if (seenFib.has(obj.group_id)) return; seenFib.add(obj.group_id); picker.add(new Option(`FIB group (${{String(obj.group_id).slice(0,8)}})`, `fib-group:${{obj.group_id}}`)); return; }}
       picker.add(new Option(`${{obj.label || 'OBJ'}} (${{String(obj.id || idx).slice(0,8)}})`, obj.id || `obj-index:${{idx}}`));
     }});
-    updateWedgeDebugPanel();
+    updateSetupDebugPanel();
   }}
 
   const FX_TO_PLN = {{PLN:1, USD:3.92, EUR:4.25, GBP:5.05}};
@@ -2274,7 +2543,7 @@ class LightweightChartLevelSelectorUI:
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
-  $('wedge-debug-btn').onclick = () => copyWedgeDebug();
+  $('setup-debug-btn').onclick = () => copySetupDebug();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
   $('find-new-lower-wedge').onclick = () => findNewWedge('lower');
@@ -2394,14 +2663,15 @@ class LightweightChartLevelSelectorUI:
 
 
   function activeJournalTechnique() {{
-    if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
-    if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
-    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (levels.__show_ichimoku__) return 'Ichimoku';
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
+    if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
+    if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
     return 'Manual';
   }}
   function selectedJournalTechnique() {{
-    return $('journal-technique')?.value || activeJournalTechnique();
+    const selected = $('journal-technique')?.value;
+    return selected && selected !== 'Kliny' ? selected : activeJournalTechnique();
   }}
   const journalReasonOptions = {{
     Kliny: [

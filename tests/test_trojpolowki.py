@@ -190,7 +190,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇵🇱 CRI" in data_rows[0]
     assert "**🇵🇱 ABC" in text
     assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
-    assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>Kijun: over" not in text
+    assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
@@ -239,7 +239,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         mod._build_html_report(["wig"], out)
     text = out.read_text(encoding="utf-8")
     assert "ALLSEARCH REPORT" in text
-    assert "🌈🐱 Scanner workspace" in text
+    assert "📈 StockHelper scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
     assert "📄 PDF" in text
@@ -268,7 +268,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "border:none" in text
     assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
     assert "Open stooq links from top choices" in text
-    assert "Open stockhelper charts from this top-choice column" in text
+    assert "Open stockhelper charts from this top-choice column" not in text
     assert "Open stockhelper charts from this column" in text
     assert "Open stooq links from this column" in text
     assert "event.stopPropagation();openTrojColumnStockhelperCharts" in text
@@ -297,7 +297,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<body class='stooq-links-hidden'>" in text
     assert ".stooq-links-hidden .stooq-chart-link,.stooq-links-hidden .sheets-cell-btn,.stooq-links-hidden .stooq-column,.stooq-links-hidden button[title*='stooq'],.stooq-links-hidden button[title*='Copy']{display:none!important}" in text
     assert "toggleStooqLinks" in text
-    assert "📈 Show links" in text
+    assert "📈 Show" in text
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
     assert "th.classList.add('chart-link-cell')" in text
@@ -325,7 +325,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-scanner='ICHIMOKU'" in text
     assert "🔻 Kliny" in text
     assert "🚀 breakout" in text
-    assert ".today-signal td{background:#dcfce7!important}" in text
+    assert ".today-signal td{background:#14532d!important}" in text
     assert "data-scanner='WEDGE' data-status='🚀 breakout' class='today-signal'" in text
     assert "falling_wedge_breakout" not in text
     assert "wybicie long 2026-05-30" not in text
@@ -352,7 +352,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<strong>🇺🇸 SBUX.US</strong></td><td>near 61.8: 98.5%" in text
     assert "<h3>🔻 Kliny" in text
     assert "near 61.8: 98.5%" in text
-    assert "data-cmd='python run -c RWE.DE --ichimoku-mode on'" in text
+    assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
