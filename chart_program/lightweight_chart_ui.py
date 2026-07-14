@@ -1109,9 +1109,13 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function isValidScannerPattern(pattern) {{
-    const text = String(pattern || '').trim();
+    const text = String(pattern || '').trim().replace(/_/g, ' ');
     if (!text || text === '-' || text.toLowerCase() === 'none') return false;
     return /(hammer|engulfing|morning star|evening star|piercing|harami|doji|shooting star|pin bar)/i.test(text);
+  }}
+
+  function scannerPatternLabel(pattern) {{
+    return String(pattern || '').trim().replace(/_/g, ' ');
   }}
 
   function detectIchimokuBreakout() {{
@@ -1245,13 +1249,10 @@ class LightweightChartLevelSelectorUI:
     if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
       const wanted = Math.max(0, parseInt(retestCount || '0', 10) || 0);
       if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
-        lines.push(`  ${{latestRetestDate}}: pattern=${{latestRetestPattern}} (scanner latest)`);
+        lines.push(`  ${{latestRetestDate}}: pattern=${{scannerPatternLabel(latestRetestPattern)}} (scanner latest)`);
         if (wanted > 1) lines.push(`  scanner reported ${{wanted}} valid retests total; older retest event details are not available in this chart command`);
-      }} else if (!wanted) {{
-        const inferred = ichimokuRetestsSince(startDate);
-        if (inferred.length) inferred.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
       }} else {{
-        lines.push(`  scanner reported ${{wanted}} valid retests total, but no latest valid pattern was provided`);
+        lines.push(wanted > 0 ? `  scanner reported ${{wanted}} valid retests total, but no latest valid pattern was provided` : '  -');
       }}
     }} else {{
       const retests = ichimokuRetestsSince(startDate);
