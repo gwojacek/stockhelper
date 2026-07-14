@@ -1071,10 +1071,23 @@ class LightweightChartLevelSelectorUI:
     return lines.join('\\n');
   }}
 
-  function candlePatternForRow(row) {{
+  function candlePatternForRow(row, idx = null, rows = ohlc) {{
     if (!row) return '-';
     const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
     if (![open, high, low, close].every(Number.isFinite)) return '-';
+    if (Number.isInteger(idx) && idx >= 2 && Array.isArray(rows)) {{
+      const a = rows[idx - 2], b = rows[idx - 1];
+      const ao = Number(a?.open), ac = Number(a?.close), bo = Number(b?.open), bc = Number(b?.close);
+      const bh = Number(b?.high), bl = Number(b?.low);
+      if ([ao, ac, bo, bc, bh, bl].every(Number.isFinite)) {{
+        const firstBody = Math.abs(ac - ao);
+        const middleBody = Math.abs(bc - bo);
+        const middleRange = Math.max(0.000001, bh - bl);
+        const firstMid = (ao + ac) / 2;
+        if (ac < ao && middleBody <= Math.max(firstBody * 0.55, middleRange * 0.45) && close > open && close >= firstMid) return 'morning star';
+        if (ac > ao && middleBody <= Math.max(firstBody * 0.55, middleRange * 0.45) && close < open && close <= firstMid) return 'evening star';
+      }}
+    }}
     const body = Math.abs(close - open);
     const range = Math.max(0.000001, high - low);
     const upper = high - Math.max(open, close);
@@ -1125,10 +1138,53 @@ class LightweightChartLevelSelectorUI:
     return latest;
   }}
 
+  function ichimokuTransitions() {{
+    const realCandles = ohlc.filter(c => c && c.time);
+    let prevSide = null;
+    const transitions = [];
+    realCandles.forEach(row => {{
+      const kijun = Number(ichiValueAt('kijun', row.time));
+      if (!Number.isFinite(kijun)) return;
+      const side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
+      if (prevSide && side !== prevSide) transitions.push({{time: row.time, side, close: row.close, kijun}});
+      prevSide = side;
+    }});
+    return transitions;
+  }}
+
+  function daysBetween(a, b) {{
+    const da = new Date(`${{a}}T00:00:00Z`);
+    const db = new Date(`${{b}}T00:00:00Z`);
+    const diff = Math.round((db - da) / 86400000);
+    return Number.isFinite(diff) ? diff : null;
+  }}
+
+  function ichimokuScannerBreakoutContext(scannerDate) {{
+    if (!scannerDate) return {{displayDate: '', csvStartDate: '', note: ''}};
+    const transitions = ichimokuTransitions();
+    const scanner = String(scannerDate).slice(0, 10);
+    let near = null;
+    transitions.forEach(t => {{
+      const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
+      if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time < near.time))) near = {{...t, diff}};
+    }});
+    const displayDate = near?.time || scanner;
+    const realCandles = ohlc.filter(c => c && c.time);
+    const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
+    const ageDays = daysBetween(scanner, lastDate);
+    let previous = null;
+    if (ageDays !== null && ageDays >= 0 && ageDays < 122) {{
+      previous = [...transitions].reverse().find(t => String(t.time) < displayDate) || null;
+    }}
+    const csvStartDate = previous?.time || displayDate || scanner;
+    const note = previous ? `Recent breakout <4m; CSV start uses previous breakout: ${{previous.time}}` : '';
+    return {{displayDate, csvStartDate, note, scannerDate: scanner}};
+  }}
+
   function ichimokuRetestsSince(startDate) {{
     const realCandles = ohlc.filter(c => c && c.time && (!startDate || String(c.time) >= String(startDate)));
     const events = [];
-    realCandles.forEach(row => {{
+    realCandles.forEach((row, idx) => {{
       const kijun = Number(ichiValueAt('kijun', row.time));
       const spanA = Number(ichiValueAt('spanA', row.time));
       const spanB = Number(ichiValueAt('spanB', row.time));
@@ -1138,7 +1194,7 @@ class LightweightChartLevelSelectorUI:
         const cloudTop = Math.max(spanA, spanB), cloudBottom = Math.min(spanA, spanB);
         if (Number(row.low) <= cloudTop && Number(row.high) >= cloudBottom) parts.push(`cloud ${{fmt(cloudBottom)}}-${{fmt(cloudTop)}}`);
       }}
-      const pattern = candlePatternForRow(row);
+      const pattern = candlePatternForRow(row, idx, realCandles);
       if (parts.length && pattern !== '-') events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{pattern}}`);
     }});
     return events;
@@ -1146,17 +1202,18 @@ class LightweightChartLevelSelectorUI:
 
   function ichimokuDebugSnapshot() {{
     const scannerBreakout = scannerMetaValue('__scanner_breakout_date__');
+    const scannerContext = ichimokuScannerBreakoutContext(scannerBreakout);
     const breakout = scannerBreakout ? null : detectIchimokuBreakout();
-    const startDate = scannerBreakout || breakout?.time || (ohlc[0]?.time || null);
+    const startDate = scannerContext.csvStartDate || breakout?.time || (ohlc[0]?.time || null);
     const retestCount = scannerMetaValue('__scanner_retest_count__');
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
-    lines.push(`Generated: ${{new Date().toISOString()}}`);
-    lines.push(`Visible: ${{levels.__show_ichimoku__ ? 'yes' : 'no'}}`);
     if (scannerBreakout) {{
-      lines.push(`Breakout day: ${{scannerBreakout}} (scanner)`);
+      const suffix = scannerContext.displayDate && scannerContext.displayDate !== scannerContext.scannerDate ? ` (scanner: ${{scannerContext.scannerDate}})` : ' (scanner)';
+      lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}${{suffix}}`);
+      if (scannerContext.note) lines.push(scannerContext.note);
     }} else {{
       lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
       if (breakout?.followed_by_recent_breakout) lines.push(`Recent opposite breakout <4m ignored for CSV start: ${{breakout.followed_by_recent_breakout.time}} (${{breakout.followed_by_recent_breakout.side.replace('_', ' ')}})`);
@@ -1165,8 +1222,20 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push('Retests / patterns since breakout:');
     if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
-      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) lines.push(`  ${{latestRetestDate}}: pattern=${{latestRetestPattern}}`);
-      else lines.push('  -');
+      const wanted = Math.max(0, parseInt(retestCount || '0', 10) || 0);
+      const merged = [];
+      const seen = new Set();
+      function addRetest(event) {{
+        const date = String(event || '').slice(0, 10);
+        if (!date || seen.has(date)) return;
+        seen.add(date);
+        merged.push(event);
+      }}
+      const inferred = ichimokuRetestsSince(startDate);
+      inferred.forEach(addRetest);
+      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) addRetest(`${{latestRetestDate}}: pattern=${{latestRetestPattern}}`);
+      const shown = wanted > 0 ? merged.slice(Math.max(0, merged.length - wanted)) : merged;
+      if (shown.length) shown.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
     }} else {{
       const retests = ichimokuRetestsSince(startDate);
       if (retests.length) retests.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
@@ -1181,7 +1250,6 @@ class LightweightChartLevelSelectorUI:
     const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
     const lines = [];
     lines.push(`FIBO DEBUG: ${{P.symbol || ''}}`);
-    lines.push(`Generated: ${{new Date().toISOString()}}`);
     if (!fibs.length) lines.push('No Fibonacci lines on chart.');
     const groups = new Map();
     fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
@@ -1197,11 +1265,14 @@ class LightweightChartLevelSelectorUI:
         const since = anchorDates[0] || null;
         touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
       }}
-      const anchorLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}} ${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
+      const anchorDatesLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}}` : '-';
+      const anchorValuesLine = boundary ? `${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
       const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
-      lines.push(`  FIB anchor: ${{anchorLine}}`);
+      lines.push('  FIB anchor:');
+      lines.push(`  ${{anchorDatesLine}}`);
+      lines.push(`  ${{anchorValuesLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
       lines.push(`  61.8 pattern: ${{touch && pattern !== '-' ? `${{pattern}} (${{touch.time}})` : '-'}}`);
     }});
@@ -1221,7 +1292,6 @@ class LightweightChartLevelSelectorUI:
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
     lines.push(`WEDGE DEBUG: ${{P.symbol || ''}}`);
-    lines.push(`Generated: ${{new Date().toISOString()}}`);
     if (!wedges.length) {{
       lines.push('No wedge lines on chart.');
       return lines.join('\\n');
