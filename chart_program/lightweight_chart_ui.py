@@ -1062,19 +1062,76 @@ class LightweightChartLevelSelectorUI:
     return points.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
   }}
 
-  function scannerCandlesCsv(limit = 140) {{
+  function scannerCandlesCsv(limit = 140, sinceDate = null) {{
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
-    const rows = realCandles.slice(Math.max(0, realCandles.length - limit));
+    const filtered = sinceDate ? realCandles.filter(row => String(row.time) >= String(sinceDate)) : realCandles;
+    const rows = filtered.slice(Math.max(0, filtered.length - limit));
     const lines = ['Date,Open,High,Low,Close,Volume'];
     rows.forEach(row => lines.push([row.time, fmt(row.open), fmt(row.high), fmt(row.low), fmt(row.close), row.volume ?? ''].join(',')));
     return lines.join('\\n');
   }}
 
+  function candlePatternForRow(row) {{
+    if (!row) return '-';
+    const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
+    if (![open, high, low, close].every(Number.isFinite)) return '-';
+    const body = Math.abs(close - open);
+    const range = Math.max(0.000001, high - low);
+    const upper = high - Math.max(open, close);
+    const lower = Math.min(open, close) - low;
+    if (lower > body * 2 && upper < range * 0.35) return close >= open ? 'bullish hammer' : 'hammer';
+    if (upper > body * 2 && lower < range * 0.35) return close <= open ? 'bearish shooting star' : 'shooting star';
+    if (body / range < 0.18) return 'doji';
+    if (close > open && body / range > 0.55) return 'bullish close';
+    if (close < open && body / range > 0.55) return 'bearish close';
+    return '-';
+  }}
+
+  function ichiValueAt(series, time) {{
+    const arr = P.ichimoku?.[series] || [];
+    return arr.find(pt => pt.time === time)?.value ?? null;
+  }}
+
+  function detectIchimokuBreakout() {{
+    const realCandles = ohlc.filter(c => c && c.time);
+    let prevSide = null;
+    let latest = null;
+    realCandles.forEach(row => {{
+      const kijun = Number(ichiValueAt('kijun', row.time));
+      if (!Number.isFinite(kijun)) return;
+      const side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
+      if (prevSide && side !== prevSide) latest = {{time: row.time, side, close: row.close, kijun}};
+      prevSide = side;
+    }});
+    return latest;
+  }}
+
+  function ichimokuRetestsSince(startDate) {{
+    const realCandles = ohlc.filter(c => c && c.time && (!startDate || String(c.time) >= String(startDate)));
+    const events = [];
+    realCandles.forEach(row => {{
+      const kijun = Number(ichiValueAt('kijun', row.time));
+      const spanA = Number(ichiValueAt('spanA', row.time));
+      const spanB = Number(ichiValueAt('spanB', row.time));
+      const parts = [];
+      if (Number.isFinite(kijun) && Number(row.low) <= kijun && Number(row.high) >= kijun) parts.push(`Kijun @ ${{fmt(kijun)}}`);
+      if (Number.isFinite(spanA) && Number.isFinite(spanB)) {{
+        const cloudTop = Math.max(spanA, spanB), cloudBottom = Math.min(spanA, spanB);
+        if (Number(row.low) <= cloudTop && Number(row.high) >= cloudBottom) parts.push(`cloud ${{fmt(cloudBottom)}}-${{fmt(cloudTop)}}`);
+      }}
+      if (parts.length) events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{candlePatternForRow(row)}}; OHLVC=${{fmt(row.open)}},${{fmt(row.high)}},${{fmt(row.low)}},${{fmt(row.close)}}`);
+    }});
+    return events;
+  }}
+
   function ichimokuDebugSnapshot() {{
+    const breakout = detectIchimokuBreakout();
+    const startDate = breakout?.time || (ohlc[0]?.time || null);
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
     lines.push(`Generated: ${{new Date().toISOString()}}`);
     lines.push(`Visible: ${{levels.__show_ichimoku__ ? 'yes' : 'no'}}`);
+    lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
     lines.push('Latest values:');
     ['tenkan','kijun','spanA','spanB','chikou'].forEach(k => {{
       const arr = P.ichimoku?.[k] || [];
@@ -1082,8 +1139,12 @@ class LightweightChartLevelSelectorUI:
       lines.push(`  ${{k}}: ${{last ? `${{last.time}} @ ${{fmt(last.value)}}` : '-'}}`);
     }});
     lines.push('');
-    lines.push('Candles data for scanner formations (latest candles):');
-    lines.push(scannerCandlesCsv());
+    lines.push('Retests / patterns since breakout:');
+    const retests = ichimokuRetestsSince(startDate);
+    if (retests.length) retests.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
+    lines.push('');
+    lines.push(`CSV candles since breakout/check start (${{startDate || '-'}}):`);
+    lines.push(scannerCandlesCsv(500, startDate));
     return lines.join('\\n');
   }}
 
@@ -1095,14 +1156,28 @@ class LightweightChartLevelSelectorUI:
     if (!fibs.length) lines.push('No Fibonacci lines on chart.');
     const groups = new Map();
     fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
+    let earliestAnchor = null;
     groups.forEach((items, gid) => {{
+      const boundary = items.find(obj => obj.type === 'fib-boundary') || null;
+      const fib618 = items.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio) - 0.618) < 0.002) || items.find(obj => String(obj.label || '').includes('61.8')) || null;
+      const anchorDates = [boundary?.x0, boundary?.x1].filter(Boolean).map(x => String(x).slice(0,10));
+      anchorDates.forEach(d => {{ if (!earliestAnchor || d < earliestAnchor) earliestAnchor = d; }});
+      const value618 = Number(fib618?.price ?? fib618?.y0);
+      let touch = null;
+      if (Number.isFinite(value618)) {{
+        const since = anchorDates[0] || null;
+        touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
+      }}
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
+      lines.push(`  anchor points: ${{anchorDates.length ? anchorDates.join(' -> ') : '-'}}`);
+      lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
+      lines.push(`  61.8 pattern: ${{touch ? `${{candlePatternForRow(touch)}} (${{touch.time}})` : '-'}}`);
       items.forEach(obj => lines.push(`  ${{obj.label || obj.type}}: ${{obj.x0 || ''}}->${{obj.x1 || ''}} ${{fmt(obj.y0)}}${{obj.y1 !== obj.y0 ? `->${{fmt(obj.y1)}}` : ''}} ${{obj.direction || ''}}`));
     }});
     lines.push('');
-    lines.push('Candles data for scanner formations (latest candles):');
-    lines.push(scannerCandlesCsv());
+    lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
+    lines.push(scannerCandlesCsv(500, earliestAnchor));
     return lines.join('\\n');
   }}
 
@@ -2447,14 +2522,15 @@ class LightweightChartLevelSelectorUI:
 
 
   function activeJournalTechnique() {{
-    if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
-    if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
     if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (levels.__show_ichimoku__) return 'Ichimoku';
+    if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
+    if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
     return 'Manual';
   }}
   function selectedJournalTechnique() {{
-    return $('journal-technique')?.value || activeJournalTechnique();
+    const selected = $('journal-technique')?.value;
+    return selected && selected !== 'Kliny' ? selected : activeJournalTechnique();
   }}
   const journalReasonOptions = {{
     Kliny: [
