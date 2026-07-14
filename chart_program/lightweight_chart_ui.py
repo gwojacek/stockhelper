@@ -1252,7 +1252,9 @@ class LightweightChartLevelSelectorUI:
         lines.push(`  ${{latestRetestDate}}: pattern=${{scannerPatternLabel(latestRetestPattern)}} (scanner latest)`);
         if (wanted > 1) lines.push(`  scanner reported ${{wanted}} valid retests total; older retest event details are not available in this chart command`);
       }} else {{
-        lines.push(wanted > 0 ? `  scanner reported ${{wanted}} valid retests total, but no latest valid pattern was provided` : '  -');
+        const inferredAfterBreakout = !wanted ? ichimokuRetestsSince(scannerContext.displayDate || scannerBreakout).filter(event => /engulfing|morning|evening/i.test(event)) : [];
+        if (inferredAfterBreakout.length) inferredAfterBreakout.forEach(event => lines.push(`  ${{event}}`));
+        else lines.push(wanted > 0 ? `  scanner reported ${{wanted}} valid retests total, but no latest valid pattern was provided` : '  -');
       }}
     }} else {{
       const retests = ichimokuRetestsSince(startDate);
@@ -1377,6 +1379,27 @@ class LightweightChartLevelSelectorUI:
         Number.isFinite(lo) ? fmt(lo) : '',
         insideUpper && insideLower ? 'yes' : 'no',
         touchSide,
+      ].join(','));
+    }});
+    const oldestAnchorDate = [...upperTouches, ...lowerTouches]
+      .filter(pt => pt.anchor && pt.time)
+      .map(pt => String(pt.time).slice(0, 10))
+      .sort()[0] || '';
+    lines.push('');
+    lines.push(`CSV candles since oldest wedge anchor (${{oldestAnchorDate || '-'}}):`);
+    lines.push('Date,Open,High,Low,Close,Volume,UpperLine,LowerLine');
+    realCandles.filter(row => !oldestAnchorDate || String(row.time) >= oldestAnchorDate).forEach(row => {{
+      const up = upper ? lineValueForDate(upper, row.time) : null;
+      const lo = lower ? lineValueForDate(lower, row.time) : null;
+      lines.push([
+        row.time,
+        fmt(row.open),
+        fmt(row.high),
+        fmt(row.low),
+        fmt(row.close),
+        row.volume ?? '',
+        Number.isFinite(up) ? fmt(up) : '',
+        Number.isFinite(lo) ? fmt(lo) : '',
       ].join(','));
     }});
     return lines.join('\\n');
