@@ -81,6 +81,10 @@ def _parse_args(raw_args=None):
     parser.add_argument("--api-key", help="Optional API key forwarded to Stooq query parameters")
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
+    parser.add_argument("--scanner-breakout-date")
+    parser.add_argument("--scanner-retest-count")
+    parser.add_argument("--scanner-latest-retest-date")
+    parser.add_argument("--scanner-latest-retest-pattern")
     parser.add_argument("--fibo-lines", type=int, default=0)
     parser.add_argument("--fibo-anchor-start")
     parser.add_argument("--fibo-anchor-end")
@@ -538,6 +542,15 @@ def run_level_selector(raw_args=None):
         else:
             os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
+    for key, value in [
+        ("__scanner_breakout_date__", args.scanner_breakout_date),
+        ("__scanner_retest_count__", args.scanner_retest_count),
+        ("__scanner_latest_retest_date__", args.scanner_latest_retest_date),
+        ("__scanner_latest_retest_pattern__", args.scanner_latest_retest_pattern),
+    ]:
+        text = str(value or "").strip()
+        if text and text != "-":
+            existing[key] = text
     if args.wedge_lines:
         existing["__journal_source_technique__"] = "Kliny"
     elif args.fibo_lines:

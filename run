@@ -23,7 +23,7 @@ if not _BOOTSTRAP_RUNNING_IN_DOCKER:
     _bootstrap_os.chdir(_BOOTSTRAP_PROJECT_ROOT)
     _bootstrap_os.execv(str(_stock_launcher), [str(_stock_launcher), *_bootstrap_sys.argv[1:]])
 
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib, shlex
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 from datetime import UTC, date, datetime, timedelta
@@ -119,8 +119,18 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     elif market == "WIG" and "." not in ticker_cmd and len(ticker_cmd) <= 5:
         ticker_cmd = f"{ticker_cmd}.WA"
     instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market in {"COMMODITIES", "INDEXES"} else "stock"))
+    def _append_optional(cmd: str, flag: str, value: str | None) -> str:
+        text = str(value or "").strip()
+        if not text or text == "-":
+            return cmd
+        return f"{cmd} {flag} {shlex.quote(text)}"
     if row.scanner == "ICHIMOKU":
-        return f"python run -c {ticker_cmd} --ichimoku-mode on"
+        cmd = f"python run -c {ticker_cmd} --ichimoku-mode on"
+        cmd = _append_optional(cmd, "--scanner-breakout-date", row.dates.get("flip_date") or row.dates.get("start_date"))
+        cmd = _append_optional(cmd, "--scanner-retest-count", row.metrics.get("retest_count") or row.metrics.get("latest_retest_count"))
+        cmd = _append_optional(cmd, "--scanner-latest-retest-date", row.metrics.get("latest_retest_date"))
+        cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
+        return cmd
     if row.scanner == "WEDGE":
         cmd = f"python run -c {ticker_cmd}"
         for arg_name, key in [("--wedge-upper-start", "upper_start"), ("--wedge-upper-end", "upper_end"), ("--wedge-lower-start", "lower_start"), ("--wedge-lower-end", "lower_end")]:
@@ -2919,6 +2929,10 @@ def main()->int:
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?'); parser.add_argument('chart_modifier', nargs='?', choices=['cfd', 'CFD'], help='Use after -c target to open a stock as CFD/commodity mode.')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('--debug-stooq-fetch',action='store_true',help='When used with --debug-stooq, merge fetched visible Stooq rows into the matching commodity CSV.'); parser.add_argument('-inspector','--inspector',action='store_true')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
+    parser.add_argument('--scanner-breakout-date')
+    parser.add_argument('--scanner-retest-count')
+    parser.add_argument('--scanner-latest-retest-date')
+    parser.add_argument('--scanner-latest-retest-pattern')
     parser.add_argument('--fibo-lines', type=int, default=0)
     parser.add_argument('--fibo-anchor-start')
     parser.add_argument('--fibo-anchor-end')
@@ -3304,6 +3318,14 @@ def main()->int:
             cmd=[sys.executable,'-m','chart_program',target]
         if args.ichimoku_mode:
             cmd.extend(['--ichimoku-mode', args.ichimoku_mode])
+        for flag, value in [
+            ('--scanner-breakout-date', args.scanner_breakout_date),
+            ('--scanner-retest-count', args.scanner_retest_count),
+            ('--scanner-latest-retest-date', args.scanner_latest_retest_date),
+            ('--scanner-latest-retest-pattern', args.scanner_latest_retest_pattern),
+        ]:
+            if value:
+                cmd.extend([flag, value])
         if args.fibo_lines:
             cmd.extend(['--fibo-lines', str(args.fibo_lines)])
         if args.fibo_anchor_start:

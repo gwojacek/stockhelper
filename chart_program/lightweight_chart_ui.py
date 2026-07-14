@@ -1089,6 +1089,18 @@ class LightweightChartLevelSelectorUI:
     return arr.find(pt => pt.time === time)?.value ?? null;
   }}
 
+  function scannerMetaValue(key) {{
+    const value = levels?.[key];
+    const text = String(value ?? '').trim();
+    return text && text !== '-' && text.toLowerCase() !== 'none' ? text : '';
+  }}
+
+  function isValidScannerPattern(pattern) {{
+    const text = String(pattern || '').trim();
+    if (!text || text === '-' || text.toLowerCase() === 'none') return false;
+    return /(hammer|engulfing|morning star|evening star|piercing|harami|doji|shooting star|pin bar)/i.test(text);
+  }}
+
   function detectIchimokuBreakout() {{
     const realCandles = ohlc.filter(c => c && c.time);
     let prevSide = null;
@@ -1127,24 +1139,38 @@ class LightweightChartLevelSelectorUI:
         if (Number(row.low) <= cloudTop && Number(row.high) >= cloudBottom) parts.push(`cloud ${{fmt(cloudBottom)}}-${{fmt(cloudTop)}}`);
       }}
       const pattern = candlePatternForRow(row);
-      if (parts.length && pattern !== '-') events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{pattern}}; OHLVC=${{fmt(row.open)}},${{fmt(row.high)}},${{fmt(row.low)}},${{fmt(row.close)}}`);
+      if (parts.length && pattern !== '-') events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{pattern}}`);
     }});
     return events;
   }}
 
   function ichimokuDebugSnapshot() {{
-    const breakout = detectIchimokuBreakout();
-    const startDate = breakout?.time || (ohlc[0]?.time || null);
+    const scannerBreakout = scannerMetaValue('__scanner_breakout_date__');
+    const breakout = scannerBreakout ? null : detectIchimokuBreakout();
+    const startDate = scannerBreakout || breakout?.time || (ohlc[0]?.time || null);
+    const retestCount = scannerMetaValue('__scanner_retest_count__');
+    const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
+    const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
     lines.push(`Generated: ${{new Date().toISOString()}}`);
     lines.push(`Visible: ${{levels.__show_ichimoku__ ? 'yes' : 'no'}}`);
-    lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
-    if (breakout?.followed_by_recent_breakout) lines.push(`Recent opposite breakout <4m ignored for CSV start: ${{breakout.followed_by_recent_breakout.time}} (${{breakout.followed_by_recent_breakout.side.replace('_', ' ')}})`);
+    if (scannerBreakout) {{
+      lines.push(`Breakout day: ${{scannerBreakout}} (scanner)`);
+    }} else {{
+      lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
+      if (breakout?.followed_by_recent_breakout) lines.push(`Recent opposite breakout <4m ignored for CSV start: ${{breakout.followed_by_recent_breakout.time}} (${{breakout.followed_by_recent_breakout.side.replace('_', ' ')}})`);
+    }}
+    if (retestCount) lines.push(`Retest count: ${{retestCount}}`);
     lines.push('');
     lines.push('Retests / patterns since breakout:');
-    const retests = ichimokuRetestsSince(startDate);
-    if (retests.length) retests.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
+    if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
+      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) lines.push(`  ${{latestRetestDate}}: pattern=${{latestRetestPattern}}`);
+      else lines.push('  -');
+    }} else {{
+      const retests = ichimokuRetestsSince(startDate);
+      if (retests.length) retests.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
+    }}
     lines.push('');
     lines.push(`CSV candles since breakout/check start (${{startDate || '-'}}):`);
     lines.push(scannerCandlesCsv(500, startDate));
@@ -1272,12 +1298,6 @@ class LightweightChartLevelSelectorUI:
     const panel = $('wedge-debug-panel');
     if (!panel || !panel.classList.contains('open')) return;
     const text = setupDebugSnapshot();
-    if (message && message.startsWith('Copied setup debug')) {{
-      const generated = text.match(/\\nGenerated: ([^\\n]+)/)?.[1] || '';
-      const body = text.replace(/\\nGenerated: [^\\n]+/, '');
-      panel.textContent = `${{message}}${{generated ? ' Generated: ' + generated : ''}}\\n\\n${{body}}`;
-      return;
-    }}
     panel.textContent = message ? `${{message}}\\n\\n${{text}}` : text;
   }}
 
