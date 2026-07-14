@@ -130,6 +130,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         cmd = _append_optional(cmd, "--scanner-retest-count", row.metrics.get("retest_count") or row.metrics.get("latest_retest_count"))
         cmd = _append_optional(cmd, "--scanner-latest-retest-date", row.metrics.get("latest_retest_date"))
         cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
+        cmd = _append_optional(cmd, "--scanner-previous-respect-months", row.metrics.get("previous_respect_months"))
         return cmd
     if row.scanner == "WEDGE":
         cmd = f"python run -c {ticker_cmd}"
@@ -2933,6 +2934,7 @@ def main()->int:
     parser.add_argument('--scanner-retest-count')
     parser.add_argument('--scanner-latest-retest-date')
     parser.add_argument('--scanner-latest-retest-pattern')
+    parser.add_argument('--scanner-previous-respect-months')
     parser.add_argument('--fibo-lines', type=int, default=0)
     parser.add_argument('--fibo-anchor-start')
     parser.add_argument('--fibo-anchor-end')
@@ -3323,6 +3325,7 @@ def main()->int:
             ('--scanner-retest-count', args.scanner_retest_count),
             ('--scanner-latest-retest-date', args.scanner_latest_retest_date),
             ('--scanner-latest-retest-pattern', args.scanner_latest_retest_pattern),
+            ('--scanner-previous-respect-months', args.scanner_previous_respect_months),
         ]:
             if value:
                 cmd.extend([flag, value])

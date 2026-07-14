@@ -352,7 +352,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<strong>🇺🇸 SBUX.US</strong></td><td>near 61.8: 98.5%" in text
     assert "<h3>🔻 Kliny" in text
     assert "near 61.8: 98.5%" in text
-    assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30'" in text
+    assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text
     assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text

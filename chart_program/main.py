@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scanner-retest-count")
     parser.add_argument("--scanner-latest-retest-date")
     parser.add_argument("--scanner-latest-retest-pattern")
+    parser.add_argument("--scanner-previous-respect-months")
     parser.add_argument("--fibo-lines", type=int, default=0)
     parser.add_argument("--fibo-anchor-start")
     parser.add_argument("--fibo-anchor-end")
@@ -92,6 +93,7 @@ def main() -> int:
         ("--scanner-retest-count", args.scanner_retest_count),
         ("--scanner-latest-retest-date", args.scanner_latest_retest_date),
         ("--scanner-latest-retest-pattern", args.scanner_latest_retest_pattern),
+        ("--scanner-previous-respect-months", args.scanner_previous_respect_months),
     ]:
         if value:
             forwarded.extend([flag, value])

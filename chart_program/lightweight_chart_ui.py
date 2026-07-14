@@ -1143,9 +1143,17 @@ class LightweightChartLevelSelectorUI:
     let prevSide = null;
     const transitions = [];
     realCandles.forEach(row => {{
+      const spanA = Number(ichiValueAt('spanA', row.time));
+      const spanB = Number(ichiValueAt('spanB', row.time));
       const kijun = Number(ichiValueAt('kijun', row.time));
-      if (!Number.isFinite(kijun)) return;
-      const side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
+      let side = null;
+      if (Number.isFinite(spanA) && Number.isFinite(spanB)) {{
+        const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
+        side = Number(row.close) > top ? 'above_cloud' : (Number(row.close) < bottom ? 'below_cloud' : 'inside_cloud');
+      }} else if (Number.isFinite(kijun)) {{
+        side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
+      }}
+      if (!side) return;
       if (prevSide && side !== prevSide) transitions.push({{time: row.time, side, close: row.close, kijun}});
       prevSide = side;
     }});
@@ -1162,22 +1170,35 @@ class LightweightChartLevelSelectorUI:
   function ichimokuScannerBreakoutContext(scannerDate) {{
     if (!scannerDate) return {{displayDate: '', csvStartDate: '', note: ''}};
     const transitions = ichimokuTransitions();
+    const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
     const scanner = String(scannerDate).slice(0, 10);
     let near = null;
     transitions.forEach(t => {{
       const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
       if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time < near.time))) near = {{...t, diff}};
     }});
-    const displayDate = near?.time || scanner;
+    let displayDate = near?.time || scanner;
     const realCandles = ohlc.filter(c => c && c.time);
     const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
     const ageDays = daysBetween(scanner, lastDate);
+    if (displayDate === scanner && Number.isFinite(previousRespectMonths) && previousRespectMonths > 0 && ageDays !== null && ageDays >= 0 && ageDays < 122) {{
+      const previousCandle = [...realCandles].reverse().find(c => String(c.time) < scanner);
+      if (previousCandle?.time) displayDate = previousCandle.time;
+    }}
     let previous = null;
     if (ageDays !== null && ageDays >= 0 && ageDays < 122) {{
       previous = [...transitions].reverse().find(t => String(t.time) < displayDate) || null;
     }}
-    const csvStartDate = previous?.time || displayDate || scanner;
-    const note = previous ? `Recent breakout <4m; CSV start uses previous breakout: ${{previous.time}}` : '';
+    let respectStartDate = '';
+    if (Number.isFinite(previousRespectMonths) && previousRespectMonths > 0) {{
+      const dt = new Date(`${{displayDate || scanner}}T00:00:00Z`);
+      dt.setUTCDate(dt.getUTCDate() - Math.round(previousRespectMonths * 30.44));
+      respectStartDate = dt.toISOString().slice(0, 10);
+    }}
+    const csvStartDate = respectStartDate || previous?.time || displayDate || scanner;
+    const note = respectStartDate
+      ? `Previous respect before breakout: ${{previousRespectMonths.toFixed(1)}}m; CSV start uses scanner respect window: ${{respectStartDate}}`
+      : (previous ? `Recent breakout <4m; CSV start uses previous breakout: ${{previous.time}}` : '');
     return {{displayDate, csvStartDate, note, scannerDate: scanner}};
   }}
 
@@ -1223,19 +1244,15 @@ class LightweightChartLevelSelectorUI:
     lines.push('Retests / patterns since breakout:');
     if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
       const wanted = Math.max(0, parseInt(retestCount || '0', 10) || 0);
-      const merged = [];
-      const seen = new Set();
-      function addRetest(event) {{
-        const date = String(event || '').slice(0, 10);
-        if (!date || seen.has(date)) return;
-        seen.add(date);
-        merged.push(event);
+      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
+        lines.push(`  ${{latestRetestDate}}: pattern=${{latestRetestPattern}} (scanner latest)`);
+        if (wanted > 1) lines.push(`  scanner reported ${{wanted}} valid retests total; older retest event details are not available in this chart command`);
+      }} else if (!wanted) {{
+        const inferred = ichimokuRetestsSince(startDate);
+        if (inferred.length) inferred.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
+      }} else {{
+        lines.push(`  scanner reported ${{wanted}} valid retests total, but no latest valid pattern was provided`);
       }}
-      const inferred = ichimokuRetestsSince(startDate);
-      inferred.forEach(addRetest);
-      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) addRetest(`${{latestRetestDate}}: pattern=${{latestRetestPattern}}`);
-      const shown = wanted > 0 ? merged.slice(Math.max(0, merged.length - wanted)) : merged;
-      if (shown.length) shown.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
     }} else {{
       const retests = ichimokuRetestsSince(startDate);
       if (retests.length) retests.forEach(event => lines.push(`  ${{event}}`)); else lines.push('  -');
