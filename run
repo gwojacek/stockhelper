@@ -2582,9 +2582,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     )
     html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><p>Use tabs to switch between the full allsearch report and focused Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"window.open('/journal-html','_blank')\">🧾 Open journal</button><button class='btn compactbtn push-right' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append(search_toolbar_html)
+    html_parts.append(_liquidity_legend_html())
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
-    html_parts.append(_liquidity_legend_html())
     def _allsearch_ichi_current_html(row: ScannerRow, *, compact_position: bool = False) -> str:
         raw_status = str(row.status or "")
         ichi_status = str(row.metrics.get("ichimoku_status", "") or "")

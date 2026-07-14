@@ -1081,9 +1081,6 @@ class LightweightChartLevelSelectorUI:
     const lower = Math.min(open, close) - low;
     if (lower > body * 2 && upper < range * 0.35) return close >= open ? 'bullish hammer' : 'hammer';
     if (upper > body * 2 && lower < range * 0.35) return close <= open ? 'bearish shooting star' : 'shooting star';
-    if (body / range < 0.18) return 'doji';
-    if (close > open && body / range > 0.55) return 'bullish close';
-    if (close < open && body / range > 0.55) return 'bearish close';
     return '-';
   }}
 
@@ -1095,14 +1092,24 @@ class LightweightChartLevelSelectorUI:
   function detectIchimokuBreakout() {{
     const realCandles = ohlc.filter(c => c && c.time);
     let prevSide = null;
-    let latest = null;
+    const transitions = [];
     realCandles.forEach(row => {{
       const kijun = Number(ichiValueAt('kijun', row.time));
       if (!Number.isFinite(kijun)) return;
       const side = Number(row.close) >= kijun ? 'above_kijun' : 'below_kijun';
-      if (prevSide && side !== prevSide) latest = {{time: row.time, side, close: row.close, kijun}};
+      if (prevSide && side !== prevSide) transitions.push({{time: row.time, side, close: row.close, kijun}});
       prevSide = side;
     }});
+    if (!transitions.length) return null;
+    const latest = transitions[transitions.length - 1];
+    const latestDate = new Date(`${{latest.time}}T00:00:00Z`);
+    const lastCandleDate = new Date(`${{realCandles[realCandles.length - 1]?.time || latest.time}}T00:00:00Z`);
+    const ageDays = Math.round((lastCandleDate - latestDate) / 86400000);
+    if (ageDays >= 0 && ageDays < 122 && transitions.length >= 2) {{
+      const previous = transitions[transitions.length - 2];
+      previous.followed_by_recent_breakout = latest;
+      return previous;
+    }}
     return latest;
   }}
 
@@ -1119,7 +1126,8 @@ class LightweightChartLevelSelectorUI:
         const cloudTop = Math.max(spanA, spanB), cloudBottom = Math.min(spanA, spanB);
         if (Number(row.low) <= cloudTop && Number(row.high) >= cloudBottom) parts.push(`cloud ${{fmt(cloudBottom)}}-${{fmt(cloudTop)}}`);
       }}
-      if (parts.length) events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{candlePatternForRow(row)}}; OHLVC=${{fmt(row.open)}},${{fmt(row.high)}},${{fmt(row.low)}},${{fmt(row.close)}}`);
+      const pattern = candlePatternForRow(row);
+      if (parts.length && pattern !== '-') events.push(`${{row.time}}: ${{parts.join(' + ')}}; pattern=${{pattern}}; OHLVC=${{fmt(row.open)}},${{fmt(row.high)}},${{fmt(row.low)}},${{fmt(row.close)}}`);
     }});
     return events;
   }}
@@ -1132,12 +1140,7 @@ class LightweightChartLevelSelectorUI:
     lines.push(`Generated: ${{new Date().toISOString()}}`);
     lines.push(`Visible: ${{levels.__show_ichimoku__ ? 'yes' : 'no'}}`);
     lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
-    lines.push('Latest values:');
-    ['tenkan','kijun','spanA','spanB','chikou'].forEach(k => {{
-      const arr = P.ichimoku?.[k] || [];
-      const last = arr.length ? arr[arr.length - 1] : null;
-      lines.push(`  ${{k}}: ${{last ? `${{last.time}} @ ${{fmt(last.value)}}` : '-'}}`);
-    }});
+    if (breakout?.followed_by_recent_breakout) lines.push(`Recent opposite breakout <4m ignored for CSV start: ${{breakout.followed_by_recent_breakout.time}} (${{breakout.followed_by_recent_breakout.side.replace('_', ' ')}})`);
     lines.push('');
     lines.push('Retests / patterns since breakout:');
     const retests = ichimokuRetestsSince(startDate);
@@ -1168,12 +1171,13 @@ class LightweightChartLevelSelectorUI:
         const since = anchorDates[0] || null;
         touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
       }}
+      const anchorLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}} ${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
+      const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
-      lines.push(`  anchor points: ${{anchorDates.length ? anchorDates.join(' -> ') : '-'}}`);
+      lines.push(`  FIB anchor: ${{anchorLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
-      lines.push(`  61.8 pattern: ${{touch ? `${{candlePatternForRow(touch)}} (${{touch.time}})` : '-'}}`);
-      items.forEach(obj => lines.push(`  ${{obj.label || obj.type}}: ${{obj.x0 || ''}}->${{obj.x1 || ''}} ${{fmt(obj.y0)}}${{obj.y1 !== obj.y0 ? `->${{fmt(obj.y1)}}` : ''}} ${{obj.direction || ''}}`));
+      lines.push(`  61.8 pattern: ${{touch && pattern !== '-' ? `${{pattern}} (${{touch.time}})` : '-'}}`);
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
@@ -1268,6 +1272,12 @@ class LightweightChartLevelSelectorUI:
     const panel = $('wedge-debug-panel');
     if (!panel || !panel.classList.contains('open')) return;
     const text = setupDebugSnapshot();
+    if (message && message.startsWith('Copied setup debug')) {{
+      const generated = text.match(/\\nGenerated: ([^\\n]+)/)?.[1] || '';
+      const body = text.replace(/\\nGenerated: [^\\n]+/, '');
+      panel.textContent = `${{message}}${{generated ? ' Generated: ' + generated : ''}}\\n\\n${{body}}`;
+      return;
+    }}
     panel.textContent = message ? `${{message}}\\n\\n${{text}}` : text;
   }}
 
@@ -2522,8 +2532,8 @@ class LightweightChartLevelSelectorUI:
 
 
   function activeJournalTechnique() {{
-    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (levels.__show_ichimoku__) return 'Ichimoku';
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
     if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
     return 'Manual';
