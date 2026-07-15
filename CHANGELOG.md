@@ -2,11 +2,16 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.1`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
-Compare: [`7.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.0...HEAD)
+Compare: [`7.1...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.1...HEAD)
+
+## [7.1] - 2026-07-15
+
+Tag: `7.1`
+Compare: [`7.0...7.1`](https://github.com/gwojacek/stockhelper/compare/7.0...7.1)
 
 ### Added
 
@@ -24,6 +29,7 @@ Compare: [`7.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.0...HE
 
 - Fixed journal/report server connection handling so generated HTML reports and journal actions stay reachable while being viewed.
 - Fixed Ichimoku breakout bucketing and improved retest handling to reduce misleading Trójpołówki report groupings.
+- Fixed 3P Fibo and Ichimoku market filters so selected markets are applied per instrument card, matching entries stay at the top of each 3P column, and `stock --open-allsearch-report all` refreshes stale HTML before serving it.
 - Guarded Stooq bulk refresh attempts to avoid repeated duplicate downloads during scans.
 - Removed repository-tracked Docker home cache artifacts.
 
