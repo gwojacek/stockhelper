@@ -304,6 +304,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<div class='troj-cell-card' data-market='WIG' data-scanner='ICHIMOKU'>" in text
     assert "card.dataset.market" in text
     assert "card.style.display=cardHit?'':'none'" in text
+    assert "const visible=[];const hidden=[]" in text
+    assert "visible.concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
+    assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
     assert "th.classList.add('stooq-column')" in text
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
