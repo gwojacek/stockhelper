@@ -300,6 +300,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📈 Show" in text
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
+    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO'>" in text
+    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='ICHIMOKU'>" in text
+    assert "card.dataset.market" in text
+    assert "card.style.display=cardHit?'':'none'" in text
     assert "th.classList.add('chart-link-cell')" in text
     assert "th.classList.add('stooq-column')" in text
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
