@@ -523,6 +523,12 @@ def _open_existing_allsearch_report(scope: str) -> int:
     if not report_html.exists():
         print(f"[allsearch] report not found: {report_html}")
         return 1
+    try:
+        _write_trojpolowki_reports(scopes, datetime.now())
+        _build_html_report(scopes, report_html)
+        print(f"[allsearch] refreshed html report before opening: {report_html}")
+    except Exception as exc:
+        print(f"[allsearch] could not refresh html report before opening ({exc}); opening existing file")
     print(f"[allsearch] opening existing html report: {report_html}")
     report_url = _open_html_report(report_html)
     return _wait_for_report_server(report_url)

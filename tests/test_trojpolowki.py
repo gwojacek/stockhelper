@@ -375,6 +375,36 @@ def test_allsearch_all_scopes_include_indexes():
     assert "📊 INDEXES" == mod._scope_label("indexes")
 
 
+def test_open_existing_allsearch_report_refreshes_html_before_serving(tmp_path: Path):
+    mod = load_run_module()
+    mod.ALL_REPORT_DIR = tmp_path
+    report = tmp_path / "allsearch" / "allsearch_latest_all.html"
+    report.parent.mkdir(parents=True)
+    report.write_text("stale", encoding="utf-8")
+
+    calls: list[tuple[str, object]] = []
+
+    def write_reports(scopes, timestamp):
+        calls.append(("write", list(scopes)))
+        return tmp_path / "fibo.md", tmp_path / "ichimoku.md"
+
+    def build_report(scopes, output_path):
+        calls.append(("build", (list(scopes), output_path)))
+        output_path.write_text("fresh", encoding="utf-8")
+
+    with mock.patch.object(mod, "_write_trojpolowki_reports", side_effect=write_reports), \
+         mock.patch.object(mod, "_build_html_report", side_effect=build_report), \
+         mock.patch.object(mod, "_open_html_report", return_value="http://127.0.0.1/report"), \
+         mock.patch.object(mod, "_wait_for_report_server", return_value=0):
+        assert mod._open_existing_allsearch_report("all") == 0
+
+    assert calls == [
+        ("write", mod.DEFAULT_ALLSEARCH_SCOPES),
+        ("build", (mod.DEFAULT_ALLSEARCH_SCOPES, report)),
+    ]
+    assert report.read_text(encoding="utf-8") == "fresh"
+
+
 def test_chart_program_accepts_journal_close_arguments():
     loader = importlib.machinery.SourceFileLoader("chart_program_main_test", "chart_program/main.py")
     spec = importlib.util.spec_from_loader(loader.name, loader)
