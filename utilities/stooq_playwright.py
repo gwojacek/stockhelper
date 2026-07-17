@@ -2397,8 +2397,12 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     print(f"[stooq-web] page={page_num} goto={url}")
                 try:
                     page.goto(url, wait_until="domcontentloaded")
-                except Exception:
+                except Exception as exc:
+                    if page_num == 1:
+                        shot = _debug_fail_screenshot(symbol, page, suffix="_goto_failed")
+                        raise ValueError(f"Stooq page load failed. URL: {url} error={exc} Screenshot: {shot}")
                     break
+                _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
                     browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page before consent")
                     if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
@@ -2416,6 +2420,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
+                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                     if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
                         browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
                         if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
@@ -2427,6 +2432,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         elif not interactive_captcha:
                             browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
+                if _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha):
+                    ready = True
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
                     browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after table wait")
                     if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
@@ -2466,6 +2473,14 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                             except Exception:
                                 pass
                             _accept_consent_if_present(page, first_page=True)
+                        _wait_for_table_or_limit_with_retry(page, retries=5)
+                        extracted = _extract_rows_from_frame(page)
+                        if not extracted:
+                            for fr in page.frames:
+                                extracted = _extract_rows_from_frame(fr)
+                                if extracted:
+                                    break
+                    if not extracted and _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha):
                         _wait_for_table_or_limit_with_retry(page, retries=5)
                         extracted = _extract_rows_from_frame(page)
                         if not extracted:

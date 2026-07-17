@@ -47,3 +47,8 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'SIGNAL NEWNYM' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_AUTO' in SOURCE
     assert 'def _stooq_tor_proxy_reachable' in SOURCE
+
+
+def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
+    assert '_handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)' in SOURCE
+    assert 'Stooq page load failed. URL:' in SOURCE
