@@ -301,11 +301,15 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
     assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO'>" in text
-    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='ICHIMOKU'>" in text
+    assert "data-scanner='ICHIMOKU'" in text
+    assert "data-ichi-trend='long'" in text
+    assert "troj-ichi-trend-filter" in text
+    assert "setTrojIchiTrend" in text
     assert "card.dataset.market" in text
     assert "card.style.display=cardHit?'':'none'" in text
     assert "const visible=[];const hidden=[]" in text
-    assert "visible.concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
+    assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
+    assert "const okTrend=trendFilter==='all'||!cardTrend||cardTrend===trendFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
     assert "th.classList.add('stooq-column')" in text
