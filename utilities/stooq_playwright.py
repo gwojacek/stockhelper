@@ -1168,7 +1168,7 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
         if pool:
             raw_idx = os.getenv("STOCKHELPER_STOOQ_PROXY_POOL_INDEX", "").strip()
             try:
-                idx = int(raw_idx) if raw_idx else (proxy_index if proxy_index is not None else (abs(hash((symbol or "").lower())) % len(pool)))
+                idx = int(raw_idx) if raw_idx else (proxy_index if proxy_index is not None else _stooq_proxy_pool_initial_index(symbol))
             except ValueError:
                 idx = 0
             idx = idx % len(pool)
@@ -1461,6 +1461,15 @@ def _stooq_proxy_pool_size() -> int:
     return len(_split_stooq_proxy_pool(os.getenv("STOCKHELPER_STOOQ_PROXY_POOL", "")))
 
 
+def _stooq_proxy_pool_initial_index(symbol: str | None) -> int:
+    pool_size = _stooq_proxy_pool_size()
+    if pool_size <= 0:
+        return -1
+    # Use a stable checksum, not Python's randomized hash(), so each commodity
+    # consistently starts from its own pool slot before the browser is opened.
+    return sum((symbol or "").strip().lower().encode("utf-8")) % pool_size
+
+
 def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
     pool_size = _stooq_proxy_pool_size()
     if pool_size <= 1:
@@ -1499,6 +1508,26 @@ def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, i
     except Exception:
         pass
     return browser, page, True
+
+
+def _recover_blank_page_with_proxy_rotation(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
+    pool_size = _stooq_proxy_pool_size()
+    if pool_size <= 1:
+        print(
+            f"[stooq-web] {reason} for {symbol}; proxy rotation skipped because STOCKHELPER_STOOQ_PROXY_POOL has {pool_size} entr{'y' if pool_size == 1 else 'ies'}.",
+            flush=True,
+        )
+        return browser, page, False
+    # Try every other proxy once.  The caller already loaded the current slot.
+    for _ in range(max(1, pool_size - 1)):
+        browser, page, rotated = _rotate_blank_page_proxy(playwright, browser, page, url, symbol, interactive, retry_state, reason)
+        if not rotated:
+            return browser, page, False
+        if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page):
+            return browser, page, True
+        if not _page_is_blank_or_without_captcha_and_rows(page):
+            return browser, page, True
+    return browser, page, False
 
 
 def _switch_to_inspector_for_captcha(
@@ -2241,13 +2270,13 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         except Exception:
             start_page = 1
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=False, symbol=symbol)
+        initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
+        browser, page = _open_page(p, interactive=False, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
         try:
             page.set_default_timeout(15000)
             page.set_default_navigation_timeout(20000)
             page_num = start_page
             empty_pages = 0
-            initial_proxy_idx = (abs(hash(symbol.lower())) % _stooq_proxy_pool_size()) if _stooq_proxy_pool_size() else -1
             interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
             max_page = max(30, start_page + 30)
             while page_num <= max_page:
@@ -2266,7 +2295,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 except Exception:
                     break
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                    browser, page, _proxy_rotated = _rotate_blank_page_proxy(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page before consent")
+                    browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page before consent")
                     if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
                         pass
                     elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
@@ -2283,7 +2312,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
                     if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                        browser, page, _proxy_rotated = _rotate_blank_page_proxy(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
+                        browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
                         if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
                             pass
                         elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
@@ -2294,7 +2323,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                             browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                    browser, page, _proxy_rotated = _rotate_blank_page_proxy(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after table wait")
+                    browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after table wait")
                     if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
                         ready = True
                     elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
@@ -2509,9 +2538,9 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
     with sync_playwright() as p:
-        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol)
+        initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
+        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
         response = None
-        initial_proxy_idx = (abs(hash(symbol.lower())) % _stooq_proxy_pool_size()) if _stooq_proxy_pool_size() else -1
         interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
         for u in urls:
             try:
@@ -2520,7 +2549,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                    browser, page, _proxy_rotated = _rotate_blank_page_proxy(
+                    browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(
                         p, browser, page, u, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq debug page"
                     )
                     if _proxy_rotated:
