@@ -11,13 +11,18 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote
 
 import pandas as pd
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
+except ModuleNotFoundError:
+    PlaywrightTimeoutError = TimeoutError
+    sync_playwright = None
 
 
 _CAPTCHA_INSPECTOR_LOCK = threading.Lock()
 _CAPTCHA_OCR_LOCK = threading.Lock()
 _EASYOCR_READER = None
 _EASYOCR_UNAVAILABLE = False
+_FIREFOX_RETRY_AVAILABLE: bool | None = None
 
 
 _POLISH_MONTHS = {
@@ -1358,15 +1363,27 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
     Some Stooq rate-limit states render as a blank/no-table Chromium page even
     after reloads, while Firefox often renders the captcha/table correctly.
     """
+    global _FIREFOX_RETRY_AVAILABLE
     if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
         return browser, page, False
     try:
         current_name = getattr(page, "__stockhelper_browser_name", "chromium")
     except Exception:
         current_name = "chromium"
-    if current_name == "firefox":
+    if current_name == "firefox" or _FIREFOX_RETRY_AVAILABLE is False:
         return browser, page, False
     print(f"[stooq-web] blank/no-table page persisted for {symbol}; retrying with Firefox browser.", flush=True)
+    try:
+        firefox_browser, firefox_page = _open_page(playwright, interactive=interactive, browser_name="firefox", symbol=symbol)
+    except Exception as exc:
+        _FIREFOX_RETRY_AVAILABLE = False
+        print(
+            f"[stooq-web] Firefox retry unavailable for this run; keeping Chromium page for {symbol} "
+            f"({type(exc).__name__}).",
+            flush=True,
+        )
+        return browser, page, False
+    _FIREFOX_RETRY_AVAILABLE = True
     try:
         page.close()
     except Exception:
@@ -1375,12 +1392,7 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
         browser.close()
     except Exception:
         pass
-    try:
-        browser, page = _open_page(playwright, interactive=interactive, browser_name="firefox", symbol=symbol)
-    except Exception as exc:
-        print(f"[stooq-web] Firefox retry unavailable for {symbol}: {exc}", flush=True)
-        browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol)
-        return browser, page, False
+    browser, page = firefox_browser, firefox_page
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
     try:
