@@ -31,3 +31,9 @@ def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
     assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
     assert 'debug page artifacts saved' in SOURCE
+
+
+def test_stooq_proxy_pool_configuration_is_supported():
+    assert 'STOCKHELPER_STOOQ_PROXY_POOL' in SOURCE
+    assert 'STOCKHELPER_STOOQ_PROXY_POOL_INDEX' in SOURCE
+    assert 'no Playwright proxy configured' in SOURCE

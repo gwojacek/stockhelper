@@ -7,6 +7,7 @@ import json
 import threading
 import warnings
 import zipfile
+import re
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
@@ -1128,12 +1129,18 @@ def _is_metal_stooq_symbol(symbol: str | None) -> bool:
     return (symbol or "").strip().lower() in {"xauusd", "xagusd", "pl.f", "pa.f"}
 
 
+def _split_stooq_proxy_pool(value: str) -> list[str]:
+    return [part.strip() for part in re.split(r"[,;\n]+", value or "") if part.strip()]
+
+
 def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
-    """Return Playwright proxy config from environment, optionally metal-specific.
+    """Return Playwright proxy config from environment, optionally symbol-specific.
 
     Supported env vars:
     - STOCKHELPER_STOOQ_PROXY_XAUUSD / _XAGUSD / _PL_F / _PA_F
     - STOCKHELPER_STOOQ_PROXY_METALS
+    - STOCKHELPER_STOOQ_PROXY_POOL (comma/semicolon/newline separated)
+    - STOCKHELPER_STOOQ_PROXY_POOL_INDEX (manual pool slot, useful after a rate limit)
     - STOCKHELPER_STOOQ_PROXY
     - optional country placeholders via STOCKHELPER_STOOQ_PROXY_COUNTRY_*
 
@@ -1157,6 +1164,19 @@ def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
             source = key
             break
     if not value:
+        pool = _split_stooq_proxy_pool(os.getenv("STOCKHELPER_STOOQ_PROXY_POOL", ""))
+        if pool:
+            raw_idx = os.getenv("STOCKHELPER_STOOQ_PROXY_POOL_INDEX", "").strip()
+            try:
+                idx = int(raw_idx) if raw_idx else (abs(hash((symbol or "").lower())) % len(pool))
+            except ValueError:
+                idx = 0
+            idx = idx % len(pool)
+            value = pool[idx]
+            source = f"STOCKHELPER_STOOQ_PROXY_POOL[{idx}/{len(pool)}]"
+    if not value:
+        if _stooq_verbose_enabled():
+            print(f"[stooq-web] no Playwright proxy configured for {symbol or '-'}; set STOCKHELPER_STOOQ_PROXY or STOCKHELPER_STOOQ_PROXY_POOL to avoid site-wide rate limits.", flush=True)
         return None
     country_candidates = []
     if raw_symbol:
