@@ -1189,9 +1189,18 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
         value = value.replace("{country}", country)
     parsed = urlparse(value)
     if parsed.scheme and parsed.hostname:
+        try:
+            parsed_port = parsed.port
+        except ValueError as exc:
+            print(
+                f"[stooq-web] invalid proxy from {source} for {symbol or '-'}: {exc}. "
+                "Use a real numeric port, e.g. http://user:pass@host:8000; skipping proxy.",
+                flush=True,
+            )
+            return None
         server = f"{parsed.scheme}://{parsed.hostname}"
-        if parsed.port:
-            server += f":{parsed.port}"
+        if parsed_port:
+            server += f":{parsed_port}"
         cfg = {"server": server}
         if parsed.username:
             cfg["username"] = unquote(parsed.username)

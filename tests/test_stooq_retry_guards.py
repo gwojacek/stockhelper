@@ -40,3 +40,5 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'proxy rotation skipped because STOCKHELPER_STOOQ_PROXY_POOL has' in SOURCE
     assert 'browser.new_context(**context_kwargs)' in SOURCE
     assert 'context_kwargs["proxy"] = proxy' in SOURCE
+    assert 'invalid proxy from' in SOURCE
+    assert 'Use a real numeric port' in SOURCE
