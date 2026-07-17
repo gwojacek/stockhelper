@@ -38,6 +38,7 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'def _stooq_proxy_pool_initial_index' in SOURCE
     assert 'def _recover_blank_page_with_proxy_rotation' in SOURCE
     assert 'no proxy pool rotation available' in SOURCE
+    assert 'if _stooq_verbose_enabled():' in SOURCE
     assert 'browser.new_context(**context_kwargs)' in SOURCE
     assert 'context_kwargs["proxy"] = proxy' in SOURCE
     assert 'invalid proxy from' in SOURCE

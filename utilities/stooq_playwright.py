@@ -1285,7 +1285,8 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
             cfg["password"] = unquote(parsed.password)
     else:
         cfg = {"server": value}
-    print(f"[stooq-web] using proxy from {source} for {symbol or '-'}: {cfg['server']}", flush=True)
+    if _stooq_verbose_enabled():
+        print(f"[stooq-web] using proxy from {source} for {symbol or '-'}: {cfg['server']}", flush=True)
     return cfg
 
 
@@ -1379,11 +1380,12 @@ def _vpn_pause_and_reload_stooq_page(page, url: str, symbol: str, reason: str, r
         except EOFError:
             print("[stooq-web] non-interactive input; retrying page once before inspector.", flush=True)
     else:
-        print(
-            f"[stooq-web] {reason} for {symbol}; auto-retrying without VPN prompt "
-            "(set STOCKHELPER_STOOQ_BLANK_PROMPT=1 to pause).",
-            flush=True,
-        )
+        if _stooq_verbose_enabled():
+            print(
+                f"[stooq-web] {reason} for {symbol}; auto-retrying without VPN prompt "
+                "(set STOCKHELPER_STOOQ_BLANK_PROMPT=1 to pause).",
+                flush=True,
+            )
     try:
         page.goto(url, wait_until="domcontentloaded")
     except Exception:
@@ -1411,10 +1413,11 @@ def _refresh_blank_page_before_vpn(page, url: str, symbol: str, reason: str, max
     for attempt in range(1, max(0, max_refreshes) + 1):
         if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
             break
-        print(
-            f"[stooq-web] {reason} for {symbol}; refreshing page before VPN prompt ({attempt}/{max_refreshes}).",
-            flush=True,
-        )
+        if _stooq_verbose_enabled():
+            print(
+                f"[stooq-web] {reason} for {symbol}; refreshing page before VPN prompt ({attempt}/{max_refreshes}).",
+                flush=True,
+            )
         try:
             page.reload(wait_until="domcontentloaded")
         except Exception:
@@ -1626,10 +1629,11 @@ def _recover_blank_page_with_proxy_rotation(playwright, browser, page, url: str,
                 return browser, page, True
             return browser, page, changed and not _page_is_blank_or_without_captcha_and_rows(page)
         if retry_state is None or not retry_state.get("proxy_rotation_skip_logged"):
-            print(
-                f"[stooq-web] {reason} for {symbol}; no proxy pool rotation available (pool entries={pool_size}).",
-                flush=True,
-            )
+            if _stooq_verbose_enabled():
+                print(
+                    f"[stooq-web] {reason} for {symbol}; no proxy pool rotation available (pool entries={pool_size}).",
+                    flush=True,
+                )
             if retry_state is not None:
                 retry_state["proxy_rotation_skip_logged"] = True
         return browser, page, False
@@ -1702,7 +1706,8 @@ def _switch_to_inspector_for_captcha(
 
     if not _headed_display_available():
         reason = "CAPTCHA/limit" if blocked else "blank first page (possible CAPTCHA/limit)"
-        print(f"[stooq-web] {reason} detected for {symbol}; headed inspector skipped because DISPLAY/WAYLAND_DISPLAY is not set.", flush=True)
+        if _stooq_verbose_enabled():
+            print(f"[stooq-web] {reason} detected for {symbol}; headed inspector skipped because DISPLAY/WAYLAND_DISPLAY is not set.", flush=True)
         return browser, page, True
 
     with _CAPTCHA_INSPECTOR_LOCK:
@@ -1881,7 +1886,8 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
             if _stooq_verbose_enabled():
                 print(f"[stooq-web] captcha OCR flow failed before inspector for {symbol}: {exc}")
         if not _headed_display_available():
-            print(f"[stooq-web] CAPTCHA/limit detected for {symbol}; inspector skipped because DISPLAY/WAYLAND_DISPLAY is not set.")
+            if _stooq_verbose_enabled():
+                print(f"[stooq-web] CAPTCHA/limit detected for {symbol}; inspector skipped because DISPLAY/WAYLAND_DISPLAY is not set.")
             return True
         print("[stooq-web] Browser inspector opened (headed mode required). Solve captcha manually, then resume execution.")
         try:
@@ -1900,7 +1906,8 @@ def _force_interactive_pause(page, symbol: str, state: dict | None = None, inter
     if state is not None and state.get("forced_pause_done"):
         return
     if not _headed_display_available():
-        print(f"[stooq-web] forced inspector skipped for {symbol} because DISPLAY/WAYLAND_DISPLAY is not set.")
+        if _stooq_verbose_enabled():
+            print(f"[stooq-web] forced inspector skipped for {symbol} because DISPLAY/WAYLAND_DISPLAY is not set.")
         return
     print(f"[stooq-web] interactive inspector forced for {symbol}. Check page/Network, solve captcha if shown, then Resume.")
     try:
