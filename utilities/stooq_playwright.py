@@ -1060,15 +1060,20 @@ def _page_has_rate_limit_or_captcha(page) -> bool:
 
 
 def _page_has_captcha_image(page) -> bool:
-    try:
-        if page.locator("#t11 img").first.count() > 0:
-            return True
-    except Exception:
-        pass
-    try:
-        return page.locator("tr#t11 img").first.count() > 0
-    except Exception:
-        return False
+    selectors = (
+        "#t11 img",
+        "tr#t11 img",
+        "img[src*='/q/l/s/i/']",
+        "img[src*='cpt']",
+        "img[src*='captcha']",
+    )
+    for selector in selectors:
+        try:
+            if page.locator(selector).first.count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def _is_rate_limited_html(html: str) -> bool:
@@ -2036,9 +2041,7 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     print("resolving rate limit captcha and consent...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
-            img = page.locator("#t11 img").first
-            if img.count() == 0:
-                img = page.locator("tr#t11 img").first
+            img = page.locator("#t11 img, tr#t11 img, img[src*='/q/l/s/i/'], img[src*='cpt'], img[src*='captcha']").first
             if img.count() == 0:
                 if attempt == 1:
                     return False
@@ -2201,7 +2204,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     ):
                         pass
                     elif interactive_captcha and _stooq_retry_budget_exhausted(interactive_state):
-                        raise ValueError(f"Stooq blank/no-table retry budget exhausted before consent for {symbol}; skipping/fallback. URL: {url}")
+                        shot = _debug_fail_screenshot(symbol, page, suffix=f"_blank_budget_before_consent_p{page_num}")
+                        raise ValueError(f"Stooq blank/no-table retry budget exhausted before consent for {symbol}; skipping/fallback. URL: {url} Screenshot: {shot}")
                     elif not interactive_captcha:
                         browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 if _page_has_rate_limit_or_captcha(page):
@@ -2217,7 +2221,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         ):
                             pass
                         elif interactive_captcha and _stooq_retry_budget_exhausted(interactive_state):
-                            raise ValueError(f"Stooq blank/no-table retry budget exhausted after consent for {symbol}; skipping/fallback. URL: {url}")
+                            shot = _debug_fail_screenshot(symbol, page, suffix=f"_blank_budget_after_consent_p{page_num}")
+                            raise ValueError(f"Stooq blank/no-table retry budget exhausted after consent for {symbol}; skipping/fallback. URL: {url} Screenshot: {shot}")
                         elif not interactive_captcha:
                             browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
@@ -2227,7 +2232,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     ):
                         ready = True
                     elif interactive_captcha and _stooq_retry_budget_exhausted(interactive_state):
-                        raise ValueError(f"Stooq blank/no-table retry budget exhausted after table wait for {symbol}; skipping/fallback. URL: {url}")
+                        shot = _debug_fail_screenshot(symbol, page, suffix=f"_blank_budget_after_table_wait_p{page_num}")
+                        raise ValueError(f"Stooq blank/no-table retry budget exhausted after table wait for {symbol}; skipping/fallback. URL: {url} Screenshot: {shot}")
                     elif not interactive_captcha:
                         browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                         ready = ready or _alt_helped

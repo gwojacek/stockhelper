@@ -2367,13 +2367,25 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return _fibo_row_for_troj_cell(ticker, raw) or troj_row_by_ticker.get(ticker)
         return troj_row_by_ticker.get(ticker)
 
+    def _troj_cell_recent_ichimoku_signal(cell: str, row: ScannerRow | None) -> bool:
+        if row is not None and _row_has_search_day_signal(row):
+            return True
+        text = str(cell or "").lower()
+        if not any(token in text for token in ("cloud", "trend", "breakout", "retest", "kijun")):
+            return False
+        months = [float(m) for m in re.findall(r"\((\d+(?:\.\d+)?)m\)", text)]
+        # 3P markdown cards do not always include the allsearch breakout date;
+        # a 0.0m/0.1m age in the cloud/retest columns means the breakout is still
+        # inside the five-day visual signal window.
+        return bool(months and min(months) <= 0.25)
+
     def _troj_cell_attrs(cell: str, section_id: str = "") -> str:
         row = _troj_row_for_cell(cell, section_id)
         if not row:
             return ""
         attrs = f" data-market='{html.escape(row.market)}' data-scanner='{html.escape(row.scanner)}'"
         classes: list[str] = []
-        if _row_has_search_day_signal(row):
+        if _row_has_search_day_signal(row) or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row)):
             classes.append("today-signal")
         if "ichimoku" in section_id:
             trend_text = " ".join(str(v) for v in [cell, row.status, row.metrics.get("ichimoku_status", ""), row.metrics.get("tk_cross", ""), row.metrics.get("current_side", "")]).lower()

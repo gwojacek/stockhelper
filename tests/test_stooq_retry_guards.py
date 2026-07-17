@@ -20,3 +20,6 @@ def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
     assert 'STOCKHELPER_STOOQ_FIREFOX_RETRY' in SOURCE
     assert 'headed Chromium fallback skipped' in SOURCE
     assert 'Stooq blank/no-table retry budget exhausted after table wait' in SOURCE
+    assert "img[src*='/q/l/s/i/']" in SOURCE
+    assert '_blank_budget_before_consent_p' in SOURCE
+    assert 'Screenshot: {shot}' in SOURCE
