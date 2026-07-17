@@ -1070,6 +1070,8 @@ def _page_has_captcha_image(page) -> bool:
     for selector in selectors:
         try:
             if page.locator(selector).first.count() > 0:
+                if _stooq_verbose_enabled():
+                    print(f"[stooq-web] captcha image detected with selector {selector}", flush=True)
                 return True
         except Exception:
             continue
@@ -1719,16 +1721,32 @@ def _force_interactive_pause(page, symbol: str, state: dict | None = None, inter
         print(f"[stooq-web] Unable to open inspector: {exc}")
 
 
-def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
-    out_dir = Path("debug") / "stooq"
+def _stooq_debug_dir() -> Path:
+    # Defaults to <repo-cwd>/debug/stooq, but can be pinned by users who run via
+    # wrappers/Docker and want artifacts in a host-mounted project directory.
+    out_dir = Path(os.getenv("STOCKHELPER_STOOQ_DEBUG_DIR", "")).expanduser() if os.getenv("STOCKHELPER_STOOQ_DEBUG_DIR") else Path.cwd() / "debug" / "stooq"
     out_dir.mkdir(parents=True, exist_ok=True)
-    name = f"{symbol.lower().replace('.', '_')}{suffix}.png"
-    path = out_dir / name
+    return out_dir
+
+
+def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
+    out_dir = _stooq_debug_dir()
+    stem = f"{symbol.lower().replace('.', '_')}{suffix}"
+    path = out_dir / f"{stem}.png"
+    html_path = out_dir / f"{stem}.html"
+    try:
+        html_path.write_text(page.content(), encoding="utf-8")
+    except Exception as exc:
+        if _stooq_verbose_enabled():
+            print(f"[stooq-web] debug HTML save failed for {symbol}: {exc}", flush=True)
     try:
         page.screenshot(path=str(path), full_page=True)
-    except Exception:
+    except Exception as exc:
+        if _stooq_verbose_enabled():
+            print(f"[stooq-web] debug screenshot save failed for {symbol}: {exc} dir={out_dir}", flush=True)
         return ""
-    return str(path)
+    print(f"[stooq-web] debug screenshot saved for {symbol}: {path.resolve()} (html: {html_path.resolve()})", flush=True)
+    return str(path.resolve())
 
 
 
@@ -1736,8 +1754,7 @@ def _captcha_artifact_path(symbol: str, suffix: str) -> Path:
     if (symbol or "").lower().startswith("wig_bulk"):
         out_dir = _stooq_bulk_debug_dir()
     else:
-        out_dir = Path("debug") / "stooq"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = _stooq_debug_dir()
     return out_dir / f"{symbol.lower().replace('.', '_')}{suffix}.png"
 
 
@@ -2044,6 +2061,8 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
             img = page.locator("#t11 img, tr#t11 img, img[src*='/q/l/s/i/'], img[src*='cpt'], img[src*='captcha']").first
             if img.count() == 0:
                 if attempt == 1:
+                    if _stooq_verbose_enabled():
+                        print(f"[stooq-web] captcha solver found no image for {symbol}; debug_dir={_stooq_debug_dir().resolve()}", flush=True)
                     return False
                 if _stooq_verbose_enabled():
                     print(f"[stooq-web] captcha image disappeared for {symbol} after attempt {attempt - 1}.", flush=True)

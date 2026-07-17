@@ -23,3 +23,6 @@ def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
     assert "img[src*='/q/l/s/i/']" in SOURCE
     assert '_blank_budget_before_consent_p' in SOURCE
     assert 'Screenshot: {shot}' in SOURCE
+    assert 'STOCKHELPER_STOOQ_DEBUG_DIR' in SOURCE
+    assert 'debug screenshot saved for' in SOURCE
+    assert 'html_path.write_text(page.content()' in SOURCE
