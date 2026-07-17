@@ -54,3 +54,4 @@ def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert '_handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)' in SOURCE
     assert 'Stooq page load failed. URL:' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
+    assert '_CAPTCHA_SOLVER_LOGGED_SYMBOLS' in SOURCE

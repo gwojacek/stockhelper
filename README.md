@@ -48,6 +48,27 @@ Use this table as the fastest path to the commands you will run most often. The 
 
 If you intentionally use a local Poetry/Python install instead of Docker, run `STOCKHELPER_IN_DOCKER=1 python run ...` inside that environment to bypass the Docker redirect and execute the Python app directly.
 
+## Commodity FIBO refresh and Stooq/Tor fallback
+
+Commodity FIBO scans are intentionally quiet and sequential by default so Stooq/Tor is not hit by many workers at once. Run:
+
+```bash
+stock -fibo_search commodities
+```
+
+The scanner first does a fast freshness check against Yahoo and sets `STOCKHELPER_COMMODITIES_REFRESH_TICKERS` only for missing/stale commodities. Fresh commodity CSVs are read from cache; only stale symbols are refreshed through the Stooq UI fallback.
+
+For Stooq web fallback, StockHelper auto-detects a reachable Tor SOCKS proxy at `socks5://127.0.0.1:9050`, or you can point Docker at a host Tor service:
+
+```bash
+docker compose run --rm \
+  --add-host=host.docker.internal:host-gateway \
+  -e STOCKHELPER_STOOQ_TOR_PROXY='socks5://host.docker.internal:9050' \
+  stockhelper -fibo_search commodities
+```
+
+Normal output is kept minimal: one captcha/consent line per symbol and page progress lines such as `[stooq-web] progress page=5 collected=200`. Use `STOCKHELPER_STOOQ_DEBUG=1` or `STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1` when you need detailed proxy, blank-page, inspector, OCR, HTML, and screenshot diagnostics under `debug/stooq/`.
+
 ## Features
 
 - **Position/risk analysis** for stocks, forex, and commodities/CFDs.

@@ -18,6 +18,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_pla
 
 _CAPTCHA_INSPECTOR_LOCK = threading.Lock()
 _CAPTCHA_OCR_LOCK = threading.Lock()
+_CAPTCHA_SOLVER_LOGGED_SYMBOLS: set[str] = set()
 _EASYOCR_READER = None
 _EASYOCR_UNAVAILABLE = False
 
@@ -2253,7 +2254,13 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     or OCR is uncertain, return False and let the headed inspector fallback handle it.
     """
     max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
-    print("resolving rate limit captcha and consent...", flush=True)
+    log_key = (symbol or "-").strip().lower()
+    with _CAPTCHA_OCR_LOCK:
+        first_solver_log = log_key not in _CAPTCHA_SOLVER_LOGGED_SYMBOLS
+        if first_solver_log:
+            _CAPTCHA_SOLVER_LOGGED_SYMBOLS.add(log_key)
+    if first_solver_log:
+        print("resolving rate limit captcha and consent...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
             img = page.locator("#t11 img, tr#t11 img, img[src*='/q/l/s/i/'], img[src*='cpt'], img[src*='captcha']").first
