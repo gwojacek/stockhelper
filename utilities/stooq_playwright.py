@@ -1174,6 +1174,13 @@ def _stooq_tor_enabled() -> bool:
 def _signal_tor_newnym(symbol: str, reason: str) -> bool:
     if not _stooq_tor_enabled():
         return False
+    control_requested = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL", "0").strip().lower() in {"1", "true", "yes", "on"}
+    control_requested = control_requested or any(
+        key in os.environ
+        for key in ("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD")
+    )
+    if not control_requested:
+        return False
     host = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "127.0.0.1").strip()
     try:
         port = int(os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "9051"))
@@ -1618,10 +1625,13 @@ def _recover_blank_page_with_proxy_rotation(playwright, browser, page, url: str,
             if changed and (_try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page)):
                 return browser, page, True
             return browser, page, changed and not _page_is_blank_or_without_captcha_and_rows(page)
-        print(
-            f"[stooq-web] {reason} for {symbol}; proxy rotation skipped because STOCKHELPER_STOOQ_PROXY_POOL has {pool_size} entr{'y' if pool_size == 1 else 'ies'}.",
-            flush=True,
-        )
+        if retry_state is None or not retry_state.get("proxy_rotation_skip_logged"):
+            print(
+                f"[stooq-web] {reason} for {symbol}; no proxy pool rotation available (pool entries={pool_size}).",
+                flush=True,
+            )
+            if retry_state is not None:
+                retry_state["proxy_rotation_skip_logged"] = True
         return browser, page, False
     # Try every other proxy once.  The caller already loaded the current slot.
     for _ in range(max(1, pool_size - 1)):

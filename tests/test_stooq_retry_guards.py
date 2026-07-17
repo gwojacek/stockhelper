@@ -37,7 +37,7 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'proxy_pool_index' in SOURCE
     assert 'def _stooq_proxy_pool_initial_index' in SOURCE
     assert 'def _recover_blank_page_with_proxy_rotation' in SOURCE
-    assert 'proxy rotation skipped because STOCKHELPER_STOOQ_PROXY_POOL has' in SOURCE
+    assert 'no proxy pool rotation available' in SOURCE
     assert 'browser.new_context(**context_kwargs)' in SOURCE
     assert 'context_kwargs["proxy"] = proxy' in SOURCE
     assert 'invalid proxy from' in SOURCE
@@ -52,3 +52,4 @@ def test_stooq_proxy_pool_configuration_is_supported():
 def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert '_handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)' in SOURCE
     assert 'Stooq page load failed. URL:' in SOURCE
+    assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
