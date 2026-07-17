@@ -1215,12 +1215,17 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
     proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index)
-    if proxy:
-        launch_kwargs["proxy"] = proxy
     browser = browser_type.launch(**launch_kwargs)
-    page = browser.new_page()
+    context_kwargs = {"viewport": {"width": 1440, "height": 1000}, "locale": "pl-PL"}
+    if proxy:
+        # Keep the proxy scoped to this context.  To change IP, close this
+        # context/browser and create a new one with the next pool slot.
+        context_kwargs["proxy"] = proxy
+    context = browser.new_context(**context_kwargs)
+    page = context.new_page()
     try:
         page.__stockhelper_browser_name = browser_name
+        page.__stockhelper_context = context
     except Exception:
         pass
     return browser, page
@@ -1426,6 +1431,12 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
     except Exception:
         pass
     try:
+        ctx = getattr(page, "__stockhelper_context", None)
+        if ctx is not None:
+            ctx.close()
+    except Exception:
+        pass
+    try:
         browser.close()
     except Exception:
         pass
@@ -1485,6 +1496,12 @@ def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, i
     )
     try:
         page.close()
+    except Exception:
+        pass
+    try:
+        ctx = getattr(page, "__stockhelper_context", None)
+        if ctx is not None:
+            ctx.close()
     except Exception:
         pass
     try:
