@@ -37,3 +37,5 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'STOCKHELPER_STOOQ_PROXY_POOL' in SOURCE
     assert 'STOCKHELPER_STOOQ_PROXY_POOL_INDEX' in SOURCE
     assert 'no Playwright proxy configured' in SOURCE
+    assert 'rotating Stooq proxy pool to slot' in SOURCE
+    assert 'proxy_pool_index' in SOURCE

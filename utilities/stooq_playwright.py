@@ -1133,7 +1133,7 @@ def _split_stooq_proxy_pool(value: str) -> list[str]:
     return [part.strip() for part in re.split(r"[,;\n]+", value or "") if part.strip()]
 
 
-def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
+def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = None) -> dict | None:
     """Return Playwright proxy config from environment, optionally symbol-specific.
 
     Supported env vars:
@@ -1168,7 +1168,7 @@ def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
         if pool:
             raw_idx = os.getenv("STOCKHELPER_STOOQ_PROXY_POOL_INDEX", "").strip()
             try:
-                idx = int(raw_idx) if raw_idx else (abs(hash((symbol or "").lower())) % len(pool))
+                idx = int(raw_idx) if raw_idx else (proxy_index if proxy_index is not None else (abs(hash((symbol or "").lower())) % len(pool)))
             except ValueError:
                 idx = 0
             idx = idx % len(pool)
@@ -1203,7 +1203,7 @@ def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
     return cfg
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None):
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None):
     browser_type = getattr(playwright, browser_name)
     launch_interactive = bool(interactive and _headed_display_available())
     if interactive and not launch_interactive:
@@ -1214,7 +1214,7 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
             flush=True,
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
-    proxy = _stooq_proxy_config(symbol)
+    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index)
     if proxy:
         launch_kwargs["proxy"] = proxy
     browser = browser_type.launch(**launch_kwargs)
@@ -1478,6 +1478,50 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
     if _try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page):
         return browser, page, True
     return browser, page, not _page_is_blank_or_without_captcha_and_rows(page)
+
+
+def _stooq_proxy_pool_size() -> int:
+    return len(_split_stooq_proxy_pool(os.getenv("STOCKHELPER_STOOQ_PROXY_POOL", "")))
+
+
+def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
+    pool_size = _stooq_proxy_pool_size()
+    if pool_size <= 1:
+        return browser, page, False
+    if retry_state is None:
+        retry_state = {}
+    current = int(retry_state.get("proxy_pool_index", -1))
+    next_idx = (current + 1) % pool_size
+    retry_state["proxy_pool_index"] = next_idx
+    print(
+        f"[stooq-web] {reason} for {symbol}; rotating Stooq proxy pool to slot {next_idx}/{pool_size} and reloading page.",
+        flush=True,
+    )
+    try:
+        page.close()
+    except Exception:
+        pass
+    try:
+        browser.close()
+    except Exception:
+        pass
+    browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol, proxy_index=next_idx)
+    page.set_default_timeout(15000)
+    page.set_default_navigation_timeout(20000)
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+    except Exception as exc:
+        print(f"[stooq-web] proxy-rotated reload failed for {symbol}: {exc}", flush=True)
+        return browser, page, True
+    try:
+        _accept_consent_if_present(page, first_page=True)
+    except Exception:
+        pass
+    try:
+        _wait_for_table_or_limit_with_retry(page)
+    except Exception:
+        pass
+    return browser, page, True
 
 
 def _switch_to_inspector_for_captcha(
@@ -2228,7 +2272,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             page.set_default_navigation_timeout(20000)
             page_num = start_page
             empty_pages = 0
-            interactive_state = {"done": False, "forced_pause_done": False, "blank_retry_budget": _blank_page_auto_retry_count()}
+            initial_proxy_idx = (abs(hash(symbol.lower())) % _stooq_proxy_pool_size()) if _stooq_proxy_pool_size() else -1
+            interactive_state = {"done": False, "forced_pause_done": False, "blank_retry_budget": _blank_page_auto_retry_count(), "proxy_pool_index": initial_proxy_idx}
             max_page = max(30, start_page + 30)
             while page_num <= max_page:
                 now_mono = time.monotonic()
@@ -2246,7 +2291,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 except Exception:
                     break
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                    if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
+                    browser, page, _proxy_rotated = _rotate_blank_page_proxy(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page before consent")
+                    if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
+                        pass
+                    elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
                         page, url, symbol, "Blank/no-table Stooq page before consent", pre_vpn_refreshes=2, retry_state=interactive_state
                     ):
                         pass
@@ -2263,7 +2311,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 if page_num == 1:
                     _accept_consent_if_present(page, first_page=True)
                     if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                        if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
+                        browser, page, _proxy_rotated = _rotate_blank_page_proxy(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
+                        if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
+                            pass
+                        elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
                             page, url, symbol, "Blank/no-table Stooq page after consent", retry_state=interactive_state
                         ):
                             pass
@@ -2274,7 +2325,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                             browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                    if interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
+                    browser, page, _proxy_rotated = _rotate_blank_page_proxy(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after table wait")
+                    if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
+                        ready = True
+                    elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
                         page, url, symbol, "Blank/no-table Stooq page after table wait", retry_state=interactive_state
                     ):
                         ready = True
@@ -2491,13 +2545,20 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     with sync_playwright() as p:
         browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol)
         response = None
-        interactive_state = {"done": False, "forced_pause_done": False}
+        initial_proxy_idx = (abs(hash(symbol.lower())) % _stooq_proxy_pool_size()) if _stooq_proxy_pool_size() else -1
+        interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
         for u in urls:
             try:
                 response = page.goto(u, wait_until="domcontentloaded")
                 _accept_consent_if_present(page, first_page=True)
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
+                if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
+                    browser, page, _proxy_rotated = _rotate_blank_page_proxy(
+                        p, browser, page, u, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq debug page"
+                    )
+                    if _proxy_rotated:
+                        _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 payload["attempted_urls"].append({"url": u, "title": page.title(), "table_count": page.locator("table").count(), "fth1_count": page.locator("#fth1").count(), "goto_error": None})
             except Exception as exc:
                 payload["attempted_urls"].append({"url": u, "title": "", "table_count": 0, "fth1_count": 0, "goto_error": str(exc)})
