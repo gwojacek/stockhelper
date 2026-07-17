@@ -10,18 +10,14 @@ def test_stooq_blank_retry_defaults_are_small_and_wait_helper_does_not_reload_by
     assert 'attempts = 1 + (retries if retries is not None else _stooq_wait_reload_retries_default())' in SOURCE
 
 
-def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
-    assert 'def _consume_stooq_retry_budget' in SOURCE
-    assert 'blank/no-table retry budget exhausted' in SOURCE
+def test_stooq_no_display_inspector_guard_is_present():
     assert 'def _headed_display_available()' in SOURCE
     assert 'DISPLAY") or os.getenv("WAYLAND_DISPLAY")' in SOURCE
     assert 'headed inspector skipped because DISPLAY/WAYLAND_DISPLAY is not set' in SOURCE
     assert 'forced inspector skipped' in SOURCE
     assert 'STOCKHELPER_STOOQ_FIREFOX_RETRY' in SOURCE
     assert 'headed Chromium fallback skipped' in SOURCE
-    assert 'Stooq blank/no-table retry budget exhausted after table wait' in SOURCE
     assert "img[src*='/q/l/s/i/']" in SOURCE
-    assert '_blank_budget_before_consent_p' in SOURCE
     assert 'Screenshot: {shot}' in SOURCE
     assert 'STOCKHELPER_STOOQ_DEBUG_DIR' in SOURCE
     assert 'debug screenshot saved for' in SOURCE
