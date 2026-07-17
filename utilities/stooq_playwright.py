@@ -1185,7 +1185,13 @@ def _stooq_proxy_config(symbol: str | None = None) -> dict | None:
 
 def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None):
     browser_type = getattr(playwright, browser_name)
-    launch_kwargs = {"headless": not interactive, "slow_mo": 150 if interactive else 0}
+    launch_interactive = bool(interactive and _headed_display_available())
+    if interactive and not launch_interactive:
+        print(
+            f"[stooq-web] headed {browser_name} launch requested for {symbol or '-'} but DISPLAY/WAYLAND_DISPLAY is not set; launching headless and skipping inspector pause.",
+            flush=True,
+        )
+    launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
     proxy = _stooq_proxy_config(symbol)
     if proxy:
         launch_kwargs["proxy"] = proxy
@@ -2441,7 +2447,7 @@ def _merge_debug_rows_into_csv(rows: list[list[str]], csv_path: Path) -> tuple[i
 
 
 def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captcha: bool = False, csv_path: Path | None = None) -> Path:
-    out_dir = out_dir or Path("debug") / "stooq"
+    out_dir = out_dir or _stooq_debug_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
 
@@ -2472,7 +2478,9 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         html = page.content()
         html_path = out_dir / f"{symbol.lower().replace('.', '_')}.html"
         html_path.write_text(html, encoding="utf-8")
-        page.screenshot(path=str(out_dir / f"{symbol.lower().replace('.', '_')}.png"), full_page=True)
+        png_path = out_dir / f"{symbol.lower().replace('.', '_')}.png"
+        page.screenshot(path=str(png_path), full_page=True)
+        print(f"[stooq-web] debug page artifacts saved for {symbol}: {png_path.resolve()} (html: {html_path.resolve()})", flush=True)
 
         rows = _extract_rows_from_frame(page)
         frame_rows = {}
@@ -2504,4 +2512,4 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return out_file
+    return out_file.resolve()

@@ -26,3 +26,6 @@ def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
     assert 'STOCKHELPER_STOOQ_DEBUG_DIR' in SOURCE
     assert 'debug screenshot saved for' in SOURCE
     assert 'html_path.write_text(page.content()' in SOURCE
+    assert 'launching headless and skipping inspector pause' in SOURCE
+    assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
+    assert 'debug page artifacts saved' in SOURCE
