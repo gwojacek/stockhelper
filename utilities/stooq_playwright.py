@@ -1134,12 +1134,41 @@ def _split_stooq_proxy_pool(value: str) -> list[str]:
     return [part.strip() for part in re.split(r"[,;\n]+", value or "") if part.strip()]
 
 
-def _stooq_tor_enabled() -> bool:
-    return os.getenv("STOCKHELPER_STOOQ_TOR", "0").strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _stooq_tor_proxy_value() -> str:
     return os.getenv("STOCKHELPER_STOOQ_TOR_PROXY", "socks5://127.0.0.1:9050").strip()
+
+
+def _stooq_tor_proxy_host_port() -> tuple[str, int]:
+    parsed = urlparse(_stooq_tor_proxy_value())
+    host = parsed.hostname or "127.0.0.1"
+    try:
+        port = parsed.port or 9050
+    except ValueError:
+        port = 9050
+    return host, port
+
+
+def _stooq_tor_proxy_reachable() -> bool:
+    host, port = _stooq_tor_proxy_host_port()
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except Exception:
+        return False
+
+
+def _stooq_tor_enabled() -> bool:
+    raw = os.getenv("STOCKHELPER_STOOQ_TOR")
+    if raw is not None:
+        lowered = raw.strip().lower()
+        if lowered == "auto":
+            return _stooq_tor_proxy_reachable()
+        return lowered in {"1", "true", "yes", "on"}
+    if os.getenv("STOCKHELPER_STOOQ_TOR_PROXY"):
+        return True
+    if os.getenv("STOCKHELPER_STOOQ_TOR_AUTO", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    return _stooq_tor_proxy_reachable()
 
 
 def _signal_tor_newnym(symbol: str, reason: str) -> bool:
