@@ -227,6 +227,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "\n# WYNIKI FIBO #2\n\n"
+        "| Ticker | Dir | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| TPE | long | hammer | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | 2026-05-16 | 1000 | https://stooq.pl/tpe | python run -c TPE | yes | 2026-05-30 | 2026-05-30 |\n"
         "\n# WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)\n\n"
         "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
@@ -333,7 +337,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🔻 Kliny" in text
     assert "🚀 breakout" in text
     assert ".today-signal td{background:#14532d!important}" in text
+    assert ".troj-cell-card.today-signal{background:#14532d!important" in text
     assert "data-scanner='WEDGE' data-status='🚀 breakout' class='today-signal'" in text
+    assert "data-scanner='FIBO' data-status='valid_reversal' class='today-signal'" in text
+    assert "data-scanner='ICHIMOKU' data-status='breakout_confirmed' class='today-signal'" in text
+    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO'>" in text
+    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU'>" in text
     assert "falling_wedge_breakout" not in text
     assert "wybicie long 2026-05-30" not in text
     assert "<th>Fit</th>" not in text

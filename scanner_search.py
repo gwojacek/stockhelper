@@ -2490,9 +2490,8 @@ def _classify_retest_depth(cloud_top: float, cloud_bottom: float, probe_price: f
 def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, allow_equal_third_close: bool = False) -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
     def _breakout_status_for_age() -> str:
         try:
-            flip_date = pd.to_datetime(df.iloc[flip_idx]["Date"]).date()
-            latest_date = pd.to_datetime(df.iloc[-1]["Date"]).date()
-            return "breakout_confirmed" if 0 <= (latest_date - flip_date).days <= 5 else "no_breakout"
+            breakout_bars = (len(df) - 1) - int(flip_idx)
+            return "breakout_confirmed" if 0 <= breakout_bars <= 5 else "no_breakout"
         except Exception:
             return "breakout_confirmed"
 
