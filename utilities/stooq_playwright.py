@@ -1239,6 +1239,11 @@ def _headed_display_available() -> bool:
     return bool(os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"))
 
 
+
+
+def _stooq_retry_budget_exhausted(state: dict | None) -> bool:
+    return bool(state is not None and int(state.get("blank_retry_budget", _blank_page_auto_retry_count())) <= 0)
+
 def _consume_stooq_retry_budget(state: dict | None, symbol: str, reason: str) -> bool:
     if state is None:
         return True
@@ -1392,6 +1397,9 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
     Some Stooq rate-limit states render as a blank/no-table Chromium page even
     after reloads, while Firefox often renders the captcha/table correctly.
     """
+    if os.getenv("STOCKHELPER_STOOQ_FIREFOX_RETRY", "0") != "1":
+        print(f"[stooq-web] Firefox blank-page retry skipped for {symbol}; set STOCKHELPER_STOOQ_FIREFOX_RETRY=1 to enable.", flush=True)
+        return browser, page, False
     if not _page_is_blank_or_without_captcha_and_rows(page) or _page_has_captcha_image(page):
         return browser, page, False
     try:
@@ -1409,11 +1417,17 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
         browser.close()
     except Exception:
         pass
+    launch_interactive = interactive and _headed_display_available()
+    if interactive and not launch_interactive:
+        print(f"[stooq-web] headed Firefox retry disabled for {symbol} because DISPLAY/WAYLAND_DISPLAY is not set.", flush=True)
     try:
-        browser, page = _open_page(playwright, interactive=interactive, browser_name="firefox", symbol=symbol)
+        browser, page = _open_page(playwright, interactive=launch_interactive, browser_name="firefox", symbol=symbol)
     except Exception as exc:
         print(f"[stooq-web] Firefox retry unavailable for {symbol}: {exc}", flush=True)
-        browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol)
+        fallback_interactive = interactive and _headed_display_available()
+        if interactive and not fallback_interactive:
+            print(f"[stooq-web] headed Chromium fallback skipped for {symbol} because DISPLAY/WAYLAND_DISPLAY is not set.", flush=True)
+        browser, page = _open_page(playwright, interactive=fallback_interactive, browser_name="chromium", symbol=symbol)
         return browser, page, False
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
@@ -1467,6 +1481,8 @@ def _switch_to_inspector_for_captcha(
         captcha_image_visible = _page_has_captcha_image(page)
         blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
         if blank_or_no_rows and not captcha_image_visible:
+            if _stooq_retry_budget_exhausted(retry_state):
+                return browser, page, True
             browser, page, firefox_helped = _retry_blank_page_with_firefox(playwright, browser, page, url, symbol, interactive=True)
             if firefox_helped:
                 blocked = _page_has_rate_limit_or_captcha(page)
@@ -2184,6 +2200,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         page, url, symbol, "Blank/no-table Stooq page before consent", pre_vpn_refreshes=2, retry_state=interactive_state
                     ):
                         pass
+                    elif interactive_captcha and _stooq_retry_budget_exhausted(interactive_state):
+                        raise ValueError(f"Stooq blank/no-table retry budget exhausted before consent for {symbol}; skipping/fallback. URL: {url}")
                     elif not interactive_captcha:
                         browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 if _page_has_rate_limit_or_captcha(page):
@@ -2198,6 +2216,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                             page, url, symbol, "Blank/no-table Stooq page after consent", retry_state=interactive_state
                         ):
                             pass
+                        elif interactive_captcha and _stooq_retry_budget_exhausted(interactive_state):
+                            raise ValueError(f"Stooq blank/no-table retry budget exhausted after consent for {symbol}; skipping/fallback. URL: {url}")
                         elif not interactive_captcha:
                             browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
@@ -2206,6 +2226,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         page, url, symbol, "Blank/no-table Stooq page after table wait", retry_state=interactive_state
                     ):
                         ready = True
+                    elif interactive_captcha and _stooq_retry_budget_exhausted(interactive_state):
+                        raise ValueError(f"Stooq blank/no-table retry budget exhausted after table wait for {symbol}; skipping/fallback. URL: {url}")
                     elif not interactive_captcha:
                         browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                         ready = ready or _alt_helped

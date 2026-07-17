@@ -3427,6 +3427,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
                         upper_exact_tol = min(exact_tol, upper_touch_tol)
+                        if _is_local_extreme(i, "upper") and highs[i] > up + upper_exact_tol:
+                            # A later local high that sits visibly above an older
+                            # upper line is a new candidate anchor, not an extra
+                            # tolerated touch of the stale line. Reject this
+                            # candidate so anchor selection can move to that
+                            # candle extreme (e.g. BMC.WA 2026-07-06).
+                            invalid = True
+                            break
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
                             upper_exact_contacts.append(i)
                             upper_contacts.append(i)

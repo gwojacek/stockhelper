@@ -17,3 +17,6 @@ def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
     assert 'DISPLAY") or os.getenv("WAYLAND_DISPLAY")' in SOURCE
     assert 'headed inspector skipped because DISPLAY/WAYLAND_DISPLAY is not set' in SOURCE
     assert 'forced inspector skipped' in SOURCE
+    assert 'STOCKHELPER_STOOQ_FIREFOX_RETRY' in SOURCE
+    assert 'headed Chromium fallback skipped' in SOURCE
+    assert 'Stooq blank/no-table retry budget exhausted after table wait' in SOURCE
