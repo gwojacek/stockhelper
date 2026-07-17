@@ -2300,11 +2300,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if "breakout" in status_text or "returned_to_cloud" in status_text or "returned to cloud" in status_text:
                 add(row.dates.get("flip_date") or row.metrics.get("latest_date"))
         elif row.scanner == "FIBO":
+            # Fibo green means a valid 61.8 reversal pattern, not merely being
+            # near/touched 61.8 while still waiting for confirmation.
             pattern = str(row.pattern or "").strip().lower()
-            if pattern not in {"", "-", "none"}:
+            status_text = " ".join(str(v) for v in [row.status, row.category]).lower()
+            valid_618_pattern = ("valid" in status_text) and pattern not in {"", "-", "none"}
+            if valid_618_pattern:
                 add(row.dates.get("touch_61") or row.metrics.get("latest_date"))
-            if row.dates.get("touch_61") and row.dates.get("touch_61") != "-":
-                add(row.dates.get("touch_61"))
         return dates_out
 
     def _row_has_search_day_signal(row: ScannerRow) -> bool:
@@ -2312,8 +2314,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if not signals:
             return False
         refs = [_date_from_text(row.metrics.get("latest_date", "")), _date_from_text(row.metrics.get("expected_date", "")), datetime.now().date()]
-        ref_set = {d for d in refs if d is not None}
-        return any(d in ref_set for d in signals)
+        ref_dates = [d for d in refs if d is not None]
+        # Breakout/retest signals stay highlighted for the next five candles/days
+        # as long as no newer scanner state replaced them.
+        return any(0 <= (ref - signal).days <= 5 for signal in signals for ref in ref_dates)
 
     def _row_attrs(row: ScannerRow) -> str:
         cls = " class='today-signal'" if _row_has_search_day_signal(row) else ""

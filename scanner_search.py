@@ -3669,6 +3669,26 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     )
                     if much_longer_with_better_upper:
                         return candidate.score >= current.score * 0.55
+                    same_lower_newer_upper_anchor = (
+                        same_state
+                        and (candidate.breakout_direction or "-") == "-"
+                        and candidate.upper_start_date == current.upper_start_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_end_date == current.lower_end_date
+                        and candidate.upper_end_date > current.upper_end_date
+                        and candidate.upper_touches >= 2
+                        and candidate.lower_touches >= current.lower_touches
+                        and candidate.width_end_pct <= current.width_end_pct * 1.45
+                        and candidate.width_start_pct <= current.width_start_pct * 1.15
+                        and candidate.fit_quality >= current.fit_quality * 0.65
+                    )
+                    if same_lower_newer_upper_anchor:
+                        # Prefer the active/recent upper swing-high anchor over an
+                        # older steep upper line that later candles merely pierce
+                        # within tolerance. Anchor points themselves remain candle
+                        # extremes because candidates are built from local highs/lows.
+                        return True
+
                     same_active_structure_longer_top = (
                         same_state
                         and candidate.upper_end_date == current.upper_end_date

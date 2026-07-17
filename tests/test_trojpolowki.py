@@ -208,6 +208,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| CRI | below | breakout_confirmed | 2026-05-29 | 0.1 | 6.2 | 1 | 1000 | 2026-05-30 | - | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/cri | python run -c CRI | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | below | breakout_confirmed | 2026-05-29 | 4.0 | 7.5 | 1 | 1000 | 2026-05-30 | - | Touched Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rwe-ichi | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 5.8 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n"
+        "| RP5 | below | medium_retest_pattern | 2026-04-23 | 1.3 | 5.8 | 2 | 1000 | 2026-05-25 | hammer | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rp5 | python run -c RP5 | yes | 2026-05-30 | 2026-05-30 |\n"
         "| SCW | below | returned_to_cloud_waiting_for_pattern | 2026-05-28 | 0.1 | 6.0 | 0 | 6728668 | - | - | Inside the cloud | - | none | mild | thick | no | neutral | no | yes | https://stooq.pl/scw | python run -c SCW | yes | 2026-05-29 | 2026-05-29 |\n"
         "\n# WYNIKI 1 ICHIMOKU\n\n"
         "| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Link | Python command | Latest data? | Latest date | Expected date |\n"
@@ -221,6 +222,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| Ticker | Dir | Status | Incline | Ratio(d) | Near61.8 | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| SBUX.US | long | 🚀 3p_steep_incline | 2026-03-27->2026-05-30 | 44/1 (44.00:1) | 98.5% | 1000 | https://stooq.pl/sbux | python run -c SBUX.US | yes | 2026-05-30 | 2026-05-30 |\n"
+        "\n# WYNIKI FIBO #2\n\n"
+        "| Ticker | Dir | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "| VAL.US | long | bullish_hammer | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | 2026-05-27 | 1000 | - | https://stooq.pl/val | python run -c VAL.US | yes | 2026-05-30 | 2026-05-30 |\n"
         "\n# WYNIKI FIBO #1\n\n"
         "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
@@ -303,6 +308,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO'>" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
+    assert "data-scanner='ICHIMOKU' data-ichi-trend='long' class='today-signal'" in text
+    assert "data-scanner='FIBO' class='today-signal'" in text
+    assert "AEP.US" in text and "bullish_hammer" in text
     assert "troj-ichi-trend-filter" in text
     assert "setTrojIchiTrend" in text
     assert "card.dataset.market" in text
