@@ -42,3 +42,6 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'context_kwargs["proxy"] = proxy' in SOURCE
     assert 'invalid proxy from' in SOURCE
     assert 'Use a real numeric port' in SOURCE
+    assert 'STOCKHELPER_STOOQ_TOR' in SOURCE
+    assert 'STOCKHELPER_STOOQ_TOR_PROXY' in SOURCE
+    assert 'SIGNAL NEWNYM' in SOURCE

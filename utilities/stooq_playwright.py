@@ -8,6 +8,7 @@ import threading
 import warnings
 import zipfile
 import re
+import socket
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 
@@ -1133,6 +1134,43 @@ def _split_stooq_proxy_pool(value: str) -> list[str]:
     return [part.strip() for part in re.split(r"[,;\n]+", value or "") if part.strip()]
 
 
+def _stooq_tor_enabled() -> bool:
+    return os.getenv("STOCKHELPER_STOOQ_TOR", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _stooq_tor_proxy_value() -> str:
+    return os.getenv("STOCKHELPER_STOOQ_TOR_PROXY", "socks5://127.0.0.1:9050").strip()
+
+
+def _signal_tor_newnym(symbol: str, reason: str) -> bool:
+    if not _stooq_tor_enabled():
+        return False
+    host = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "127.0.0.1").strip()
+    try:
+        port = int(os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "9051"))
+    except ValueError:
+        port = 9051
+    password = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD", "")
+    auth = f'AUTHENTICATE "{password}"\r\n' if password else "AUTHENTICATE\r\n"
+    try:
+        with socket.create_connection((host, port), timeout=4) as conn:
+            conn.sendall(auth.encode("utf-8"))
+            auth_reply = conn.recv(1024).decode("utf-8", errors="replace")
+            if not auth_reply.startswith("250"):
+                print(f"[stooq-web] Tor NEWNYM auth failed for {symbol}: {auth_reply.strip()}", flush=True)
+                return False
+            conn.sendall(b"SIGNAL NEWNYM\r\n")
+            reply = conn.recv(1024).decode("utf-8", errors="replace")
+            conn.sendall(b"QUIT\r\n")
+            if reply.startswith("250"):
+                print(f"[stooq-web] {reason} for {symbol}; requested new Tor circuit via {host}:{port}.", flush=True)
+                return True
+            print(f"[stooq-web] Tor NEWNYM failed for {symbol}: {reply.strip()}", flush=True)
+    except Exception as exc:
+        print(f"[stooq-web] Tor NEWNYM unavailable for {symbol} at {host}:{port}: {exc}", flush=True)
+    return False
+
+
 def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = None) -> dict | None:
     """Return Playwright proxy config from environment, optionally symbol-specific.
 
@@ -1174,6 +1212,9 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
             idx = idx % len(pool)
             value = pool[idx]
             source = f"STOCKHELPER_STOOQ_PROXY_POOL[{idx}/{len(pool)}]"
+    if not value and _stooq_tor_enabled():
+        value = _stooq_tor_proxy_value()
+        source = "STOCKHELPER_STOOQ_TOR_PROXY"
     if not value:
         if _stooq_verbose_enabled():
             print(f"[stooq-web] no Playwright proxy configured for {symbol or '-'}; set STOCKHELPER_STOOQ_PROXY or STOCKHELPER_STOOQ_PROXY_POOL to avoid site-wide rate limits.", flush=True)
@@ -1490,19 +1531,7 @@ def _stooq_proxy_pool_initial_index(symbol: str | None) -> int:
     return sum((symbol or "").strip().lower().encode("utf-8")) % pool_size
 
 
-def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
-    pool_size = _stooq_proxy_pool_size()
-    if pool_size <= 1:
-        return browser, page, False
-    if retry_state is None:
-        retry_state = {}
-    current = int(retry_state.get("proxy_pool_index", -1))
-    next_idx = (current + 1) % pool_size
-    retry_state["proxy_pool_index"] = next_idx
-    print(
-        f"[stooq-web] {reason} for {symbol}; rotating Stooq proxy pool to slot {next_idx}/{pool_size} and reloading page.",
-        flush=True,
-    )
+def _reopen_stooq_page(playwright, browser, page, url: str, symbol: str, interactive: bool, proxy_index: int | None):
     try:
         page.close()
     except Exception:
@@ -1517,13 +1546,13 @@ def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, i
         browser.close()
     except Exception:
         pass
-    browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol, proxy_index=next_idx)
+    browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol, proxy_index=proxy_index)
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
     try:
         page.goto(url, wait_until="domcontentloaded")
     except Exception as exc:
-        print(f"[stooq-web] proxy-rotated reload failed for {symbol}: {exc}", flush=True)
+        print(f"[stooq-web] connection-changed reload failed for {symbol}: {exc}", flush=True)
         return browser, page, True
     try:
         _accept_consent_if_present(page, first_page=True)
@@ -1536,9 +1565,30 @@ def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, i
     return browser, page, True
 
 
+def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
+    pool_size = _stooq_proxy_pool_size()
+    if pool_size <= 1:
+        return browser, page, False
+    if retry_state is None:
+        retry_state = {}
+    current = int(retry_state.get("proxy_pool_index", -1))
+    next_idx = (current + 1) % pool_size
+    retry_state["proxy_pool_index"] = next_idx
+    print(
+        f"[stooq-web] {reason} for {symbol}; rotating Stooq proxy pool to slot {next_idx}/{pool_size} and reloading page.",
+        flush=True,
+    )
+    return _reopen_stooq_page(playwright, browser, page, url, symbol, interactive, next_idx)
+
+
 def _recover_blank_page_with_proxy_rotation(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
     pool_size = _stooq_proxy_pool_size()
     if pool_size <= 1:
+        if _signal_tor_newnym(symbol, reason):
+            browser, page, changed = _reopen_stooq_page(playwright, browser, page, url, symbol, interactive, None)
+            if changed and (_try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page)):
+                return browser, page, True
+            return browser, page, changed and not _page_is_blank_or_without_captcha_and_rows(page)
         print(
             f"[stooq-web] {reason} for {symbol}; proxy rotation skipped because STOCKHELPER_STOOQ_PROXY_POOL has {pool_size} entr{'y' if pool_size == 1 else 'ies'}.",
             flush=True,
