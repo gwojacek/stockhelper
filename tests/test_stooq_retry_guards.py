@@ -27,5 +27,7 @@ def test_stooq_retry_budget_and_no_display_inspector_guard_are_present():
     assert 'debug screenshot saved for' in SOURCE
     assert 'html_path.write_text(page.content()' in SOURCE
     assert 'launching headless and skipping inspector pause' in SOURCE
+    assert '--inspector requires a GUI display visible inside the process' in SOURCE
+    assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
     assert 'debug page artifacts saved' in SOURCE

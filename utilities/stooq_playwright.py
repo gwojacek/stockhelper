@@ -1188,7 +1188,9 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
     launch_interactive = bool(interactive and _headed_display_available())
     if interactive and not launch_interactive:
         print(
-            f"[stooq-web] headed {browser_name} launch requested for {symbol or '-'} but DISPLAY/WAYLAND_DISPLAY is not set; launching headless and skipping inspector pause.",
+            f"[stooq-web] headed {browser_name} launch requested for {symbol or '-'} but DISPLAY/WAYLAND_DISPLAY is not set in this process; "
+            "launching headless and skipping inspector pause. In Docker, pass DISPLAY/WAYLAND_DISPLAY into the container "
+            "and mount the X11/Wayland socket, or run under xvfb-run if you only need a virtual display.",
             flush=True,
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
@@ -2449,6 +2451,19 @@ def _merge_debug_rows_into_csv(rows: list[list[str]], csv_path: Path) -> tuple[i
 def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captcha: bool = False, csv_path: Path | None = None) -> Path:
     out_dir = out_dir or _stooq_debug_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
+    print(
+        f"[stooq-web] debug_stooq_page symbol={symbol} inspector={int(bool(interactive_captcha))} "
+        f"DISPLAY={os.getenv('DISPLAY') or '-'} WAYLAND_DISPLAY={os.getenv('WAYLAND_DISPLAY') or '-'} "
+        f"debug_dir={out_dir.resolve()} env_debug_dir={os.getenv('STOCKHELPER_STOOQ_DEBUG_DIR') or '-'}",
+        flush=True,
+    )
+    if interactive_captcha and not _headed_display_available():
+        print(
+            "[stooq-web] --inspector requires a GUI display visible inside the process. "
+            "If this is Docker, ensure your launcher passes -e DISPLAY=$DISPLAY and mounts /tmp/.X11-unix "
+            "(or the Wayland socket). Without that, Playwright cannot open a headed inspector, so this run continues headless.",
+            flush=True,
+        )
     out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
 
     urls = _stooq_history_urls(symbol)
