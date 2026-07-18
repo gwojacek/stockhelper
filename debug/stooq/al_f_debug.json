@@ -1,0 +1,139 @@
+{
+  "symbol": "al.f",
+  "url": "https://stooq.pl/q/d/?s=al.f&i=d",
+  "attempted_urls": [
+    {
+      "url": "https://stooq.pl/q/d/?s=al.f&i=d",
+      "title": "AL.F - Aluminum - Stooq",
+      "table_count": 36,
+      "fth1_count": 1,
+      "goto_error": null
+    }
+  ],
+  "debug_only": false,
+  "rows_count": 40,
+  "rows_preview": [
+    [
+      "3063",
+      "16 lip 2026",
+      "3360",
+      "3409",
+      "3359.25",
+      "3379.75",
+      "+0.90%",
+      "+30.00",
+      "0",
+      "0"
+    ],
+    [
+      "3062",
+      "15 lip 2026",
+      "3375.25",
+      "3375.25",
+      "3300.5",
+      "3349.75",
+      "+0.22%",
+      "+7.50",
+      "0",
+      "0"
+    ],
+    [
+      "3061",
+      "14 lip 2026",
+      "3333.5",
+      "3380",
+      "3317.25",
+      "3342.25",
+      "+0.60%",
+      "+20.00",
+      "0",
+      "0"
+    ],
+    [
+      "3060",
+      "13 lip 2026",
+      "3307.75",
+      "3330.25",
+      "3295",
+      "3322.25",
+      "+0.57%",
+      "+18.75",
+      "0",
+      "0"
+    ],
+    [
+      "3059",
+      "10 lip 2026",
+      "3396.5",
+      "3403.25",
+      "3301.5",
+      "3303.5",
+      "-1.95%",
+      "-65.75",
+      "0",
+      "0"
+    ],
+    [
+      "3058",
+      "9 lip 2026",
+      "3309",
+      "3433",
+      "3302",
+      "3369.25",
+      "+1.62%",
+      "+53.75",
+      "0",
+      "0"
+    ],
+    [
+      "3057",
+      "8 lip 2026",
+      "3323",
+      "3374.25",
+      "3296",
+      "3315.5",
+      "-0.54%",
+      "-18.00",
+      "0",
+      "0"
+    ],
+    [
+      "3056",
+      "7 lip 2026",
+      "3290.25",
+      "3364",
+      "3290.25",
+      "3333.5",
+      "+0.77%",
+      "+25.50",
+      "0",
+      "0"
+    ]
+  ],
+  "csv_path": "/app/data/csv/commodities/AL_F.csv",
+  "csv_rows_merged_from_debug": 40,
+  "csv_latest_date_after_merge": "2026-07-16",
+  "title": "AL.F - Aluminum - Stooq",
+  "status": 200,
+  "final_url": "https://stooq.pl/q/d/?s=al.f&i=d",
+  "html_path": "/app/debug/stooq/al_f.html",
+  "html_length": 362785,
+  "html_head": "<html><head><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\"><meta name=\"keywords\" content=\"aluminum, al.f, dane historyczne, kwotowania, historia, wartosci\"><meta name=\"description\" content=\"Dane historyczne kwotowań.\"><title>AL.F - Aluminum - Stooq</title><script src=\"https://pagead2.googlesyndication.com/pagead/managed/js/adsense/m202607140101/show_ads_impl.js\"></script><script type=\"text/javascript\" async=\"\" src=\"https://www.google-analytics.com/analytics.js\"></script><script type=\"text/javascript\" async=\"\" src=\"https://www.googletagmanager.com/gtag/js?id=G-MLFKCBGX9C&amp;cx=c&amp;gtm=4e67f0\"></script><script>function f_d(a){var i;var d1=a.d3.value+(a.d5.value<10?'0':'')+a.d5.value+(a.d7.value<10?'0':'')+a.d7.value;var d2=a.d4.value+(a.d6.value<10?'0':'')+a.d6.value+(a.d8.value<10?'0':'')+a.d8.value;for(i=0;i<a.i.length;i++) if(a.i[i].checked==true) var p=a.i[i].value;var o='';var o_=new Array('o_s','o_d','o_p','o_n','o_o','o_m','o_x');for(i=0;i<o_.length;i++) o+=a",
+  "table_count": 36,
+  "fth1_count": 1,
+  "frames": [
+    "https://stooq.pl/q/d/?s=al.f&i=d",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "https://googleads.g.doubleclick.net/pagead/html/r20260716/r20190131/zrt_lookup.html",
+    "https://googleads.g.doubleclick.net/pagead/ads?gdpr=0&us_privacy=1---&gpp_sid=-1&client=ca-pub-0033517517437426&output=html&h=250&slotname=5307119916&adk=2072438063&adf=1601490120&pi=t.ma~as.5307119916&abgtt=6&w=300&lmt=1784316723&format=300x250&url=https%3A%2F%2Fstooq.pl%2Fq%2Fd%2F%3Fs%3Dal.f%26i%3Dd&asro=0&aimartd=4&aieuf=1&aicrs=1&uach=WyJMaW51eCIsIiIsIng4NiIsIiIsIjE0OS4wLjc4MjcuNTUiLG51bGwsMCxudWxsLCI2NCIsW1siSGVhZGxlc3NDaHJvbWUiLCIxNDkuMC43ODI3LjU1Il0sWyJDaHJvbWl1bSIsIjE0OS4wLjc4MjcuNTUiXSxbIk5vdClBO0JyYW5kIiwiMjQuMC4wLjAiXV0sMF0.&dt=1784309524294&bpp=1&bdt=262&idt=-M&shv=r20260716&mjsv=m202607140101&ptt=9&saldr=aa&abxe=1&cookie=ID%3D48ff4613de99beb0%3AT%3D1784309514%3ART%3D1784309514%3AS%3DALNI_MZLEl6T3KEum0xIE7avtFOrctNRpA&gpic=UID%3D000013e8e102d0d1%3AT%3D1784309514%3ART%3D1784309514%3AS%3DALNI_Mb0d6TDTY5lnXeTvYHwRhGIFX5LKw&eo_id_str=ID%3D2ccf40543766912e%3AT%3D1784309514%3ART%3D1784309514%3AS%3DAA-AfjazipA-gMpqcYI5QS9-ZC-L&prev_fmts=970x250&correlator=458183612844&frm=20&pv=1&u_tz=0&u_his=2&u_h=1000&u_w=1440&u_ah=1000&u_aw=1440&u_cd=24&u_sd=1&dmc=16&adx=101&ady=429&biw=1440&bih=1000&scr_x=0&scr_y=0&oid=2&pvsid=2021487713352626&tmod=640404268&uas=3&nvt=2&ref=https%3A%2F%2Fstooq.pl%2Fq%2Fd%2F%3Fs%3Dal.f%26i%3Dd&fc=896&brdim=0%2C0%2C0%2C0%2C1440%2C0%2C1440%2C1000%2C1440%2C1000&vis=1&rsz=d%7C%7CeE%7Cn&abl=XS&pfx=0&fu=0&bc=31&bz=1&ifi=2&uci=a!2&fsb=1&dtd=492",
+    "https://googleads.g.doubleclick.net/pagead/ads?gdpr=0&us_privacy=1---&gpp_sid=-1&client=ca-pub-0033517517437426&output=html&adk=1812271804&adf=3025194257&abgtt=6&lmt=1784316723&plat=3%3A16%2C4%3A16%2C9%3A32776%2C16%3A8388608%2C17%3A32%2C24%3A32%2C25%3A32%2C30%3A1081344%2C32%3A32%2C41%3A32%2C42%3A32%2C43%3A32%2C44%3A32&format=0x0&url=https%3A%2F%2Fstooq.pl%2Fq%2Fd%2F%3Fs%3Dal.f%26i%3Dd&pra=7&asro=0&aimartd=4&aieuf=1&aicrs=1&uach=WyJMaW51eCIsIiIsIng4NiIsIiIsIjE0OS4wLjc4MjcuNTUiLG51bGwsMCxudWxsLCI2NCIsW1siSGVhZGxlc3NDaHJvbWUiLCIxNDkuMC43ODI3LjU1Il0sWyJDaHJvbWl1bSIsIjE0OS4wLjc4MjcuNTUiXSxbIk5vdClBO0JyYW5kIiwiMjQuMC4wLjAiXV0sMF0.&dt=1784309524294&bpp=1&bdt=261&idt=0&shv=r20260716&mjsv=m202607140101&ptt=9&saldr=aa&abxe=1&cookie=ID%3D48ff4613de99beb0%3AT%3D1784309514%3ART%3D1784309514%3AS%3DALNI_MZLEl6T3KEum0xIE7avtFOrctNRpA&gpic=UID%3D000013e8e102d0d1%3AT%3D1784309514%3ART%3D1784309514%3AS%3DALNI_Mb0d6TDTY5lnXeTvYHwRhGIFX5LKw&eo_id_str=ID%3D2ccf40543766912e%3AT%3D1784309514%3ART%3D1784309514%3AS%3DAA-AfjazipA-gMpqcYI5QS9-ZC-L&prev_fmts=970x250%2C300x250&nras=1&correlator=458183612844&frm=20&pv=1&u_tz=0&u_his=2&u_h=1000&u_w=1440&u_ah=1000&u_aw=1440&u_cd=24&u_sd=1&dmc=16&adx=-12245933&ady=-12245933&biw=1440&bih=1000&scr_x=0&scr_y=0&oid=2&pvsid=2021487713352626&tmod=640404268&uas=3&nvt=2&fsapi=1&ref=https%3A%2F%2Fstooq.pl%2Fq%2Fd%2F%3Fs%3Dal.f%26i%3Dd&fc=896&brdim=0%2C0%2C0%2C0%2C1440%2C0%2C1440%2C1000%2C1440%2C1000&vis=1&rsz=%7C%7Cs%7C&abl=NS&fu=32768&bc=31&bz=1&ifi=3&uci=a!3&fsb=1&dtd=492"
+  ],
+  "frame_rows": {},
+  "contains_fth1_text": true,
+  "rate_limited": true
+}

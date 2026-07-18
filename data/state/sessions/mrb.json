@@ -10,5 +10,10 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
   "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_date__": "2026-07-03",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-07-15",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
+  "__scanner_previous_respect_months__": "5.4"
 }
