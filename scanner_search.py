@@ -1004,6 +1004,17 @@ def _commodity_missing_days_vs_yahoo(ticker: str) -> int:
         return 0
 
 
+def _commodity_refresh_targets_from_env() -> set[str]:
+    raw = os.getenv("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", "")
+    return {part.strip().upper() for part in re.split(r"[,;\s]+", raw) if part.strip()}
+
+
+def _commodity_refresh_target_matches(ticker: str, fetch_symbol: str, refresh_targets: set[str]) -> bool:
+    if not refresh_targets:
+        return False
+    return ticker.upper() in refresh_targets or fetch_symbol.upper() in refresh_targets
+
+
 def _commodity_csv_health_check(members: Sequence[str]) -> None:
     try:
         min_rows = max(1, int(os.getenv("STOCKHELPER_COMMODITIES_MIN_ROWS", "250")))
@@ -1247,17 +1258,21 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         state = _read_refresh_state()
         bucket = f"commodities:{day}:{phase}"
         stale: list[str] = []
+        stale_tickers: list[str] = []
         for t in members:
             missing = _commodity_missing_days_vs_yahoo(t)
             if missing > 0:
                 stale.append(f"{t}({missing} candle{'s' if missing != 1 else ''})")
+                stale_tickers.append(t.upper())
         if stale:
-            print(f"[refresh-check] commodities stale vs Yahoo: {', '.join(stale[:8])}{' ...' if len(stale)>8 else ''} -> refresh whole group")
-            state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "stale"}
+            print(f"[refresh-check] commodities stale vs Yahoo: {', '.join(stale[:8])}{' ...' if len(stale)>8 else ''} -> refresh only missing/stale")
+            state[bucket] = {"checked_at": datetime.now(UTC).isoformat(), "result": "stale", "tickers": stale_tickers}
             _write_refresh_state(state)
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            os.environ["STOCKHELPER_COMMODITIES_REFRESH_TICKERS"] = ",".join(stale_tickers)
             return True
+        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
         if state.get(bucket):
             print(f"[refresh-check] commodities {phase}: already checked today -> cache-only mode ON")
             os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
@@ -3427,6 +3442,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
                         upper_exact_tol = min(exact_tol, upper_touch_tol)
+                        if _is_local_extreme(i, "upper") and highs[i] > up + upper_exact_tol:
+                            # A later local high that sits visibly above an older
+                            # upper line is a new candidate anchor, not an extra
+                            # tolerated touch of the stale line. Reject this
+                            # candidate so anchor selection can move to that
+                            # candle extreme (e.g. BMC.WA 2026-07-06).
+                            invalid = True
+                            break
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
                             upper_exact_contacts.append(i)
                             upper_contacts.append(i)
@@ -3669,6 +3692,26 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     )
                     if much_longer_with_better_upper:
                         return candidate.score >= current.score * 0.55
+                    same_lower_newer_upper_anchor = (
+                        same_state
+                        and (candidate.breakout_direction or "-") == "-"
+                        and candidate.upper_start_date == current.upper_start_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_end_date == current.lower_end_date
+                        and candidate.upper_end_date > current.upper_end_date
+                        and candidate.upper_touches >= 2
+                        and candidate.lower_touches >= current.lower_touches
+                        and candidate.width_end_pct <= current.width_end_pct * 1.45
+                        and candidate.width_start_pct <= current.width_start_pct * 1.15
+                        and candidate.fit_quality >= current.fit_quality * 0.65
+                    )
+                    if same_lower_newer_upper_anchor:
+                        # Prefer the active/recent upper swing-high anchor over an
+                        # older steep upper line that later candles merely pierce
+                        # within tolerance. Anchor points themselves remain candle
+                        # extremes because candidates are built from local highs/lows.
+                        return True
+
                     same_active_structure_longer_top = (
                         same_state
                         and candidate.upper_end_date == current.upper_end_date
@@ -4500,6 +4543,7 @@ def run_fibo_search(target: str) -> int:
     _should_refresh_group_data(group_name, members, exchange_suffix)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     current_datetime = datetime.now(UTC)
+    commodity_refresh_targets = _commodity_refresh_targets_from_env() if group_name == "commodities" else set()
     rows: list[FiboScanResult] = []
     rows3p_steep: list[FiboScanResult] = []
     wedge_rows: list[WedgeScanResult] = []
@@ -4569,7 +4613,28 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult] = []
         try:
-            df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+            prev_force_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+            scoped_env = group_name == "commodities" and bool(commodity_refresh_targets)
+            if scoped_env:
+                if _commodity_refresh_target_matches(ticker, fetch_symbol, commodity_refresh_targets):
+                    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+                else:
+                    os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+                    os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            try:
+                df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+            finally:
+                if scoped_env:
+                    if prev_cache_only is None:
+                        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    else:
+                        os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
+                    if prev_force_refresh is None:
+                        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                    else:
+                        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = prev_force_refresh
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
@@ -4676,11 +4741,17 @@ def run_fibo_search(target: str) -> int:
     workers_override = _scan_workers_override()
     if workers_override is not None:
         max_workers = min(max(1, workers_override), len(members))
+    elif group_name == "commodities":
+        try:
+            max_workers = min(max(1, int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "1"))), len(members))
+        except ValueError:
+            max_workers = 1
     else:
         cpu = os.cpu_count() or 4
         auto_workers = max(4, min(cpu * 3, 32))
         max_workers = min(auto_workers, len(members))
-    print(f"[fibo] parallel mode ({max_workers} workers, bounded queue).")
+    mode = "sequential" if max_workers == 1 else "parallel"
+    print(f"[fibo] {mode} mode ({max_workers} workers, bounded queue).")
     indexed_members = list(enumerate(members, start=1))
     next_pos = 0
     pending: dict = {}

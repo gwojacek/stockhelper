@@ -81,5 +81,8 @@
       "color": "#64748b",
       "group_id": "auto-fibo"
     }
-  ]
+  ],
+  "__scanner_breakout_date__": "2026-07-16",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "6.7"
 }
