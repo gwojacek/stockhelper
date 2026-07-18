@@ -309,6 +309,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
     assert "data-scanner='ICHIMOKU' data-ichi-trend='long' class='today-signal'" in text
+    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' class='today-signal'><strong>🇩🇪 RWE.DE" in text
+    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO' class='today-signal'><strong>🇺🇸 VAL.US" in text
     assert "data-scanner='FIBO' class='today-signal'" in text
     assert "AEP.US" in text and "bullish_hammer" in text
     assert "troj-ichi-trend-filter" in text
