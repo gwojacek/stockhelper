@@ -2411,6 +2411,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             attrs += f" class='{' '.join(classes)}'"
         return attrs
 
+    def _troj_card_attrs(cell: str, section_id: str = "") -> str:
+        attrs = _troj_cell_attrs(cell, section_id)
+        class_match = re.search(r"\sclass='([^']*)'", attrs)
+        card_classes = "troj-cell-card"
+        if class_match:
+            card_classes += " " + class_match.group(1)
+            attrs = attrs[:class_match.start()] + attrs[class_match.end():]
+        return f" class='{card_classes}'{attrs}"
+
     def _trojpolowki_html_section(parsed: dict[str, object], section_id: str, top_choice_cols: list[int] | None = None) -> str:
         headers = parsed.get("headers", [])
         body_rows = parsed.get("rows", [])
@@ -2463,7 +2472,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         table_html += "<tr>"
         for col_idx, cells in enumerate(columns_for_display):
             attrs_source = next((cell for cell in cells if str(cell).strip()), "")
-            stack = "".join(f"<div class='troj-cell-card'{_troj_cell_attrs(str(cell), section_id)}>{_troj_cell_to_html(str(cell), section_id)}</div>" for cell in cells)
+            stack = "".join(f"<div{_troj_card_attrs(str(cell), section_id)}>{_troj_cell_to_html(str(cell), section_id)}</div>" for cell in cells)
             table_html += f"<td{_troj_cell_attrs(str(attrs_source), section_id)}><div class='troj-cell-stack'>{stack}</div></td>"
         table_html += "</tr>"
         table_html += "</tbody></table></div>"
