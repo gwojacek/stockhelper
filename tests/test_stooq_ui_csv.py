@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from utilities.stooq_playwright import _capture_stooq_ui_failure, _parse_stooq_ui_csv
+from utilities.stooq_playwright import (
+    _POLISH_MONTHS_BY_NUMBER,
+    _capture_stooq_ui_failure,
+    _parse_stooq_ui_csv,
+)
 
 
 def test_parse_polish_stooq_ui_csv():
@@ -18,6 +22,10 @@ def test_parse_polish_stooq_ui_csv():
     assert frame.iloc[0]["Date"] == pd.Timestamp("1971-01-04")
     assert frame.iloc[0]["Close"] == 357.73
     assert frame.iloc[0]["Volume"] == 0
+
+
+def test_july_is_selected_using_the_polish_ui_label():
+    assert _POLISH_MONTHS_BY_NUMBER[7] == "lip"
 
 
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):

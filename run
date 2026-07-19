@@ -3328,8 +3328,19 @@ def main()->int:
     if args.open_allsearch_report is not None:
         return _open_existing_allsearch_report(args.open_allsearch_report)
     if args.debug_stooq:
-        from utilities.stooq_playwright import debug_stooq_page
+        from utilities.stooq_playwright import debug_stooq_page, update_stooq_history_from_ui_csv
         raw = args.debug_stooq.strip(); upper_raw = raw.upper(); mapped = COMMODITY_STOOQ_MAP.get(upper_raw)
+        if re.fullmatch(r"[A-Z]{6}", upper_raw):
+            csv_path = CSV_DATA_DIR / "forex" / f"{upper_raw}.csv"
+            df = update_stooq_history_from_ui_csv(
+                symbol=upper_raw,
+                csv_path=csv_path,
+                lookback_days=364,
+                verbose=True,
+                interactive=args.inspector,
+            )
+            print(f"Stooq forex UI CSV downloaded: {csv_path} ({len(df)} merged rows)")
+            return 0
         if mapped: symbol_for_debug = str(mapped).lower()
         else:
             values = {str(v).lower() for v in COMMODITY_STOOQ_MAP.values()}

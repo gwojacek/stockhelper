@@ -28,6 +28,10 @@ _POLISH_MONTHS = {
     "sty": "01", "lut": "02", "mar": "03", "kwi": "04", "maj": "05", "cze": "06",
     "lip": "07", "sie": "08", "wrz": "09", "paź": "10", "paz": "10", "lis": "11", "gru": "12",
 }
+_POLISH_MONTHS_BY_NUMBER = {
+    1: "sty", 2: "lut", 3: "mar", 4: "kwi", 5: "maj", 6: "cze",
+    7: "lip", 8: "sie", 9: "wrz", 10: "paź", 11: "lis", 12: "gru",
+}
 
 
 STOOQ_BULK_HISTORY_URL = "https://stooq.com/db/h/"
@@ -1386,6 +1390,7 @@ def update_stooq_history_from_ui_csv(
     lookback_days: int = 364,
     end_date: datetime | None = None,
     verbose: bool = False,
+    interactive: bool = False,
 ) -> pd.DataFrame:
     """Set the Stooq UI start date and download its filtered daily CSV."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1396,7 +1401,7 @@ def update_stooq_history_from_ui_csv(
         proxy_index = _stooq_proxy_pool_initial_index(symbol)
         browser, page = _open_page(
             playwright,
-            interactive=False,
+            interactive=interactive,
             symbol=symbol,
             proxy_index=proxy_index if proxy_index >= 0 else None,
         )
@@ -1411,13 +1416,22 @@ def update_stooq_history_from_ui_csv(
             )
             try:
                 page.goto(url, wait_until="domcontentloaded")
+                page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
             except Exception as exc:
                 details = _capture_stooq_ui_failure(symbol, page, "goto", exc)
                 raise ValueError(f"Stooq UI navigation failed for {symbol}: {exc}; details={details}") from exc
             _accept_consent_if_present(page, first_page=True)
             try:
+                page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
+                if interactive:
+                    print(
+                        f"[stooq-web] Inspector ready for {symbol}. Click Resume; StockHelper will set "
+                        f"{start.day} {_POLISH_MONTHS_BY_NUMBER[start.month]} {start.year}, submit, and download CSV.",
+                        flush=True,
+                    )
+                    page.pause()
                 page.locator('input[name="d7"]').fill(str(start.day))
-                page.locator('select[name="d5"]').select_option(str(start.month))
+                page.locator('select[name="d5"]').select_option(label=_POLISH_MONTHS_BY_NUMBER[start.month])
                 page.locator('input[name="d3"]').fill(str(start.year))
                 page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first.click()
                 page.wait_for_load_state("domcontentloaded")
