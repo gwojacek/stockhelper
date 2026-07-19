@@ -14,7 +14,7 @@ import time as time_module
 
 import pandas as pd
 
-from utilities.stooq_playwright import update_stooq_history_with_playwright
+from utilities.stooq_playwright import update_stooq_history_from_ui_csv, update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
@@ -1086,21 +1086,21 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         primary_error: Exception | None = None
         for attempt in range(1, attempts + 1):
             try:
-                df, candidate = _stooq_download(
-                    symbol,
-                    "forex",
-                    api_key=api_key,
+                df = update_stooq_history_from_ui_csv(
+                    symbol=symbol,
+                    csv_path=csv_path_ref,
                     lookback_days=lookback,
                     end_date=older_anchor if fetch_older_data else None,
+                    verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
                 )
-                reason = f"Stooq CSV download succeeded for forex on attempt {attempt}/{attempts}."
+                reason = f"Stooq filtered UI CSV download succeeded for forex on attempt {attempt}/{attempts}."
                 if not fetch_older_data:
                     yahoo_merged = _try_yahoo_fresh_candle_merge(
                         df,
                         symbol,
                         "forex",
-                        source="stooq",
-                        source_symbol=candidate,
+                        source="stooq_web_csv",
+                        source_symbol=symbol.upper(),
                         source_name=None,
                         reason=reason + " Yahoo is used only for newer candle(s).",
                         trim_to_last_year=False,
@@ -1108,15 +1108,15 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                     if yahoo_merged is not None:
                         merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
                         return merged_df, merged_source, merged_symbol, merged_name, merged_reason
-                return df, "stooq", candidate, None, reason
+                return df, "stooq_web_csv", symbol.upper(), None, reason
             except Exception as exc:
                 primary_error = exc
-                print(f"[forex-download] {symbol}: Stooq CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
+                print(f"[forex-download] {symbol}: Stooq UI CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
                 if attempt < attempts:
                     time_module.sleep(min(4.0, float(attempt)))
 
-        # The CSV endpoint can deny or time out. Fall back to the same paginated
-        # Stooq UI table scraper used for literal commodities (through Tor when enabled).
+        # The filtered UI CSV can deny or time out. Fall back to the same
+        # paginated Stooq UI table scraper used for literal commodities.
         df = update_stooq_history_with_playwright(
             symbol=symbol.lower(),
             csv_path=csv_path_ref,
@@ -1125,7 +1125,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
             interactive_captcha=True,
         )
-        reason = f"Stooq CSV failed after {attempts} attempts; used paginated Stooq UI fallback: {primary_error}"
+        reason = f"Stooq filtered UI CSV failed after {attempts} attempts; used paginated Stooq UI fallback: {primary_error}"
         if not fetch_older_data:
             yahoo_merged = _try_yahoo_fresh_candle_merge(
                 df,

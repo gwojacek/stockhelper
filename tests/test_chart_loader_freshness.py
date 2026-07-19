@@ -22,16 +22,16 @@ def _df(*dates: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_forex_retries_stooq_csv_and_merges_yahoo_newest_candle(monkeypatch, tmp_path):
+def test_forex_retries_filtered_ui_csv_and_merges_yahoo_newest_candle(monkeypatch, tmp_path):
     calls = []
 
-    def fake_stooq(symbol, instrument_type, **kwargs):
-        calls.append((symbol, instrument_type, kwargs))
-        return _df("2025-01-20", "2026-06-09"), "eurusd"
+    def fake_stooq_ui(**kwargs):
+        calls.append(kwargs)
+        return _df("2025-01-20", "2026-06-09")
 
     csv_path = tmp_path / "EURUSD.csv"
     monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
-    monkeypatch.setattr(loader, "_stooq_download", fake_stooq)
+    monkeypatch.setattr(loader, "update_stooq_history_from_ui_csv", fake_stooq_ui)
     monkeypatch.setattr(
         loader,
         "_yahoo_download_window",
@@ -45,8 +45,8 @@ def test_forex_retries_stooq_csv_and_merges_yahoo_newest_candle(monkeypatch, tmp
         data_source="auto",
     )
 
-    assert calls == [("EURUSD", "forex", {"api_key": None, "lookback_days": 548, "end_date": None})]
-    assert source == "stooq+yahoo"
+    assert calls == [{"symbol": "EURUSD", "csv_path": csv_path, "lookback_days": 548, "end_date": None, "verbose": False}]
+    assert source == "stooq_web_csv+yahoo"
     assert source_symbol == "EURUSD=X"
     assert source_name == "EUR/USD"
     assert "Yahoo newer candles=1" in reason
@@ -54,16 +54,16 @@ def test_forex_retries_stooq_csv_and_merges_yahoo_newest_candle(monkeypatch, tmp
     assert df["Date"].max() == pd.Timestamp("2026-06-10")
 
 
-def test_forex_falls_back_to_commodity_style_ui_after_five_csv_failures(monkeypatch, tmp_path):
+def test_forex_falls_back_to_table_ui_after_five_filtered_ui_csv_failures(monkeypatch, tmp_path):
     csv_path = tmp_path / "EURCHF.csv"
     attempts = []
 
-    def fail_stooq(*_args, **_kwargs):
+    def fail_stooq_ui(**_kwargs):
         attempts.append(1)
         raise ValueError("denied")
 
     monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
-    monkeypatch.setattr(loader, "_stooq_download", fail_stooq)
+    monkeypatch.setattr(loader, "update_stooq_history_from_ui_csv", fail_stooq_ui)
     monkeypatch.setattr(loader.time_module, "sleep", lambda _seconds: None)
     monkeypatch.setattr(loader, "_try_yahoo_fresh_candle_merge", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(loader, "update_stooq_history_with_playwright", lambda **_kwargs: _df("2025-01-20", "2026-06-10"))
@@ -75,7 +75,7 @@ def test_forex_falls_back_to_commodity_style_ui_after_five_csv_failures(monkeypa
     assert len(attempts) == 5
     assert source == "stooq_web"
     assert source_symbol == "EURCHF"
-    assert "failed after 5 attempts" in reason
+    assert "filtered UI CSV failed after 5 attempts" in reason
     assert df["Date"].min() == pd.Timestamp("2025-01-20")
 
 
@@ -95,7 +95,7 @@ def test_complete_forex_window_uses_cache_without_ui_download(monkeypatch, tmp_p
     monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
     monkeypatch.setattr(
         loader,
-        "_stooq_download",
+        "update_stooq_history_from_ui_csv",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("complete forex cache must not download")),
     )
     monkeypatch.setattr(
