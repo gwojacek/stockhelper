@@ -929,6 +929,23 @@ def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, dateti
         return 364, None
 
 
+def _local_forex_has_required_window(csv_path: Path, required_days: int = 548) -> bool:
+    """Return true when FX cache already covers rolling 1.5y and is current."""
+    try:
+        if not csv_path.exists():
+            return False
+        dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+        if dates.empty:
+            return False
+        today = pd.Timestamp.now(tz="UTC").date()
+        oldest = dates.min().date()
+        latest = dates.max().date()
+        required_start = today - timedelta(days=required_days)
+        return oldest <= required_start + timedelta(days=7) and latest >= today - timedelta(days=7)
+    except Exception:
+        return False
+
+
 def _mapped_stooq_symbol_for_commodity(symbol: str) -> str:
     normalized_symbol = _canonical_commodity_symbol(symbol)
     mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
@@ -1057,10 +1074,15 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         )
 
     if instrument_type == "forex":
+        if not fetch_older_data and _local_forex_has_required_window(csv_path_ref):
+            local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+            return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
         df = update_stooq_history_from_ui_csv(
             symbol=symbol,
             csv_path=csv_path_ref,
-            lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path_ref, default_days=548),
+            # Always request from the rolling boundary when cache is incomplete;
+            # a latest-date incremental window cannot repair missing older rows.
+            lookback_days=older_days if fetch_older_data else 548,
             end_date=older_anchor if fetch_older_data else None,
             verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
         )

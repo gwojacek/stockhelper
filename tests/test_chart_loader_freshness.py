@@ -42,11 +42,42 @@ def test_forex_uses_filtered_stooq_ui_csv_as_primary_source(monkeypatch, tmp_pat
 
     assert calls[0]["symbol"] == "EURUSD"
     assert calls[0]["csv_path"] == csv_path
+    assert calls[0]["lookback_days"] == 548
     assert source == "stooq_web"
     assert source_symbol == "EURUSD"
     assert source_name is None
     assert "filtered UI CSV" in reason
     assert df["Date"].max() == pd.Timestamp("2026-06-10")
+
+
+def test_complete_forex_window_uses_cache_without_ui_download(monkeypatch, tmp_path):
+    csv_path = tmp_path / "EURUSD.csv"
+    today = pd.Timestamp.now(tz="UTC").date()
+    pd.DataFrame(
+        {
+            "Date": pd.date_range(today - pd.Timedelta(days=548), today),
+            "Open": 1.0,
+            "High": 1.1,
+            "Low": 0.9,
+            "Close": 1.0,
+            "Volume": 0,
+        }
+    ).to_csv(csv_path, index=False)
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "update_stooq_history_from_ui_csv",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("complete forex cache must not download")),
+    )
+
+    df, source, source_symbol, _name, reason = loader._download_remote(
+        symbol="EURUSD", instrument_type="forex", api_key=None, data_source="auto"
+    )
+
+    assert source == "cache"
+    assert source_symbol == "EURUSD"
+    assert "already covers" in reason
+    assert not df.empty
 
 
 def test_index_like_commodity_uses_yahoo_as_primary_source(monkeypatch):
