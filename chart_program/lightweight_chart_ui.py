@@ -2356,6 +2356,12 @@ class LightweightChartLevelSelectorUI:
       let series = null;
       if (isWedge) {{
         addLegend(seriesTitle, color, objKey, deleteFn);
+        // Keep a native chart series behind the canvas overlay. The overlay gives
+        // wedge lines precise straight-line projection and draggable handles, but
+        // browsers can occasionally clear only that canvas path after an anchor is
+        // moved. A synchronized series makes the boundary remain visible while its
+        // extension/anchor icons are visible and also updates during pointer drag.
+        series = addLine(straightWedgeLineData(obj), color, 2, LightweightCharts.LineStyle.Solid, '', false, false, false, objKey, null, false);
       }} else if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
         series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isFib ? 1.2 : 2, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
       }} else {{

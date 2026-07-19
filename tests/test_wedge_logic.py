@@ -15,9 +15,12 @@ scanner = pytest.importorskip("scanner_search")
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
 
 
-def test_commodity_wedge_is_not_rejected_when_feed_has_no_volume():
+def test_price_only_markets_are_not_rejected_for_unusable_turnover():
     assert scanner._passes_scanner_liquidity(0.0, "commodity", 500_000.0)
     assert scanner._passes_scanner_liquidity(None, "commodity", 500_000.0)
+    assert scanner._passes_scanner_liquidity(0.0, "forex", 500_000.0)
+    assert scanner._passes_scanner_liquidity(None, "forex", 500_000.0)
+    assert scanner._passes_scanner_liquidity(1.0, "forex", 500_000.0)
     assert not scanner._passes_scanner_liquidity(0.0, "stock", 500_000.0)
 
 

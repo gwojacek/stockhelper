@@ -1090,6 +1090,11 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
     """Apply turnover filtering only when the data source has usable volume."""
+    # FX feeds expose either zero volume or broker-specific tick volume, neither
+    # of which is comparable to the PLN turnover threshold used for shares.
+    # Commodity turnover is enforced only when the source supplies usable volume.
+    if instrument_type == "forex":
+        return True
     if instrument_type == "commodity" and (avg_10d_pln is None or avg_10d_pln <= 0):
         return True
     return avg_10d_pln is not None and avg_10d_pln >= min_avg
