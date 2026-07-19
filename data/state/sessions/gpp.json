@@ -41,25 +41,23 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-06-10",
-        "2026-07-09",
-        "2026-11-05"
+        "2026-05-18",
+        "2026-08-26"
       ],
       "y": [
-        42.2864,
-        43.2,
-        46.8979
+        39.56,
+        46.56
       ],
       "x0": "2026-06-10",
       "x1": "2026-11-05",
       "y0": 42.2864,
       "y1": 46.8979,
       "anchor_x": [
-        "2026-06-10",
+        "2026-05-18",
         "2026-07-09"
       ],
       "anchor_y": [
-        42.2864,
+        39.56,
         43.2
       ],
       "price": 46.8979,
@@ -67,5 +65,49 @@
       "group_id": "auto-wedge",
       "free_extension": false
     }
-  ]
+  ],
+  "high": 68.32,
+  "__wedge_auto_high__": true,
+  "low": 39.56,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 46.17,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "long",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 44.93,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 255000,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 68.32,
+      "plot_price": 68.32,
+      "date": "2025-08-19",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 39.56,
+      "plot_price": 39.56,
+      "date": "2026-05-18",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 46.17,
+      "plot_price": 46.17,
+      "date": "2026-07-16",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 44.93,
+      "plot_price": 44.93,
+      "date": "2026-07-16",
+      "auto_wedge": true
+    }
+  }
 }

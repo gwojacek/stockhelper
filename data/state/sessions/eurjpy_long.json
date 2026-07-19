@@ -1,0 +1,82 @@
+{
+  "high": 164.179,
+  "low": 158.092,
+  "entry": 162.94,
+  "stop_loss": 162.079,
+  "position_type": "long",
+  "capital": 243000,
+  "lot_cost": 14450.0,
+  "pip_value": 23.29,
+  "pip_size": 0.01,
+  "spread": 42.064,
+  "pair": "EUR/JPY",
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-04-30",
+        "2026-06-17",
+        "2026-11-06"
+      ],
+      "y": [
+        187.554,
+        186.30499,
+        182.55797
+      ],
+      "x0": "2026-04-30",
+      "x1": "2026-11-06",
+      "y0": 187.554,
+      "y1": 182.55797,
+      "anchor_x": [
+        "2026-04-30",
+        "2026-06-17"
+      ],
+      "anchor_y": [
+        187.554,
+        186.30499
+      ],
+      "price": 182.55797,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-05-06",
+        "2026-06-24",
+        "2026-11-06"
+      ],
+      "y": [
+        182.063,
+        183.173,
+        186.24929
+      ],
+      "x0": "2026-05-06",
+      "x1": "2026-11-06",
+      "y0": 182.063,
+      "y1": 186.24929,
+      "anchor_x": [
+        "2026-05-06",
+        "2026-06-24"
+      ],
+      "anchor_y": [
+        182.063,
+        183.173
+      ],
+      "price": 186.24929,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    }
+  ]
+}
