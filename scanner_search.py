@@ -1039,46 +1039,60 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
             return raw, csv_path, 0, "-", exc
 
     print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
-    checked: list[tuple[str, Path, int, str, Exception | None]] = []
-    retry_tickers: list[str] = []
-    for ticker in members:
-        item = _health_row(ticker)
-        checked.append(item)
-        raw, csv_path, rows, latest, exc = item
-        if exc is not None or rows < min_rows:
-            retry_tickers.append(raw)
+    def _print_summary(checked: Sequence[tuple[str, Path, int, str, Exception | None]]) -> list[str]:
+        ok_count = 0
+        retry_tickers: list[str] = []
+        for raw, csv_path, rows, latest, exc in checked:
+            if exc is not None:
+                retry_tickers.append(raw)
+                print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
+                continue
+            status = "OK" if rows >= min_rows else "WARN"
+            if status == "OK":
+                ok_count += 1
+            else:
+                retry_tickers.append(raw)
+            print(f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, csv={csv_path}")
+        print(f"[commodity-check] summary: ok={ok_count}, warn={len(retry_tickers)}, total={len(checked)}")
+        return retry_tickers
+
+    checked = [_health_row(ticker) for ticker in members]
+    retry_tickers = _print_summary(checked)
 
     if retry_tickers and os.getenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "1") != "0":
-        print(f"[commodity-check] retrying {len(retry_tickers)} short/missing commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
+        print(f"[commodity-check] replacing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
         try:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
+                _raw, csv_path, _rows, _latest, _exc = _health_row(raw)
+                backup = csv_path.read_bytes() if csv_path.exists() else None
                 try:
+                    # A forced merge can leave a short CSV short. Remove it first so
+                    # the retry performs a clean full-history download/replacement.
+                    csv_path.unlink(missing_ok=True)
                     load_or_update_daily_data(symbol=raw, instrument_type="commodity", persist=True, fetch_older_data=False)
+                    if not csv_path.exists():
+                        raise FileNotFoundError(f"replacement did not create {csv_path}")
                 except Exception as exc:
                     print(f"[commodity-check] retry failed for {raw}: {_retry_error_brief(exc)}")
+                    if backup is not None:
+                        csv_path.parent.mkdir(parents=True, exist_ok=True)
+                        csv_path.write_bytes(backup)
         finally:
             if old_force is None:
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
-        checked = [_health_row(ticker) for ticker in members]
+        print("[commodity-check] post-retry CSV row-count check")
+        _print_summary([_health_row(ticker) for ticker in members])
 
-    ok_count = 0
-    warn_count = 0
-    for raw, csv_path, rows, latest, exc in checked:
-        if exc is not None:
-            warn_count += 1
-            print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
-            continue
-        status = "OK" if rows >= min_rows else "WARN"
-        if status == "OK":
-            ok_count += 1
-        else:
-            warn_count += 1
-        print(f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, csv={csv_path}")
-    print(f"[commodity-check] summary: ok={ok_count}, warn={warn_count}, total={len(members)}")
+
+def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
+    """Apply turnover filtering only when the data source has usable volume."""
+    if instrument_type == "commodity" and (avg_10d_pln is None or avg_10d_pln <= 0):
+        return True
+    return avg_10d_pln is not None and avg_10d_pln >= min_avg
 
 
 
@@ -4849,11 +4863,15 @@ def run_fibo_search(target: str) -> int:
             return False
         symbol, instrument_type = row
         avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
-        if avg_10d_pln is None:
-            return False
-        avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
+        # Spot metals and several commodity feeds legitimately publish zero or
+        # unavailable volume. Do not discard a price-valid technical setup merely
+        # because that feed cannot provide a meaningful turnover figure.
         min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
-        return avg_10d_pln >= min_avg
+        if not _passes_scanner_liquidity(avg_10d_pln, instrument_type, min_avg):
+            return False
+        if avg_10d_pln is not None:
+            avg_turnover_10d_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = avg_10d_pln
+        return True
 
     def _passes_wedge_liquidity(r: WedgeScanResult) -> bool:
         row = wedge_source_by_ticker.get(r.ticker)
@@ -4861,11 +4879,11 @@ def run_fibo_search(target: str) -> int:
             return False
         symbol, instrument_type = row
         avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
-        if avg_10d_pln is None:
+        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
+        if not _passes_scanner_liquidity(avg_10d_pln, instrument_type, min_avg):
             return False
         r.avg_turnover_10d_pln = avg_10d_pln
-        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
-        return avg_10d_pln >= min_avg
+        return True
 
     rows_by_key: dict[tuple[str, str, str, str], tuple[str, str]] = {}
     wedge_source_by_ticker: dict[str, tuple[str, str]] = {}

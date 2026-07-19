@@ -15,6 +15,12 @@ scanner = pytest.importorskip("scanner_search")
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
 
 
+def test_commodity_wedge_is_not_rejected_when_feed_has_no_volume():
+    assert scanner._passes_scanner_liquidity(0.0, "commodity", 500_000.0)
+    assert scanner._passes_scanner_liquidity(None, "commodity", 500_000.0)
+    assert not scanner._passes_scanner_liquidity(0.0, "stock", 500_000.0)
+
+
 def test_wedge_midpoint_stop_touch_burns_long_breakout():
     upper_a = (0, 100.0)
     upper_b = (10, 90.0)
