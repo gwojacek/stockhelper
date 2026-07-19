@@ -9,6 +9,7 @@ import warnings
 import zipfile
 import re
 import socket
+import secrets
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 from io import BytesIO
@@ -22,6 +23,8 @@ _CAPTCHA_OCR_LOCK = threading.Lock()
 _CAPTCHA_SOLVER_LOGGED_SYMBOLS: set[str] = set()
 _EASYOCR_READER = None
 _EASYOCR_UNAVAILABLE = False
+_TOR_AUTH_SLOT_LOCK = threading.Lock()
+_TOR_AUTH_SLOT_COUNTER: int | None = None
 
 
 _POLISH_MONTHS = {
@@ -1163,6 +1166,27 @@ def _stooq_tor_proxy_reachable() -> bool:
         return False
 
 
+def _stooq_tor_isolate_auth_enabled() -> bool:
+    return os.getenv("STOCKHELPER_STOOQ_TOR_ISOLATE_SOCKS_AUTH", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _next_stooq_tor_auth_slot() -> int | None:
+    """Choose another SOCKS credential slot for Tor IsolateSOCKSAuth."""
+    global _TOR_AUTH_SLOT_COUNTER
+    if not _stooq_tor_enabled() or not _stooq_tor_isolate_auth_enabled():
+        return None
+    try:
+        pool_size = max(1, int(os.getenv("STOCKHELPER_STOOQ_TOR_AUTH_POOL_SIZE", "16")))
+    except ValueError:
+        pool_size = 16
+    with _TOR_AUTH_SLOT_LOCK:
+        if _TOR_AUTH_SLOT_COUNTER is None:
+            _TOR_AUTH_SLOT_COUNTER = secrets.randbelow(pool_size)
+        slot = _TOR_AUTH_SLOT_COUNTER % pool_size
+        _TOR_AUTH_SLOT_COUNTER = (_TOR_AUTH_SLOT_COUNTER + 1) % pool_size
+    return slot
+
+
 def _stooq_tor_enabled() -> bool:
     raw = os.getenv("STOCKHELPER_STOOQ_TOR")
     if raw is not None:
@@ -1213,7 +1237,7 @@ def _signal_tor_newnym(symbol: str, reason: str) -> bool:
     return False
 
 
-def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = None) -> dict | None:
+def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = None, tor_auth_slot: int | None = None) -> dict | None:
     """Return Playwright proxy config from environment, optionally symbol-specific.
 
     Supported env vars:
@@ -1291,13 +1315,20 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
             cfg["password"] = unquote(parsed.password)
     else:
         cfg = {"server": value}
+    if source == "STOCKHELPER_STOOQ_TOR_PROXY" and tor_auth_slot is not None:
+        # Tor configured with `SocksPort 9050 IsolateSOCKSAuth` assigns streams
+        # with different SOCKS credentials to separate circuits.
+        cfg["username"] = f"stockhelper-{tor_auth_slot}"
+        cfg["password"] = f"stockhelper-{tor_auth_slot}"
     if _stooq_verbose_enabled():
         print(f"[stooq-web] using proxy from {source} for {symbol or '-'}: {cfg['server']}", flush=True)
     return cfg
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None):
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None, tor_auth_slot: int | None = None):
     browser_type = getattr(playwright, browser_name)
+    if tor_auth_slot is None:
+        tor_auth_slot = _next_stooq_tor_auth_slot()
     launch_interactive = bool(interactive and _headed_display_available())
     if interactive and not launch_interactive:
         print(
@@ -1307,7 +1338,7 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
             flush=True,
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
-    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index)
+    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index, tor_auth_slot=tor_auth_slot)
     browser = browser_type.launch(**launch_kwargs)
     context_kwargs = {"viewport": {"width": 1440, "height": 1000}, "locale": "pl-PL"}
     if proxy:
@@ -1319,6 +1350,7 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
     try:
         page.__stockhelper_browser_name = browser_name
         page.__stockhelper_context = context
+        page.__stockhelper_tor_auth_slot = tor_auth_slot
     except Exception:
         pass
     return browser, page
@@ -1364,7 +1396,8 @@ def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseExceptio
     raw_path = out_dir / f"{stem}.download"
     if payload is not None:
         raw_path.write_bytes(payload)
-    proxy = _stooq_proxy_config(symbol)
+    tor_auth_slot = getattr(page, "__stockhelper_tor_auth_slot", None)
+    proxy = _stooq_proxy_config(symbol, tor_auth_slot=tor_auth_slot)
     info = {
         "symbol": symbol,
         "stage": stage,
@@ -1373,6 +1406,7 @@ def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseExceptio
         "tor_enabled": _stooq_tor_enabled(),
         "tor_proxy_reachable": _stooq_tor_proxy_reachable() if _stooq_tor_enabled() else None,
         "proxy_server": (proxy or {}).get("server", ""),
+        "tor_auth_slot": tor_auth_slot,
         "screenshot": screenshot,
         "html": str((out_dir / f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}.html").resolve()),
         "download": str(raw_path.resolve()) if payload is not None else "",
@@ -1399,19 +1433,21 @@ def update_stooq_history_from_ui_csv(
     url = f"https://stooq.pl/q/d/?s={symbol.strip().lower()}"
     with sync_playwright() as playwright:
         proxy_index = _stooq_proxy_pool_initial_index(symbol)
+        tor_auth_slot = _next_stooq_tor_auth_slot()
         browser, page = _open_page(
             playwright,
             interactive=interactive,
             symbol=symbol,
             proxy_index=proxy_index if proxy_index >= 0 else None,
+            tor_auth_slot=tor_auth_slot,
         )
         try:
             page.set_default_timeout(20000)
-            proxy = _stooq_proxy_config(symbol)
+            proxy = _stooq_proxy_config(symbol, tor_auth_slot=tor_auth_slot)
             print(
                 f"[stooq-web] forex UI session {symbol}: tor={'on' if _stooq_tor_enabled() else 'off'} "
                 f"reachable={_stooq_tor_proxy_reachable() if _stooq_tor_enabled() else '-'} "
-                f"proxy={(proxy or {}).get('server', 'direct')}",
+                f"proxy={(proxy or {}).get('server', 'direct')} isolate_auth_slot={tor_auth_slot if tor_auth_slot is not None else '-'}",
                 flush=True,
             )
             try:

@@ -959,6 +959,30 @@ stock -allsearch commodities
 
 Country targeting is proxy-provider-specific: StockHelper only substitutes `{country}` in the proxy string and passes the resulting proxy settings to Playwright. Put country information where your provider expects it, usually in the username, host, or port.
 
+#### Tor circuit isolation pool
+
+For concurrent Stooq UI sessions, configure the Tor SOCKS listener in `torrc`:
+
+```text
+SocksPort 9050 IsolateSOCKSAuth
+```
+
+Restart Tor after changing `torrc`. StockHelper assigns a different SOCKS
+username/password slot to successive browser sessions, so Tor places those
+streams on isolated circuits. The first slot is randomized and subsequent
+sessions rotate through the pool. The default pool has 16 slots:
+
+```bash
+STOCKHELPER_STOOQ_TOR=1 \
+STOCKHELPER_STOOQ_TOR_AUTH_POOL_SIZE=16 \
+./stock -search forex
+```
+
+Set `STOCKHELPER_STOOQ_TOR_ISOLATE_SOCKS_AUTH=0` to disable credentials for a
+Tor installation that does not use `IsolateSOCKSAuth`. Circuit isolation does
+not guarantee that every circuit has a different exit relay; Tor makes the
+final path selection.
+
 ### No scanner Markdown is created
 
 Check that dependencies are installed and that the scanner scope is valid:
