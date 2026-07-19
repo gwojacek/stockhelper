@@ -13,7 +13,7 @@ import os
 
 import pandas as pd
 
-from utilities.stooq_playwright import update_stooq_history_from_ui_csv, update_stooq_history_with_playwright
+from utilities.stooq_playwright import StooqUIDownloadDenied, update_stooq_history_from_ui_csv, update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
@@ -1111,6 +1111,13 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             except Exception as exc:
                 primary_error = exc
                 print(f"[forex-download] {symbol}: Stooq UI CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
+                if isinstance(exc, StooqUIDownloadDenied):
+                    print(
+                        f"[forex-download] {symbol}: the visible history table is valid but q/d/l denied the file; "
+                        "switching immediately to paginated UI table fetching.",
+                        flush=True,
+                    )
+                    break
 
         # The filtered UI CSV can deny or time out. Fall back to the same
         # paginated Stooq UI table scraper used for literal commodities.

@@ -978,6 +978,13 @@ configured Tor SOCKS proxy. The filtered-CSV path also reuses the commodity
 scraper's consent handling, CAPTCHA OCR, and automatic blocked-page retries
 before and after submitting the date form.
 
+If a failure artifact says `download_endpoint_denied`, the screenshot can still
+show a valid table and CSV link: Stooq returned `Odmowa,dostępu` as the contents
+of the separate `q/d/l/` file-download response. The diagnostic JSON records
+the link URL, response status when available, filename, byte count, and payload
+preview. StockHelper immediately switches that symbol to table-row fetching
+instead of repeating the same denied file action five times.
+
 After the forex coverage summary, warned CSVs are retried for up to four
 download rounds by default. Only files that remain incomplete enter the next
 round. Tune the behavior when needed:

@@ -39,6 +39,21 @@ STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='d_pl_txt']"
 STOOQ_BULK_TXT_COLUMNS = ["<TICKER>", "<PER>", "<DATE>", "<TIME>", "<OPEN>", "<HIGH>", "<LOW>", "<CLOSE>", "<VOL>", "<OPENINT>"]
 
 
+class StooqUIDownloadDenied(ValueError):
+    """The history page worked, but its CSV download endpoint denied access."""
+
+
+def _stooq_ui_payload_preview(payload: bytes | None, limit: int = 500) -> str:
+    if payload is None:
+        return ""
+    for encoding in ("utf-8-sig", "cp1250", "latin-1"):
+        try:
+            return payload[:limit].decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return payload[:limit].decode("utf-8", errors="replace")
+
+
 def _is_stooq_bulk_history_url(url: str) -> bool:
     lowered = (url or "").lower().split("?", 1)[0].rstrip("/")
     return lowered in {"https://stooq.com/db/h", "https://stooq.pl/db/h"}
@@ -1355,7 +1370,14 @@ def _parse_stooq_ui_csv(payload: bytes) -> pd.DataFrame:
     return frame.dropna(subset=required).sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
 
 
-def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseException | str, payload: bytes | None = None) -> str:
+def _capture_stooq_ui_failure(
+    symbol: str,
+    page,
+    stage: str,
+    error: BaseException | str,
+    payload: bytes | None = None,
+    extra: dict | None = None,
+) -> str:
     """Persist enough evidence to diagnose a failed filtered-CSV session."""
     safe_stage = re.sub(r"[^a-z0-9_-]+", "_", stage.lower()).strip("_") or "failure"
     stem = f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}"
@@ -1376,8 +1398,10 @@ def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseExceptio
         "screenshot": screenshot,
         "html": str((out_dir / f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}.html").resolve()),
         "download": str(raw_path.resolve()) if payload is not None else "",
-        "download_preview": payload[:500].decode("utf-8", errors="replace") if payload is not None else "",
+        "download_preview": _stooq_ui_payload_preview(payload),
     }
+    if extra:
+        info.update(extra)
     info_path = out_dir / f"{stem}.json"
     info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[stooq-web] UI CSV failure details for {symbol}: {info_path.resolve()}", flush=True)
@@ -1460,19 +1484,46 @@ def update_stooq_history_from_ui_csv(
                     submit.evaluate("button => button.click()")
                 _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
                 download_link = page.locator('a[href*="q/d/l/"]').first
+                download_href = download_link.get_attribute("href") or ""
+                download_url = page.evaluate("href => new URL(href, document.baseURI).href", download_href)
+                response_meta: dict = {}
+
+                def _record_download_response(response) -> None:
+                    if "q/d/l/" not in response.url:
+                        return
+                    response_meta.update({"download_response_url": response.url, "download_response_status": response.status})
+
+                page.on("response", _record_download_response)
                 with page.expect_download(timeout=30000) as download_info:
                     download_link.evaluate("link => link.click()")
-                payload = Path(download_info.value.path()).read_bytes()
+                download = download_info.value
+                payload = Path(download.path()).read_bytes()
+                download_meta = {
+                    "download_link_href": download_href,
+                    "download_url": download_url,
+                    "download_suggested_filename": download.suggested_filename,
+                    "download_bytes": len(payload),
+                    **response_meta,
+                }
             except Exception as exc:
                 details = _capture_stooq_ui_failure(symbol, page, "form_or_download", exc)
                 raise ValueError(f"Stooq UI form/download failed for {symbol}: {exc}; details={details}") from exc
             if verbose:
                 print(f"[stooq-web] downloaded filtered UI CSV for {symbol}: start={start} bytes={len(payload)}", flush=True)
+            denial_text = _stooq_ui_payload_preview(payload).lower().replace("ę", "e")
+            if "odmowa,dostepu" in denial_text or "odmowa dostepu" in denial_text:
+                message = (
+                    f"Stooq CSV download endpoint denied access for {symbol} after the table page and CSV link loaded correctly"
+                )
+                details = _capture_stooq_ui_failure(
+                    symbol, page, "download_endpoint_denied", message, payload, extra=download_meta
+                )
+                raise StooqUIDownloadDenied(f"{message}; details={details}")
             try:
                 remote = _parse_stooq_ui_csv(payload)
             except Exception as exc:
                 # "Odmowa,dostępu" is a downloaded denial document, not data.
-                details = _capture_stooq_ui_failure(symbol, page, "invalid_download", exc, payload)
+                details = _capture_stooq_ui_failure(symbol, page, "invalid_download", exc, payload, extra=download_meta)
                 raise ValueError(f"Invalid Stooq UI CSV for {symbol}: {exc}; details={details}") from exc
         finally:
             browser.close()

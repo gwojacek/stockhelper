@@ -80,3 +80,30 @@ def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tm
     assert (tmp_path / "usdjpy_ui_csv_invalid_download.png").exists()
     assert (tmp_path / "usdjpy_ui_csv_invalid_download.html").exists()
     assert (tmp_path / "usdjpy_ui_csv_invalid_download.download").exists()
+
+
+def test_ui_failure_json_identifies_download_action(monkeypatch, tmp_path):
+    class FakePage:
+        url = "https://stooq.pl/q/d/?s=usdpln"
+
+        def content(self):
+            return "<html>valid table and csv link</html>"
+
+        def screenshot(self, *, path, full_page):
+            Path(path).write_bytes(b"png")
+
+    monkeypatch.setenv("STOCKHELPER_STOOQ_DEBUG_DIR", str(tmp_path))
+    monkeypatch.setenv("STOCKHELPER_STOOQ_TOR", "0")
+    info_path = _capture_stooq_ui_failure(
+        "USDPLN",
+        FakePage(),
+        "download_endpoint_denied",
+        "q/d/l denied access",
+        b"Odmowa,dostepu\n",
+        extra={"download_url": "https://stooq.pl/q/d/l/?s=usdpln&i=d", "download_response_status": 200},
+    )
+
+    info = json.loads(Path(info_path).read_text(encoding="utf-8"))
+    assert info["stage"] == "download_endpoint_denied"
+    assert info["download_url"].endswith("s=usdpln&i=d")
+    assert info["download_response_status"] == 200

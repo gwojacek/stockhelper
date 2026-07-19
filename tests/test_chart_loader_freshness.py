@@ -4,6 +4,7 @@ import types
 import pandas as pd
 
 import chart_program.chart_loader as loader
+from utilities.stooq_playwright import StooqUIDownloadDenied
 
 
 def _df(*dates: str) -> pd.DataFrame:
@@ -76,6 +77,28 @@ def test_forex_falls_back_to_table_ui_after_five_filtered_ui_csv_failures(monkey
     assert source_symbol == "EURCHF"
     assert "filtered UI CSV failed after 5 attempts" in reason
     assert df["Date"].min() == pd.Timestamp("2025-01-20")
+
+
+def test_forex_download_endpoint_denial_skips_remaining_csv_attempts(monkeypatch, tmp_path):
+    csv_path = tmp_path / "USDPLN.csv"
+    attempts = []
+
+    def denied_ui_csv(**_kwargs):
+        attempts.append(1)
+        raise StooqUIDownloadDenied("q/d/l returned Odmowa dostępu")
+
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(loader, "update_stooq_history_from_ui_csv", denied_ui_csv)
+    monkeypatch.setattr(loader, "_try_yahoo_fresh_candle_merge", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(loader, "update_stooq_history_with_playwright", lambda **_kwargs: _df("2025-01-20", "2026-06-10"))
+
+    _df_out, source, _source_symbol, _name, reason = loader._download_remote(
+        symbol="USDPLN", instrument_type="forex", api_key=None, data_source="auto"
+    )
+
+    assert len(attempts) == 1
+    assert source == "stooq_web"
+    assert "q/d/l returned Odmowa" in reason
 
 
 def test_complete_forex_window_uses_cache_without_ui_download(monkeypatch, tmp_path):
