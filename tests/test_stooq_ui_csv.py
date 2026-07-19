@@ -3,7 +3,6 @@ import inspect
 from pathlib import Path
 
 import pandas as pd
-import utilities.stooq_playwright as stooq
 
 from utilities.stooq_playwright import (
     _POLISH_MONTHS_BY_NUMBER,
@@ -36,25 +35,6 @@ def test_ui_actions_use_dom_clicks_to_bypass_stooq_dark_overlay():
     source = inspect.getsource(update_stooq_history_from_ui_csv)
     assert 'submit.evaluate("button => button.click()")' in source
     assert 'download_link.evaluate("link => link.click()")' in source
-
-
-def test_tor_isolate_socks_auth_pool_rotates_credentials(monkeypatch):
-    monkeypatch.setenv("STOCKHELPER_STOOQ_TOR", "1")
-    monkeypatch.setenv("STOCKHELPER_STOOQ_TOR_ISOLATE_SOCKS_AUTH", "1")
-    monkeypatch.setenv("STOCKHELPER_STOOQ_TOR_AUTH_POOL_SIZE", "3")
-    monkeypatch.delenv("STOCKHELPER_STOOQ_PROXY", raising=False)
-    monkeypatch.delenv("STOCKHELPER_STOOQ_PROXY_AUDUSD", raising=False)
-    monkeypatch.delenv("STOCKHELPER_STOOQ_PROXY_POOL", raising=False)
-    monkeypatch.setattr(stooq, "_TOR_AUTH_SLOT_COUNTER", 0)
-
-    slots = [stooq._next_stooq_tor_auth_slot() for _ in range(4)]
-    configs = [stooq._stooq_proxy_config("AUDUSD", tor_auth_slot=slot) for slot in slots]
-
-    assert slots == [0, 1, 2, 0]
-    assert all(config["server"].startswith("http://127.0.0.1:") for config in configs)
-    assert len({config["server"] for config in configs[:3]}) == 3
-    assert configs[0]["server"] == configs[3]["server"]
-    assert all("username" not in config and "password" not in config for config in configs)
 
 
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):

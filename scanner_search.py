@@ -1185,7 +1185,7 @@ def _forex_csv_health_check(members: Sequence[str]) -> None:
             break
         if retry_round < retry_rounds and retry_delay > 0:
             wait_seconds = retry_delay * retry_round
-            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; waiting {wait_seconds:.1f}s before another Tor circuit round.")
+            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; waiting {wait_seconds:.1f}s before another download round.")
             time.sleep(wait_seconds)
 
 

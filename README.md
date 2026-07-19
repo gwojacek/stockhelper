@@ -959,36 +959,23 @@ stock -allsearch commodities
 
 Country targeting is proxy-provider-specific: StockHelper only substitutes `{country}` in the proxy string and passes the resulting proxy settings to Playwright. Put country information where your provider expects it, usually in the username, host, or port.
 
-#### Tor circuit isolation pool
+#### Tor SOCKS proxy
 
-For concurrent Stooq UI sessions, edit `/etc/tor/torrc` on Ubuntu (the path can
-differ on other systems) and configure the Tor SOCKS listener:
-
-```text
-SocksPort 9050 IsolateSOCKSAuth
-```
-
-Restart Tor after changing `torrc` (`sudo systemctl restart tor`). StockHelper
-assigns a different SOCKS username/password slot to successive browser sessions,
-so Tor places those streams on isolated circuits. Because Chromium does not
-support SOCKS5 authentication itself, StockHelper automatically creates one
-local HTTP CONNECT bridge per slot and applies the SOCKS credentials between
-that bridge and Tor. The first slot is randomized and subsequent sessions rotate
-through the pool. The default pool has 16 slots:
+StockHelper can keep routing Stooq Playwright sessions through the ordinary Tor
+SOCKS listener without SOCKS authentication:
 
 ```bash
 STOCKHELPER_STOOQ_TOR=1 \
-STOCKHELPER_STOOQ_TOR_AUTH_POOL_SIZE=16 \
 ./stock -search forex
 ```
 
-Set `STOCKHELPER_STOOQ_TOR_ISOLATE_SOCKS_AUTH=0` to disable credentials for a
-Tor installation that does not use `IsolateSOCKSAuth`. Circuit isolation does
-not guarantee that every circuit has a different exit relay; Tor makes the
-final path selection.
+For an incomplete forex cache, StockHelper first tries the Stooq CSV endpoint
+up to five times and then merges any newer Yahoo candle. If all five downloads
+fail, it falls back to the paginated Playwright table scraper used by
+commodities; that browser fallback uses the configured Tor SOCKS proxy.
 
-After the forex coverage summary, warned CSVs are retried for up to four Tor
-circuit rounds by default. Only files that remain incomplete enter the next
+After the forex coverage summary, warned CSVs are retried for up to four
+download rounds by default. Only files that remain incomplete enter the next
 round. Tune the behavior when needed:
 
 ```bash
@@ -998,7 +985,8 @@ export STOCKHELPER_FOREX_HEALTH_WORKERS=4
 ```
 
 The delay is multiplied by the completed round (3s, 6s, 9s by default), giving
-Tor and Stooq time between denial or timeout responses.
+Tor and Stooq time between denial or timeout responses. These are retries over
+the configured Tor SOCKS proxy, not guaranteed distinct Tor exit circuits.
 
 ### No scanner Markdown is created
 
