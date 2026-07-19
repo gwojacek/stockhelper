@@ -2210,14 +2210,21 @@ class LightweightChartLevelSelectorUI:
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
       if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
       const display = lineDisplayValues(obj) || anchors;
-      const displayEndY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
       const endSourceX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
-      const endSourceY = Number.isFinite(displayEndY) ? displayEndY : y1;
-      const slope = Number.isFinite(endSourceX) && endSourceX !== x0 ? (endSourceY - y0) / (endSourceX - x0) : (y1 - y0) / (x1 - x0);
       let endX = endSourceX;
       if (!Number.isFinite(endX)) endX = $('chart-wrap').clientWidth || x1;
       const leftX = Math.max(0, Math.min(x0, x1));
       const rightX = Math.max(leftX, endX);
+      // Scanner wedges must always follow the two detected candle-extreme
+      // anchors. Calendar-date projection in a native line series changes their
+      // apparent slope across weekends/holidays even though the touch icons stay
+      // correct. For a manually free-dragged extension only, honor its explicit
+      // endpoint; otherwise extend the pixel-space line through both anchors.
+      let slope = (y1 - y0) / (x1 - x0);
+      if (obj.free_extension && Number.isFinite(endSourceX) && endSourceX !== x0) {{
+        const displayEndY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
+        if (Number.isFinite(displayEndY)) slope = (displayEndY - y0) / (endSourceX - x0);
+      }}
       ctx.save();
       ctx.strokeStyle = obj.color || '#facc15';
       ctx.lineWidth = 3;

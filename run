@@ -2300,8 +2300,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if "breakout" in status_text or "returned_to_cloud" in status_text or "returned to cloud" in status_text:
                 add(row.dates.get("flip_date") or row.metrics.get("latest_date"))
         elif row.scanner == "FIBO":
-            # Fibo green means a valid 61.8 reversal pattern, not merely being
-            # near/touched 61.8 while still waiting for confirmation.
+            # Fibo 3P green means the scanner still carries an SL-intact 61.8
+            # reversal pattern. Invalid/SL-hit setups are removed before this
+            # reporter sees them, so keep the visual signal for five days from
+            # the pattern/touch date instead of highlighting plain waiting rows.
             pattern = str(row.pattern or "").strip().lower()
             status_text = " ".join(str(v) for v in [row.status, row.category]).lower()
             valid_618_pattern = ("valid" in status_text) and pattern not in {"", "-", "none"}
@@ -2371,13 +2373,22 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if row is not None and _row_has_search_day_signal(row):
             return True
         text = str(cell or "").lower()
-        if not any(token in text for token in ("cloud", "trend", "breakout", "retest", "kijun")):
+        if not any(token in text for token in ("cloud", "breakout", "retest", "pattern", "returned")):
             return False
+        ref = _date_from_text(row.metrics.get("latest_date", "") if row is not None else "") or datetime.now().date()
+        cell_dates = [d for d in (_date_from_text(match.group(0)) for match in re.finditer(r"\d{4}-\d{2}-\d{2}", str(cell or ""))) if d is not None]
+        if any(0 <= (ref - d).days <= 5 for d in cell_dates):
+            return True
         months = [float(m) for m in re.findall(r"\((\d+(?:\.\d+)?)m\)", text)]
         # 3P markdown cards do not always include the allsearch breakout date;
         # a 0.0m/0.1m age in the cloud/retest columns means the breakout is still
         # inside the five-day visual signal window.
         return bool(months and min(months) <= 0.25)
+
+    def _troj_cell_recent_fibo_signal(cell: str, row: ScannerRow | None) -> bool:
+        if row is None or row.scanner != "FIBO":
+            return False
+        return _row_has_search_day_signal(row)
 
     def _troj_cell_attrs(cell: str, section_id: str = "") -> str:
         row = _troj_row_for_cell(cell, section_id)
@@ -2385,7 +2396,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return ""
         attrs = f" data-market='{html.escape(row.market)}' data-scanner='{html.escape(row.scanner)}'"
         classes: list[str] = []
-        if _row_has_search_day_signal(row) or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row)):
+        if (
+            _row_has_search_day_signal(row)
+            or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row))
+            or ("fibo" in section_id and _troj_cell_recent_fibo_signal(cell, row))
+        ):
             classes.append("today-signal")
         if "ichimoku" in section_id:
             trend_text = " ".join(str(v) for v in [cell, row.status, row.metrics.get("ichimoku_status", ""), row.metrics.get("tk_cross", ""), row.metrics.get("current_side", "")]).lower()
@@ -2395,6 +2410,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if classes:
             attrs += f" class='{' '.join(classes)}'"
         return attrs
+
+    def _troj_card_attrs(cell: str, section_id: str = "") -> str:
+        attrs = _troj_cell_attrs(cell, section_id)
+        class_match = re.search(r"\sclass='([^']*)'", attrs)
+        card_classes = "troj-cell-card"
+        if class_match:
+            card_classes += " " + class_match.group(1)
+            attrs = attrs[:class_match.start()] + attrs[class_match.end():]
+        return f" class='{card_classes}'{attrs}"
 
     def _trojpolowki_html_section(parsed: dict[str, object], section_id: str, top_choice_cols: list[int] | None = None) -> str:
         headers = parsed.get("headers", [])
@@ -2448,7 +2472,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         table_html += "<tr>"
         for col_idx, cells in enumerate(columns_for_display):
             attrs_source = next((cell for cell in cells if str(cell).strip()), "")
-            stack = "".join(f"<div class='troj-cell-card'{_troj_cell_attrs(str(cell), section_id)}>{_troj_cell_to_html(str(cell), section_id)}</div>" for cell in cells)
+            stack = "".join(f"<div{_troj_card_attrs(str(cell), section_id)}>{_troj_cell_to_html(str(cell), section_id)}</div>" for cell in cells)
             table_html += f"<td{_troj_cell_attrs(str(attrs_source), section_id)}><div class='troj-cell-stack'>{stack}</div></td>"
         table_html += "</tr>"
         table_html += "</tbody></table></div>"
