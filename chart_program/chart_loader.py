@@ -10,7 +10,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import os
-import time
+import time as time_module
 
 import pandas as pd
 
@@ -1113,7 +1113,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 primary_error = exc
                 print(f"[forex-download] {symbol}: Stooq CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
                 if attempt < attempts:
-                    time.sleep(min(4.0, float(attempt)))
+                    time_module.sleep(min(4.0, float(attempt)))
 
         # The CSV endpoint can deny or time out. Fall back to the same paginated
         # Stooq UI table scraper used for literal commodities (through Tor when enabled).
