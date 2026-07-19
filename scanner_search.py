@@ -1088,6 +1088,88 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         _print_summary([_health_row(ticker) for ticker in members])
 
 
+def _forex_csv_health_check(members: Sequence[str]) -> None:
+    """Report and retry FX caches that do not cover the rolling 1.5-year window."""
+    try:
+        required_days = max(1, int(os.getenv("STOCKHELPER_FOREX_REQUIRED_DAYS", "548")))
+    except ValueError:
+        required_days = 548
+    today = datetime.now(UTC).date()
+    required_start = today - timedelta(days=required_days)
+    # Markets may be closed on the exact boundary date.
+    oldest_tolerance = required_start + timedelta(days=7)
+
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, str, int, Exception | None]:
+        raw = (ticker or "").strip().upper()
+        csv_path = local_csv_path_for_symbol(raw, "forex")
+        try:
+            dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+            if dates.empty:
+                raise ValueError("CSV has no valid dates")
+            oldest = dates.min().date()
+            latest = dates.max().date()
+            return raw, csv_path, len(dates), oldest.isoformat(), latest.isoformat(), (latest - oldest).days, None
+        except Exception as exc:
+            return raw, csv_path, 0, "-", "-", 0, exc
+
+    def _warned(row: tuple[str, Path, int, str, str, int, Exception | None]) -> bool:
+        _raw, _path, _rows, oldest, _latest, _span, exc = row
+        return (
+            exc is not None
+            or oldest == "-"
+            or date.fromisoformat(oldest) > oldest_tolerance
+            or _latest == "-"
+            or date.fromisoformat(_latest) < today - timedelta(days=7)
+        )
+
+    def _print_summary(rows: Sequence[tuple[str, Path, int, str, str, int, Exception | None]]) -> list[str]:
+        retry: list[str] = []
+        for raw, csv_path, row_count, oldest, latest, span_days, exc in rows:
+            warn = _warned((raw, csv_path, row_count, oldest, latest, span_days, exc))
+            if warn:
+                retry.append(raw)
+            detail = f"error={_retry_error_brief(exc)}" if exc else f"rows={row_count}, oldest={oldest}, latest={latest}, span_days={span_days}"
+            print(f"[forex-check] {'WARN' if warn else 'OK'} {raw}: {detail}, csv={csv_path}")
+        print(f"[forex-check] summary: ok={len(rows) - len(retry)}, warn={len(retry)}, total={len(rows)}")
+        return retry
+
+    print(f"[forex-check] rolling 1.5-year coverage check (required_start<={required_start}, tolerance=7d)")
+    retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
+    if not retry_tickers or os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY", "1") == "0":
+        return
+
+    try:
+        retry_workers = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "4")))
+    except ValueError:
+        retry_workers = 4
+    retry_workers = min(retry_workers, len(retry_tickers))
+    print(f"[forex-check] replacing and retrying {len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}")
+
+    def _replace(raw: str) -> None:
+        _raw, csv_path, _rows, _oldest, _latest, _span, _exc = _health_row(raw)
+        backup = csv_path.read_bytes() if csv_path.exists() else None
+        try:
+            csv_path.unlink(missing_ok=True)
+            load_or_update_daily_data(symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False)
+            if not csv_path.exists():
+                raise FileNotFoundError(f"replacement did not create {csv_path}")
+        except Exception:
+            if backup is not None:
+                csv_path.parent.mkdir(parents=True, exist_ok=True)
+                csv_path.write_bytes(backup)
+            raise
+
+    with ThreadPoolExecutor(max_workers=retry_workers) as executor:
+        futures = {executor.submit(_replace, raw): raw for raw in retry_tickers}
+        for future, raw in [(future, futures[future]) for future in futures]:
+            try:
+                future.result()
+            except Exception as exc:
+                print(f"[forex-check] retry failed for {raw}: {_retry_error_brief(exc)}")
+    print("[forex-check] post-retry rolling coverage check")
+    _print_summary([_health_row(ticker) for ticker in members])
+
+
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
     """Apply turnover filtering only when the data source has usable volume."""
     # FX feeds expose either zero volume or broker-specific tick volume, neither
@@ -2955,6 +3037,8 @@ def run_ichimoku_search(target: str) -> int:
         print(f"[search] error samples: {'; '.join(error_samples)}")
     if group_name == "commodities":
         _commodity_csv_health_check(members)
+    elif group_name == "forex":
+        _forex_csv_health_check(members)
 
     links_flip = _print_flip_results_with_links(flip_results)
 

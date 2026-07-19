@@ -1,4 +1,5 @@
 import json
+import inspect
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +27,14 @@ def test_parse_polish_stooq_ui_csv():
 
 def test_july_is_selected_using_the_polish_ui_label():
     assert _POLISH_MONTHS_BY_NUMBER[7] == "lip"
+
+
+def test_ui_actions_use_dom_clicks_to_bypass_stooq_dark_overlay():
+    from utilities.stooq_playwright import update_stooq_history_from_ui_csv
+
+    source = inspect.getsource(update_stooq_history_from_ui_csv)
+    assert 'submit.evaluate("button => button.click()")' in source
+    assert 'download_link.evaluate("link => link.click()")' in source
 
 
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):

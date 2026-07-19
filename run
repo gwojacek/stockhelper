@@ -3335,7 +3335,7 @@ def main()->int:
             df = update_stooq_history_from_ui_csv(
                 symbol=upper_raw,
                 csv_path=csv_path,
-                lookback_days=364,
+                lookback_days=548,
                 verbose=True,
                 interactive=args.inspector,
             )

@@ -1060,7 +1060,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         df = update_stooq_history_from_ui_csv(
             symbol=symbol,
             csv_path=csv_path_ref,
-            lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path_ref),
+            lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path_ref, default_days=548),
             end_date=older_anchor if fetch_older_data else None,
             verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
         )

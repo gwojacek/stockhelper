@@ -1433,11 +1433,14 @@ def update_stooq_history_from_ui_csv(
                 page.locator('input[name="d7"]').fill(str(start.day))
                 page.locator('select[name="d5"]').select_option(label=_POLISH_MONTHS_BY_NUMBER[start.month])
                 page.locator('input[name="d3"]').fill(str(start.year))
-                page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first.click()
-                page.wait_for_load_state("domcontentloaded")
+                submit = page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first
+                # Stooq sometimes leaves #drk_scr above the form. A DOM click runs
+                # the same onclick handler without pointer-event interception.
+                with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
+                    submit.evaluate("button => button.click()")
                 download_link = page.locator('a[href*="q/d/l/"]').first
                 with page.expect_download(timeout=30000) as download_info:
-                    download_link.click()
+                    download_link.evaluate("link => link.click()")
                 payload = Path(download_info.value.path()).read_bytes()
             except Exception as exc:
                 details = _capture_stooq_ui_failure(symbol, page, "form_or_download", exc)
