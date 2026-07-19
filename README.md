@@ -974,7 +974,9 @@ rolling start date in the Stooq UI and download the filtered CSV, retrying that
 workflow up to five times. It then merges any newer Yahoo candle. If all five
 UI CSV downloads fail, it falls back to fetching rows from the paginated Stooq
 UI tables exactly like the commodity workflow. Both browser paths use the
-configured Tor SOCKS proxy.
+configured Tor SOCKS proxy. The filtered-CSV path also reuses the commodity
+scraper's consent handling, CAPTCHA OCR, and automatic blocked-page retries
+before and after submitting the date form.
 
 After the forex coverage summary, warned CSVs are retried for up to four
 download rounds by default. Only files that remain incomplete enter the next

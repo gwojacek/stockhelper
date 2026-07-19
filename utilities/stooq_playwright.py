@@ -1384,6 +1384,27 @@ def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseExceptio
     return str(info_path.resolve())
 
 
+def _resolve_stooq_ui_consent_and_captcha(page, url: str, symbol: str) -> None:
+    """Apply the commodity scraper's consent and automatic CAPTCHA handling."""
+    _accept_consent_if_present(page, first_page=True)
+    if not _page_has_rate_limit_or_captcha(page):
+        return
+    print(f"[stooq-web] filtered UI CSV CAPTCHA/limit detected for {symbol}; trying commodity OCR flow.", flush=True)
+    if _try_solve_stooq_captcha(page, symbol) and not _page_has_rate_limit_or_captcha(page):
+        return
+    retry_state = {"done": False, "forced_pause_done": False}
+    if _retry_blocked_page_before_inspector(
+        page,
+        url,
+        symbol,
+        "Filtered UI CSV CAPTCHA/limit",
+        retry_state=retry_state,
+    ) and not _page_has_rate_limit_or_captcha(page):
+        _accept_consent_if_present(page, first_page=True)
+        return
+    raise ValueError(f"Stooq CAPTCHA/rate limit remained after automatic commodity-style retries for {symbol}")
+
+
 def update_stooq_history_from_ui_csv(
     symbol: str,
     csv_path: Path,
@@ -1416,11 +1437,10 @@ def update_stooq_history_from_ui_csv(
             )
             try:
                 page.goto(url, wait_until="domcontentloaded")
-                page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
+                _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
             except Exception as exc:
                 details = _capture_stooq_ui_failure(symbol, page, "goto", exc)
                 raise ValueError(f"Stooq UI navigation failed for {symbol}: {exc}; details={details}") from exc
-            _accept_consent_if_present(page, first_page=True)
             try:
                 page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
                 if interactive:
@@ -1438,6 +1458,7 @@ def update_stooq_history_from_ui_csv(
                 # the same onclick handler without pointer-event interception.
                 with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
                     submit.evaluate("button => button.click()")
+                _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
                 download_link = page.locator('a[href*="q/d/l/"]').first
                 with page.expect_download(timeout=30000) as download_info:
                     download_link.evaluate("link => link.click()")

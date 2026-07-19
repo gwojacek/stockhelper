@@ -37,6 +37,20 @@ def test_ui_actions_use_dom_clicks_to_bypass_stooq_dark_overlay():
     assert 'download_link.evaluate("link => link.click()")' in source
 
 
+def test_filtered_ui_csv_reuses_commodity_consent_and_captcha_flow():
+    from utilities.stooq_playwright import (
+        _resolve_stooq_ui_consent_and_captcha,
+        update_stooq_history_from_ui_csv,
+    )
+
+    resolver_source = inspect.getsource(_resolve_stooq_ui_consent_and_captcha)
+    download_source = inspect.getsource(update_stooq_history_from_ui_csv)
+    assert "_accept_consent_if_present" in resolver_source
+    assert "_try_solve_stooq_captcha" in resolver_source
+    assert "_retry_blocked_page_before_inspector" in resolver_source
+    assert download_source.count("_resolve_stooq_ui_consent_and_captcha") == 2
+
+
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):
     class FakePage:
         url = "https://stooq.pl/q/d/?s=usdjpy"
