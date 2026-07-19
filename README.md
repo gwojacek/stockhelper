@@ -987,6 +987,19 @@ Tor installation that does not use `IsolateSOCKSAuth`. Circuit isolation does
 not guarantee that every circuit has a different exit relay; Tor makes the
 final path selection.
 
+After the forex coverage summary, warned CSVs are retried for up to four Tor
+circuit rounds by default. Only files that remain incomplete enter the next
+round. Tune the behavior when needed:
+
+```bash
+export STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS=4
+export STOCKHELPER_FOREX_HEALTH_RETRY_DELAY=3
+export STOCKHELPER_FOREX_HEALTH_WORKERS=4
+```
+
+The delay is multiplied by the completed round (3s, 6s, 9s by default), giving
+Tor and Stooq time between denial or timeout responses.
+
 ### No scanner Markdown is created
 
 Check that dependencies are installed and that the scanner scope is valid:

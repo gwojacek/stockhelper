@@ -1139,11 +1139,17 @@ def _forex_csv_health_check(members: Sequence[str]) -> None:
         return
 
     try:
-        retry_workers = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "4")))
+        retry_workers_setting = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "4")))
     except ValueError:
-        retry_workers = 4
-    retry_workers = min(retry_workers, len(retry_tickers))
-    print(f"[forex-check] replacing and retrying {len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}")
+        retry_workers_setting = 4
+    try:
+        retry_rounds = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS", "4")))
+    except ValueError:
+        retry_rounds = 4
+    try:
+        retry_delay = max(0.0, float(os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY_DELAY", "3")))
+    except ValueError:
+        retry_delay = 3.0
 
     def _replace(raw: str) -> None:
         _raw, csv_path, _rows, _oldest, _latest, _span, _exc = _health_row(raw)
@@ -1159,15 +1165,28 @@ def _forex_csv_health_check(members: Sequence[str]) -> None:
                 csv_path.write_bytes(backup)
             raise
 
-    with ThreadPoolExecutor(max_workers=retry_workers) as executor:
-        futures = {executor.submit(_replace, raw): raw for raw in retry_tickers}
-        for future, raw in [(future, futures[future]) for future in futures]:
-            try:
-                future.result()
-            except Exception as exc:
-                print(f"[forex-check] retry failed for {raw}: {_retry_error_brief(exc)}")
-    print("[forex-check] post-retry rolling coverage check")
-    _print_summary([_health_row(ticker) for ticker in members])
+    for retry_round in range(1, retry_rounds + 1):
+        retry_workers = min(retry_workers_setting, len(retry_tickers))
+        print(
+            f"[forex-check] retry round {retry_round}/{retry_rounds}: replacing and retrying "
+            f"{len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}"
+        )
+        with ThreadPoolExecutor(max_workers=retry_workers) as executor:
+            futures = {executor.submit(_replace, raw): raw for raw in retry_tickers}
+            for future, raw in [(future, futures[future]) for future in futures]:
+                try:
+                    future.result()
+                except Exception as exc:
+                    print(f"[forex-check] retry round {retry_round} failed for {raw}: {_retry_error_brief(exc)}")
+        print(f"[forex-check] post-retry round {retry_round} rolling coverage check")
+        retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
+        if not retry_tickers:
+            print(f"[forex-check] all forex CSVs complete after retry round {retry_round}.")
+            break
+        if retry_round < retry_rounds and retry_delay > 0:
+            wait_seconds = retry_delay * retry_round
+            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; waiting {wait_seconds:.1f}s before another Tor circuit round.")
+            time.sleep(wait_seconds)
 
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
