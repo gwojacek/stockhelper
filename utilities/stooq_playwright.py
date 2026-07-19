@@ -10,6 +10,8 @@ import zipfile
 import re
 import socket
 import secrets
+import select
+import socketserver
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 from io import BytesIO
@@ -25,6 +27,8 @@ _EASYOCR_READER = None
 _EASYOCR_UNAVAILABLE = False
 _TOR_AUTH_SLOT_LOCK = threading.Lock()
 _TOR_AUTH_SLOT_COUNTER: int | None = None
+_TOR_HTTP_BRIDGES: dict[int, socketserver.ThreadingTCPServer] = {}
+_TOR_HTTP_BRIDGE_LOCK = threading.Lock()
 
 
 _POLISH_MONTHS = {
@@ -1187,6 +1191,100 @@ def _next_stooq_tor_auth_slot() -> int | None:
     return slot
 
 
+def _recv_exact(conn: socket.socket, size: int) -> bytes:
+    data = b""
+    while len(data) < size:
+        chunk = conn.recv(size - len(data))
+        if not chunk:
+            raise ConnectionError("connection closed")
+        data += chunk
+    return data
+
+
+def _tor_socks_connect(host: str, port: int, username: str, password: str) -> socket.socket:
+    """Open a SOCKS5-authenticated stream without relying on browser support."""
+    proxy_host, proxy_port = _stooq_tor_proxy_host_port()
+    upstream = socket.create_connection((proxy_host, proxy_port), timeout=20)
+    upstream.sendall(b"\x05\x01\x02")
+    if _recv_exact(upstream, 2) != b"\x05\x02":
+        upstream.close()
+        raise ConnectionError("Tor SOCKS listener rejected username/password authentication")
+    user = username.encode("utf-8")[:255]
+    secret = password.encode("utf-8")[:255]
+    upstream.sendall(b"\x01" + bytes([len(user)]) + user + bytes([len(secret)]) + secret)
+    if _recv_exact(upstream, 2) != b"\x01\x00":
+        upstream.close()
+        raise ConnectionError("Tor SOCKS authentication failed")
+    target = host.encode("idna")
+    upstream.sendall(b"\x05\x01\x00\x03" + bytes([len(target)]) + target + int(port).to_bytes(2, "big"))
+    reply = _recv_exact(upstream, 4)
+    if reply[1] != 0:
+        upstream.close()
+        raise ConnectionError(f"Tor SOCKS connect failed with status {reply[1]}")
+    addr_type = reply[3]
+    if addr_type == 1:
+        _recv_exact(upstream, 4)
+    elif addr_type == 3:
+        _recv_exact(upstream, _recv_exact(upstream, 1)[0])
+    elif addr_type == 4:
+        _recv_exact(upstream, 16)
+    _recv_exact(upstream, 2)
+    upstream.settimeout(None)
+    return upstream
+
+
+def _tor_http_bridge_server(slot: int) -> socketserver.ThreadingTCPServer:
+    """Expose a local HTTP CONNECT proxy backed by one Tor auth slot."""
+    with _TOR_HTTP_BRIDGE_LOCK:
+        existing = _TOR_HTTP_BRIDGES.get(slot)
+        if existing is not None:
+            return existing
+        username = password = f"stockhelper-{slot}"
+
+        class Handler(socketserver.BaseRequestHandler):
+            def handle(self):
+                header = b""
+                while b"\r\n\r\n" not in header and len(header) < 65536:
+                    chunk = self.request.recv(4096)
+                    if not chunk:
+                        return
+                    header += chunk
+                first = header.split(b"\r\n", 1)[0].decode("latin-1", errors="replace")
+                parts = first.split()
+                if len(parts) < 2 or parts[0].upper() != "CONNECT":
+                    self.request.sendall(b"HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n")
+                    return
+                host, _, raw_port = parts[1].rpartition(":")
+                try:
+                    upstream = _tor_socks_connect(host.strip("[]"), int(raw_port or "443"), username, password)
+                except Exception:
+                    self.request.sendall(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                    return
+                try:
+                    self.request.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                    sockets = [self.request, upstream]
+                    while True:
+                        readable, _, _ = select.select(sockets, [], [], 60)
+                        if not readable:
+                            continue
+                        for source in readable:
+                            data = source.recv(65536)
+                            if not data:
+                                return
+                            (upstream if source is self.request else self.request).sendall(data)
+                finally:
+                    upstream.close()
+
+        class Server(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        server = Server(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, name=f"tor-auth-bridge-{slot}", daemon=True).start()
+        _TOR_HTTP_BRIDGES[slot] = server
+        return server
+
+
 def _stooq_tor_enabled() -> bool:
     raw = os.getenv("STOCKHELPER_STOOQ_TOR")
     if raw is not None:
@@ -1316,10 +1414,10 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
     else:
         cfg = {"server": value}
     if source == "STOCKHELPER_STOOQ_TOR_PROXY" and tor_auth_slot is not None:
-        # Tor configured with `SocksPort 9050 IsolateSOCKSAuth` assigns streams
-        # with different SOCKS credentials to separate circuits.
-        cfg["username"] = f"stockhelper-{tor_auth_slot}"
-        cfg["password"] = f"stockhelper-{tor_auth_slot}"
+        # Chromium rejects authenticated SOCKS proxies. Give it an unauthenticated
+        # local HTTP CONNECT bridge which applies this slot's credentials upstream.
+        bridge = _tor_http_bridge_server(tor_auth_slot)
+        cfg = {"server": f"http://127.0.0.1:{bridge.server_address[1]}"}
     if _stooq_verbose_enabled():
         print(f"[stooq-web] using proxy from {source} for {symbol or '-'}: {cfg['server']}", flush=True)
     return cfg
@@ -1406,6 +1504,7 @@ def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseExceptio
         "tor_enabled": _stooq_tor_enabled(),
         "tor_proxy_reachable": _stooq_tor_proxy_reachable() if _stooq_tor_enabled() else None,
         "proxy_server": (proxy or {}).get("server", ""),
+        "tor_upstream": _stooq_tor_proxy_value() if _stooq_tor_enabled() else "",
         "tor_auth_slot": tor_auth_slot,
         "screenshot": screenshot,
         "html": str((out_dir / f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}.html").resolve()),
@@ -1447,7 +1546,8 @@ def update_stooq_history_from_ui_csv(
             print(
                 f"[stooq-web] forex UI session {symbol}: tor={'on' if _stooq_tor_enabled() else 'off'} "
                 f"reachable={_stooq_tor_proxy_reachable() if _stooq_tor_enabled() else '-'} "
-                f"proxy={(proxy or {}).get('server', 'direct')} isolate_auth_slot={tor_auth_slot if tor_auth_slot is not None else '-'}",
+                f"proxy={(proxy or {}).get('server', 'direct')} tor_upstream={_stooq_tor_proxy_value() if _stooq_tor_enabled() else '-'} "
+                f"isolate_auth_slot={tor_auth_slot if tor_auth_slot is not None else '-'}",
                 flush=True,
             )
             try:

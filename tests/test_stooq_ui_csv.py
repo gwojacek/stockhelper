@@ -51,10 +51,10 @@ def test_tor_isolate_socks_auth_pool_rotates_credentials(monkeypatch):
     configs = [stooq._stooq_proxy_config("AUDUSD", tor_auth_slot=slot) for slot in slots]
 
     assert slots == [0, 1, 2, 0]
-    assert [config["username"] for config in configs] == [
-        "stockhelper-0", "stockhelper-1", "stockhelper-2", "stockhelper-0"
-    ]
-    assert all(config["server"] == "socks5://127.0.0.1:9050" for config in configs)
+    assert all(config["server"].startswith("http://127.0.0.1:") for config in configs)
+    assert len({config["server"] for config in configs[:3]}) == 3
+    assert configs[0]["server"] == configs[3]["server"]
+    assert all("username" not in config and "password" not in config for config in configs)
 
 
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):

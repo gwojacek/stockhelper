@@ -961,16 +961,20 @@ Country targeting is proxy-provider-specific: StockHelper only substitutes `{cou
 
 #### Tor circuit isolation pool
 
-For concurrent Stooq UI sessions, configure the Tor SOCKS listener in `torrc`:
+For concurrent Stooq UI sessions, edit `/etc/tor/torrc` on Ubuntu (the path can
+differ on other systems) and configure the Tor SOCKS listener:
 
 ```text
 SocksPort 9050 IsolateSOCKSAuth
 ```
 
-Restart Tor after changing `torrc`. StockHelper assigns a different SOCKS
-username/password slot to successive browser sessions, so Tor places those
-streams on isolated circuits. The first slot is randomized and subsequent
-sessions rotate through the pool. The default pool has 16 slots:
+Restart Tor after changing `torrc` (`sudo systemctl restart tor`). StockHelper
+assigns a different SOCKS username/password slot to successive browser sessions,
+so Tor places those streams on isolated circuits. Because Chromium does not
+support SOCKS5 authentication itself, StockHelper automatically creates one
+local HTTP CONNECT bridge per slot and applies the SOCKS credentials between
+that bridge and Tor. The first slot is randomized and subsequent sessions rotate
+through the pool. The default pool has 16 slots:
 
 ```bash
 STOCKHELPER_STOOQ_TOR=1 \
