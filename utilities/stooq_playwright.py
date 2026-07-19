@@ -11,6 +11,7 @@ import re
 import socket
 from pathlib import Path
 from urllib.parse import urlparse, unquote
+from io import BytesIO
 
 import pandas as pd
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -1317,6 +1318,84 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
     except Exception:
         pass
     return browser, page
+
+
+def _parse_stooq_ui_csv(payload: bytes) -> pd.DataFrame:
+    """Parse the CSV downloaded by the Polish Stooq history UI."""
+    frame = None
+    for encoding in ("utf-8-sig", "cp1250", "latin-1"):
+        try:
+            frame = pd.read_csv(BytesIO(payload), encoding=encoding, sep=None, engine="python")
+            break
+        except UnicodeDecodeError:
+            continue
+    if frame is None:
+        raise ValueError("Unable to decode Stooq UI CSV download")
+    aliases = {
+        "data": "Date", "date": "Date", "otwarcie": "Open", "open": "Open",
+        "najwyzszy": "High", "najwyższy": "High", "high": "High",
+        "najnizszy": "Low", "najniższy": "Low", "low": "Low",
+        "zamkniecie": "Close", "zamknięcie": "Close", "close": "Close",
+        "wolumen": "Volume", "volume": "Volume",
+    }
+    frame = frame.rename(columns={column: aliases.get(str(column).strip().lower(), column) for column in frame.columns})
+    required = ["Date", "Open", "High", "Low", "Close"]
+    if not all(column in frame.columns for column in required):
+        raise ValueError(f"Unexpected Stooq UI CSV columns: {list(frame.columns)}")
+    if "Volume" not in frame.columns:
+        frame["Volume"] = 0
+    frame = frame[[*required, "Volume"]].copy()
+    frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce")
+    for column in ["Open", "High", "Low", "Close", "Volume"]:
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return frame.dropna(subset=required).sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
+
+
+def update_stooq_history_from_ui_csv(
+    symbol: str,
+    csv_path: Path,
+    lookback_days: int = 364,
+    end_date: datetime | None = None,
+    verbose: bool = False,
+) -> pd.DataFrame:
+    """Set the Stooq UI start date and download its filtered daily CSV."""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    anchor = end_date.date() if isinstance(end_date, datetime) else datetime.now(UTC).date()
+    start = anchor - timedelta(days=max(1, lookback_days))
+    url = f"https://stooq.pl/q/d/?s={symbol.strip().lower()}"
+    with sync_playwright() as playwright:
+        proxy_index = _stooq_proxy_pool_initial_index(symbol)
+        browser, page = _open_page(
+            playwright,
+            interactive=False,
+            symbol=symbol,
+            proxy_index=proxy_index if proxy_index >= 0 else None,
+        )
+        try:
+            page.set_default_timeout(20000)
+            page.goto(url, wait_until="domcontentloaded")
+            _accept_consent_if_present(page, first_page=True)
+            page.locator('input[name="d7"]').fill(str(start.day))
+            page.locator('select[name="d5"]').select_option(str(start.month))
+            page.locator('input[name="d3"]').fill(str(start.year))
+            page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first.click()
+            page.wait_for_load_state("domcontentloaded")
+            download_link = page.locator('a[href*="q/d/l/"]').first
+            with page.expect_download(timeout=30000) as download_info:
+                download_link.click()
+            payload = Path(download_info.value.path()).read_bytes()
+            if verbose:
+                print(f"[stooq-web] downloaded filtered UI CSV for {symbol}: start={start} bytes={len(payload)}", flush=True)
+        finally:
+            browser.close()
+    remote = _parse_stooq_ui_csv(payload)
+    local = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+    if not local.empty:
+        local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
+        remote = pd.concat([local, remote], ignore_index=True)
+    remote = remote.sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
+    remote.to_csv(csv_path, index=False, date_format="%Y-%m-%d")
+    return remote
 
 
 

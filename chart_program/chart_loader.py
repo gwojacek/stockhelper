@@ -13,7 +13,7 @@ import os
 
 import pandas as pd
 
-from utilities.stooq_playwright import update_stooq_history_with_playwright
+from utilities.stooq_playwright import update_stooq_history_from_ui_csv, update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
@@ -1056,9 +1056,19 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             older_anchor=older_anchor,
         )
 
-    if instrument_type == "forex" or (instrument_type == "commodity" and _is_index_like_commodity(symbol)):
+    if instrument_type == "forex":
+        df = update_stooq_history_from_ui_csv(
+            symbol=symbol,
+            csv_path=csv_path_ref,
+            lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path_ref),
+            end_date=older_anchor if fetch_older_data else None,
+            verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+        )
+        return df, "stooq_web", symbol.upper(), None, "Stooq filtered UI CSV used as primary source for forex."
+
+    if instrument_type == "commodity" and _is_index_like_commodity(symbol):
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for forex/index symbols."
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for index symbols."
 
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
     # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20); they returned above via Yahoo.

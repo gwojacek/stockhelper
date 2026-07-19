@@ -2829,6 +2829,10 @@ def _retry_missing_scope_csvs_once(scope: str) -> bool:
     return True
 
 def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False) -> int:
+    # Allsearch performs commodity and forex Stooq UI downloads concurrently.
+    # Keep explicit caller settings, otherwise use a practical Tor-backed default.
+    os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "auto")
+    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "8")
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)
     for old in report_dir.glob("*.txt"):
@@ -3032,8 +3036,6 @@ def main()->int:
         os.environ.pop('STOCKHELPER_STOOQ_BULK_INSPECTOR', None)
     if args.scan_workers is not None:
         os.environ['STOCKHELPER_SCAN_WORKERS'] = str(max(1, int(args.scan_workers)))
-    else:
-        os.environ.pop('STOCKHELPER_SCAN_WORKERS', None)
     if args.journal_html or args.journal_pdf:
         from journal import write_html
         path = write_html()

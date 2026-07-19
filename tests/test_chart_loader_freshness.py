@@ -22,18 +22,16 @@ def _df(*dates: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_forex_uses_yahoo_as_primary_source(monkeypatch):
+def test_forex_uses_filtered_stooq_ui_csv_as_primary_source(monkeypatch, tmp_path):
     calls = []
 
-    def fake_yahoo(symbol, instrument_type):
-        calls.append((symbol, instrument_type))
-        return _df("2026-06-10"), "EURUSD=X", "Euro / US Dollar"
+    def fake_stooq_ui(**kwargs):
+        calls.append(kwargs)
+        return _df("2026-06-10")
 
-    def fail_stooq(*_args, **_kwargs):
-        raise AssertionError("forex should not call Stooq in auto mode")
-
-    monkeypatch.setattr(loader, "_yahoo_download", fake_yahoo)
-    monkeypatch.setattr(loader, "_stooq_download", fail_stooq)
+    csv_path = tmp_path / "EURUSD.csv"
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(loader, "update_stooq_history_from_ui_csv", fake_stooq_ui)
 
     df, source, source_symbol, source_name, reason = loader._download_remote(
         symbol="EURUSD",
@@ -42,11 +40,12 @@ def test_forex_uses_yahoo_as_primary_source(monkeypatch):
         data_source="auto",
     )
 
-    assert calls == [("EURUSD", "forex")]
-    assert source == "yahoo"
-    assert source_symbol == "EURUSD=X"
-    assert source_name == "Euro / US Dollar"
-    assert "forex/index" in reason
+    assert calls[0]["symbol"] == "EURUSD"
+    assert calls[0]["csv_path"] == csv_path
+    assert source == "stooq_web"
+    assert source_symbol == "EURUSD"
+    assert source_name is None
+    assert "filtered UI CSV" in reason
     assert df["Date"].max() == pd.Timestamp("2026-06-10")
 
 
@@ -73,7 +72,7 @@ def test_index_like_commodity_uses_yahoo_as_primary_source(monkeypatch):
     assert calls == [("US100", "commodity")]
     assert source == "yahoo"
     assert source_symbol == "^NDX"
-    assert "forex/index" in reason
+    assert "index symbols" in reason
 
 
 def test_warsaw_stock_merges_local_bulk_with_yahoo_fresh_candle_without_stooq_api(monkeypatch, tmp_path):
