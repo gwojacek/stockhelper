@@ -2210,14 +2210,21 @@ class LightweightChartLevelSelectorUI:
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
       if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
       const display = lineDisplayValues(obj) || anchors;
-      const displayEndY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
       const endSourceX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
-      const endSourceY = Number.isFinite(displayEndY) ? displayEndY : y1;
-      const slope = Number.isFinite(endSourceX) && endSourceX !== x0 ? (endSourceY - y0) / (endSourceX - x0) : (y1 - y0) / (x1 - x0);
       let endX = endSourceX;
       if (!Number.isFinite(endX)) endX = $('chart-wrap').clientWidth || x1;
       const leftX = Math.max(0, Math.min(x0, x1));
       const rightX = Math.max(leftX, endX);
+      // Scanner wedges must always follow the two detected candle-extreme
+      // anchors. Calendar-date projection in a native line series changes their
+      // apparent slope across weekends/holidays even though the touch icons stay
+      // correct. For a manually free-dragged extension only, honor its explicit
+      // endpoint; otherwise extend the pixel-space line through both anchors.
+      let slope = (y1 - y0) / (x1 - x0);
+      if (obj.free_extension && Number.isFinite(endSourceX) && endSourceX !== x0) {{
+        const displayEndY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
+        if (Number.isFinite(displayEndY)) slope = (displayEndY - y0) / (endSourceX - x0);
+      }}
       ctx.save();
       ctx.strokeStyle = obj.color || '#facc15';
       ctx.lineWidth = 3;
@@ -2356,12 +2363,6 @@ class LightweightChartLevelSelectorUI:
       let series = null;
       if (isWedge) {{
         addLegend(seriesTitle, color, objKey, deleteFn);
-        // Keep a native chart series behind the canvas overlay. The overlay gives
-        // wedge lines precise straight-line projection and draggable handles, but
-        // browsers can occasionally clear only that canvas path after an anchor is
-        // moved. A synchronized series makes the boundary remain visible while its
-        // extension/anchor icons are visible and also updates during pointer drag.
-        series = addLine(straightWedgeLineData(obj), color, 2, LightweightCharts.LineStyle.Solid, '', false, false, false, objKey, null, false);
       }} else if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
         series = addLine(obj.x.map((x, i) => ({{time:String(x).slice(0,10), value:Number(obj.y[i])}})), color, isFib ? 1.2 : 2, LightweightCharts.LineStyle.Solid, seriesTitle, showLegend && !isFib, false, isFib, objKey, deleteFn, !isEditableLineObject(obj));
       }} else {{
