@@ -1,6 +1,9 @@
+import json
+from pathlib import Path
+
 import pandas as pd
 
-from utilities.stooq_playwright import _parse_stooq_ui_csv
+from utilities.stooq_playwright import _capture_stooq_ui_failure, _parse_stooq_ui_csv
 
 
 def test_parse_polish_stooq_ui_csv():
@@ -15,3 +18,29 @@ def test_parse_polish_stooq_ui_csv():
     assert frame.iloc[0]["Date"] == pd.Timestamp("1971-01-04")
     assert frame.iloc[0]["Close"] == 357.73
     assert frame.iloc[0]["Volume"] == 0
+
+
+def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):
+    class FakePage:
+        url = "https://stooq.pl/q/d/?s=usdjpy"
+
+        def content(self):
+            return "<html><body>Odmowa dostępu</body></html>"
+
+        def screenshot(self, *, path, full_page):
+            assert full_page is True
+            Path(path).write_bytes(b"png")
+
+    monkeypatch.setenv("STOCKHELPER_STOOQ_DEBUG_DIR", str(tmp_path))
+    monkeypatch.setenv("STOCKHELPER_STOOQ_TOR", "0")
+
+    info_path = _capture_stooq_ui_failure(
+        "USDJPY", FakePage(), "invalid_download", "unexpected columns", b"Odmowa,dostepu\n"
+    )
+    info = json.loads(Path(info_path).read_text(encoding="utf-8"))
+
+    assert info["stage"] == "invalid_download"
+    assert info["download_preview"].startswith("Odmowa")
+    assert (tmp_path / "usdjpy_ui_csv_invalid_download.png").exists()
+    assert (tmp_path / "usdjpy_ui_csv_invalid_download.html").exists()
+    assert (tmp_path / "usdjpy_ui_csv_invalid_download.download").exists()

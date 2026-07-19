@@ -1351,6 +1351,35 @@ def _parse_stooq_ui_csv(payload: bytes) -> pd.DataFrame:
     return frame.dropna(subset=required).sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
 
 
+def _capture_stooq_ui_failure(symbol: str, page, stage: str, error: BaseException | str, payload: bytes | None = None) -> str:
+    """Persist enough evidence to diagnose a failed filtered-CSV session."""
+    safe_stage = re.sub(r"[^a-z0-9_-]+", "_", stage.lower()).strip("_") or "failure"
+    stem = f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}"
+    out_dir = _stooq_debug_dir()
+    screenshot = _debug_fail_screenshot(symbol, page, suffix=f"_ui_csv_{safe_stage}")
+    raw_path = out_dir / f"{stem}.download"
+    if payload is not None:
+        raw_path.write_bytes(payload)
+    proxy = _stooq_proxy_config(symbol)
+    info = {
+        "symbol": symbol,
+        "stage": stage,
+        "error": str(error),
+        "page_url": getattr(page, "url", ""),
+        "tor_enabled": _stooq_tor_enabled(),
+        "tor_proxy_reachable": _stooq_tor_proxy_reachable() if _stooq_tor_enabled() else None,
+        "proxy_server": (proxy or {}).get("server", ""),
+        "screenshot": screenshot,
+        "html": str((out_dir / f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}.html").resolve()),
+        "download": str(raw_path.resolve()) if payload is not None else "",
+        "download_preview": payload[:500].decode("utf-8", errors="replace") if payload is not None else "",
+    }
+    info_path = out_dir / f"{stem}.json"
+    info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[stooq-web] UI CSV failure details for {symbol}: {info_path.resolve()}", flush=True)
+    return str(info_path.resolve())
+
+
 def update_stooq_history_from_ui_csv(
     symbol: str,
     csv_path: Path,
@@ -1373,22 +1402,42 @@ def update_stooq_history_from_ui_csv(
         )
         try:
             page.set_default_timeout(20000)
-            page.goto(url, wait_until="domcontentloaded")
+            proxy = _stooq_proxy_config(symbol)
+            print(
+                f"[stooq-web] forex UI session {symbol}: tor={'on' if _stooq_tor_enabled() else 'off'} "
+                f"reachable={_stooq_tor_proxy_reachable() if _stooq_tor_enabled() else '-'} "
+                f"proxy={(proxy or {}).get('server', 'direct')}",
+                flush=True,
+            )
+            try:
+                page.goto(url, wait_until="domcontentloaded")
+            except Exception as exc:
+                details = _capture_stooq_ui_failure(symbol, page, "goto", exc)
+                raise ValueError(f"Stooq UI navigation failed for {symbol}: {exc}; details={details}") from exc
             _accept_consent_if_present(page, first_page=True)
-            page.locator('input[name="d7"]').fill(str(start.day))
-            page.locator('select[name="d5"]').select_option(str(start.month))
-            page.locator('input[name="d3"]').fill(str(start.year))
-            page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first.click()
-            page.wait_for_load_state("domcontentloaded")
-            download_link = page.locator('a[href*="q/d/l/"]').first
-            with page.expect_download(timeout=30000) as download_info:
-                download_link.click()
-            payload = Path(download_info.value.path()).read_bytes()
+            try:
+                page.locator('input[name="d7"]').fill(str(start.day))
+                page.locator('select[name="d5"]').select_option(str(start.month))
+                page.locator('input[name="d3"]').fill(str(start.year))
+                page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first.click()
+                page.wait_for_load_state("domcontentloaded")
+                download_link = page.locator('a[href*="q/d/l/"]').first
+                with page.expect_download(timeout=30000) as download_info:
+                    download_link.click()
+                payload = Path(download_info.value.path()).read_bytes()
+            except Exception as exc:
+                details = _capture_stooq_ui_failure(symbol, page, "form_or_download", exc)
+                raise ValueError(f"Stooq UI form/download failed for {symbol}: {exc}; details={details}") from exc
             if verbose:
                 print(f"[stooq-web] downloaded filtered UI CSV for {symbol}: start={start} bytes={len(payload)}", flush=True)
+            try:
+                remote = _parse_stooq_ui_csv(payload)
+            except Exception as exc:
+                # "Odmowa,dostępu" is a downloaded denial document, not data.
+                details = _capture_stooq_ui_failure(symbol, page, "invalid_download", exc, payload)
+                raise ValueError(f"Invalid Stooq UI CSV for {symbol}: {exc}; details={details}") from exc
         finally:
             browser.close()
-    remote = _parse_stooq_ui_csv(payload)
     local = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
     if not local.empty:
         local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
