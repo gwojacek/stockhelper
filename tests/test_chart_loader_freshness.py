@@ -64,7 +64,6 @@ def test_forex_falls_back_to_table_ui_after_five_filtered_ui_csv_failures(monkey
 
     monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
     monkeypatch.setattr(loader, "update_stooq_history_from_ui_csv", fail_stooq_ui)
-    monkeypatch.setattr(loader.time_module, "sleep", lambda _seconds: None)
     monkeypatch.setattr(loader, "_try_yahoo_fresh_candle_merge", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(loader, "update_stooq_history_with_playwright", lambda **_kwargs: _df("2025-01-20", "2026-06-10"))
 

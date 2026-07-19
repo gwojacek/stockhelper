@@ -1945,9 +1945,9 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             if clicked:
                 break
         if clicked:
-            # Wait for consent layer to disappear and content table to become available.
+            # Wait on the consent container itself rather than sleeping.
             try:
-                page.wait_for_timeout(1200)
+                page.locator('.fc-dialog-container').first.wait_for(state="hidden", timeout=5000)
             except Exception:
                 pass
             if not _consent_overlay_visible(page):
@@ -1955,10 +1955,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                 return
             print("[stooq-web] consent overlay still visible after click.", flush=True)
         else:
-            try:
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
+            break
 
 def _consent_overlay_visible(page) -> bool:
     probes = [
@@ -2196,6 +2193,22 @@ def _captcha_state_screenshot(page, symbol: str, reason: str, attempt: int) -> s
 
 
 def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
+    captcha_selector = "#t11 img, tr#t11 img, img[src*='/q/l/s/i/'], img[src*='cpt'], img[src*='captcha']"
+    try:
+        old_src = page.locator(captcha_selector).first.get_attribute("src") or ""
+    except Exception:
+        old_src = ""
+
+    def _wait_for_new_code() -> None:
+        try:
+            page.wait_for_function(
+                "([selector, previous]) => { const img = document.querySelector(selector); return !!img && !!img.getAttribute('src') && img.getAttribute('src') !== previous; }",
+                [captcha_selector, old_src],
+                timeout=5000,
+            )
+        except Exception:
+            pass
+
     selectors = (
         'a:has-text("Zmień kod")',
         'a:has-text("Zmien kod")',
@@ -2212,19 +2225,13 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
                 link.click(timeout=3000, force=True)
             except Exception:
                 link.evaluate("el => el.click()")
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
+            _wait_for_new_code()
             return True
         except Exception:
             continue
     try:
         page.evaluate("() => { if (typeof cpt_o === 'function') cpt_o(); }")
-        try:
-            page.wait_for_timeout(1000)
-        except Exception:
-            pass
+        _wait_for_new_code()
         if _stooq_verbose_enabled():
             print(f"[stooq-web] captcha rejected for {symbol}; requested new code via cpt_o() (attempt {attempt}).", flush=True)
         return True
@@ -2245,10 +2252,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
         button.click(timeout=5000)
         if _stooq_verbose_enabled():
             print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
-        try:
-            page.wait_for_timeout(1000)
-        except Exception:
-            pass
         return True
     except Exception as role_exc:
         if _stooq_verbose_enabled():
@@ -2272,10 +2275,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
             btn.click(timeout=5000, force=True)
             if _stooq_verbose_enabled():
                 print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt} ({selector} fallback).", flush=True)
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
             return True
         except Exception:
             continue
@@ -2285,10 +2284,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
 
 def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> bool:
     try:
-        try:
-            page.wait_for_timeout(1000)
-        except Exception:
-            pass
         refresh_link = page.get_by_role("link", name="Odśwież stronę").first
         if refresh_link.count() == 0:
             refresh_link = page.locator("a#cpt_gh").first
@@ -2472,11 +2467,6 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
-
             if _captcha_wrong_code_visible(page):
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
                     continue
@@ -2870,7 +2860,6 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                 continue
             if page.locator("#fth1").count() > 0:
                 break
-        page.wait_for_timeout(1500)
         try:
             page.wait_for_selector("table#fth1", timeout=6000)
         except Exception:

@@ -51,6 +51,11 @@ def test_filtered_ui_csv_reuses_commodity_consent_and_captcha_flow():
     assert download_source.count("_resolve_stooq_ui_consent_and_captcha") == 2
 
 
+def test_stooq_playwright_uses_conditions_not_fixed_timeouts():
+    source = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
+    assert "wait_for_timeout(" not in source
+
+
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):
     class FakePage:
         url = "https://stooq.pl/q/d/?s=usdjpy"

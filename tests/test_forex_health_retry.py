@@ -16,7 +16,6 @@ def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp
     calls = []
 
     monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
-    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY_DELAY", "0")
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda _symbol, _instrument: csv_path)
 
     def replace_csv(**kwargs):
@@ -44,7 +43,6 @@ def test_forex_health_retries_transient_tor_failure_in_next_round(monkeypatch, t
 
     monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
     monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS", "3")
-    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY_DELAY", "0")
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda _symbol, _instrument: csv_path)
 
     def transient_then_success(**_kwargs):
@@ -79,3 +77,10 @@ def test_forex_health_does_not_retry_complete_rolling_window(monkeypatch, tmp_pa
     scanner._forex_csv_health_check(["USDJPY"])
 
     assert "summary: ok=1, warn=0, total=1" in capsys.readouterr().out
+
+
+def test_fibo_forex_reports_per_ticker_sources_and_health_summary():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert 'print(f"[fibo-source] {ticker}: {label}")' in source
+    assert 'print(f"[fibo-source] summary:' in source
+    assert '_forex_csv_health_check(members)' in source

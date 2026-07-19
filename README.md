@@ -984,13 +984,12 @@ round. Tune the behavior when needed:
 
 ```bash
 export STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS=4
-export STOCKHELPER_FOREX_HEALTH_RETRY_DELAY=3
 export STOCKHELPER_FOREX_HEALTH_WORKERS=4
 ```
 
-The delay is multiplied by the completed round (3s, 6s, 9s by default), giving
-Tor and Stooq time between denial or timeout responses. These are retries over
-the configured Tor SOCKS proxy, not guaranteed distinct Tor exit circuits.
+Retries use Playwright navigation, locator, CAPTCHA, and download conditions
+instead of fixed sleeps. They use the configured Tor SOCKS proxy, without a
+guarantee of distinct Tor exit circuits.
 
 ### No scanner Markdown is created
 

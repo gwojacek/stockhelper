@@ -1146,11 +1146,6 @@ def _forex_csv_health_check(members: Sequence[str]) -> None:
         retry_rounds = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS", "4")))
     except ValueError:
         retry_rounds = 4
-    try:
-        retry_delay = max(0.0, float(os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY_DELAY", "3")))
-    except ValueError:
-        retry_delay = 3.0
-
     def _replace(raw: str) -> None:
         _raw, csv_path, _rows, _oldest, _latest, _span, _exc = _health_row(raw)
         backup = csv_path.read_bytes() if csv_path.exists() else None
@@ -1183,10 +1178,8 @@ def _forex_csv_health_check(members: Sequence[str]) -> None:
         if not retry_tickers:
             print(f"[forex-check] all forex CSVs complete after retry round {retry_round}.")
             break
-        if retry_round < retry_rounds and retry_delay > 0:
-            wait_seconds = retry_delay * retry_round
-            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; waiting {wait_seconds:.1f}s before another download round.")
-            time.sleep(wait_seconds)
+        if retry_round < retry_rounds:
+            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; starting another condition-driven download round.")
 
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
@@ -4669,6 +4662,7 @@ def run_fibo_search(target: str) -> int:
     rows: list[FiboScanResult] = []
     rows3p_steep: list[FiboScanResult] = []
     wedge_rows: list[WedgeScanResult] = []
+    data_source_by_ticker: dict[str, str] = {}
     def _is_valid_reversal_invalidated(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "valid_reversal" or not cand.first_61_8_touch_date:
             return False
@@ -4718,7 +4712,7 @@ def run_fibo_search(target: str) -> int:
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
 
-    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None]:
+    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None, str]:
         idx, ticker = idx_ticker
         instrument = "stock"
         if group_name == "forex":
@@ -4746,7 +4740,7 @@ def run_fibo_search(target: str) -> int:
                     os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
                     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             try:
-                df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+                df, _, meta = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             finally:
                 if scoped_env:
                     if prev_cache_only is None:
@@ -4856,9 +4850,9 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
-            return idx, ticker, out_rows, None
+            return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:
-            return idx, ticker, [], _compact_error(str(exc))
+            return idx, ticker, [], _compact_error(str(exc)), "error"
 
     workers_override = _scan_workers_override()
     if workers_override is not None:
@@ -4896,7 +4890,8 @@ def run_fibo_search(target: str) -> int:
                 continue
             for fut in done:
                 idx, ticker = pending.pop(fut)
-                _, _, found, err = fut.result()
+                _, _, found, err, data_source = fut.result()
+                data_source_by_ticker[ticker] = data_source
                 print(f"[{idx}/{len(members)}] fibo {ticker}...", flush=True)
                 if err:
                     print(f"  pominięto ({err})", flush=True)
@@ -5114,6 +5109,14 @@ def run_fibo_search(target: str) -> int:
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
     print(f"[fibo] md: {out_md}")
+    if group_name == "forex":
+        source_counts: dict[str, int] = {}
+        for ticker in members:
+            label = data_source_by_ticker.get(ticker, "unknown")
+            source_counts[label] = source_counts.get(label, 0) + 1
+            print(f"[fibo-source] {ticker}: {label}")
+        print(f"[fibo-source] summary: {', '.join(f'{source}={count}' for source, count in sorted(source_counts.items()))}")
+        _forex_csv_health_check(members)
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()
