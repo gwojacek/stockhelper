@@ -899,7 +899,11 @@ def _load_daily_data_with_retries(*, symbol: str, instrument_type: str, persist:
         except Exception as exc:
             last_exc = exc
             if _is_rate_limit_download_error(exc):
-                PAUSE_SCAN_EVENT.set()
+                # Forex and commodity Playwright flows have their own automatic
+                # Tor/CAPTCHA/fallback handling; never block their worker pool on
+                # an interactive VPN-change pause.
+                if instrument_type not in {"forex", "commodity"}:
+                    PAUSE_SCAN_EVENT.set()
                 raise
             if not _is_retryable_download_error(exc) or attempt >= 3:
                 raise
@@ -1086,6 +1090,108 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
         print("[commodity-check] post-retry CSV row-count check")
         _print_summary([_health_row(ticker) for ticker in members])
+
+
+def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> None:
+    """Report and retry FX caches that do not cover the rolling 1.5-year window."""
+    source_by_ticker = {
+        (ticker or "").strip().upper(): source
+        for ticker, source in (sources or {}).items()
+    }
+    try:
+        required_days = max(1, int(os.getenv("STOCKHELPER_FOREX_REQUIRED_DAYS", "548")))
+    except ValueError:
+        required_days = 548
+    today = datetime.now(UTC).date()
+    required_start = today - timedelta(days=required_days)
+    # Markets may be closed on the exact boundary date.
+    oldest_tolerance = required_start + timedelta(days=7)
+
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, str, int, Exception | None]:
+        raw = (ticker or "").strip().upper()
+        csv_path = local_csv_path_for_symbol(raw, "forex")
+        try:
+            dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+            if dates.empty:
+                raise ValueError("CSV has no valid dates")
+            oldest = dates.min().date()
+            latest = dates.max().date()
+            return raw, csv_path, len(dates), oldest.isoformat(), latest.isoformat(), (latest - oldest).days, None
+        except Exception as exc:
+            return raw, csv_path, 0, "-", "-", 0, exc
+
+    def _warned(row: tuple[str, Path, int, str, str, int, Exception | None]) -> bool:
+        _raw, _path, _rows, oldest, _latest, _span, exc = row
+        return (
+            exc is not None
+            or oldest == "-"
+            or date.fromisoformat(oldest) > oldest_tolerance
+            or _latest == "-"
+            or date.fromisoformat(_latest) < today - timedelta(days=7)
+        )
+
+    def _print_summary(rows: Sequence[tuple[str, Path, int, str, str, int, Exception | None]]) -> list[str]:
+        retry: list[str] = []
+        for raw, csv_path, row_count, oldest, latest, span_days, exc in rows:
+            warn = _warned((raw, csv_path, row_count, oldest, latest, span_days, exc))
+            if warn:
+                retry.append(raw)
+            detail = f"error={_retry_error_brief(exc)}" if exc else f"rows={row_count}, oldest={oldest}, latest={latest}, span_days={span_days}"
+            source = _forex_source_summary_label(source_by_ticker.get(raw, "unknown"))
+            print(f"[forex-check] {'WARN' if warn else 'OK'} {raw}: {detail}, source={source}, csv={csv_path}")
+        print(f"[forex-check] summary: ok={len(rows) - len(retry)}, warn={len(retry)}, total={len(rows)}")
+        return retry
+
+    print(f"[forex-check] rolling 1.5-year coverage check (required_start<={required_start}, tolerance=7d)")
+    retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
+    if not retry_tickers or os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY", "1") == "0":
+        return
+
+    try:
+        retry_workers_setting = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "4")))
+    except ValueError:
+        retry_workers_setting = 4
+    try:
+        retry_rounds = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS", "4")))
+    except ValueError:
+        retry_rounds = 4
+    def _replace(raw: str) -> str:
+        _raw, csv_path, _rows, _oldest, _latest, _span, _exc = _health_row(raw)
+        backup = csv_path.read_bytes() if csv_path.exists() else None
+        try:
+            csv_path.unlink(missing_ok=True)
+            _df, _path, meta = load_or_update_daily_data(
+                symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
+            )
+            if not csv_path.exists():
+                raise FileNotFoundError(f"replacement did not create {csv_path}")
+            return str((meta or {}).get("source", "unknown"))
+        except Exception:
+            if backup is not None:
+                csv_path.parent.mkdir(parents=True, exist_ok=True)
+                csv_path.write_bytes(backup)
+            raise
+
+    for retry_round in range(1, retry_rounds + 1):
+        retry_workers = min(retry_workers_setting, len(retry_tickers))
+        print(
+            f"[forex-check] retry round {retry_round}/{retry_rounds}: replacing and retrying "
+            f"{len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}"
+        )
+        with ThreadPoolExecutor(max_workers=retry_workers) as executor:
+            futures = {executor.submit(_replace, raw): raw for raw in retry_tickers}
+            for future, raw in [(future, futures[future]) for future in futures]:
+                try:
+                    source_by_ticker[raw] = future.result()
+                except Exception as exc:
+                    print(f"[forex-check] retry round {retry_round} failed for {raw}: {_retry_error_brief(exc)}")
+        print(f"[forex-check] post-retry round {retry_round} rolling coverage check")
+        retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
+        if not retry_tickers:
+            print(f"[forex-check] all forex CSVs complete after retry round {retry_round}.")
+            break
+        if retry_round < retry_rounds:
+            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; starting another condition-driven download round.")
 
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
@@ -1931,7 +2037,7 @@ def _rate_limit_detected(err: str | None) -> bool:
 
 
 def _should_prompt_rate_limit(group_name: str) -> bool:
-    return (group_name or "").lower() != "commodities"
+    return (group_name or "").lower() not in {"commodities", "forex"}
 
 
 def _prompt_vpn_continue_or_stop() -> bool:
@@ -2011,6 +2117,28 @@ def _scan_source_label(src: str) -> str:
     if s in {"stooq", "yahoo", "cache"}:
         return "API"
     return s.upper() or "UNKNOWN"
+
+
+def _forex_source_summary_label(src: str) -> str:
+    """Collapse loader metadata into the three user-facing forex fetch paths."""
+    source = (src or "").strip().lower()
+    if source.startswith("stooq_web_csv"):
+        return "downloaded_csv"
+    if source.startswith("stooq_web"):
+        return "table_ui"
+    if source == "cache":
+        return "cache"
+    return source or "unknown"
+
+
+def _print_forex_source_summary(prefix: str, members: Sequence[str], sources: dict[str, str]) -> None:
+    counts: dict[str, int] = {}
+    for ticker in members:
+        label = _forex_source_summary_label(sources.get(ticker, "unknown"))
+        counts[label] = counts.get(label, 0) + 1
+        print(f"[{prefix}-source] {ticker}: {label}")
+    summary = ", ".join(f"{source}={count}" for source, count in sorted(counts.items()))
+    print(f"[{prefix}-source] summary: {summary}")
 
 
 
@@ -2757,6 +2885,7 @@ def run_ichimoku_search(target: str) -> int:
     processed_count = 0
     error_count = 0
     error_samples: list[str] = []
+    data_source_by_ticker: dict[str, str] = {}
 
     def _record_scan_error(ticker: str, err: str | None) -> None:
         nonlocal error_count
@@ -2768,6 +2897,7 @@ def run_ichimoku_search(target: str) -> int:
     first = members[0]
     print(f"[1/{len(members)}] {first}")
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix, current_datetime)
+    data_source_by_ticker[first] = first_source
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = False
@@ -2805,6 +2935,7 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix, current_datetime)
+            data_source_by_ticker[ticker] = src
             print(f"[{offset}/{len(members)}] {ticker}", flush=True)
             processed_count += 1
             if stopped:
@@ -2881,6 +3012,7 @@ def run_ichimoku_search(target: str) -> int:
                         display_symbol, result, flip, err, src, stopped = fut.result()
                     except Exception as exc:
                         display_symbol, result, flip, err, src, stopped = ticker, None, None, _compact_error(str(exc)), "unknown", False
+                    data_source_by_ticker[ticker] = src
                     if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                         print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                         print(f"  pauza VPN/rate-limit ({_compact_error(err)})", flush=True)
@@ -2953,8 +3085,12 @@ def run_ichimoku_search(target: str) -> int:
     print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
     if error_samples:
         print(f"[search] error samples: {'; '.join(error_samples)}")
+    if group_name == "forex":
+        _print_forex_source_summary("search", members, data_source_by_ticker)
     if group_name == "commodities":
         _commodity_csv_health_check(members)
+    elif group_name == "forex":
+        _forex_csv_health_check(members, data_source_by_ticker)
 
     links_flip = _print_flip_results_with_links(flip_results)
 
@@ -4566,6 +4702,7 @@ def run_fibo_search(target: str) -> int:
     rows: list[FiboScanResult] = []
     rows3p_steep: list[FiboScanResult] = []
     wedge_rows: list[WedgeScanResult] = []
+    data_source_by_ticker: dict[str, str] = {}
     def _is_valid_reversal_invalidated(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status != "valid_reversal" or not cand.first_61_8_touch_date:
             return False
@@ -4615,7 +4752,7 @@ def run_fibo_search(target: str) -> int:
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
 
-    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None]:
+    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None, str]:
         idx, ticker = idx_ticker
         instrument = "stock"
         if group_name == "forex":
@@ -4643,7 +4780,7 @@ def run_fibo_search(target: str) -> int:
                     os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
                     os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             try:
-                df, _, _ = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+                df, _, meta = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             finally:
                 if scoped_env:
                     if prev_cache_only is None:
@@ -4753,9 +4890,9 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
-            return idx, ticker, out_rows, None
+            return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:
-            return idx, ticker, [], _compact_error(str(exc))
+            return idx, ticker, [], _compact_error(str(exc)), "error"
 
     workers_override = _scan_workers_override()
     if workers_override is not None:
@@ -4793,7 +4930,8 @@ def run_fibo_search(target: str) -> int:
                 continue
             for fut in done:
                 idx, ticker = pending.pop(fut)
-                _, _, found, err = fut.result()
+                _, _, found, err, data_source = fut.result()
+                data_source_by_ticker[ticker] = data_source
                 print(f"[{idx}/{len(members)}] fibo {ticker}...", flush=True)
                 if err:
                     print(f"  pominięto ({err})", flush=True)
@@ -5011,6 +5149,9 @@ def run_fibo_search(target: str) -> int:
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
     print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
     print(f"[fibo] md: {out_md}")
+    if group_name == "forex":
+        _print_forex_source_summary("fibo", members, data_source_by_ticker)
+        _forex_csv_health_check(members, data_source_by_ticker)
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
             open_all = input("Czy otworzyć wszystkie linki? [y/N]: ").strip().lower()

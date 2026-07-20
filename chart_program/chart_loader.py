@@ -13,7 +13,7 @@ import os
 
 import pandas as pd
 
-from utilities.stooq_playwright import update_stooq_history_with_playwright
+from utilities.stooq_playwright import StooqUIDownloadDenied, update_stooq_history_from_ui_csv, update_stooq_history_with_playwright
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
@@ -432,6 +432,7 @@ def _merge_yahoo_fresh_candle(
     instrument_type: str,
     *,
     period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
+    trim_to_last_year: bool = True,
 ) -> tuple[pd.DataFrame, str, str | None, int]:
     yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
     yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
@@ -451,7 +452,7 @@ def _merge_yahoo_fresh_candle(
             merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_new_rows], ignore_index=True))
         else:
             merged = sanitized_base
-    return _last_year_only(merged), yahoo_symbol, display_name, added_count
+    return (_last_year_only(merged) if trim_to_last_year else merged), yahoo_symbol, display_name, added_count
 
 
 def _try_yahoo_fresh_candle_merge(
@@ -463,12 +464,14 @@ def _try_yahoo_fresh_candle_merge(
     source_symbol: str,
     source_name: str | None,
     reason: str,
+    trim_to_last_year: bool = True,
 ) -> tuple[pd.DataFrame, str, str, str | None, str | None, int] | None:
     try:
         merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
             base,
             symbol,
             instrument_type,
+            trim_to_last_year=trim_to_last_year,
         )
     except Exception:
         return None
@@ -929,6 +932,23 @@ def _older_fetch_plan(csv_path: Path, instrument_type: str) -> tuple[int, dateti
         return 364, None
 
 
+def _local_forex_has_required_window(csv_path: Path, required_days: int = 548) -> bool:
+    """Return true when FX cache already covers rolling 1.5y and is current."""
+    try:
+        if not csv_path.exists():
+            return False
+        dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+        if dates.empty:
+            return False
+        today = pd.Timestamp.now(tz="UTC").date()
+        oldest = dates.min().date()
+        latest = dates.max().date()
+        required_start = today - timedelta(days=required_days)
+        return oldest <= required_start + timedelta(days=7) and latest >= today - timedelta(days=7)
+    except Exception:
+        return False
+
+
 def _mapped_stooq_symbol_for_commodity(symbol: str) -> str:
     normalized_symbol = _canonical_commodity_symbol(symbol)
     mapped_stooq = COMMODITY_STOOQ_MAP.get(normalized_symbol, "")
@@ -1056,9 +1076,91 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             older_anchor=older_anchor,
         )
 
-    if instrument_type == "forex" or (instrument_type == "commodity" and _is_index_like_commodity(symbol)):
+    if instrument_type == "forex":
+        if not fetch_older_data and _local_forex_has_required_window(csv_path_ref):
+            local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+            return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
+        lookback = older_days if fetch_older_data else 548
+        attempts = 2
+        primary_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                df = update_stooq_history_from_ui_csv(
+                    symbol=symbol,
+                    csv_path=csv_path_ref,
+                    lookback_days=lookback,
+                    end_date=older_anchor if fetch_older_data else None,
+                    verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                )
+                reason = f"Stooq filtered UI CSV download succeeded for forex on attempt {attempt}/{attempts}."
+                if not fetch_older_data:
+                    yahoo_merged = _try_yahoo_fresh_candle_merge(
+                        df,
+                        symbol,
+                        "forex",
+                        source="stooq_web_csv",
+                        source_symbol=symbol.upper(),
+                        source_name=None,
+                        reason=reason + " Yahoo is used only for newer candle(s).",
+                        trim_to_last_year=False,
+                    )
+                    if yahoo_merged is not None:
+                        merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                        return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+                return df, "stooq_web_csv", symbol.upper(), None, reason
+            except Exception as exc:
+                primary_error = exc
+                print(f"[forex-download] {symbol}: Stooq UI CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
+                if isinstance(exc, StooqUIDownloadDenied):
+                    if attempt >= attempts:
+                        print(
+                            f"[forex-download] {symbol}: the visible history table is valid but q/d/l denied "
+                            "both fresh browser sessions; switching to paginated UI table fetching.",
+                            flush=True,
+                        )
+                        break
+                    print(
+                        f"[forex-download] {symbol}: q/d/l denied the first browser session; "
+                        "trying one fresh browser session before table fallback.",
+                        flush=True,
+                    )
+                if attempt < attempts:
+                    print(
+                        f"[forex-download] {symbol}: previous browser session closed; "
+                        "retrying once with a new browser session.",
+                        flush=True,
+                    )
+
+        # The filtered UI CSV can deny or time out. Fall back to the same
+        # paginated Stooq UI table scraper used for literal commodities.
+        df = update_stooq_history_with_playwright(
+            symbol=symbol.lower(),
+            csv_path=csv_path_ref,
+            lookback_days=lookback,
+            end_date=older_anchor if fetch_older_data else None,
+            verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+            interactive_captcha=True,
+        )
+        reason = f"Stooq filtered UI CSV failed after {attempts} attempts; used paginated Stooq UI fallback: {primary_error}"
+        if not fetch_older_data:
+            yahoo_merged = _try_yahoo_fresh_candle_merge(
+                df,
+                symbol,
+                "forex",
+                source="stooq_web",
+                source_symbol=symbol.upper(),
+                source_name=None,
+                reason=reason + " Yahoo is used only for newer candle(s).",
+                trim_to_last_year=False,
+            )
+            if yahoo_merged is not None:
+                merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
+                return merged_df, merged_source, merged_symbol, merged_name, merged_reason
+        return df, "stooq_web", symbol.upper(), None, reason
+
+    if instrument_type == "commodity" and _is_index_like_commodity(symbol):
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
-        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for forex/index symbols."
+        return df, "yahoo", candidate, display_name, "Yahoo used as primary source for index symbols."
 
     # For literal commodities prefer web scraping first (Stooq history pages are often richer/more reliable than CSV endpoint).
     # Do NOT force web scraping for index-like symbols routed as "commodity" (e.g. US500, DAX, WIG20); they returned above via Yahoo.
@@ -1272,8 +1374,16 @@ def load_or_update_daily_data(
     else:
         merged_full = _sanitize_ohlc_dataframe(remote)
 
-    # Runtime callers typically need only the recent window for indicators,
-    # but cache on disk must keep full history (never shrink on regular refresh).
+    if instrument_type == "forex" and not fetch_older_data and not merged_full.empty:
+        # Keep the on-disk FX cache at the promised rolling 1.5-year boundary,
+        # even if Stooq ignored UI filters or an older local file was merged.
+        forex_start = datetime.now(timezone.utc).date() - timedelta(days=548)
+        forex_dates = pd.to_datetime(merged_full["Date"], errors="coerce")
+        merged_full = merged_full.loc[forex_dates.dt.date >= forex_start].reset_index(drop=True)
+
+    # Runtime callers typically need only the recent window for indicators.
+    # Other caches retain full history; regular forex refreshes intentionally
+    # retain only the rolling 548-day window enforced above.
     merged = merged_full if fetch_older_data else _last_year_only(merged_full)
 
     if persist:

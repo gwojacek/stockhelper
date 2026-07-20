@@ -234,10 +234,23 @@ Use `stock -allsearch all` for the normal all-search workflow. When the HTML rep
 
 The helper intentionally ignores non-localhost URLs printed in scraper diagnostics. For example, Stooq bulk logs may print `https://stooq.com/db/d/?b=d_pl_txt`; that URL is not a StockHelper report and should not be opened by the helper.
 
-Keep the terminal command running while you view the report. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done. The helper stops older StockHelper report containers before starting a new report command unless you set:
+Keep the terminal command running while you view the report. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done. The helper uses `docker compose run --rm`, which removes that one-shot container after the process stops; it does not accumulate a stopped container for every report run. As an additional stale-container guard, the helper removes older containers carrying the Compose `stockhelper` service label before starting a new report command unless you set:
 
 ```bash
 export STOCKHELPER_KEEP_OLD_REPORTS=1
+```
+
+To verify that no old StockHelper report containers remain after `Ctrl+C`, run:
+
+```bash
+docker ps -a --filter "label=com.docker.compose.service=stockhelper"
+```
+
+To remove only StockHelper service containers without pruning images or build
+cache, run:
+
+```bash
+docker ps -aq --filter "label=com.docker.compose.service=stockhelper" | xargs -r docker rm -f
 ```
 
 Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container. If the served report is recent (default: 24 hours), chart buttons use fast cache mode because `-allsearch` already refreshed the latest candle before writing the HTML report; stale reports fall back to normal chart freshness checks.
@@ -265,7 +278,19 @@ If that prints a `sudo chown ...` command, run the printed command once. Future 
 
 #### Docker disk cleanup
 
-Report commands intentionally keep a container alive while the report server is open. Use this when you are done with reports or need disk space:
+Report commands intentionally keep a container alive only while the report server is open. Normally, press `Ctrl+C`; `docker compose run --rm` then removes that one-shot container automatically. To inspect any remaining StockHelper service containers, run:
+
+```bash
+docker ps -a --filter "label=com.docker.compose.service=stockhelper"
+```
+
+To remove only those containers, without touching images or build cache, run:
+
+```bash
+docker ps -aq --filter "label=com.docker.compose.service=stockhelper" | xargs -r docker rm -f
+```
+
+For a broader StockHelper Docker cleanup when you also need disk space, run:
 
 ```shell
 stock --cleanup
@@ -274,7 +299,7 @@ stock --cleanup
 It stops/removes StockHelper containers, removes dangling Docker images, and prunes unused build cache. Manual equivalent:
 
 ```bash
-docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f
+docker ps -aq --filter "label=com.docker.compose.service=stockhelper" | xargs -r docker rm -f
 docker image prune -f
 docker builder prune -f
 ```
@@ -958,6 +983,55 @@ stock -allsearch commodities
 ```
 
 Country targeting is proxy-provider-specific: StockHelper only substitutes `{country}` in the proxy string and passes the resulting proxy settings to Playwright. Put country information where your provider expects it, usually in the username, host, or port.
+
+#### Tor SOCKS proxy
+
+StockHelper can keep routing Stooq Playwright sessions through the ordinary Tor
+SOCKS listener without SOCKS authentication:
+
+```bash
+STOCKHELPER_STOOQ_TOR=1 \
+./stock -search forex
+```
+
+`./stock -allsearch all` enables this Tor mode by default for every Stooq
+Playwright fetch in the Ichimoku and Fibo phases, including both commodity and
+forex UI workflows. Override it explicitly with `STOCKHELPER_STOOQ_TOR=0` only
+when a direct connection is intended.
+
+For an incomplete forex cache, StockHelper first uses Playwright to set the
+rolling start date in the Stooq UI and download the filtered CSV, retrying that
+workflow once in a fresh browser session (two attempts total). It then merges
+any newer Yahoo candle. If both UI CSV downloads fail, it falls back to
+fetching rows from the paginated Stooq UI tables exactly like the commodity workflow. Both browser paths use the
+configured Tor SOCKS proxy. The filtered-CSV path also reuses the commodity
+scraper's consent handling, CAPTCHA OCR, and automatic blocked-page retries
+before and after submitting the date form.
+
+If a failure artifact says `download_endpoint_denied`, the screenshot can still
+show a valid table and CSV link: Stooq returned `Odmowa,dostępu` as the contents
+of the separate `q/d/l/` file-download response. The diagnostic JSON records
+the link URL, response status when available, filename, byte count, and payload
+preview. StockHelper retries the denied file action once in a fresh browser,
+then switches that symbol to table-row fetching if the second attempt is also denied.
+
+Forex and commodity scans do not pause for an interactive VPN change when a
+rate limit is detected; their Tor, CAPTCHA, retry, and UI fallback paths handle
+the failure automatically. Forex health rows include `source=downloaded_csv`,
+`source=table_ui`, or `source=cache` alongside coverage details.
+
+After the forex coverage summary, warned CSVs are retried for up to four
+download rounds by default. Only files that remain incomplete enter the next
+round. Tune the behavior when needed:
+
+```bash
+export STOCKHELPER_FOREX_HEALTH_RETRY_ROUNDS=4
+export STOCKHELPER_FOREX_HEALTH_WORKERS=4
+```
+
+Retries use Playwright navigation, locator, CAPTCHA, and download conditions
+instead of fixed sleeps. They use the configured Tor SOCKS proxy, without a
+guarantee of distinct Tor exit circuits.
 
 ### No scanner Markdown is created
 

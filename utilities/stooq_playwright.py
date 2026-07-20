@@ -11,6 +11,7 @@ import re
 import socket
 from pathlib import Path
 from urllib.parse import urlparse, unquote
+from io import BytesIO
 
 import pandas as pd
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
@@ -27,11 +28,30 @@ _POLISH_MONTHS = {
     "sty": "01", "lut": "02", "mar": "03", "kwi": "04", "maj": "05", "cze": "06",
     "lip": "07", "sie": "08", "wrz": "09", "paź": "10", "paz": "10", "lis": "11", "gru": "12",
 }
+_POLISH_MONTHS_BY_NUMBER = {
+    1: "sty", 2: "lut", 3: "mar", 4: "kwi", 5: "maj", 6: "cze",
+    7: "lip", 8: "sie", 9: "wrz", 10: "paź", 11: "lis", 12: "gru",
+}
 
 
 STOOQ_BULK_HISTORY_URL = "https://stooq.com/db/h/"
 STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='d_pl_txt']"
 STOOQ_BULK_TXT_COLUMNS = ["<TICKER>", "<PER>", "<DATE>", "<TIME>", "<OPEN>", "<HIGH>", "<LOW>", "<CLOSE>", "<VOL>", "<OPENINT>"]
+
+
+class StooqUIDownloadDenied(ValueError):
+    """The history page worked, but its CSV download endpoint denied access."""
+
+
+def _stooq_ui_payload_preview(payload: bytes | None, limit: int = 500) -> str:
+    if payload is None:
+        return ""
+    for encoding in ("utf-8-sig", "cp1250", "latin-1"):
+        try:
+            return payload[:limit].decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return payload[:limit].decode("utf-8", errors="replace")
 
 
 def _is_stooq_bulk_history_url(url: str) -> bool:
@@ -1319,6 +1339,214 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
     return browser, page
 
 
+def _parse_stooq_ui_csv(payload: bytes) -> pd.DataFrame:
+    """Parse the CSV downloaded by the Polish Stooq history UI."""
+    frame = None
+    for encoding in ("utf-8-sig", "cp1250", "latin-1"):
+        try:
+            frame = pd.read_csv(BytesIO(payload), encoding=encoding, sep=None, engine="python")
+            break
+        except UnicodeDecodeError:
+            continue
+    if frame is None:
+        raise ValueError("Unable to decode Stooq UI CSV download")
+    aliases = {
+        "data": "Date", "date": "Date", "otwarcie": "Open", "open": "Open",
+        "najwyzszy": "High", "najwyższy": "High", "high": "High",
+        "najnizszy": "Low", "najniższy": "Low", "low": "Low",
+        "zamkniecie": "Close", "zamknięcie": "Close", "close": "Close",
+        "wolumen": "Volume", "volume": "Volume",
+    }
+    frame = frame.rename(columns={column: aliases.get(str(column).strip().lower(), column) for column in frame.columns})
+    required = ["Date", "Open", "High", "Low", "Close"]
+    if not all(column in frame.columns for column in required):
+        raise ValueError(f"Unexpected Stooq UI CSV columns: {list(frame.columns)}")
+    if "Volume" not in frame.columns:
+        frame["Volume"] = 0
+    frame = frame[[*required, "Volume"]].copy()
+    frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce")
+    for column in ["Open", "High", "Low", "Close", "Volume"]:
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return frame.dropna(subset=required).sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
+
+
+def _trim_stooq_ui_history_to_window(frame: pd.DataFrame, start: date) -> pd.DataFrame:
+    """Enforce the submitted UI start date even if Stooq returns full history."""
+    if frame is None or frame.empty or "Date" not in frame.columns:
+        return frame
+    dates = pd.to_datetime(frame["Date"], errors="coerce")
+    return frame.loc[dates.dt.date >= start].reset_index(drop=True)
+
+
+def _capture_stooq_ui_failure(
+    symbol: str,
+    page,
+    stage: str,
+    error: BaseException | str,
+    payload: bytes | None = None,
+    extra: dict | None = None,
+) -> str:
+    """Persist enough evidence to diagnose a failed filtered-CSV session."""
+    safe_stage = re.sub(r"[^a-z0-9_-]+", "_", stage.lower()).strip("_") or "failure"
+    stem = f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}"
+    out_dir = _stooq_debug_dir()
+    screenshot = _debug_fail_screenshot(symbol, page, suffix=f"_ui_csv_{safe_stage}")
+    raw_path = out_dir / f"{stem}.download"
+    if payload is not None:
+        raw_path.write_bytes(payload)
+    proxy = _stooq_proxy_config(symbol)
+    info = {
+        "symbol": symbol,
+        "stage": stage,
+        "error": str(error),
+        "page_url": getattr(page, "url", ""),
+        "tor_enabled": _stooq_tor_enabled(),
+        "tor_proxy_reachable": _stooq_tor_proxy_reachable() if _stooq_tor_enabled() else None,
+        "proxy_server": (proxy or {}).get("server", ""),
+        "screenshot": screenshot,
+        "html": str((out_dir / f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}.html").resolve()),
+        "download": str(raw_path.resolve()) if payload is not None else "",
+        "download_preview": _stooq_ui_payload_preview(payload),
+    }
+    if extra:
+        info.update(extra)
+    info_path = out_dir / f"{stem}.json"
+    info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[stooq-web] UI CSV failure details for {symbol}: {info_path.resolve()}", flush=True)
+    return str(info_path.resolve())
+
+
+def _resolve_stooq_ui_consent_and_captcha(page, url: str, symbol: str) -> None:
+    """Apply the commodity scraper's consent and automatic CAPTCHA handling."""
+    _accept_consent_if_present(page, first_page=True)
+    if not _page_has_rate_limit_or_captcha(page):
+        return
+    print(f"[stooq-web] filtered UI CSV CAPTCHA/limit detected for {symbol}; trying commodity OCR flow.", flush=True)
+    if _try_solve_stooq_captcha(page, symbol) and not _page_has_rate_limit_or_captcha(page):
+        return
+    retry_state = {"done": False, "forced_pause_done": False}
+    if _retry_blocked_page_before_inspector(
+        page,
+        url,
+        symbol,
+        "Filtered UI CSV CAPTCHA/limit",
+        retry_state=retry_state,
+    ) and not _page_has_rate_limit_or_captcha(page):
+        _accept_consent_if_present(page, first_page=True)
+        return
+    raise ValueError(f"Stooq CAPTCHA/rate limit remained after automatic commodity-style retries for {symbol}")
+
+
+def update_stooq_history_from_ui_csv(
+    symbol: str,
+    csv_path: Path,
+    lookback_days: int = 548,
+    end_date: datetime | None = None,
+    verbose: bool = False,
+    interactive: bool = False,
+) -> pd.DataFrame:
+    """Set the Stooq UI start date and download its filtered daily CSV."""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    anchor = end_date.date() if isinstance(end_date, datetime) else datetime.now(UTC).date()
+    start = anchor - timedelta(days=max(1, lookback_days))
+    url = f"https://stooq.pl/q/d/?s={symbol.strip().lower()}"
+    with sync_playwright() as playwright:
+        proxy_index = _stooq_proxy_pool_initial_index(symbol)
+        browser, page = _open_page(
+            playwright,
+            interactive=interactive,
+            symbol=symbol,
+            proxy_index=proxy_index if proxy_index >= 0 else None,
+        )
+        try:
+            page.set_default_timeout(20000)
+            proxy = _stooq_proxy_config(symbol)
+            print(
+                f"[stooq-web] forex UI session {symbol}: tor={'on' if _stooq_tor_enabled() else 'off'} "
+                f"reachable={_stooq_tor_proxy_reachable() if _stooq_tor_enabled() else '-'} "
+                f"proxy={(proxy or {}).get('server', 'direct')}",
+                flush=True,
+            )
+            try:
+                page.goto(url, wait_until="domcontentloaded")
+                _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
+            except Exception as exc:
+                details = _capture_stooq_ui_failure(symbol, page, "goto", exc)
+                raise ValueError(f"Stooq UI navigation failed for {symbol}: {exc}; details={details}") from exc
+            try:
+                page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
+                if interactive:
+                    print(
+                        f"[stooq-web] Inspector ready for {symbol}. Click Resume; StockHelper will set "
+                        f"{start.day} {_POLISH_MONTHS_BY_NUMBER[start.month]} {start.year}, submit, and download CSV.",
+                        flush=True,
+                    )
+                    page.pause()
+                page.locator('input[name="d7"]').fill(str(start.day))
+                page.locator('select[name="d5"]').select_option(label=_POLISH_MONTHS_BY_NUMBER[start.month])
+                page.locator('input[name="d3"]').fill(str(start.year))
+                submit = page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first
+                # Stooq sometimes leaves #drk_scr above the form. A DOM click runs
+                # the same onclick handler without pointer-event interception.
+                with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
+                    submit.evaluate("button => button.click()")
+                _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
+                download_link = page.locator('a[href*="q/d/l/"]').first
+                download_href = download_link.get_attribute("href") or ""
+                download_url = page.evaluate("href => new URL(href, document.baseURI).href", download_href)
+                response_meta: dict = {}
+
+                def _record_download_response(response) -> None:
+                    if "q/d/l/" not in response.url:
+                        return
+                    response_meta.update({"download_response_url": response.url, "download_response_status": response.status})
+
+                page.on("response", _record_download_response)
+                with page.expect_download(timeout=30000) as download_info:
+                    download_link.evaluate("link => link.click()")
+                download = download_info.value
+                payload = Path(download.path()).read_bytes()
+                download_meta = {
+                    "download_link_href": download_href,
+                    "download_url": download_url,
+                    "download_suggested_filename": download.suggested_filename,
+                    "download_bytes": len(payload),
+                    **response_meta,
+                }
+            except Exception as exc:
+                details = _capture_stooq_ui_failure(symbol, page, "form_or_download", exc)
+                raise ValueError(f"Stooq UI form/download failed for {symbol}: {exc}; details={details}") from exc
+            if verbose:
+                print(f"[stooq-web] downloaded filtered UI CSV for {symbol}: start={start} bytes={len(payload)}", flush=True)
+            denial_text = _stooq_ui_payload_preview(payload).lower().replace("ę", "e")
+            if "odmowa,dostepu" in denial_text or "odmowa dostepu" in denial_text:
+                message = (
+                    f"Stooq CSV download endpoint denied access for {symbol} after the table page and CSV link loaded correctly"
+                )
+                details = _capture_stooq_ui_failure(
+                    symbol, page, "download_endpoint_denied", message, payload, extra=download_meta
+                )
+                raise StooqUIDownloadDenied(f"{message}; details={details}")
+            try:
+                remote = _parse_stooq_ui_csv(payload)
+            except Exception as exc:
+                # "Odmowa,dostępu" is a downloaded denial document, not data.
+                details = _capture_stooq_ui_failure(symbol, page, "invalid_download", exc, payload, extra=download_meta)
+                raise ValueError(f"Invalid Stooq UI CSV for {symbol}: {exc}; details={details}") from exc
+        finally:
+            browser.close()
+    local = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+    if not local.empty:
+        local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
+        remote = pd.concat([local, remote], ignore_index=True)
+    remote = remote.sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
+    # The UI should honor the submitted start date, but defensively enforce the
+    # requested rolling window if Stooq returns an unfiltered/full-history file.
+    remote = _trim_stooq_ui_history_to_window(remote, start)
+    remote.to_csv(csv_path, index=False, date_format="%Y-%m-%d")
+    return remote
+
+
 
 
 def _page_has_history_rows(page) -> bool:
@@ -1779,9 +2007,9 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             if clicked:
                 break
         if clicked:
-            # Wait for consent layer to disappear and content table to become available.
+            # Wait on the consent container itself rather than sleeping.
             try:
-                page.wait_for_timeout(1200)
+                page.locator('.fc-dialog-container').first.wait_for(state="hidden", timeout=5000)
             except Exception:
                 pass
             if not _consent_overlay_visible(page):
@@ -1789,10 +2017,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                 return
             print("[stooq-web] consent overlay still visible after click.", flush=True)
         else:
-            try:
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
+            break
 
 def _consent_overlay_visible(page) -> bool:
     probes = [
@@ -2030,6 +2255,22 @@ def _captcha_state_screenshot(page, symbol: str, reason: str, attempt: int) -> s
 
 
 def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
+    captcha_selector = "#t11 img, tr#t11 img, img[src*='/q/l/s/i/'], img[src*='cpt'], img[src*='captcha']"
+    try:
+        old_src = page.locator(captcha_selector).first.get_attribute("src") or ""
+    except Exception:
+        old_src = ""
+
+    def _wait_for_new_code() -> None:
+        try:
+            page.wait_for_function(
+                "([selector, previous]) => { const img = document.querySelector(selector); return !!img && !!img.getAttribute('src') && img.getAttribute('src') !== previous; }",
+                [captcha_selector, old_src],
+                timeout=5000,
+            )
+        except Exception:
+            pass
+
     selectors = (
         'a:has-text("Zmień kod")',
         'a:has-text("Zmien kod")',
@@ -2046,19 +2287,13 @@ def _request_new_captcha_code(page, symbol: str, attempt: int) -> bool:
                 link.click(timeout=3000, force=True)
             except Exception:
                 link.evaluate("el => el.click()")
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
+            _wait_for_new_code()
             return True
         except Exception:
             continue
     try:
         page.evaluate("() => { if (typeof cpt_o === 'function') cpt_o(); }")
-        try:
-            page.wait_for_timeout(1000)
-        except Exception:
-            pass
+        _wait_for_new_code()
         if _stooq_verbose_enabled():
             print(f"[stooq-web] captcha rejected for {symbol}; requested new code via cpt_o() (attempt {attempt}).", flush=True)
         return True
@@ -2079,10 +2314,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
         button.click(timeout=5000)
         if _stooq_verbose_enabled():
             print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt}.", flush=True)
-        try:
-            page.wait_for_timeout(1000)
-        except Exception:
-            pass
         return True
     except Exception as role_exc:
         if _stooq_verbose_enabled():
@@ -2106,10 +2337,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
             btn.click(timeout=5000, force=True)
             if _stooq_verbose_enabled():
                 print(f"[stooq-web] captcha Potwierdzam clicked for {symbol} attempt {attempt} ({selector} fallback).", flush=True)
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
             return True
         except Exception:
             continue
@@ -2119,10 +2346,6 @@ def _submit_captcha_form(page, symbol: str, attempt: int) -> bool:
 
 def _refresh_after_captcha_submit(page, symbol: str, attempt: int) -> bool:
     try:
-        try:
-            page.wait_for_timeout(1000)
-        except Exception:
-            pass
         refresh_link = page.get_by_role("link", name="Odśwież stronę").first
         if refresh_link.count() == 0:
             refresh_link = page.locator("a#cpt_gh").first
@@ -2306,11 +2529,6 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
                 page.wait_for_load_state("domcontentloaded", timeout=10000)
             except Exception:
                 pass
-            try:
-                page.wait_for_timeout(1000)
-            except Exception:
-                pass
-
             if _captcha_wrong_code_visible(page):
                 if attempt < max_attempts and _request_new_captcha_code(page, symbol, attempt + 1):
                     continue
@@ -2704,7 +2922,6 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                 continue
             if page.locator("#fth1").count() > 0:
                 break
-        page.wait_for_timeout(1500)
         try:
             page.wait_for_selector("table#fth1", timeout=6000)
         except Exception:

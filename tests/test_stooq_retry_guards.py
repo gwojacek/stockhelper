@@ -1,6 +1,10 @@
 from pathlib import Path
 
 SOURCE = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
+RUN_SOURCE = Path("run").read_text(encoding="utf-8")
+STOCK_SOURCE = Path("stock").read_text(encoding="utf-8")
+LOADER_SOURCE = Path("chart_program/chart_loader.py").read_text(encoding="utf-8")
+SCANNER_SOURCE = Path("scanner_search.py").read_text(encoding="utf-8")
 
 
 def test_stooq_blank_retry_defaults_are_small_and_wait_helper_does_not_reload_by_default():
@@ -55,3 +59,34 @@ def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert 'Stooq page load failed. URL:' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
     assert '_CAPTCHA_SOLVER_LOGGED_SYMBOLS' in SOURCE
+    assert "lookback_days: int = 548" in SOURCE
+    assert "remote = _trim_stooq_ui_history_to_window(remote, start)" in SOURCE
+
+
+def test_allsearch_enables_tor_for_stooq_playwright_by_default():
+    assert 'os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")' in RUN_SOURCE
+    assert 'f"[allsearch] Stooq Playwright Tor mode=' in RUN_SOURCE
+
+
+def test_allsearch_top_choice_actions_are_scoped_to_their_category():
+    selector = "btn?.closest('.top-choice-group')||btn?.closest('.top-choice')"
+    assert RUN_SOURCE.count(selector) >= 4
+    assert "function openClosestStockhelperCharts(btn)" in RUN_SOURCE
+    assert "function copyClosestSheetsCells(btn)" in RUN_SOURCE
+
+
+def test_forex_uses_two_fresh_csv_sessions_and_reports_fetch_paths():
+    assert "attempts = 2" in LOADER_SOURCE
+    assert "previous browser session closed" in LOADER_SOURCE
+    assert 'return "downloaded_csv"' in SCANNER_SOURCE
+    assert 'return "table_ui"' in SCANNER_SOURCE
+    assert '_print_forex_source_summary("search", members, data_source_by_ticker)' in SCANNER_SOURCE
+    assert '_print_forex_source_summary("fibo", members, data_source_by_ticker)' in SCANNER_SOURCE
+    assert '_forex_csv_health_check(members, data_source_by_ticker)' in SCANNER_SOURCE
+    assert 'not in {"commodities", "forex"}' in SCANNER_SOURCE
+
+
+def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():
+    assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
+    assert 'label=com.docker.compose.service=stockhelper' in STOCK_SOURCE
+    assert 'docker compose run --rm will delete this one-shot container' in RUN_SOURCE
