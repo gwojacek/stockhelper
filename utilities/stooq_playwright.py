@@ -1370,6 +1370,14 @@ def _parse_stooq_ui_csv(payload: bytes) -> pd.DataFrame:
     return frame.dropna(subset=required).sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
 
 
+def _trim_stooq_ui_history_to_window(frame: pd.DataFrame, start: date) -> pd.DataFrame:
+    """Enforce the submitted UI start date even if Stooq returns full history."""
+    if frame is None or frame.empty or "Date" not in frame.columns:
+        return frame
+    dates = pd.to_datetime(frame["Date"], errors="coerce")
+    return frame.loc[dates.dt.date >= start].reset_index(drop=True)
+
+
 def _capture_stooq_ui_failure(
     symbol: str,
     page,
@@ -1432,7 +1440,7 @@ def _resolve_stooq_ui_consent_and_captcha(page, url: str, symbol: str) -> None:
 def update_stooq_history_from_ui_csv(
     symbol: str,
     csv_path: Path,
-    lookback_days: int = 364,
+    lookback_days: int = 548,
     end_date: datetime | None = None,
     verbose: bool = False,
     interactive: bool = False,
@@ -1532,6 +1540,9 @@ def update_stooq_history_from_ui_csv(
         local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
         remote = pd.concat([local, remote], ignore_index=True)
     remote = remote.sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
+    # The UI should honor the submitted start date, but defensively enforce the
+    # requested rolling window if Stooq returns an unfiltered/full-history file.
+    remote = _trim_stooq_ui_history_to_window(remote, start)
     remote.to_csv(csv_path, index=False, date_format="%Y-%m-%d")
     return remote
 

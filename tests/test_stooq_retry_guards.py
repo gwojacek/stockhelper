@@ -56,8 +56,17 @@ def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert 'Stooq page load failed. URL:' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
     assert '_CAPTCHA_SOLVER_LOGGED_SYMBOLS' in SOURCE
+    assert "lookback_days: int = 548" in SOURCE
+    assert "remote = _trim_stooq_ui_history_to_window(remote, start)" in SOURCE
 
 
 def test_allsearch_enables_tor_for_stooq_playwright_by_default():
     assert 'os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")' in RUN_SOURCE
     assert 'f"[allsearch] Stooq Playwright Tor mode=' in RUN_SOURCE
+
+
+def test_allsearch_top_choice_actions_are_scoped_to_their_category():
+    selector = "btn?.closest('.top-choice-group')||btn?.closest('.top-choice')"
+    assert RUN_SOURCE.count(selector) >= 4
+    assert "function openClosestStockhelperCharts(btn)" in RUN_SOURCE
+    assert "function copyClosestSheetsCells(btn)" in RUN_SOURCE

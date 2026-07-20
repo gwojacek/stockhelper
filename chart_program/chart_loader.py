@@ -1362,8 +1362,16 @@ def load_or_update_daily_data(
     else:
         merged_full = _sanitize_ohlc_dataframe(remote)
 
-    # Runtime callers typically need only the recent window for indicators,
-    # but cache on disk must keep full history (never shrink on regular refresh).
+    if instrument_type == "forex" and not fetch_older_data and not merged_full.empty:
+        # Keep the on-disk FX cache at the promised rolling 1.5-year boundary,
+        # even if Stooq ignored UI filters or an older local file was merged.
+        forex_start = datetime.now(timezone.utc).date() - timedelta(days=548)
+        forex_dates = pd.to_datetime(merged_full["Date"], errors="coerce")
+        merged_full = merged_full.loc[forex_dates.dt.date >= forex_start].reset_index(drop=True)
+
+    # Runtime callers typically need only the recent window for indicators.
+    # Other caches retain full history; regular forex refreshes intentionally
+    # retain only the rolling 548-day window enforced above.
     merged = merged_full if fetch_older_data else _last_year_only(merged_full)
 
     if persist:

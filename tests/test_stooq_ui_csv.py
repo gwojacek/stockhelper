@@ -8,6 +8,7 @@ from utilities.stooq_playwright import (
     _POLISH_MONTHS_BY_NUMBER,
     _capture_stooq_ui_failure,
     _parse_stooq_ui_csv,
+    _trim_stooq_ui_history_to_window,
 )
 
 
@@ -23,6 +24,19 @@ def test_parse_polish_stooq_ui_csv():
     assert frame.iloc[0]["Date"] == pd.Timestamp("1971-01-04")
     assert frame.iloc[0]["Close"] == 357.73
     assert frame.iloc[0]["Volume"] == 0
+
+
+def test_full_ui_download_is_trimmed_to_submitted_548_day_window():
+    frame = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2024-01-01", "2025-01-19", "2025-01-20", "2026-07-20"]),
+            "Close": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+
+    trimmed = _trim_stooq_ui_history_to_window(frame, pd.Timestamp("2025-01-20").date())
+
+    assert trimmed["Date"].dt.strftime("%Y-%m-%d").tolist() == ["2025-01-20", "2026-07-20"]
 
 
 def test_july_is_selected_using_the_polish_ui_label():
