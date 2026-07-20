@@ -66,7 +66,9 @@ _stop_old_report_containers() {
   if [[ "${STOCKHELPER_KEEP_OLD_REPORTS:-0}" == "1" ]]; then
     return 0
   fi
-  docker ps -aq --filter "name=stockhelper" --filter "ancestor=stockhelper:latest" | xargs -r docker rm -f >/dev/null 2>&1 || true
+  # Compose labels are stable even when the generated image/container name is
+  # different from `stockhelper:latest` (for example stockhelper-stockhelper).
+  docker ps -aq --filter "label=com.docker.compose.service=stockhelper" | xargs -r docker rm -f >/dev/null 2>&1 || true
 }
 
 _should_watch_for_report_url=0

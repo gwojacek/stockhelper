@@ -763,12 +763,15 @@ def _wait_for_report_server(report_url: str | None) -> int:
     if not report_url or not _should_keep_report_server_foreground():
         return 0
     print(f"[allsearch] report server is running. Open this URL in your browser: {report_url}")
-    print("[allsearch] keeping Docker container alive for the report server. Press Ctrl+C to stop.")
+    print(
+        "[allsearch] keeping Docker container alive for the report server. "
+        "Press Ctrl+C to stop; docker compose run --rm will delete this one-shot container."
+    )
     try:
         while True:
             time.sleep(3600)
     except KeyboardInterrupt:
-        print("\n[allsearch] stopping report server.")
+        print("\n[allsearch] stopping report server; Docker will remove the container.")
         return 0
 
 def _serve_report_locally(path: Path) -> str | None:

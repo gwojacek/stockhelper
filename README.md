@@ -234,7 +234,7 @@ Use `stock -allsearch all` for the normal all-search workflow. When the HTML rep
 
 The helper intentionally ignores non-localhost URLs printed in scraper diagnostics. For example, Stooq bulk logs may print `https://stooq.com/db/d/?b=d_pl_txt`; that URL is not a StockHelper report and should not be opened by the helper.
 
-Keep the terminal command running while you view the report. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done. The helper stops older StockHelper report containers before starting a new report command unless you set:
+Keep the terminal command running while you view the report. The container owns the local report server, so press `Ctrl+C` in that terminal when you are done. The helper uses `docker compose run --rm`, which removes that one-shot container after the process stops; it does not accumulate a stopped container for every report run. As an additional stale-container guard, the helper removes older containers carrying the Compose `stockhelper` service label before starting a new report command unless you set:
 
 ```bash
 export STOCKHELPER_KEEP_OLD_REPORTS=1

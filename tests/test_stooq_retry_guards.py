@@ -2,6 +2,7 @@ from pathlib import Path
 
 SOURCE = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
 RUN_SOURCE = Path("run").read_text(encoding="utf-8")
+STOCK_SOURCE = Path("stock").read_text(encoding="utf-8")
 LOADER_SOURCE = Path("chart_program/chart_loader.py").read_text(encoding="utf-8")
 SCANNER_SOURCE = Path("scanner_search.py").read_text(encoding="utf-8")
 
@@ -81,3 +82,9 @@ def test_forex_uses_two_fresh_csv_sessions_and_reports_fetch_paths():
     assert 'return "table_ui"' in SCANNER_SOURCE
     assert '_print_forex_source_summary("search", members, data_source_by_ticker)' in SCANNER_SOURCE
     assert '_print_forex_source_summary("fibo", members, data_source_by_ticker)' in SCANNER_SOURCE
+
+
+def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():
+    assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
+    assert 'label=com.docker.compose.service=stockhelper' in STOCK_SOURCE
+    assert 'docker compose run --rm will delete this one-shot container' in RUN_SOURCE
