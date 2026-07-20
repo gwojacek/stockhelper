@@ -969,6 +969,11 @@ STOCKHELPER_STOOQ_TOR=1 \
 ./stock -search forex
 ```
 
+`./stock -allsearch all` enables this Tor mode by default for every Stooq
+Playwright fetch in the Ichimoku and Fibo phases, including both commodity and
+forex UI workflows. Override it explicitly with `STOCKHELPER_STOOQ_TOR=0` only
+when a direct connection is intended.
+
 For an incomplete forex cache, StockHelper first uses Playwright to set the
 rolling start date in the Stooq UI and download the filtered CSV, retrying that
 workflow up to five times. It then merges any newer Yahoo candle. If all five

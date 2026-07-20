@@ -1,6 +1,7 @@
 from pathlib import Path
 
 SOURCE = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
+RUN_SOURCE = Path("run").read_text(encoding="utf-8")
 
 
 def test_stooq_blank_retry_defaults_are_small_and_wait_helper_does_not_reload_by_default():
@@ -55,3 +56,8 @@ def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert 'Stooq page load failed. URL:' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
     assert '_CAPTCHA_SOLVER_LOGGED_SYMBOLS' in SOURCE
+
+
+def test_allsearch_enables_tor_for_stooq_playwright_by_default():
+    assert 'os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")' in RUN_SOURCE
+    assert 'f"[allsearch] Stooq Playwright Tor mode=' in RUN_SOURCE
