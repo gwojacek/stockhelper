@@ -2,6 +2,8 @@ from pathlib import Path
 
 SOURCE = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
 RUN_SOURCE = Path("run").read_text(encoding="utf-8")
+LOADER_SOURCE = Path("chart_program/chart_loader.py").read_text(encoding="utf-8")
+SCANNER_SOURCE = Path("scanner_search.py").read_text(encoding="utf-8")
 
 
 def test_stooq_blank_retry_defaults_are_small_and_wait_helper_does_not_reload_by_default():
@@ -70,3 +72,12 @@ def test_allsearch_top_choice_actions_are_scoped_to_their_category():
     assert RUN_SOURCE.count(selector) >= 4
     assert "function openClosestStockhelperCharts(btn)" in RUN_SOURCE
     assert "function copyClosestSheetsCells(btn)" in RUN_SOURCE
+
+
+def test_forex_uses_two_fresh_csv_sessions_and_reports_fetch_paths():
+    assert "attempts = 2" in LOADER_SOURCE
+    assert "previous browser session closed" in LOADER_SOURCE
+    assert 'return "downloaded_csv"' in SCANNER_SOURCE
+    assert 'return "table_ui"' in SCANNER_SOURCE
+    assert '_print_forex_source_summary("search", members, data_source_by_ticker)' in SCANNER_SOURCE
+    assert '_print_forex_source_summary("fibo", members, data_source_by_ticker)' in SCANNER_SOURCE

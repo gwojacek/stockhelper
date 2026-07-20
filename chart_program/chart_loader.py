@@ -1081,7 +1081,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
             return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
         lookback = older_days if fetch_older_data else 548
-        attempts = 5
+        attempts = 2
         primary_error: Exception | None = None
         for attempt in range(1, attempts + 1):
             try:
@@ -1112,12 +1112,24 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 primary_error = exc
                 print(f"[forex-download] {symbol}: Stooq UI CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
                 if isinstance(exc, StooqUIDownloadDenied):
+                    if attempt >= attempts:
+                        print(
+                            f"[forex-download] {symbol}: the visible history table is valid but q/d/l denied "
+                            "both fresh browser sessions; switching to paginated UI table fetching.",
+                            flush=True,
+                        )
+                        break
                     print(
-                        f"[forex-download] {symbol}: the visible history table is valid but q/d/l denied the file; "
-                        "switching immediately to paginated UI table fetching.",
+                        f"[forex-download] {symbol}: q/d/l denied the first browser session; "
+                        "trying one fresh browser session before table fallback.",
                         flush=True,
                     )
-                    break
+                if attempt < attempts:
+                    print(
+                        f"[forex-download] {symbol}: previous browser session closed; "
+                        "retrying once with a new browser session.",
+                        flush=True,
+                    )
 
         # The filtered UI CSV can deny or time out. Fall back to the same
         # paginated Stooq UI table scraper used for literal commodities.

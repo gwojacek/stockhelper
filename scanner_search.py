@@ -2107,6 +2107,28 @@ def _scan_source_label(src: str) -> str:
     return s.upper() or "UNKNOWN"
 
 
+def _forex_source_summary_label(src: str) -> str:
+    """Collapse loader metadata into the three user-facing forex fetch paths."""
+    source = (src or "").strip().lower()
+    if source.startswith("stooq_web_csv"):
+        return "downloaded_csv"
+    if source.startswith("stooq_web"):
+        return "table_ui"
+    if source == "cache":
+        return "cache"
+    return source or "unknown"
+
+
+def _print_forex_source_summary(prefix: str, members: Sequence[str], sources: dict[str, str]) -> None:
+    counts: dict[str, int] = {}
+    for ticker in members:
+        label = _forex_source_summary_label(sources.get(ticker, "unknown"))
+        counts[label] = counts.get(label, 0) + 1
+        print(f"[{prefix}-source] {ticker}: {label}")
+    summary = ", ".join(f"{source}={count}" for source, count in sorted(counts.items()))
+    print(f"[{prefix}-source] summary: {summary}")
+
+
 
 
 def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "", wedge: WedgeScanResult | None = None) -> str:
@@ -2851,6 +2873,7 @@ def run_ichimoku_search(target: str) -> int:
     processed_count = 0
     error_count = 0
     error_samples: list[str] = []
+    data_source_by_ticker: dict[str, str] = {}
 
     def _record_scan_error(ticker: str, err: str | None) -> None:
         nonlocal error_count
@@ -2862,6 +2885,7 @@ def run_ichimoku_search(target: str) -> int:
     first = members[0]
     print(f"[1/{len(members)}] {first}")
     display_symbol, first_result, first_flip, first_err, first_source, first_stopped = _scan_one_with_retry_on_rate_limit(first, group_name, exchange_suffix, current_datetime)
+    data_source_by_ticker[first] = first_source
     sequential = _rate_limit_detected(first_err)
     if group_name == "WIG":
         sequential = False
@@ -2899,6 +2923,7 @@ def run_ichimoku_search(target: str) -> int:
             print("[search] rate-limit/captcha detected -> switching to sequential mode.")
         for offset, ticker in enumerate(rest, start=2):
             display_symbol, result, flip, err, src, stopped = _scan_one_with_retry_on_rate_limit(ticker, group_name, exchange_suffix, current_datetime)
+            data_source_by_ticker[ticker] = src
             print(f"[{offset}/{len(members)}] {ticker}", flush=True)
             processed_count += 1
             if stopped:
@@ -2975,6 +3000,7 @@ def run_ichimoku_search(target: str) -> int:
                         display_symbol, result, flip, err, src, stopped = fut.result()
                     except Exception as exc:
                         display_symbol, result, flip, err, src, stopped = ticker, None, None, _compact_error(str(exc)), "unknown", False
+                    data_source_by_ticker[ticker] = src
                     if err and _rate_limit_detected(err) and _should_prompt_rate_limit(group_name):
                         print(f"[{idx}/{len(members)}] {ticker}", flush=True)
                         print(f"  pauza VPN/rate-limit ({_compact_error(err)})", flush=True)
@@ -3047,6 +3073,8 @@ def run_ichimoku_search(target: str) -> int:
     print(f"[search] summary {group_name}: processed={processed_count}/{len(members)}, errors={error_count}")
     if error_samples:
         print(f"[search] error samples: {'; '.join(error_samples)}")
+    if group_name == "forex":
+        _print_forex_source_summary("search", members, data_source_by_ticker)
     if group_name == "commodities":
         _commodity_csv_health_check(members)
     elif group_name == "forex":
@@ -5110,12 +5138,7 @@ def run_fibo_search(target: str) -> int:
     print(f"\n[fibo] znaleziono: {len(rows) + len(rows3p_steep)}; kliny: {len(wedge_rows)}")
     print(f"[fibo] md: {out_md}")
     if group_name == "forex":
-        source_counts: dict[str, int] = {}
-        for ticker in members:
-            label = data_source_by_ticker.get(ticker, "unknown")
-            source_counts[label] = source_counts.get(label, 0) + 1
-            print(f"[fibo-source] {ticker}: {label}")
-        print(f"[fibo-source] summary: {', '.join(f'{source}={count}' for source, count in sorted(source_counts.items()))}")
+        _print_forex_source_summary("fibo", members, data_source_by_ticker)
         _forex_csv_health_check(members)
     if links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:

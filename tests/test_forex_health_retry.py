@@ -81,6 +81,24 @@ def test_forex_health_does_not_retry_complete_rolling_window(monkeypatch, tmp_pa
 
 def test_fibo_forex_reports_per_ticker_sources_and_health_summary():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert 'print(f"[fibo-source] {ticker}: {label}")' in source
-    assert 'print(f"[fibo-source] summary:' in source
+    assert '_print_forex_source_summary("fibo", members, data_source_by_ticker)' in source
+    assert '_print_forex_source_summary("search", members, data_source_by_ticker)' in source
     assert '_forex_csv_health_check(members)' in source
+
+
+def test_forex_source_summary_uses_user_facing_fetch_paths(capsys):
+    scanner._print_forex_source_summary(
+        "search",
+        ["AUDUSD", "EURCHF", "USDJPY"],
+        {
+            "AUDUSD": "stooq_web_csv+yahoo",
+            "EURCHF": "stooq_web",
+            "USDJPY": "cache",
+        },
+    )
+
+    output = capsys.readouterr().out
+    assert "[search-source] AUDUSD: downloaded_csv" in output
+    assert "[search-source] EURCHF: table_ui" in output
+    assert "[search-source] USDJPY: cache" in output
+    assert "[search-source] summary: cache=1, downloaded_csv=1, table_ui=1" in output
