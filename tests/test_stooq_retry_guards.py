@@ -82,6 +82,8 @@ def test_forex_uses_two_fresh_csv_sessions_and_reports_fetch_paths():
     assert 'return "table_ui"' in SCANNER_SOURCE
     assert '_print_forex_source_summary("search", members, data_source_by_ticker)' in SCANNER_SOURCE
     assert '_print_forex_source_summary("fibo", members, data_source_by_ticker)' in SCANNER_SOURCE
+    assert '_forex_csv_health_check(members, data_source_by_ticker)' in SCANNER_SOURCE
+    assert 'not in {"commodities", "forex"}' in SCANNER_SOURCE
 
 
 def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():

@@ -976,9 +976,9 @@ when a direct connection is intended.
 
 For an incomplete forex cache, StockHelper first uses Playwright to set the
 rolling start date in the Stooq UI and download the filtered CSV, retrying that
-workflow up to five times. It then merges any newer Yahoo candle. If all five
-UI CSV downloads fail, it falls back to fetching rows from the paginated Stooq
-UI tables exactly like the commodity workflow. Both browser paths use the
+workflow once in a fresh browser session (two attempts total). It then merges
+any newer Yahoo candle. If both UI CSV downloads fail, it falls back to
+fetching rows from the paginated Stooq UI tables exactly like the commodity workflow. Both browser paths use the
 configured Tor SOCKS proxy. The filtered-CSV path also reuses the commodity
 scraper's consent handling, CAPTCHA OCR, and automatic blocked-page retries
 before and after submitting the date form.
@@ -987,8 +987,13 @@ If a failure artifact says `download_endpoint_denied`, the screenshot can still
 show a valid table and CSV link: Stooq returned `Odmowa,dostępu` as the contents
 of the separate `q/d/l/` file-download response. The diagnostic JSON records
 the link URL, response status when available, filename, byte count, and payload
-preview. StockHelper immediately switches that symbol to table-row fetching
-instead of repeating the same denied file action five times.
+preview. StockHelper retries the denied file action once in a fresh browser,
+then switches that symbol to table-row fetching if the second attempt is also denied.
+
+Forex and commodity scans do not pause for an interactive VPN change when a
+rate limit is detected; their Tor, CAPTCHA, retry, and UI fallback paths handle
+the failure automatically. Forex health rows include `source=downloaded_csv`,
+`source=table_ui`, or `source=cache` alongside coverage details.
 
 After the forex coverage summary, warned CSVs are retried for up to four
 download rounds by default. Only files that remain incomplete enter the next
