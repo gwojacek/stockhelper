@@ -240,6 +240,21 @@ class LightweightChartLevelSelectorUI:
             "reportServer": str(payload.get("reportServer") or ""),
         }
 
+    @staticmethod
+    def _instrument_catalog() -> list[dict[str, str]]:
+        """Return instruments that already have a local candle CSV."""
+        csv_root = Path(__file__).resolve().parents[1] / "data" / "csv"
+        suffixes = {"WA", "PL", "US", "DE", "L", "F"}
+        instruments: list[dict[str, str]] = []
+        for csv_path in sorted(csv_root.glob("*/*.csv")):
+            if csv_path.name.startswith("."):
+                continue
+            instrument_type = {"stocks": "stock", "commodities": "commodity", "forex": "forex", "indexes": "index"}.get(csv_path.parent.name, csv_path.parent.name)
+            parts = csv_path.stem.upper().split("_")
+            symbol = f"{'.'.join(parts[:-1])}.{parts[-1]}" if len(parts) > 1 and parts[-1] in suffixes else csv_path.stem.upper().replace("_CASH", ".CASH")
+            instruments.append({"symbol": symbol, "type": instrument_type})
+        return instruments
+
     def _payload(self) -> dict:
         return {
             "symbol": self.symbol,
@@ -259,6 +274,7 @@ class LightweightChartLevelSelectorUI:
             "futureTimes": self._future_time_payload(),
             "ichimoku": self._ichimoku_payload(),
             "chartGroup": self._chart_group_payload(),
+            "instrumentCatalog": self._instrument_catalog(),
         }
 
 
@@ -503,6 +519,10 @@ class LightweightChartLevelSelectorUI:
     .meta-label,.side-section-title {{ display:flex; align-items:center; gap:6px; color:#b8c7e6; font-weight:800; font-size:12px; margin-bottom:6px; }}
     .meta-value {{ min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid #334155; border-radius:11px; background:rgba(2,6,23,.42); color:#f8fafc; font-size:15px; font-weight:900; }}
     #source {{ color:#f8fafc; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.03em; }}
+    .instrument-switcher {{ grid-column:1/-1; padding:10px; border:1px solid rgba(56,189,248,.3); border-radius:12px; background:rgba(8,47,73,.28); }}
+    .instrument-switch-row {{ display:grid; grid-template-columns:1fr auto; gap:7px; }}
+    #instrument-switch-btn {{ min-width:76px; background:linear-gradient(135deg,#0284c7,#2563eb); color:white; border-color:#60a5fa; }}
+    #instrument-switch-status {{ display:block; min-height:16px; margin-top:5px; color:#93c5fd; font-size:11px; }}
     #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
     #stock-cfd-toggle::after {{ content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #stock-cfd-toggle::before {{ content:''; position:absolute; right:29px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
@@ -641,6 +661,7 @@ class LightweightChartLevelSelectorUI:
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
+          <div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search ticker, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist><button id="instrument-switch-btn" type="button">Open</button></div><span id="instrument-switch-status"></span></div>
         </div>
       </section>
       <section class="side-card selected-card">
@@ -2562,7 +2583,36 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function setupInstrumentSwitcher() {{
+    const input = $('instrument-search');
+    const list = $('instrument-options');
+    const button = $('instrument-switch-btn');
+    const status = $('instrument-switch-status');
+    const instruments = Array.isArray(P.instrumentCatalog) ? P.instrumentCatalog : [];
+    if (!input || !list || !button) return;
+    instruments.forEach(item => {{
+      const option = document.createElement('option');
+      option.value = item.symbol || '';
+      option.label = `${{item.symbol || ''}} — ${{item.type || 'instrument'}}`;
+      list.appendChild(option);
+    }});
+    const openSelected = () => {{
+      const requested = String(input.value || '').trim().toUpperCase();
+      const selected = instruments.find(item => String(item.symbol || '').toUpperCase() === requested);
+      if (!selected) {{ status.textContent = 'Choose an instrument from the available-data list.'; return; }}
+      if (!P.reportServer) {{ status.textContent = 'Instrument switching is available in charts opened from a search report.'; return; }}
+      status.textContent = `Opening ${{selected.symbol}}…`;
+      const url = new URL('/open-chart', P.reportServer);
+      url.searchParams.set('command', `python run -c ${{selected.symbol}}`);
+      window.location.replace(url.href);
+    }};
+    button.onclick = openSelected;
+    input.addEventListener('keydown', event => {{ if (event.key === 'Enter') {{ event.preventDefault(); openSelected(); }} }});
+    status.textContent = `${{instruments.length}} instruments with local data`;
+  }}
+
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
+  setupInstrumentSwitcher();
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000; $('calculation-currency').value = levels.calculation_currency || levels.currency || 'PLN'; setCalculationCurrencyButtons($('calculation-currency').value);
   loadSharedBalance();
   $('capital').addEventListener('change', saveSharedBalance);
