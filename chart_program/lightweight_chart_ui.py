@@ -248,6 +248,7 @@ class LightweightChartLevelSelectorUI:
             "sourceName": self.source_name,
             "sourceProvider": self.source_provider,
             "reportLaunched": os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1",
+            "reportServer": os.environ.get("STOCKHELPER_REPORT_SERVER_URL", ""),
             "pricePrecision": self._precision_for_price(),
             "basePrecision": self.price_precision,
             "selectionSequence": SELECTION_SEQUENCE,
@@ -655,7 +656,7 @@ class LightweightChartLevelSelectorUI:
         <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
-        <label>Capital</label><input id="capital" type="number" />
+        <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
@@ -2409,6 +2410,30 @@ class LightweightChartLevelSelectorUI:
 
   const FX_TO_PLN = {{PLN:1, USD:3.92, EUR:4.25, GBP:5.05}};
 
+  async function loadSharedBalance() {{
+    if (!P.reportServer) return;
+    try {{
+      const response = await fetch(new URL('/current-balance', P.reportServer));
+      const data = await response.json();
+      if (response.ok && Number(data.balance) > 0) {{
+        $('capital').value = data.balance;
+        levels.capital = Number(data.balance);
+        $('calculation-currency').value = 'PLN';
+        levels.calculation_currency = 'PLN';
+        setCalculationCurrencyButtons('PLN');
+      }}
+    }} catch (error) {{ console.warn('Could not load shared balance', error); }}
+  }}
+
+  async function saveSharedBalance() {{
+    const balance = Number($('capital')?.value || 0);
+    if (!P.reportServer || !(balance > 0)) return;
+    levels.capital = balance;
+    try {{
+      await fetch(new URL('/current-balance', P.reportServer), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{balance}})}});
+    }} catch (error) {{ console.warn('Could not save shared balance', error); }}
+  }}
+
   function setCalculationCurrencyButtons(currency) {{
     const target = String(currency || 'PLN').toUpperCase();
     document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.classList.toggle('active', btn.dataset.currency === target));
@@ -2539,6 +2564,8 @@ class LightweightChartLevelSelectorUI:
 
   seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000; $('calculation-currency').value = levels.calculation_currency || levels.currency || 'PLN'; setCalculationCurrencyButtons($('calculation-currency').value);
+  loadSharedBalance();
+  $('capital').addEventListener('change', saveSharedBalance);
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
   $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
