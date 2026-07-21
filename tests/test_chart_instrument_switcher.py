@@ -28,5 +28,7 @@ def test_chart_html_has_searchable_instrument_switcher():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert 'type="search" list="instrument-options"' in source
+    assert 'id="instrument-switch-btn"' not in source
     assert "function setupInstrumentSwitcher()" in source
+    assert "input.addEventListener('input', openSelected)" in source
     assert "url.searchParams.set('command', `python run -c ${{selected.symbol}}`)" in source

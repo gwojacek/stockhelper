@@ -520,8 +520,7 @@ class LightweightChartLevelSelectorUI:
     .meta-value {{ min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid #334155; border-radius:11px; background:rgba(2,6,23,.42); color:#f8fafc; font-size:15px; font-weight:900; }}
     #source {{ color:#f8fafc; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.03em; }}
     .instrument-switcher {{ grid-column:1/-1; padding:10px; border:1px solid rgba(56,189,248,.3); border-radius:12px; background:rgba(8,47,73,.28); }}
-    .instrument-switch-row {{ display:grid; grid-template-columns:1fr auto; gap:7px; }}
-    #instrument-switch-btn {{ min-width:76px; background:linear-gradient(135deg,#0284c7,#2563eb); color:white; border-color:#60a5fa; }}
+    .instrument-switch-row {{ display:block; }}
     #instrument-switch-status {{ display:block; min-height:16px; margin-top:5px; color:#93c5fd; font-size:11px; }}
     #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
     #stock-cfd-toggle::after {{ content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
@@ -661,7 +660,7 @@ class LightweightChartLevelSelectorUI:
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
-          <div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search ticker, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist><button id="instrument-switch-btn" type="button">Open</button></div><span id="instrument-switch-status"></span></div>
+          <div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search and select, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist></div><span id="instrument-switch-status"></span></div>
         </div>
       </section>
       <section class="side-card selected-card">
@@ -2586,28 +2585,28 @@ class LightweightChartLevelSelectorUI:
   function setupInstrumentSwitcher() {{
     const input = $('instrument-search');
     const list = $('instrument-options');
-    const button = $('instrument-switch-btn');
     const status = $('instrument-switch-status');
     const instruments = Array.isArray(P.instrumentCatalog) ? P.instrumentCatalog : [];
-    if (!input || !list || !button) return;
+    if (!input || !list) return;
     instruments.forEach(item => {{
       const option = document.createElement('option');
       option.value = item.symbol || '';
       option.label = `${{item.symbol || ''}} — ${{item.type || 'instrument'}}`;
       list.appendChild(option);
     }});
+    let opening = false;
     const openSelected = () => {{
       const requested = String(input.value || '').trim().toUpperCase();
       const selected = instruments.find(item => String(item.symbol || '').toUpperCase() === requested);
-      if (!selected) {{ status.textContent = 'Choose an instrument from the available-data list.'; return; }}
+      if (!selected || opening) return;
       if (!P.reportServer) {{ status.textContent = 'Instrument switching is available in charts opened from a search report.'; return; }}
+      opening = true;
       status.textContent = `Opening ${{selected.symbol}}…`;
       const url = new URL('/open-chart', P.reportServer);
       url.searchParams.set('command', `python run -c ${{selected.symbol}}`);
       window.location.replace(url.href);
     }};
-    button.onclick = openSelected;
-    input.addEventListener('keydown', event => {{ if (event.key === 'Enter') {{ event.preventDefault(); openSelected(); }} }});
+    input.addEventListener('input', openSelected);
     status.textContent = `${{instruments.length}} instruments with local data`;
   }}
 
