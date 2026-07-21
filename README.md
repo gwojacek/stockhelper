@@ -9,7 +9,7 @@ It helps you:
 - download/cache daily market data from Stooq, Yahoo Finance, and Stooq web/table fallbacks;
 - scan market groups for Ichimoku cloud, Fibonacci setups, and falling-wedge (Kliny) formations with age-aware breakout/retest handling, stale-Fibo-anchor rejection, improved 5.0 wedge anchor scoring, and alternate-wedge review;
 - generate compact Trójpolówki (3P) Fibo/Ichimoku watchlists plus a dedicated Kliny tab from the latest allsearch data, with searchable/filterable HTML tabs and grouped quick-chart buttons;
-- open an interactive chart tool, select price levels, inspect/import/edit wedge lines, save/update config files, export chart snapshots, and create transaction journal entries;
+- open an interactive chart tool, search and switch between locally cached instruments, use a shared saved PLN balance, select price levels, inspect/import/edit wedge lines, save/update config files, export chart snapshots, and create transaction journal entries;
 - review a local transaction journal with opening/closing screenshots, close-adjust chart mode, estimated P/L, and update/delete actions;
 - generate terminal output plus Markdown/HTML reports, cached CSV data, debug JSON/HTML/screenshots, journal HTML, and chart images.
 
@@ -89,7 +89,7 @@ Normal output is kept minimal: one captcha/consent line per symbol and page prog
 - **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner metadata for filtering, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
-- **Interactive chart tool** powered by TradingView Lightweight Charts, with manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
+- **Interactive chart tool** powered by TradingView Lightweight Charts, with an in-chart searchable instrument switcher for every symbol already available in the local CSV cache, shared saved PLN balance, manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
 - **Setup information panel** in the chart UI for scanner-loaded setups: Ichimoku shows scanner breakout/retest context plus CSV candles from the scanner check window, Fibo shows anchor dates/values and 61.8 diagnostics, and wedge/Kliny shows touch diagnostics plus CSV candles since the oldest wedge anchor.
 - **Transaction journal** stored locally under `data/journal/`, with opening screenshots, close-adjust chart screenshots, Trade Summary autosave, long/short direction, estimated profit/loss, compressed review mode, year filtering, delete/update/close actions, and PDF-friendly HTML output.
 - **Reports and artifacts**:
@@ -1065,6 +1065,8 @@ chart_program/data/all_insturments_search/allsearch/
 ```
 
 The combined HTML includes tabs for the allsearch report, 3P Fibo, 3P Ichimoku, and `🔻 Kliny`. Use the search box and market buttons across tabs; the Ichimoku/Fibo scanner buttons are shown only on the Allsearch tab and can be clicked again to clear the scanner filter. Use the `📄 Download PDF` button in the tab header to export the currently visible report view.
+
+The report header also contains a **Current balance** field in PLN. StockHelper saves a valid changed value locally and uses it as the default balance in every chart subsequently opened from a search report. Inside a report-launched chart, use **Open another instrument** to search the locally cached candle-data catalog; selecting an exact suggestion immediately replaces the current tab with that instrument's StockHelper chart—there is no separate Open button.
 
 ### Data history is too short
 
