@@ -1,0 +1,19 @@
+{
+  "symbol": "EURGBP",
+  "stage": "download_endpoint_denied",
+  "error": "Stooq CSV download endpoint denied access for EURGBP after the table page and CSV link loaded correctly",
+  "page_url": "https://stooq.pl/q/d/?f=20250118&t=20260720&s=eurgbp&c=0",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/eurgbp_ui_csv_download_endpoint_denied.png",
+  "html": "/app/debug/stooq/eurgbp_ui_csv_download_endpoint_denied.html",
+  "download": "/app/debug/stooq/eurgbp_ui_csv_download_endpoint_denied.download",
+  "download_preview": "Odmowa dostępu",
+  "download_link_href": "q/d/l/?s=eurgbp&f=20250118&t=20260720&i=d",
+  "download_url": "https://stooq.pl/q/d/l/?s=eurgbp&f=20250118&t=20260720&i=d",
+  "download_suggested_filename": "blad.txt",
+  "download_bytes": 15,
+  "download_response_url": "https://stooq.pl/q/d/l/?s=eurgbp&f=20250118&t=20260720&i=d",
+  "download_response_status": 200
+}

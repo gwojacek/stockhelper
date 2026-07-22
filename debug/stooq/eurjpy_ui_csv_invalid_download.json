@@ -1,0 +1,15 @@
+{
+  "symbol": "EURJPY",
+  "stage": "invalid_download",
+  "error": "Unexpected Stooq UI CSV columns: ['Odmowa', 'dostępu']",
+  "page_url": "https://stooq.pl/q/d/?f=20250117&t=20260717&s=eurjpy&c=0",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "http://127.0.0.1:36325",
+  "tor_upstream": "socks5://127.0.0.1:9050",
+  "tor_auth_slot": 11,
+  "screenshot": "/app/debug/stooq/eurjpy_ui_csv_invalid_download.png",
+  "html": "/app/debug/stooq/eurjpy_ui_csv_invalid_download.html",
+  "download": "/app/debug/stooq/eurjpy_ui_csv_invalid_download.download",
+  "download_preview": "Odmowa dostępu"
+}

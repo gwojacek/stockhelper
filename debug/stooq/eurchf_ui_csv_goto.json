@@ -1,0 +1,13 @@
+{
+  "symbol": "EURCHF",
+  "stage": "goto",
+  "error": "Locator.wait_for: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input[name=\\\"d7\\\"]\") to be visible\n",
+  "page_url": "https://stooq.pl/q/d/?s=eurchf",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/eurchf_ui_csv_goto.png",
+  "html": "/app/debug/stooq/eurchf_ui_csv_goto.html",
+  "download": "",
+  "download_preview": ""
+}

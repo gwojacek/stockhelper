@@ -1,0 +1,13 @@
+{
+  "symbol": "AUDUSD",
+  "stage": "goto",
+  "error": "Page.goto: Timeout 20000ms exceeded.\nCall log:\n  - navigating to \"https://stooq.pl/q/d/?s=audusd\", waiting until \"domcontentloaded\"\n",
+  "page_url": "chrome-error://chromewebdata/",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/audusd_ui_csv_goto.png",
+  "html": "/app/debug/stooq/audusd_ui_csv_goto.html",
+  "download": "",
+  "download_preview": ""
+}

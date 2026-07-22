@@ -5,7 +5,7 @@
   "stop_loss": 3.68955,
   "position_type": "short",
   "capital": 238000,
-  "lot_cost": 18167.45,
+  "lot_cost": 18973.9,
   "pip_value": 10.0,
   "pip_size": 0.0001,
   "spread": 130,
@@ -25,5 +25,6 @@
   },
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
-  "__currency_fee_eligible__": false
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false
 }

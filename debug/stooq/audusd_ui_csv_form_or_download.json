@@ -1,0 +1,13 @@
+{
+  "symbol": "AUDUSD",
+  "stage": "form_or_download",
+  "error": "Locator.wait_for: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input[name=\\\"d7\\\"]\") to be visible\n    - waiting for\" https://stooq.pl/q/d/?s=audusd\" navigation to finish...\n    - navigated to \"https://stooq.pl/q/d/?s=audusd\"\n",
+  "page_url": "https://stooq.pl/q/d/?s=audusd",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/audusd_ui_csv_form_or_download.png",
+  "html": "/app/debug/stooq/audusd_ui_csv_form_or_download.html",
+  "download": "",
+  "download_preview": ""
+}

@@ -1,0 +1,13 @@
+{
+  "symbol": "USDJPY",
+  "stage": "goto",
+  "error": "Page.goto: Timeout 20000ms exceeded.\nCall log:\n  - navigating to \"https://stooq.pl/q/d/?s=usdjpy\", waiting until \"domcontentloaded\"\n",
+  "page_url": "https://stooq.pl/q/d/?s=usdjpy",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/usdjpy_ui_csv_goto.png",
+  "html": "/app/debug/stooq/usdjpy_ui_csv_goto.html",
+  "download": "",
+  "download_preview": ""
+}

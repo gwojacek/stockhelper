@@ -82,5 +82,8 @@
   "pip_value": 7.28,
   "spread_multiplier": 75.0,
   "spread": 546.0,
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_date__": "2026-05-15",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "8.6"
 }

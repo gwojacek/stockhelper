@@ -81,5 +81,10 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_date__": "2026-07-17",
+  "__scanner_retest_count__": "1",
+  "__scanner_previous_respect_months__": "7.4",
+  "__scanner_latest_retest_date__": "2026-07-21",
+  "__scanner_latest_retest_pattern__": "bearish_harami"
 }

@@ -1,0 +1,13 @@
+{
+  "symbol": "EURGBP",
+  "stage": "form_or_download",
+  "error": "Locator.wait_for: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input[name=\\\"d7\\\"]\") to be visible\n",
+  "page_url": "https://stooq.pl/q/d/?s=eurgbp",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/eurgbp_ui_csv_form_or_download.png",
+  "html": "/app/debug/stooq/eurgbp_ui_csv_form_or_download.html",
+  "download": "",
+  "download_preview": ""
+}

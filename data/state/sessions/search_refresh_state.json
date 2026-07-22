@@ -184,8 +184,56 @@
     ]
   },
   "commodities:2026-07-19:pre1945": {
-    "checked_at": "2026-07-19T08:20:19.120030+00:00",
+    "checked_at": "2026-07-19T12:15:53.051191+00:00",
+    "result": "stale",
+    "tickers": [
+      "COFFEE",
+      "COCOA",
+      "COPPER",
+      "ALUMINIUM",
+      "WTI",
+      "OIL"
+    ]
+  },
+  "commodities:2026-07-20:post1945": {
+    "checked_at": "2026-07-20T18:05:52.313228+00:00",
     "result": "fresh"
+  },
+  "commodities:2026-07-20:pre1945": {
+    "checked_at": "2026-07-20T13:07:54.176099+00:00",
+    "result": "stale",
+    "tickers": [
+      "ALUMINIUM"
+    ]
+  },
+  "commodities:2026-07-21:pre1945": {
+    "checked_at": "2026-07-21T13:20:37.038452+00:00",
+    "result": "stale",
+    "tickers": [
+      "COCOA"
+    ]
+  },
+  "commodities:2026-07-22:pre1945": {
+    "checked_at": "2026-07-22T16:04:28.282160+00:00",
+    "result": "stale",
+    "tickers": [
+      "COFFEE",
+      "COCOA",
+      "SUGAR",
+      "WHEAT",
+      "CORN",
+      "SOYBEAN",
+      "SOYOIL",
+      "COPPER",
+      "ALUMINIUM",
+      "PLATINUM",
+      "PALLADIUM",
+      "WTI",
+      "OIL",
+      "NATURAL_GAS",
+      "GOLD",
+      "SILVER"
+    ]
   },
   "dax40": {
     "last_remote_check": "2026-05-28T16:58:39.959472+02:00"
@@ -273,6 +321,18 @@
   },
   "stooq_bulk:2026-07-19": {
     "checked_at": "2026-07-19T08:18:26.452036+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-20": {
+    "checked_at": "2026-07-20T08:37:40.480931+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-21": {
+    "checked_at": "2026-07-21T08:13:26.039935+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-22": {
+    "checked_at": "2026-07-22T16:02:39.391140+00:00",
     "result": "bulk"
   },
   "wig": {

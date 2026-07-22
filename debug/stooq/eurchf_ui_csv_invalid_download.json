@@ -1,0 +1,13 @@
+{
+  "symbol": "EURCHF",
+  "stage": "invalid_download",
+  "error": "Unexpected Stooq UI CSV columns: ['Odmowa', 'dostępu']",
+  "page_url": "https://stooq.pl/q/d/?f=20250117&t=20260717&s=eurchf&c=0",
+  "tor_enabled": true,
+  "tor_proxy_reachable": true,
+  "proxy_server": "socks5://127.0.0.1:9050",
+  "screenshot": "/app/debug/stooq/eurchf_ui_csv_invalid_download.png",
+  "html": "/app/debug/stooq/eurchf_ui_csv_invalid_download.html",
+  "download": "/app/debug/stooq/eurchf_ui_csv_invalid_download.download",
+  "download_preview": "Odmowa dostępu"
+}

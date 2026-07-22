@@ -12,6 +12,8 @@
   "__show_ichimoku__": true,
   "__journal_source_technique__": "Ichimoku",
   "__scanner_breakout_date__": "2026-07-09",
-  "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "7.4"
+  "__scanner_retest_count__": "1",
+  "__scanner_previous_respect_months__": "7.4",
+  "__scanner_latest_retest_date__": "2026-07-20",
+  "__scanner_latest_retest_pattern__": "shooting_star"
 }
