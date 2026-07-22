@@ -2,11 +2,31 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.1`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.2`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
-Compare: [`7.1...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.1...HEAD)
+Compare: [`7.2...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.2...HEAD)
+
+## [7.2] - 2026-07-21
+
+Tag: `7.2`
+Compare: [`7.1...7.2`](https://github.com/gwojacek/stockhelper/compare/7.1...7.2)
+
+### Added
+
+- Added a persistent current-balance control to Allsearch reports. The saved PLN balance is shared with every chart launched from the report and changes made in a chart are saved for later charts.
+- Added a searchable instrument switcher to the chart sidebar, populated from StockHelper's locally cached stock, forex, commodity, and index candle data.
+- Added automatic chart navigation as soon as an exact instrument suggestion is selected, without requiring a separate Open button.
+
+### Changed
+
+- Updated report-launched charts to communicate with the local report server for shared user settings and instrument navigation.
+- Bumped the report-server protocol to v20 for the shared-balance and chart-navigation integration.
+
+### Fixed
+
+- Fixed the report-launcher protocol negotiation so Allsearch reports continue opening through the local HTTP server instead of falling back to a non-functional `file:///` URL.
 
 ## [7.1] - 2026-07-15
 

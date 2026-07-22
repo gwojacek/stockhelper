@@ -30,6 +30,13 @@ def load_run_module():
     return module
 
 
+def test_report_launcher_protocol_matches_report_server():
+    run_source = Path("run").read_text(encoding="utf-8")
+    server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    assert 'report_server_protocol = "stockhelper-report-server-v20"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v20"' in server_source
+
+
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [
@@ -253,6 +260,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "@media print" in text
     assert "zoom:.78" in text
     assert "id='tab-allsearch' class='tab-panel active'" in text
+    assert "id='current-balance'" in text
+    assert "Used by every StockHelper chart" in text
+    assert "fetch('/current-balance'" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text

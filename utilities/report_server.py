@@ -20,7 +20,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v19"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v20"
+DEFAULT_CURRENT_BALANCE = 255000.0
 
 
 def main() -> int:
@@ -85,6 +86,35 @@ def main() -> int:
     console_log = None
     chart_groups: dict[str, dict] = {}
     chart_group_lock = threading.Lock()
+    settings_lock = threading.Lock()
+    settings_path = project_root / "chart_program" / "data" / "user_settings.json"
+
+    def _current_balance() -> float:
+        with settings_lock:
+            try:
+                value = float(json.loads(settings_path.read_text(encoding="utf-8")).get("current_balance"))
+                if value > 0:
+                    return value
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                pass
+        return DEFAULT_CURRENT_BALANCE
+
+    def _save_current_balance(value: object) -> float:
+        balance = float(value)
+        if not (0 < balance <= 1_000_000_000_000):
+            raise ValueError("balance must be greater than zero")
+        with settings_lock:
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            current = {}
+            try:
+                current = json.loads(settings_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+            current["current_balance"] = balance
+            temporary = settings_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(settings_path)
+        return balance
     if console_log_path:
         try:
             Path(console_log_path).parent.mkdir(parents=True, exist_ok=True)
@@ -274,6 +304,7 @@ def main() -> int:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
+        env["STOCKHELPER_REPORT_SERVER_URL"] = f"http://{args.host}:{args.port}"
         if _should_use_fast_chart_cache():
             env["STOCKHELPER_CHART_FAST_CACHE"] = "1"
         else:
@@ -405,6 +436,9 @@ def main() -> int:
             if parsed.path == "/__stockhelper_report_server_info":
                 payload = {"protocol": REPORT_SERVER_PROTOCOL, "project_root": str(project_root), "root": str(root)}
                 self.send_response(200); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/current-balance":
+                payload = {"ok": True, "balance": _current_balance(), "currency": "PLN"}
+                self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
             if parsed.path == "/journal-html":
                 try:
                     payload = _journal_response_payload()
@@ -451,6 +485,15 @@ def main() -> int:
 
         def do_POST(self):
             parsed = urlparse(self.path)
+            if parsed.path == "/current-balance":
+                try:
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                    payload = json.loads(self.rfile.read(length) or b"{}")
+                    balance = _save_current_balance(payload.get("balance"))
+                    response, status = {"ok": True, "balance": balance, "currency": "PLN"}, 200
+                except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                    response, status = {"ok": False, "error": str(exc)}, 400
+                self.send_response(status); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(response).encode("utf-8")); return
             if parsed.path == "/attach-console":
                 try:
                     ln = int(self.headers.get("content-length", "0") or "0")
