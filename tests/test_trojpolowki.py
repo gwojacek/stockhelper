@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import re
 import sys
 import types
 from datetime import datetime
@@ -170,19 +171,30 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="BEAR.DE", status="breakout_confirmed",
             dates={"flip_date": "2026-05-29"}, metrics={"months": "0.0", "ichimoku_status": "Touched Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "current_side": "🔴 below", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/bear",
         ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="ICHIMOKU", category="position", ticker="GOLD", status="🔴 below",
+            dates={"start_date": "2025-10-01"}, metrics={"months": "7.0", "ichimoku_status": "Touched Kijun-sen", "risk": "-", "tk_cross": "bearish TK cross", "raw_status": "below"}, chart_url="https://stooq.pl/gold",
+        ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="ICHIMOKU", category="retest_breakout", ticker="GOLD", status="🔴 below",
+            dates={"flip_date": "2026-01-01"}, metrics={"months": "6.0", "ichimoku_status": "Touched Kijun-sen", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "raw_status": "medium_retest_pattern", "latest_retest_date": "2026-05-01", "latest_retest_pattern": "hammer", "current_side": "🔴 below", "previous_respect_months": "6.0"}, chart_url="https://stooq.pl/gold",
+        ),
+        mod.ScannerRow(
+            market="US100", scanner="ICHIMOKU", category="retest_breakout", ticker="LONG.US", status="⚪ above",
+            dates={"flip_date": "2025-10-01"}, metrics={"months": "8.0", "ichimoku_status": "Inside the cloud", "risk": "2%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "raw_status": "medium_retest_pattern", "latest_retest_date": "2026-05-29", "latest_retest_pattern": "hammer", "previous_respect_months": "6.0"}, chart_url="https://stooq.pl/long",
+        ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
     assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE (5.1m)**<br>🏷️ below cloud · Kijun: under · Short trend<br>🕘 last retest pattern (2026-02-01)<br>🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
+    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>Kijun: under" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
     assert "**🇺🇸 MSFT.US (2.0m)**" in text
     assert "🏷️ touched cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
-    assert "**🇩🇪 RWE.DE (4.0m)**" in text
+    assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
     assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
-    assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn high · cloud normal" in text
     assert "**🇩🇪 BEAR.DE (0.0m)**" in text
     assert "🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
     assert "➕ 🔴 TK cross bearish · Tenkan_in_☁: yes · dyn mild · cloud normal" in text
@@ -190,7 +202,6 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "➖ cloud shallow" in text
     lines = text.splitlines()
     data_rows = [line for line in lines if line.startswith("| ") and not line.startswith("|---")][1:]
-    assert "**🇩🇪 HFG.DE" in data_rows[0]
     assert "**🇩🇪 BEAR.DE" in data_rows[0]
     assert any("**🇩🇪 RWE.DE" in row for row in data_rows)
     assert "**🇺🇸 MSFT.US" in text
@@ -198,6 +209,10 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇵🇱 ABC" in text
     assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
     assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇺🇸 LONG.US (8.0m)**<br>🏷️ inside cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
+    assert text.count("**🛢️ GOLD") == 1
+    assert "**🛢️ GOLD ↘️ short (7.0m)**<br>🏷️ below cloud<br>Kijun: touched" in text
+    assert any("**🛢️ GOLD" in row.split(" | ")[1] for row in data_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
@@ -217,6 +232,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "| GPP | below | medium_retest_pattern | 2026-04-21 | 1.3 | 5.8 | 2 | 1000 | 2026-05-21 | bullish_harami | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/gpp | python run -c GPP | yes | 2026-05-29 | 2026-05-29 |\n"
         "| RP5 | below | medium_retest_pattern | 2026-04-23 | 1.3 | 5.8 | 2 | 1000 | 2026-05-25 | hammer | Over Kijun-sen | 2% | bullish TK cross | mild | normal | yes | green | yes | yes | https://stooq.pl/rp5 | python run -c RP5 | yes | 2026-05-30 | 2026-05-30 |\n"
         "| SCW | below | returned_to_cloud_waiting_for_pattern | 2026-05-28 | 0.1 | 6.0 | 0 | 6728668 | - | - | Inside the cloud | - | none | mild | thick | no | neutral | no | yes | https://stooq.pl/scw | python run -c SCW | yes | 2026-05-29 | 2026-05-29 |\n"
+        "| LIN.US | below | medium_retest_pattern | 2025-12-01 | 6.4 | 7.0 | 2 | 1000 | 2026-07-22 | bullish_harami | Touched the cloud | 2% | bearish TK cross | mild | normal | under | red | no | yes | https://stooq.pl/lin | python run -c LIN.US | yes | 2026-07-22 | 2026-07-22 |\n"
         "\n# WYNIKI 1 ICHIMOKU\n\n"
         "| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
@@ -318,6 +334,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO'>" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
+    assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 LIN\.US", text)
     assert "data-scanner='ICHIMOKU' data-ichi-trend='long' class='today-signal'" in text
     assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long'><strong>🇩🇪 RWE.DE" in text
     assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO'><strong>🇺🇸 VAL.US" in text
@@ -377,7 +394,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Unsuccessful breakout to the other side" in text
     assert "returned to cloud, waiting (2026-05-28)" in text
     assert "Mies. respektu przed wybiciem" in text
-    assert "pattern/retest: bullish_harami" not in text
+    assert "pattern/retest: bullish_harami (2026-07-22)" in text
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text

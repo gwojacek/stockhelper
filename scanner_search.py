@@ -218,7 +218,7 @@ NDX100_SEARCH_TICKERS = [
     "META.US","MNST.US","MPWR.US","MRVL.US","MSFT.US","MSTR.US","MU.US","NFLX.US","NVDA.US","NXPI.US",
     "ODFL.US","ORLY.US","PANW.US","PAYX.US","PCAR.US","PDD.US","PEP.US","PLTR.US","PYPL.US","QCOM.US",
     "REGN.US","ROP.US","ROST.US","SBUX.US","SHOP.US","SNPS.US","STX.US","TMUS.US","TRI.US","TSLA.US",
-    "TTWO.US","TXN.US","VRSK.US","VRTX.US","WBD.US","WDC.US","WMT.US","XEL.US","ZS.US",
+    "SPCX.US","TTWO.US","TXN.US","VRSK.US","VRTX.US","WBD.US","WDC.US","WMT.US","XEL.US","ZS.US",
 ]
 
 
@@ -1604,8 +1604,12 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     span_b = ((out["High"].rolling(52).max() + out["Low"].rolling(52).min()) / 2).shift(26)
     out["span_a"] = span_a
     out["span_b"] = span_b
-    out["cloud_top"] = pd.concat([span_a, span_b], axis=1).max(axis=1)
-    out["cloud_bottom"] = pd.concat([span_a, span_b], axis=1).min(axis=1)
+    # Avoid row-wise reductions here.  The leading all-NaN warm-up rows can
+    # reach pandas' nanargmax/nanargmin implementation as an empty sequence,
+    # which made otherwise valid symbols fail intermittently in parallel scans.
+    span_distance = (span_a - span_b).abs()
+    out["cloud_top"] = (span_a + span_b + span_distance) / 2
+    out["cloud_bottom"] = (span_a + span_b - span_distance) / 2
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
 
 

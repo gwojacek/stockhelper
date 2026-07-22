@@ -6,6 +6,34 @@ pd = pytest.importorskip("pandas")
 scanner_search = pytest.importorskip("scanner_search")
 
 
+def test_ichimoku_builds_cloud_without_row_wise_nan_reductions(monkeypatch):
+    rows = 120
+    prices = pd.Series(range(rows), dtype=float) + 100.0
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": prices + 2.0,
+            "Low": prices - 2.0,
+            "Close": prices + 1.0,
+        }
+    )
+
+    def fail_row_reduction(*args, **kwargs):
+        raise AssertionError("Ichimoku cloud must not use DataFrame row reductions")
+
+    monkeypatch.setattr(pd.DataFrame, "max", fail_row_reduction)
+    monkeypatch.setattr(pd.DataFrame, "min", fail_row_reduction)
+
+    enriched = scanner_search._ichimoku(df)
+
+    assert len(enriched) == rows - 77
+    assert (enriched["cloud_top"] >= enriched["cloud_bottom"]).all()
+
+
+def test_ndx100_members_include_spcx():
+    assert "SPCX.US" in scanner_search.NDX100_SEARCH_TICKERS
+
+
 def test_tk_cross_around_cloud_entry_uses_newest_cross():
     rows = []
     for idx in range(35):
