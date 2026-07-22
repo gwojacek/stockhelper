@@ -170,6 +170,18 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
             market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="BEAR.DE", status="breakout_confirmed",
             dates={"flip_date": "2026-05-29"}, metrics={"months": "0.0", "ichimoku_status": "Touched Kijun-sen", "risk": "3%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "tk_plus": "yes", "tenkan_in_cloud": "yes", "raw_status": "breakout_confirmed", "current_side": "🔴 below", "previous_respect_months": "6.2"}, chart_url="https://stooq.pl/bear",
         ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="ICHIMOKU", category="position", ticker="GOLD", status="🔴 below",
+            dates={"start_date": "2025-10-01"}, metrics={"months": "7.0", "ichimoku_status": "Under Kijun-sen", "risk": "-", "tk_cross": "bearish TK cross", "raw_status": "below"}, chart_url="https://stooq.pl/gold",
+        ),
+        mod.ScannerRow(
+            market="COMMODITIES", scanner="ICHIMOKU", category="retest_breakout", ticker="GOLD", status="🔴 below",
+            dates={"flip_date": "2026-01-01"}, metrics={"months": "6.0", "ichimoku_status": "Inside the cloud", "risk": "2%", "tk_cross": "bullish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "yes", "twist": "green", "raw_status": "returned_to_cloud_waiting_for_pattern", "current_side": "🔴 below", "previous_respect_months": "6.0"}, chart_url="https://stooq.pl/gold",
+        ),
+        mod.ScannerRow(
+            market="US100", scanner="ICHIMOKU", category="retest_breakout", ticker="LONG.US", status="⚪ above",
+            dates={"flip_date": "2025-10-01"}, metrics={"months": "8.0", "ichimoku_status": "Inside the cloud", "risk": "2%", "tk_cross": "bearish TK cross", "dynamic": "mild", "cloud": "normal", "chikou": "↓ under", "twist": "red", "raw_status": "medium_retest_pattern", "latest_retest_date": "2026-05-29", "latest_retest_pattern": "hammer", "previous_respect_months": "6.0"}, chart_url="https://stooq.pl/long",
+        ),
     ]
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
@@ -198,6 +210,10 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇵🇱 ABC" in text
     assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
     assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇺🇸 LONG.US (8.0m)**<br>🏷️ inside cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
+    assert text.count("**🛢️ GOLD") == 1
+    assert "**🛢️ GOLD (6.0m)**<br>🏷️ inside cloud · Short trend" in text
+    assert "🕘 returned to cloud, waiting (2026-01-01)" in text
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 

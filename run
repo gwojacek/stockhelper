@@ -1371,6 +1371,30 @@ def _bias_label(row: ScannerRow, note: str) -> str:
     return "-"
 
 
+def _ichimoku_trend_side(row: ScannerRow) -> str:
+    """Return the established cloud trend independently of the current retest depth."""
+    current_side = str(row.metrics.get("current_side", "")).lower()
+    if "above" in current_side:
+        return "long"
+    if "below" in current_side:
+        return "short"
+
+    status = str(row.status or "").lower()
+    if "above" in status:
+        return "long"
+    if "below" in status:
+        return "short"
+
+    # Flip rows occasionally come from older reports without Current/Jest.  In
+    # that case the current trend is necessarily the opposite of Previous/Było.
+    previous_side = str(row.metrics.get("previous_side", "")).lower()
+    if "below" in previous_side:
+        return "long"
+    if "above" in previous_side:
+        return "short"
+    return "-"
+
+
 def _source_metric(row: ScannerRow, key: str) -> str:
     value = str(row.metrics.get(key, "")).strip()
     return value if value else "-"
@@ -1446,6 +1470,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             "twist": _source_metric(row, "twist"),
             "tk_plus": _source_metric(row, "tk_plus"),
             "tenkan_in_cloud": _source_metric(row, "tenkan_in_cloud"),
+            "trend_side": _ichimoku_trend_side(row),
         }
         recent_breakout = note == "breakout confirmed" and _recent_ichimoku_date(row.dates.get("flip_date") or row.metrics.get("latest_date"))
         if note == "breakout confirmed" and not recent_breakout and (("above" in info["cloud_side"] and kijun == "over") or ("below" in info["cloud_side"] and kijun == "under")):
@@ -1467,17 +1492,10 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return risk >= 1 or months >= 4.0 or special or kijun_or_tk
 
     def is_short(info: dict[str, str]) -> bool:
-        text = f"{info.get('bias', '')} {info.get('cloud_side', '')} {info.get('current_side', '')} {info.get('kijun', '')}".lower()
-        if "short" in text or "below" in text or "under" in text:
-            return True
-        chikou_under = any(token in info.get("chikou", "").lower() for token in ("under", "below", "↓", "down"))
-        bearish_breakout_context = (
-            info.get("note", "") not in {"", "-", "above cloud", "below cloud"}
-            and info.get("twist", "").lower() == "red"
-            and chikou_under
-            and _risk_value(info.get("risk", "-")) >= 2
-        )
-        return bearish_breakout_context
+        # Kijun, Chikou and projected-kumo signals grade a setup; they must not
+        # reverse its direction. A long trend remains long while price retests
+        # Kijun or enters/touches the cloud, and the short case is symmetrical.
+        return info.get("trend_side") == "short"
 
     def _previous_respect_months(row: ScannerRow) -> float:
         return _parse_float_text(row.metrics.get("previous_respect_months", "0"), 0.0)
@@ -1701,11 +1719,13 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             if fresh_breakout:
                 recent_line = _current_ichi_status_line(info)
             elif active_latest_pattern:
-                recent_line = f"✨ pattern: {latest_pattern} ({latest_pattern_date})"
+                # Show the current price/cloud position and established trend;
+                # the fresh candle pattern is retained on the following line.
+                recent_line = _current_ichi_status_line(info)
             elif note.startswith("last retest pattern"):
                 recent_line = _current_ichi_status_line(info)
             else:
-                recent_line = f"🏷️ {note}"
+                recent_line = _current_ichi_status_line(info)
             lines.append(recent_line)
             if latest_pattern != "-" and latest_pattern_date != "-":
                 last_label = f"retest {latest_pattern}"
@@ -1733,6 +1753,19 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return "<br>".join(lines)
 
     prepared_rows = [item for item in prepared_rows if include(item) and bucket(item) != "skip"]
+
+    # WYNIKI 1 and WYNIKI 2 can both contain the same instrument.  Trójpolówki
+    # is a current-state board, so render one card per instrument in exactly one
+    # column, preferring the richer/current cloud or retest state.
+    bucket_priority = {"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}
+    unique_rows: dict[tuple[str, str], tuple[ScannerRow, dict[str, str]]] = {}
+    for item in prepared_rows:
+        row, _info = item
+        key = (str(row.market or "").upper(), str(row.ticker or "").upper())
+        current = unique_rows.get(key)
+        if current is None or bucket_priority.get(bucket(item), 9) < bucket_priority.get(bucket(current), 9):
+            unique_rows[key] = item
+    prepared_rows = list(unique_rows.values())
     prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), _market_sort_key(item[0])[0], 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
