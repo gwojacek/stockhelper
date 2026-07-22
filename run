@@ -1534,9 +1534,10 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         row, info = item
         if _is_fresh_retest_window(row):
             return False
-        if _touches_cloud(item):
-            return True
-        return info["note"] not in {"-", "above cloud", "below cloud"} and ("breakout" in info["note"] or "retest" in info["note"] or "returned" in info["note"] or "unsuccessful" in info["note"])
+        # Column 3 describes the current price/cloud relationship. Historical
+        # retest/breakout notes must not keep an instrument here after price has
+        # moved on to a Kijun watch or continuation state.
+        return _touches_cloud(item)
 
     def _current_continuation(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item
@@ -1713,19 +1714,11 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         if detailed:
             latest_pattern = _source_metric(row, "latest_retest_pattern")
             latest_pattern_date = _source_metric(row, "latest_retest_date")
-            active_latest_pattern = latest_pattern != "-" and _recent_ichimoku_date(latest_pattern_date, max_days=3)
             raw_status = row.metrics.get("raw_status", row.status)
             fresh_breakout = _is_fresh_retest_window(row)
-            if fresh_breakout:
-                recent_line = _current_ichi_status_line(info)
-            elif active_latest_pattern:
-                # Show the current price/cloud position and established trend;
-                # the fresh candle pattern is retained on the following line.
-                recent_line = _current_ichi_status_line(info)
-            elif note.startswith("last retest pattern"):
-                recent_line = _current_ichi_status_line(info)
-            else:
-                recent_line = _current_ichi_status_line(info)
+            # Always lead with current price/cloud position and trend. Pattern
+            # history, when present, is rendered on the following line.
+            recent_line = _current_ichi_status_line(info)
             lines.append(recent_line)
             if latest_pattern != "-" and latest_pattern_date != "-":
                 last_label = f"retest {latest_pattern}"
@@ -1758,12 +1751,20 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
     # is a current-state board, so render one card per instrument in exactly one
     # column, preferring the richer/current cloud or retest state.
     bucket_priority = {"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}
+
+    def _dedupe_rank(item: tuple[ScannerRow, dict[str, str]]) -> tuple[int, int]:
+        row, _info = item
+        # For equal current-state buckets, WYNIKI 1 is the direct current-price
+        # record and wins over a WYNIKI 2 row carrying historical retest data.
+        source_rank = 0 if row.category == "position" else 1
+        return bucket_priority.get(bucket(item), 9), source_rank
+
     unique_rows: dict[tuple[str, str], tuple[ScannerRow, dict[str, str]]] = {}
     for item in prepared_rows:
         row, _info = item
         key = (str(row.market or "").upper(), str(row.ticker or "").upper())
         current = unique_rows.get(key)
-        if current is None or bucket_priority.get(bucket(item), 9) < bucket_priority.get(bucket(current), 9):
+        if current is None or _dedupe_rank(item) < _dedupe_rank(current):
             unique_rows[key] = item
     prepared_rows = list(unique_rows.values())
     prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), _market_sort_key(item[0])[0], 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
@@ -2455,8 +2456,17 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         ):
             classes.append("today-signal")
         if "ichimoku" in section_id:
-            trend_text = " ".join(str(v) for v in [cell, row.status, row.metrics.get("ichimoku_status", ""), row.metrics.get("tk_cross", ""), row.metrics.get("current_side", "")]).lower()
-            trend = "short" if any(token in trend_text for token in ("short trend", "bearish", "below", "under")) else "long" if any(token in trend_text for token in ("long trend", "bullish", "above", "over")) else ""
+            cell_text = str(cell).lower()
+            # The rendered card already contains the authoritative established
+            # trend. Do not let bearish/bullish grading details (for example a
+            # TK cross during a retest) override it in the trend filter.
+            if "long trend" in cell_text:
+                trend = "long"
+            elif "short trend" in cell_text:
+                trend = "short"
+            else:
+                trend = _ichimoku_trend_side(row)
+                trend = "" if trend == "-" else trend
             if trend:
                 attrs += f" data-ichi-trend='{trend}'"
         if classes:
