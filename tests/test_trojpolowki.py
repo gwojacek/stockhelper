@@ -140,6 +140,33 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "[🔗 stooq](https://stooq.pl/trn)" in text
 
 
+def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
+    mod = load_run_module()
+    setup = mod.ScannerRow(
+        market="WIG", scanner="FIBO", category="waiting", ticker="DROP", status="reached_23_6_waiting_for_61_8",
+        direction="long", dates={"start": "2026-06-01", "incline": "2026-06-01->2026-07-01"},
+        metrics={"near61_raw": "101.2", "ratio_raw": "2.0", "incline_days": "30"}, chart_url="https://stooq.pl/drop",
+    )
+    # A crossed setup is intentionally absent from the active columns, so seed a
+    # previous near-61.8 board cell to model yesterday's displayed candidate.
+    board = tmp_path / "fibo.md"
+    board.write_text(
+        "# Trójpolówki — Fibo\n\n"
+        "| 🚀 Steep incline / no major bearish signal | ⚠️ Waiting 23.6→61.8 / bearish close | 🎯 Near 61.8 > 75% / deeper pullback | ✅ Pattern ≤14d / SL intact |\n"
+        "|---|---|---|---|\n"
+        "|  |  | **🇵🇱 DROP ↗️ (2026-06-01) 101.2%** [🔗 stooq](https://stooq.pl/drop) |  |\n",
+        encoding="utf-8",
+    )
+    out = mod._write_trojpolowki_fibo([], tmp_path, datetime(2026, 7, 10, 9, 0, 0))
+    text = out.read_text(encoding="utf-8")
+    assert "🕘 Recent dropouts (10d)" in text
+    assert "❌ 2026-07-10 · no valid pattern at 61.8" in text
+    assert "DROP ↗️ (2026-06-01)" in text
+
+    mod._write_trojpolowki_fibo([setup], tmp_path, datetime(2026, 7, 21, 9, 0, 0))
+    assert "DROP ↗️ (2026-06-01)" not in (tmp_path / "fibo_dropouts.json").read_text(encoding="utf-8")
+
+
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     mod = load_run_module()
     rows = [
