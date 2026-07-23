@@ -241,8 +241,8 @@ def test_fibo_chart_recovers_missing_dropout_end_anchor():
 
 def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert "r.has_monthly_sideways" in source
-    assert "int(r.incline_duration_days) >= shortest_regular * 2" in source
+    assert "item.has_monthly_sideways" in source
+    assert "int(item.incline_duration_days) >= shortest_regular * 2" in source
 
 
 def test_dropout_reasons_use_common_status_codes():

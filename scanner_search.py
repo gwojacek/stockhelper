@@ -351,6 +351,30 @@ class FiboScanResult:
     has_monthly_sideways: bool = False
 
 
+def _prune_superseded_steep_fibo_rows(
+    items: list[FiboScanResult | WedgeScanResult],
+) -> list[FiboScanResult | WedgeScanResult]:
+    """Drop a stale broad steep leg without inspecting unrelated wedge rows."""
+    regular_longs = [
+        item for item in items
+        if isinstance(item, FiboScanResult)
+        and item.direction == "long"
+        and not item.status.startswith("3p_steep")
+    ]
+    if not regular_longs:
+        return items
+    shortest_regular = min(int(item.incline_duration_days) for item in regular_longs)
+    return [
+        item for item in items
+        if not (
+            isinstance(item, FiboScanResult)
+            and item.status.startswith("3p_steep")
+            and item.has_monthly_sideways
+            and int(item.incline_duration_days) >= shortest_regular * 2
+        )
+    ]
+
+
 
 def _fibo_retracement_progress_pct(result: FiboScanResult) -> float:
     """Return pullback progress from 23.6 to 61.8; crossing 61.8 can exceed 100%."""
@@ -4752,7 +4776,7 @@ def run_fibo_search(target: str) -> int:
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
 
-    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None, str]:
+    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult | WedgeScanResult], str | None, str]:
         idx, ticker = idx_ticker
         instrument = "stock"
         if group_name == "forex":
@@ -4767,7 +4791,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
-        out_rows: list[FiboScanResult] = []
+        out_rows: list[FiboScanResult | WedgeScanResult] = []
         try:
             prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
             prev_force_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
@@ -4894,17 +4918,7 @@ def run_fibo_search(target: str) -> int:
             # when this same scan found a much smaller regular long formation.
             # This removes JP225's stale broad leg while preserving stepwise
             # trends such as ROST when no actionable nested replacement exists.
-            regular_longs = [r for r in out_rows if r.direction == "long" and not r.status.startswith("3p_steep")]
-            if regular_longs:
-                shortest_regular = min(int(r.incline_duration_days) for r in regular_longs)
-                out_rows = [
-                    r for r in out_rows
-                    if not (
-                        r.status.startswith("3p_steep")
-                        and r.has_monthly_sideways
-                        and int(r.incline_duration_days) >= shortest_regular * 2
-                    )
-                ]
+            out_rows = _prune_superseded_steep_fibo_rows(out_rows)
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc)), "error"
