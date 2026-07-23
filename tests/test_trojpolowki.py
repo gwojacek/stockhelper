@@ -169,6 +169,25 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     assert "DROP ↗️ (2026-06-01)" not in (tmp_path / "fibo_dropouts.json").read_text(encoding="utf-8")
 
 
+def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
+    source = Path("run").read_text(encoding="utf-8")
+    fibo_branch = source[source.index('elif "fibo" in section_id:'):source.index('else:', source.index('elif "fibo" in section_id:'))]
+    assert "troj_row_by_ticker.get(ticker)" not in fibo_branch
+    assert "--ichimoku-mode off --fibo-lines 5" in source
+
+
+def test_fibo_sideways_rules_apply_to_impulse_not_correction():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep_start = source.index("def _find_fibo_3p_steep_setup")
+    regular_start = source.index("def _find_fibo_setup", steep_start)
+    steep_source = source[steep_start:regular_start]
+    assert "max_days=30, band_pct=0.06" in steep_source
+    assert "Rejected 3P steep: impulse contains a month-long sideways reset." in steep_source
+    correction_start = source.index("correction_seg =", regular_start)
+    correction_end = source.index("if corr_low > fib_236", correction_start)
+    assert "_latest_sideways_window" not in source[correction_start:correction_end]
+
+
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     mod = load_run_module()
     rows = [

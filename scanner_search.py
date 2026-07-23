@@ -4137,13 +4137,12 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         )
         return None
 
-    # The 3P steep column is an incline-quality watchlist, not a pullback
-    # scanner.  Do not reject a multi-month uptrend just because it paused in a
-    # tight consolidation for a few weeks; names like PCO should remain visible
-    # while they keep making current highs.  The regular Fibo scanner below still
-    # applies stricter sideways/correction filters for pullback setups.
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=45, band_pct=0.035):
-        _log("3P steep: impulse has a very tight pause, but keeping current-high incline watchlist candidate.")
+    # A month-long flat block splits the structure into separate impulses.  Do
+    # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
+    # range); the newer post-range impulse can still be found independently.
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
+        _log("Rejected 3P steep: impulse contains a month-long sideways reset.")
+        return None
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -4284,23 +4283,10 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
-        correction_sideways = _latest_sideways_window(correction_seg, max_days=22, band_pct=0.12)
-        if correction_sideways is not None:
-            s, e, hi, lo, rng_pct = correction_sideways
-            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
-            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
-            _log(
-                "Rejected long: correction is sideways/flat. "
-                f"window={s}-{e} ({start_date}..{end_date}), "
-                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 12.00%."
-            )
-            return None
-        # Only reject a genuinely tight correction (22 sessions within 12%).
-        # The former 30-session/20% and 42-session/35% guards also discarded
-        # normal, tradable pullbacks such as the smaller JP225 April→June leg.
-        # Broad formations still reset/stop through the impulse-side sideways
-        # and stale-cycle checks; a normal correction must remain eligible for
-        # the 23.6→61.8 waiting column.
+        # A correction may consolidate while progressing from 23.6 toward 61.8;
+        # that does not invalidate its anchors.  Sideways resets belong to the
+        # impulse leg checks below, not to the post-peak waiting leg.  This keeps
+        # formations such as MBK 2026-03-09→2026-06-16 eligible in column two.
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None

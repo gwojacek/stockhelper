@@ -2273,10 +2273,20 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if "ichimoku" in section_id:
             row = troj_ichi_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
         elif "fibo" in section_id:
-            row = _fibo_row_for_troj_cell(ticker, raw) or troj_row_by_ticker.get(ticker)
+            # Never fall back to an Ichimoku row for a historical Fibo dropout.
+            # That fallback opened the MBK dropout with Ichimoku enabled and no
+            # Fibo anchors, making a valid setup look unrelated to its card.
+            row = _fibo_row_for_troj_cell(ticker, raw)
         else:
             row = troj_row_by_ticker.get(ticker)
-        cmd = html.escape(_chart_command_for_row(row)) if row else html.escape(f"python run -c {ticker}")
+        if row:
+            cmd = html.escape(_chart_command_for_row(row))
+        elif "fibo" in section_id:
+            start_match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", raw)
+            start_arg = f" --fibo-anchor-start {start_match.group(1)}" if start_match else ""
+            cmd = html.escape(f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5{start_arg} --fibo-right")
+        else:
+            cmd = html.escape(f"python run -c {ticker}")
         stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))
         stooq_btn = _stooq_link_with_cell_button(stooq, ticker, "troj-name-btn")
         group_label = _troj_group_button_label(row, ticker, section_id)
