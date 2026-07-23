@@ -182,14 +182,24 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "max_days=30, band_pct=0.06" in steep_source
+    assert "max_days=30, band_pct=0.14" in steep_source
     assert "Rejected 3P steep: impulse contains a month-long sideways reset." in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
-    assert "max_days=30, band_pct=0.06" in source[selector_start:selector_end]
+    assert "max_days=30, band_pct=0.14" in source[selector_start:selector_end]
+    assert "Rejected long: correction contains a month-long sideways range." in source
+
+
+def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def _select_peak_long")
+    end = source.index("def _reverse_stooq_symbol", start)
+    peak_source = source[start:end]
+    assert "global_max * 0.995" in peak_source
+    assert "return max(dominant)" in peak_source
 
 
 def test_fibo_chart_recovers_missing_dropout_end_anchor():

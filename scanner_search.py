@@ -756,7 +756,7 @@ def _select_impulse_start_long(
         # Reset only after a real month-long base.  The previous 22/12 rule
         # treated ordinary rising pauses as resets and skipped valid anchors
         # such as MBK 2026-03-09 and JP225 2026-03-31.
-        sideways_end = _latest_sideways_end_offset(seg, max_days=30, band_pct=0.06)
+        sideways_end = _latest_sideways_end_offset(seg, max_days=30, band_pct=0.14)
         if sideways_end is not None:
             candidate_left = left + sideways_end + 1
             if candidate_left < right:
@@ -798,6 +798,14 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
             best_score = score
             best_idx = i
     if recent_near_top_idxs:
+        # A later lower high is part of the correction, not a replacement for
+        # the real impulse peak.  MBK's 2026-07-15 lower high (1450) previously
+        # displaced the 2026-06-16 maximum (1474), after which the dominant-peak
+        # guard correctly rejected the mismatched candidate.  Prefer the latest
+        # actual dominant high and only use the 97% fallback if none is present.
+        dominant = [i for i in near_top_idxs if float(high.iloc[i]) >= global_max * 0.995]
+        if dominant:
+            return max(dominant)
         return max(recent_near_top_idxs)
     if near_top_idxs:
         return max(near_top_idxs)
@@ -4143,7 +4151,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     # A month-long flat block splits the structure into separate impulses.  Do
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
+    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.14):
         _log("Rejected 3P steep: impulse contains a month-long sideways reset.")
         return None
 
@@ -4290,10 +4298,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         # that does not invalidate its anchors.  Sideways resets belong to the
         # impulse leg checks below, not to the post-peak waiting leg.  This keeps
         # formations such as MBK 2026-03-09→2026-06-16 eligible in column two.
+        if _has_long_sideways(correction_seg, max_days=30, band_pct=0.14):
+            _log("Rejected long: correction contains a month-long sideways range.")
+            return None
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None
-        if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
+        if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.14):
             _log("Rejected long: impulse is sideways/flat.")
             return None
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
