@@ -4295,28 +4295,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 12.00%."
             )
             return None
-        long_sideways_month = _latest_sideways_window(correction_seg, max_days=30, band_pct=0.20)
-        if long_sideways_month is not None:
-            s, e, hi, lo, rng_pct = long_sideways_month
-            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
-            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
-            _log(
-                "Rejected long: correction has a month-long sideways block. "
-                f"window={s}-{e} ({start_date}..{end_date}), "
-                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 20.00%."
-            )
-            return None
-        long_sideways_multiweek = _latest_sideways_window(correction_seg, max_days=42, band_pct=0.35)
-        if long_sideways_multiweek is not None:
-            s, e, hi, lo, rng_pct = long_sideways_multiweek
-            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
-            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
-            _log(
-                "Rejected long: correction has a multi-week sideways block. "
-                f"window={s}-{e} ({start_date}..{end_date}), "
-                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 35.00%."
-            )
-            return None
+        # Only reject a genuinely tight correction (22 sessions within 12%).
+        # The former 30-session/20% and 42-session/35% guards also discarded
+        # normal, tradable pullbacks such as the smaller JP225 April→June leg.
+        # Broad formations still reset/stop through the impulse-side sideways
+        # and stale-cycle checks; a normal correction must remain eligible for
+        # the 23.6→61.8 waiting column.
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None

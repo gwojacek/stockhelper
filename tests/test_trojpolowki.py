@@ -144,8 +144,8 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     mod = load_run_module()
     setup = mod.ScannerRow(
         market="WIG", scanner="FIBO", category="waiting", ticker="DROP", status="reached_23_6_waiting_for_61_8",
-        direction="long", dates={"start": "2026-06-01", "incline": "2026-06-01->2026-07-01"},
-        metrics={"near61_raw": "101.2", "ratio_raw": "2.0", "incline_days": "30"}, chart_url="https://stooq.pl/drop",
+        direction="long", dates={"start": "2026-06-15", "incline": "2026-06-15->2026-07-01"},
+        metrics={"near61_raw": "50.0", "ratio_raw": "2.0", "incline_days": "30"}, chart_url="https://stooq.pl/drop",
     )
     # A crossed setup is intentionally absent from the active columns, so seed a
     # previous near-61.8 board cell to model yesterday's displayed candidate.
@@ -163,7 +163,9 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     assert "❌ 2026-07-10 · no valid pattern at 61.8" in text
     assert "DROP ↗️ (2026-06-01)" in text
 
-    mod._write_trojpolowki_fibo([setup], tmp_path, datetime(2026, 7, 21, 9, 0, 0))
+    # A currently active re-anchored formation means the ticker never dropped
+    # out and must disappear from history immediately, not after ten days.
+    mod._write_trojpolowki_fibo([setup], tmp_path, datetime(2026, 7, 11, 9, 0, 0))
     assert "DROP ↗️ (2026-06-01)" not in (tmp_path / "fibo_dropouts.json").read_text(encoding="utf-8")
 
 

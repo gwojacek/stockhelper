@@ -1347,6 +1347,11 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         dropout_history = {}
     active_cells = [_fibo_item(row, include_near=include_near) for column, include_near in ((col1, False), (col2, True), (col3, True), (col4, False)) for row in column]
     active_keys = {key for cell in active_cells if (key := _fibo_board_cell_key(cell))}
+    # A changed anchor is a scanner reclassification, not a dropout.  Keep an
+    # instrument/direction out of history whenever any current formation for it
+    # is still present on the board (for example a broad steep JP225 leg and a
+    # newer regular pullback must not also appear as a red dropout).
+    active_directions = {(ticker, direction) for ticker, direction, _start in active_keys}
     cutoff = timestamp.date() - timedelta(days=10)
     # Keep only entries from the requested rolling ten-day window.
     cleaned_history: dict[str, dict[str, str]] = {}
@@ -1356,11 +1361,11 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         except (ValueError, AttributeError):
             continue
         tuple_key = tuple(key.split("|", 2))
-        if dropped >= cutoff and tuple_key not in active_keys:
+        if dropped >= cutoff and tuple_key not in active_keys and tuple_key[:2] not in active_directions:
             cleaned_history[key] = value
     dropout_history = cleaned_history
     for key, (cell, column) in previous.items():
-        if key in active_keys:
+        if key in active_keys or key[:2] in active_directions:
             dropout_history.pop("|".join(key), None)
         else:
             dropout_history.setdefault("|".join(key), {
