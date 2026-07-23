@@ -4027,12 +4027,11 @@ def _select_fibo_long_impulse_base(
 
     i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
 
-    # Guard against stale multi-cycle impulses: if a *large enough* earlier
-    # formation (after the chosen start, before the chosen peak) already completed
-    # a >=61.8 correction, this start is too old. Short one-month-ish cycles are
-    # allowed to cross 61.8; bigger cycles must restart after the new bottom.
-    min_completed_cycle_days = 32
-    max_short_completed_cycle_days = 45
+    # Guard against stale multi-cycle impulses: once an established formation
+    # completes a >=61.8 correction, a later incline is a new cycle and must use
+    # the correction bottom.  Do this for short formations too; retaining their
+    # original bottom was the reason renewed inclines reused an obsolete anchor.
+    min_completed_cycle_days = 10
     min_completed_cycle_gain = 0.18
 
     def _stale_cycle_reset_candidate(start_idx: int, start_low: float) -> tuple[bool, tuple[int, float, int] | None]:
@@ -4052,7 +4051,7 @@ def _select_fibo_long_impulse_base(
                 continue
             completed_days = p - start_idx
             gain_pct = p_rng / max(abs(start_low), 1e-9)
-            if completed_days <= max_short_completed_cycle_days or gain_pct < min_completed_cycle_gain:
+            if gain_pct < min_completed_cycle_gain:
                 continue
             p_fib_618 = p_high - p_rng * 0.618
             post_slice = low.iloc[p:i_peak + 1]
@@ -4176,7 +4175,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
     has_monthly_sideways = _has_long_sideways(
-        w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.14, max_progress_pct=0.05
+        w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.12, max_progress_pct=0.05
     )
     if has_monthly_sideways:
         _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
@@ -4231,7 +4230,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         has_monthly_sideways=has_monthly_sideways,
     )
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject", allow_equal_third_close: bool = False) -> FiboScanResult | None:
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reset", allow_equal_third_close: bool = False) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)

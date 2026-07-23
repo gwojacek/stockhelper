@@ -1205,7 +1205,10 @@ def _fibo_dropout_reason(previous_column: int, cell: str) -> str:
     pct = _parse_float_text((re.search(r"(\d+(?:\.\d+)?)%", cell) or [None, "-1"])[1], -1.0)
     if previous_column >= 2 or pct >= 100.0:
         return "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8"
-    return "SIDE_TREND_OVER_1_MONTH — formation was replaced by a post-range anchor"
+    # A board cell does not contain the scanner's rejection trace.  In particular,
+    # column 1 only says that a setup was waiting; it does not prove a month-long
+    # range.  Do not manufacture the SIDE_TREND status (as happened for MCHP).
+    return "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner"
 
 
 def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
@@ -1365,7 +1368,7 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         if dropped >= cutoff and tuple_key not in active_keys and tuple_key[:2] not in active_directions:
             # Migrate pre-status history entries so the board consistently uses
             # the common dropout vocabulary introduced below.
-            if not str(value.get("reason", "")).startswith(("NO_VALID_PATTERN_AT_61_8 —", "SIDE_TREND_OVER_1_MONTH —")):
+            if not str(value.get("reason", "")).startswith(("NO_VALID_PATTERN_AT_61_8 —", "OTHER_SETUP_FILTER —")):
                 value["reason"] = _fibo_dropout_reason(int(value.get("column", 0)), str(value.get("cell", "")))
             cleaned_history[key] = value
     dropout_history = cleaned_history

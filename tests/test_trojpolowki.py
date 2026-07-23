@@ -183,7 +183,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "max_days=30, band_pct=0.14" in steep_source
+    assert "max_days=30, band_pct=0.12" in steep_source
     assert "max_progress_pct=0.05" in steep_source
     assert "keep only when no materially smaller regular setup replaces it" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
@@ -222,11 +222,11 @@ def test_month_long_range_requires_flat_progress_for_supplied_cases():
             low = min(float(row["Low"]) for row in window)
             band = (high - low) / ((high + low) / 2.0)
             progress = abs(float(window[-1]["Close"]) - float(window[0]["Close"])) / float(window[0]["Close"])
-            if band <= 0.14 and progress <= 0.05:
+            if band <= 0.12 and progress <= 0.05:
                 return True
         return False
 
-    assert has_flat_window("data/csv/stocks/SCW_WA.csv", "2025-09-10", "2026-04-20")
+    assert not has_flat_window("data/csv/stocks/SCW_WA.csv", "2025-09-10", "2026-04-20")
     assert has_flat_window("data/csv/indexes/JP225.csv", "2025-07-22", "2026-06-22")
     assert not has_flat_window("data/csv/stocks/PCO_WA.csv", "2026-03-23", "2026-07-22")
     assert not has_flat_window("data/csv/stocks/RBW_WA.csv", "2026-05-20", "2026-07-02")
@@ -267,8 +267,19 @@ def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
 
 def test_dropout_reasons_use_common_status_codes():
     source = Path("run").read_text(encoding="utf-8")
-    for status in ["NO_VALID_PATTERN_AT_61_8", "SIDE_TREND_OVER_1_MONTH"]:
+    for status in ["NO_VALID_PATTERN_AT_61_8", "OTHER_SETUP_FILTER"]:
         assert status in source
+
+
+def test_completed_61_8_cycle_resets_regular_fibo_anchor():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector_start = source.index("def _select_fibo_long_impulse_base")
+    selector_end = source.index("def _find_fibo_3p_steep_setup", selector_start)
+    selector = source[selector_start:selector_end]
+    assert "min_completed_cycle_days = 10" in selector
+    assert "max_short_completed_cycle_days" not in selector
+    regular_signature = source[source.index("def _find_fibo_setup"):source.index("def _find_fibo_setup") + 300]
+    assert 'stale_cycle_mode: str = "reset"' in regular_signature
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
