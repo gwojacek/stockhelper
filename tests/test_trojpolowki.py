@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import csv
 import re
 import sys
 import types
@@ -183,6 +184,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
     assert "max_days=30, band_pct=0.14" in steep_source
+    assert "max_progress_pct=0.05" in steep_source
     assert "Rejected 3P steep: impulse contains a month-long sideways reset." in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
@@ -190,6 +192,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "max_days=30, band_pct=0.14" in source[selector_start:selector_end]
+    assert "max_progress_pct=0.05" in source[selector_start:selector_end]
     assert "Rejected long: correction contains a month-long sideways range." in source
 
 
@@ -200,6 +203,33 @@ def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
     peak_source = source[start:end]
     assert "global_max * 0.995" in peak_source
     assert "return max(dominant)" in peak_source
+
+
+def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "touch_idxs[:1]" not in source
+    assert "any(t in {i - 1, i} for t in touch_idxs)" in source
+    assert "any(t in {i - 2, i - 1, i} for t in touch_idxs)" in source
+
+
+def test_month_long_range_requires_flat_progress_for_supplied_cases():
+    def has_flat_window(path: str, start: str, end: str) -> bool:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if start <= row["Date"] <= end]
+        for idx in range(len(rows) - 29):
+            window = rows[idx:idx + 30]
+            high = max(float(row["High"]) for row in window)
+            low = min(float(row["Low"]) for row in window)
+            band = (high - low) / ((high + low) / 2.0)
+            progress = abs(float(window[-1]["Close"]) - float(window[0]["Close"])) / float(window[0]["Close"])
+            if band <= 0.14 and progress <= 0.05:
+                return True
+        return False
+
+    assert has_flat_window("data/csv/stocks/SCW_WA.csv", "2025-09-10", "2026-04-20")
+    assert has_flat_window("data/csv/indexes/JP225.csv", "2025-07-22", "2026-06-22")
+    assert not has_flat_window("data/csv/stocks/PCO_WA.csv", "2026-03-23", "2026-07-22")
+    assert not has_flat_window("data/csv/stocks/RBW_WA.csv", "2026-05-20", "2026-07-02")
 
 
 def test_fibo_chart_recovers_missing_dropout_end_anchor():
