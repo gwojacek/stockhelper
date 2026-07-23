@@ -162,7 +162,7 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     out = mod._write_trojpolowki_fibo([], tmp_path, datetime(2026, 7, 10, 9, 0, 0))
     text = out.read_text(encoding="utf-8")
     assert "🕘 Recent dropouts (10d)" in text
-    assert "❌ 2026-07-10 · no valid pattern at 61.8" in text
+    assert "❌ 2026-07-10 · NO_61_8_REVERSAL" in text
     assert "DROP ↗️ (2026-06-01)" in text
 
     # A currently active re-anchored formation means the ticker never dropped
@@ -185,7 +185,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     steep_source = source[steep_start:regular_start]
     assert "max_days=30, band_pct=0.14" in steep_source
     assert "max_progress_pct=0.05" in steep_source
-    assert "Rejected 3P steep: impulse contains a month-long sideways reset." in steep_source
+    assert "keep only when no materially smaller regular setup replaces it" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
@@ -193,7 +193,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "max_days=30, band_pct=0.14" in source[selector_start:selector_end]
     assert "max_progress_pct=0.05" in source[selector_start:selector_end]
-    assert "Rejected long: correction contains a month-long sideways range." in source
+    assert "rejecting any flat sub-window dropped MCHP" in source
 
 
 def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
@@ -237,6 +237,18 @@ def test_fibo_chart_recovers_missing_dropout_end_anchor():
     assert "if args.fibo_lines and args.fibo_anchor_start:" in source
     assert 'after_start = df.loc[all_dts >= s_ts]' in source
     assert 'peak_idx = pd.to_numeric(after_start["High"], errors="coerce").idxmax()' in source
+
+
+def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "r.has_monthly_sideways" in source
+    assert "int(r.incline_duration_days) >= shortest_regular * 2" in source
+
+
+def test_dropout_reasons_use_common_status_codes():
+    source = Path("run").read_text(encoding="utf-8")
+    for status in ["INCLINE_RECLASSIFIED", "LEFT_WAITING_ZONE", "LEFT_61_8_ZONE", "NO_61_8_REVERSAL", "VALID_PATTERN_ENDED"]:
+        assert status in source
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):

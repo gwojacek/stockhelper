@@ -348,6 +348,7 @@ class FiboScanResult:
     current_close: float
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
+    has_monthly_sideways: bool = False
 
 
 
@@ -4159,9 +4160,11 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     # A month-long flat block splits the structure into separate impulses.  Do
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.14, max_progress_pct=0.05):
-        _log("Rejected 3P steep: impulse contains a month-long sideways reset.")
-        return None
+    has_monthly_sideways = _has_long_sideways(
+        w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.14, max_progress_pct=0.05
+    )
+    if has_monthly_sideways:
+        _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -4210,6 +4213,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         reversal_pattern_name="none",
         stop_loss=fib_start,
         current_close=current_close,
+        has_monthly_sideways=has_monthly_sideways,
     )
 
 def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject", allow_equal_third_close: bool = False) -> FiboScanResult | None:
@@ -4306,9 +4310,9 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         # that does not invalidate its anchors.  Sideways resets belong to the
         # impulse leg checks below, not to the post-peak waiting leg.  This keeps
         # formations such as MBK 2026-03-09→2026-06-16 eligible in column two.
-        if _has_long_sideways(correction_seg, max_days=30, band_pct=0.14, max_progress_pct=0.05):
-            _log("Rejected long: correction contains a month-long sideways range.")
-            return None
+        # A correction may pause on its way through the retracement levels.  Its
+        # anchors remain valid as long as the current 23.6/61.8 state below is
+        # valid; rejecting any flat sub-window dropped MCHP and similar setups.
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None
@@ -4886,6 +4890,21 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
+            # A broad steep leg with a genuine monthly range is superseded only
+            # when this same scan found a much smaller regular long formation.
+            # This removes JP225's stale broad leg while preserving stepwise
+            # trends such as ROST when no actionable nested replacement exists.
+            regular_longs = [r for r in out_rows if r.direction == "long" and not r.status.startswith("3p_steep")]
+            if regular_longs:
+                shortest_regular = min(int(r.incline_duration_days) for r in regular_longs)
+                out_rows = [
+                    r for r in out_rows
+                    if not (
+                        r.status.startswith("3p_steep")
+                        and r.has_monthly_sideways
+                        and int(r.incline_duration_days) >= shortest_regular * 2
+                    )
+                ]
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc)), "error"
