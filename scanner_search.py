@@ -781,20 +781,11 @@ def _select_impulse_start_long(
     right = peak_idx - min_days
     if right <= left:
         return None
-    # If a long sideways block exists before the selected peak, treat the breakout
-    # after that block as a newer impulse and avoid anchoring to very old lows.
-    # 3P can disable this to prefer a larger valid formation when one exists.
-    if reset_after_sideways:
-        seg = w.iloc[left:peak_idx + 1]
-        # Reset only after a real month-long base.  The previous 22/12 rule
-        # treated ordinary rising pauses as resets and skipped valid anchors
-        # such as MBK 2026-03-09 and JP225 2026-03-31.
-        sideways_end = _latest_sideways_end_offset(seg, max_days=30, band_pct=0.14, max_progress_pct=0.05)
-        if sideways_end is not None:
-            candidate_left = left + sideways_end + 1
-            if candidate_left < right:
-                left = candidate_left
-    # Use the lowest low in the allowed pre-peak window as impulse base.
+    # Use the lowest low in the allowed pre-peak window as the base of the
+    # largest incline.  A later sideways pause does not move the anchor: doing
+    # so hid valid SBUX, MCHP, MAR and KDP formations.  The early-sideways and
+    # stale-cycle checks still reject an anchor that did not begin an impulse or
+    # belongs to an already completed 61.8 cycle.
     return int(low.iloc[left:right + 1].idxmin())
 
 
@@ -4340,9 +4331,10 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None
-        if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.14, max_progress_pct=0.05):
-            _log("Rejected long: impulse is sideways/flat.")
-            return None
+        # Sideways pauses inside an otherwise valid incline do not invalidate
+        # its bottom/peak anchors.  Prefer the bottom that produced the largest
+        # incline; broad stale legs are pruned only when a materially smaller
+        # current setup replaces them.
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
         if all_touch_idxs:

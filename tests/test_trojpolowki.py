@@ -162,7 +162,7 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     out = mod._write_trojpolowki_fibo([], tmp_path, datetime(2026, 7, 10, 9, 0, 0))
     text = out.read_text(encoding="utf-8")
     assert "🕘 Recent dropouts (10d)" in text
-    assert "❌ 2026-07-10 · NO_61_8_REVERSAL" in text
+    assert "❌ 2026-07-10 · NO_VALID_PATTERN_AT_61_8" in text
     assert "DROP ↗️ (2026-06-01)" in text
 
     # A currently active re-anchored formation means the ticker never dropped
@@ -191,8 +191,8 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
-    assert "max_days=30, band_pct=0.14" in source[selector_start:selector_end]
-    assert "max_progress_pct=0.05" in source[selector_start:selector_end]
+    assert "_latest_sideways_end_offset" not in source[selector_start:selector_end]
+    assert "largest incline" in source[selector_start:selector_end]
     assert "rejecting any flat sub-window dropped MCHP" in source
 
 
@@ -232,6 +232,26 @@ def test_month_long_range_requires_flat_progress_for_supplied_cases():
     assert not has_flat_window("data/csv/stocks/RBW_WA.csv", "2026-05-20", "2026-07-02")
 
 
+def test_supplied_small_long_formations_are_in_waiting_band():
+    cases = [
+        ("data/csv/stocks/SBUX_US.csv", "2026-06-04", "2026-07-17"),
+        ("data/csv/stocks/MCHP_US.csv", "2026-03-30", "2026-05-08"),
+        ("data/csv/stocks/MAR_US.csv", "2025-10-31", "2026-06-15"),
+        ("data/csv/stocks/KDP_US.csv", "2026-04-06", "2026-06-29"),
+    ]
+    for path, start, peak in cases:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        start_row = next(row for row in rows if row["Date"] == start)
+        peak_row = next(row for row in rows if row["Date"] == peak)
+        low = float(start_row["Low"])
+        high = float(peak_row["High"])
+        current = float(rows[-1]["Close"])
+        fib_236 = high - (high - low) * 0.236
+        fib_618 = high - (high - low) * 0.618
+        assert fib_618 <= current < fib_236, (path, current, fib_618, fib_236)
+
+
 def test_fibo_chart_recovers_missing_dropout_end_anchor():
     source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
     assert "if args.fibo_lines and args.fibo_anchor_start:" in source
@@ -247,7 +267,7 @@ def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
 
 def test_dropout_reasons_use_common_status_codes():
     source = Path("run").read_text(encoding="utf-8")
-    for status in ["INCLINE_RECLASSIFIED", "LEFT_WAITING_ZONE", "LEFT_61_8_ZONE", "NO_61_8_REVERSAL", "VALID_PATTERN_ENDED"]:
+    for status in ["NO_VALID_PATTERN_AT_61_8", "SIDE_TREND_OVER_1_MONTH"]:
         assert status in source
 
 

@@ -1202,16 +1202,10 @@ def _read_previous_fibo_board(path: Path) -> dict[tuple[str, str, str], tuple[st
 
 
 def _fibo_dropout_reason(previous_column: int, cell: str) -> str:
-    if previous_column == 3:
-        return "VALID_PATTERN_ENDED — pattern expired, was invalidated, or SL no longer intact"
     pct = _parse_float_text((re.search(r"(\d+(?:\.\d+)?)%", cell) or [None, "-1"])[1], -1.0)
-    if pct >= 100.0:
-        return "NO_61_8_REVERSAL — crossed 61.8 without an active valid pattern"
-    if previous_column == 2:
-        return "LEFT_61_8_ZONE — deep-pullback setup is no longer active"
-    if previous_column == 1:
-        return "LEFT_WAITING_ZONE — 23.6→61.8 waiting setup is no longer active"
-    return "INCLINE_RECLASSIFIED — anchor/peak changed or incline filter no longer matches"
+    if previous_column >= 2 or pct >= 100.0:
+        return "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8"
+    return "SIDE_TREND_OVER_1_MONTH — formation was replaced by a post-range anchor"
 
 
 def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: datetime) -> Path:
@@ -1371,7 +1365,7 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         if dropped >= cutoff and tuple_key not in active_keys and tuple_key[:2] not in active_directions:
             # Migrate pre-status history entries so the board consistently uses
             # the common dropout vocabulary introduced below.
-            if not re.match(r"^[A-Z0-9_]+ —", str(value.get("reason", ""))):
+            if not str(value.get("reason", "")).startswith(("NO_VALID_PATTERN_AT_61_8 —", "SIDE_TREND_OVER_1_MONTH —")):
                 value["reason"] = _fibo_dropout_reason(int(value.get("column", 0)), str(value.get("cell", "")))
             cleaned_history[key] = value
     dropout_history = cleaned_history
