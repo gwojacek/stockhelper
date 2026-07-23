@@ -1163,7 +1163,12 @@ def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
         if near >= 0:
             parts.append(f"{near:.1f}%")
     parts.append(_stooq_link_for_troj(row))
-    return "**" + " ".join(parts[:-1]) + "** " + parts[-1]
+    # Keep the second anchor in the board cell so a later dropout retains an
+    # exact, reproducible chart command.  HTML rendering removes this metadata.
+    incline = str(row.dates.get("incline") or "")
+    end = incline.split("->", 1)[1].strip() if "->" in incline else ""
+    end_meta = f"<!--fibo-end:{end}-->" if end else ""
+    return "**" + " ".join(parts[:-1]) + "** " + end_meta + parts[-1]
 
 
 def _fibo_board_cell_key(cell: str) -> tuple[str, str, str] | None:
@@ -2265,6 +2270,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         stooq_match = re.search(r"\[🔗 stooq\]\(([^)]+)\)", raw)
         stooq_url = stooq_match.group(1) if stooq_match else ""
         without_stooq = re.sub(r"\s*·?\s*\[🔗 stooq\]\([^)]+\)", "", raw).strip()
+        without_stooq = re.sub(r"<!--fibo-end:\d{4}-\d{2}-\d{2}-->", "", without_stooq).strip()
         rendered = _md_inline_to_html(without_stooq)
         ticker_match = re.search(r"\*\*[^A-Za-z0-9]*(?:[^\s]+\s+)?([A-Z0-9][A-Z0-9._]{0,24})(?=\s)", raw)
         if not ticker_match:
@@ -2283,8 +2289,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             cmd = html.escape(_chart_command_for_row(row))
         elif "fibo" in section_id:
             start_match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", raw)
+            end_match = re.search(r"<!--fibo-end:(\d{4}-\d{2}-\d{2})-->", raw)
             start_arg = f" --fibo-anchor-start {start_match.group(1)}" if start_match else ""
-            cmd = html.escape(f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5{start_arg} --fibo-right")
+            end_arg = f" --fibo-anchor-end {end_match.group(1)}" if end_match else ""
+            cmd = html.escape(f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5{start_arg}{end_arg} --fibo-right")
         else:
             cmd = html.escape(f"python run -c {ticker}")
         stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))

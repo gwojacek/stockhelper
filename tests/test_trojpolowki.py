@@ -138,6 +138,7 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert not any("**🇵🇱 CPS" in cells[0] for cells in split_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/trn)" in text
+    assert "<!--fibo-end:2026-03-30-->" in text
 
 
 def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
@@ -186,6 +187,16 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
+    selector_start = source.index("def _select_impulse_start_long")
+    selector_end = source.index("def _select_peak_long", selector_start)
+    assert "max_days=30, band_pct=0.06" in source[selector_start:selector_end]
+
+
+def test_fibo_chart_recovers_missing_dropout_end_anchor():
+    source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+    assert "if args.fibo_lines and args.fibo_anchor_start:" in source
+    assert 'after_start = df.loc[all_dts >= s_ts]' in source
+    assert 'peak_idx = pd.to_numeric(after_start["High"], errors="coerce").idxmax()' in source
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):

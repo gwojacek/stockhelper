@@ -753,7 +753,10 @@ def _select_impulse_start_long(
     # 3P can disable this to prefer a larger valid formation when one exists.
     if reset_after_sideways:
         seg = w.iloc[left:peak_idx + 1]
-        sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
+        # Reset only after a real month-long base.  The previous 22/12 rule
+        # treated ordinary rising pauses as resets and skipped valid anchors
+        # such as MBK 2026-03-09 and JP225 2026-03-31.
+        sideways_end = _latest_sideways_end_offset(seg, max_days=30, band_pct=0.06)
         if sideways_end is not None:
             candidate_left = left + sideways_end + 1
             if candidate_left < right:
