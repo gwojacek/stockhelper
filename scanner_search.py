@@ -696,6 +696,16 @@ def _sideways_window_stats(
     low_order = sorted(range(size), key=low_values.__getitem__)
     candidate_idxs = set(high_order[:3] + low_order[:3])
     candidate_idxs = {int(idx) for idx in candidate_idxs if 2 <= int(idx) <= size - 4}
+    ending_close = float(closes.iloc[-3:].median())
+    # Do not erase a genuine trend bottom as an "interior spike".  When the
+    # window finishes more than 10% above a low, that low started a material
+    # recovery and must remain in the envelope (SBUX 2026-06-05).
+    protected_bottoms = {
+        idx for idx in candidate_idxs
+        if idx in low_order[:3]
+        and (ending_close - low_values[idx]) / max(abs(low_values[idx]), 1e-9) > 0.10
+    }
+    candidate_idxs -= protected_bottoms
     best: tuple[float, float, float, int] | None = None
     for count in range(min(max_outlier_candles, 2, len(candidate_idxs)) + 1):
         for excluded in combinations(sorted(candidate_idxs), count):
@@ -713,7 +723,7 @@ def _sideways_window_stats(
         return None
     hi, lo, rng_pct, lo_idx = best
     first_close = float(closes.iloc[:3].median())
-    last_close = float(closes.iloc[-3:].median())
+    last_close = ending_close
     progress_pct = abs(last_close - first_close) / max(abs(first_close), 1e-9)
     terminal_position = (last_close - lo) / max(hi - lo, 1e-9)
     # A range ending with closes at its upper edge is already breaking out, not

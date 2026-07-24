@@ -229,6 +229,17 @@ def test_fibo_anchor_requires_confirmed_local_trend_bottom():
     assert "clear if clear is not None else -1" in selector
 
 
+def test_sbux_june_5_bottom_is_not_discarded_as_sideways_spike():
+    with Path("data/csv/stocks/SBUX_US.csv").open(encoding="utf-8") as handle:
+        rows = [row for row in csv.DictReader(handle) if "2026-05-26" <= row["Date"] <= "2026-07-17"]
+    bottom_idx = next(idx for idx, row in enumerate(rows) if row["Date"] == "2026-06-05")
+    bottom = float(rows[bottom_idx]["Low"])
+    local_lows = [float(row["Low"]) for row in rows[bottom_idx - 3:bottom_idx + 4]]
+    ending_close = statistics.median(float(row["Close"]) for row in rows[-3:])
+    assert bottom == min(local_lows)
+    assert (ending_close - bottom) / bottom > 0.10
+
+
 def test_month_long_range_requires_flat_progress_for_supplied_cases():
     def has_flat_window(path: str, start: str, end: str) -> bool:
         with Path(path).open(encoding="utf-8") as handle:
@@ -310,6 +321,9 @@ def test_sideways_detection_ignores_only_interior_spike_candles():
     assert "closes.iloc[-3:].median()" in stats_source
     assert "lo_idx >= size // 3" in stats_source
     assert "> 0.08" in stats_source
+    assert "protected_bottoms" in stats_source
+    assert "> 0.10" in stats_source
+    assert "candidate_idxs -= protected_bottoms" in stats_source
 
 
 def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
