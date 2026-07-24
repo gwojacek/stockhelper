@@ -194,7 +194,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
-    assert "absolute_end - 10" in source[selector_start:selector_end]
+    assert "absolute_end - 29" in source[selector_start:selector_end]
     assert "return -1" in source[selector_start:selector_end]
     assert "rejecting any flat sub-window dropped MCHP" in source
     base_start = source.index("def _select_fibo_long_impulse_base")
@@ -228,6 +228,7 @@ def test_fibo_anchor_requires_confirmed_local_trend_bottom():
     assert "later_closes > float(close.iloc[idx])" in selector
     assert "clear if clear is not None else -1" in selector
     assert "band_pct=0.08" in selector
+    assert "absolute_end - 29" in selector
 
 
 def test_sbux_june_5_bottom_is_not_discarded_as_sideways_spike():
@@ -239,6 +240,17 @@ def test_sbux_june_5_bottom_is_not_discarded_as_sideways_spike():
     ending_close = statistics.median(float(row["Close"]) for row in rows[-3:])
     assert bottom == min(local_lows)
     assert (ending_close - bottom) / bottom > 0.10
+
+
+def test_aep_june_1_is_clear_bottom_of_full_monthly_base():
+    with Path("data/csv/stocks/AEP_US.csv").open(encoding="utf-8") as handle:
+        rows = [row for row in csv.DictReader(handle) if "2026-05-12" <= row["Date"] <= "2026-07-07"]
+    bottom_idx = next(idx for idx, row in enumerate(rows) if row["Date"] == "2026-06-01")
+    bottom = float(rows[bottom_idx]["Low"])
+    pre_breakout = [float(row["Low"]) for row in rows if row["Date"] <= "2026-06-23"]
+    following_closes = [float(row["Close"]) for row in rows[bottom_idx + 1:bottom_idx + 7]]
+    assert bottom == min(pre_breakout)
+    assert sum(close > float(rows[bottom_idx]["Close"]) for close in following_closes) >= 2
 
 
 def test_month_long_range_requires_flat_progress_for_supplied_cases():

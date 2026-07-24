@@ -873,10 +873,11 @@ def _select_impulse_start_long(
         )
         if sideways_end is not None:
             absolute_end = left + sideways_end
-            # Inspect the final ten candles around the range boundary so the
-            # true local bottom/first breakout candle wins instead of an
-            # arbitrary later rising candle.  Do not search the full old range.
-            post_range_left = max(left, absolute_end - 10)
+            # Search the complete qualifying month, not only its last few
+            # candles.  A genuine trend bottom may form inside the base before
+            # the visible breakout (AEP 2026-06-01); trimming to ten candles
+            # incorrectly replaced it with the ordinary June 9 pullback.
+            post_range_left = max(left, absolute_end - 29)
             if post_range_left > right:
                 return -1
             clear = _clear_bottom(post_range_left, right)
