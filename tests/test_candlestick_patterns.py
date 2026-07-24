@@ -110,3 +110,18 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
     limited = _limit_fibo_formations_per_ticker([small, middle, big, tiny_fast])
 
     assert limited == [small, big]
+
+
+def test_steep_pruning_ignores_wedge_rows():
+    from scanner_search import WedgeScanResult, _prune_superseded_steep_fibo_rows
+
+    wedge = WedgeScanResult(
+        ticker="ABE", start_date="2026-01-01", end_date="2026-07-01", duration_days=120,
+        upper_start_date="2026-01-01", upper_start_price=10.0, upper_end_date="2026-07-01", upper_end_price=8.0,
+        lower_start_date="2026-01-01", lower_start_price=5.0, lower_end_date="2026-07-01", lower_end_price=6.0,
+        upper_touches=2, lower_touches=2, width_start_pct=50.0, width_end_pct=20.0,
+        slope_pct_per_day=-0.1, slope_strength="moderate", fit_quality=1.0, recent_proximity_pct=1.0,
+        compression_pct=60.0, score=10.0, current_close=7.0,
+    )
+
+    assert _prune_superseded_steep_fibo_rows([wedge]) == [wedge]

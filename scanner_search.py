@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
+from itertools import combinations
 from importlib import util
 from pathlib import Path
 from typing import Callable, Sequence
@@ -348,6 +349,31 @@ class FiboScanResult:
     current_close: float
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
+    has_monthly_sideways: bool = False
+
+
+def _prune_superseded_steep_fibo_rows(
+    items: list[FiboScanResult | WedgeScanResult],
+) -> list[FiboScanResult | WedgeScanResult]:
+    """Drop a stale broad steep leg without inspecting unrelated wedge rows."""
+    regular_longs = [
+        item for item in items
+        if isinstance(item, FiboScanResult)
+        and item.direction == "long"
+        and not item.status.startswith("3p_steep")
+    ]
+    if not regular_longs:
+        return items
+    shortest_regular = min(int(item.incline_duration_days) for item in regular_longs)
+    return [
+        item for item in items
+        if not (
+            isinstance(item, FiboScanResult)
+            and item.status.startswith("3p_steep")
+            and item.has_monthly_sideways
+            and int(item.incline_duration_days) >= shortest_regular * 2
+        )
+    ]
 
 
 
@@ -647,42 +673,96 @@ def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, 
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 < level
-def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> int | None:
+def _sideways_window_stats(
+    highs: pd.Series,
+    lows: pd.Series,
+    closes: pd.Series,
+    band_pct: float,
+    max_progress_pct: float | None,
+    max_outlier_candles: int,
+) -> tuple[float, float, float, float] | None:
+    """Return a flat window's robust envelope, ignoring at most two interior spikes.
+
+    Outliers are only removable from the interior of a window.  A high/low at
+    either edge can be a real breakout or breakdown and must not be hidden.  The
+    three candles after an ignored spike prove that price returned to the range.
+    """
+    size = len(highs)
+    if size < 3:
+        return None
+    high_values = [float(value) for value in highs.tolist()]
+    low_values = [float(value) for value in lows.tolist()]
+    high_order = sorted(range(size), key=high_values.__getitem__, reverse=True)
+    low_order = sorted(range(size), key=low_values.__getitem__)
+    candidate_idxs = set(high_order[:3] + low_order[:3])
+    candidate_idxs = {int(idx) for idx in candidate_idxs if 2 <= int(idx) <= size - 4}
+    best: tuple[float, float, float] | None = None
+    for count in range(min(max_outlier_candles, 2, len(candidate_idxs)) + 1):
+        for excluded in combinations(sorted(candidate_idxs), count):
+            excluded_set = set(excluded)
+            hi = high_values[next(idx for idx in high_order if idx not in excluded_set)]
+            lo = low_values[next(idx for idx in low_order if idx not in excluded_set)]
+            mid = (hi + lo) / 2.0
+            if mid <= 0:
+                continue
+            rng_pct = (hi - lo) / mid
+            if best is None or rng_pct < best[2]:
+                best = (hi, lo, rng_pct)
+    if best is None:
+        return None
+    hi, lo, rng_pct = best
+    first_close = float(closes.iloc[:3].median())
+    last_close = float(closes.iloc[-3:].median())
+    progress_pct = abs(last_close - first_close) / max(abs(first_close), 1e-9)
+    terminal_position = (last_close - lo) / max(hi - lo, 1e-9)
+    # A range ending with closes at its upper edge is already breaking out, not
+    # a flat block that should replace the earlier impulse (VRTX is such a case).
+    if last_close > first_close and terminal_position > 0.85:
+        return None
+    if rng_pct > band_pct or (max_progress_pct is not None and progress_pct > max_progress_pct):
+        return None
+    return hi, lo, rng_pct, progress_pct
+
+
+def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None, max_outlier_candles: int = 2) -> int | None:
     if len(df_slice) < max_days:
         return None
     highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
     lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
+    closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
     best_end: int | None = None
     for i in range(0, len(df_slice) - max_days + 1):
-        hwin = highs.iloc[i:i + max_days]
-        lwin = lows.iloc[i:i + max_days]
-        hi = float(hwin.max())
-        lo = float(lwin.min())
-        mid = (hi + lo) / 2.0
-        if mid <= 0:
-            continue
-        rng_pct = (hi - lo) / mid
-        if rng_pct <= band_pct:
+        stats = _sideways_window_stats(
+            highs.iloc[i:i + max_days].reset_index(drop=True),
+            lows.iloc[i:i + max_days].reset_index(drop=True),
+            closes.iloc[i:i + max_days].reset_index(drop=True),
+            band_pct,
+            max_progress_pct,
+            max_outlier_candles,
+        )
+        if stats is not None:
             best_end = i + max_days - 1
     return best_end
 
 
-def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> tuple[int, int, float, float, float] | None:
+def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None, max_outlier_candles: int = 2) -> tuple[int, int, float, float, float] | None:
     if len(df_slice) < max_days:
         return None
     highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
     lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
+    closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
     best: tuple[int, int, float, float, float] | None = None
     for i in range(0, len(df_slice) - max_days + 1):
-        hwin = highs.iloc[i:i + max_days]
-        lwin = lows.iloc[i:i + max_days]
-        hi = float(hwin.max())
-        lo = float(lwin.min())
-        mid = (hi + lo) / 2.0
-        if mid <= 0:
-            continue
-        rng_pct = (hi - lo) / mid
-        if rng_pct <= band_pct:
+        stats = _sideways_window_stats(
+            highs.iloc[i:i + max_days].reset_index(drop=True),
+            lows.iloc[i:i + max_days].reset_index(drop=True),
+            closes.iloc[i:i + max_days].reset_index(drop=True),
+            band_pct,
+            max_progress_pct,
+            max_outlier_candles,
+        )
+        if stats is not None:
+            hi, lo, rng_pct, _progress_pct = stats
             end = i + max_days - 1
             # keep the tightest qualifying window as most diagnostic
             if best is None or rng_pct < best[4]:
@@ -690,10 +770,10 @@ def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct
     return best
 
 
-def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12) -> bool:
+def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None, max_outlier_candles: int = 2) -> bool:
     if len(df_slice) < max_days:
         return False
-    return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct) is not None
+    return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
 
 
 def _early_sideways_after_anchor_window(
@@ -748,17 +828,23 @@ def _select_impulse_start_long(
     right = peak_idx - min_days
     if right <= left:
         return None
-    # If a long sideways block exists before the selected peak, treat the breakout
-    # after that block as a newer impulse and avoid anchoring to very old lows.
-    # 3P can disable this to prefer a larger valid formation when one exists.
     if reset_after_sideways:
-        seg = w.iloc[left:peak_idx + 1]
-        sideways_end = _latest_sideways_end_offset(seg, max_days=22, band_pct=0.12)
+        sideways_end = _latest_sideways_end_offset(
+            w.iloc[left:peak_idx + 1].reset_index(drop=True),
+            max_days=30,
+            band_pct=0.12,
+            max_progress_pct=0.05,
+            max_outlier_candles=2,
+        )
         if sideways_end is not None:
-            candidate_left = left + sideways_end + 1
-            if candidate_left < right:
-                left = candidate_left
-    # Use the lowest low in the allowed pre-peak window as impulse base.
+            absolute_end = left + sideways_end
+            # Inspect the final ten candles around the range boundary so the
+            # true local bottom/first breakout candle wins instead of an
+            # arbitrary later rising candle.  Do not search the full old range.
+            post_range_left = max(left, absolute_end - 10)
+            if post_range_left > right:
+                return -1
+            return int(low.iloc[post_range_left:right + 1].idxmin())
     return int(low.iloc[left:right + 1].idxmin())
 
 
@@ -794,7 +880,15 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
         if score > best_score:
             best_score = score
             best_idx = i
+    dominant = [i for i in near_top_idxs if float(high.iloc[i]) >= global_max * 0.995]
+    if dominant:
+        return max(dominant)
     if recent_near_top_idxs:
+        # A later lower high is part of the correction, not a replacement for
+        # the real impulse peak.  MBK's 2026-07-15 lower high (1450) previously
+        # displaced the 2026-06-16 maximum (1474), after which the dominant-peak
+        # guard correctly rejected the mismatched candidate.  Prefer the latest
+        # actual dominant high and only use the 97% fallback if none is present.
         return max(recent_near_top_idxs)
     if near_top_idxs:
         return max(near_top_idxs)
@@ -3931,6 +4025,9 @@ def _select_fibo_long_impulse_base(
         max_lookback=max_lookback,
         reset_after_sideways=reset_after_sideways,
     )
+    if i_start == -1:
+        _log("Rejected long: latest month-long range leaves no mature post-range incline.")
+        return None
     if i_start is None or i_peak <= i_start + min_incline_days:
         left_fallback = max(0, i_peak - max_lookback)
         right_fallback = i_peak - min_incline_days
@@ -3956,12 +4053,11 @@ def _select_fibo_long_impulse_base(
         )
         return None
 
-    # Extend fib-base search left of the selected impulse start.
-    # In strong accelerations, impulse-start selector can land on a later pullback
-    # while the true swing base is a bit earlier. Widening this local back-scan
-    # preserves recency while allowing nearby earlier lows to become the fib anchor.
+    # Include only the two candles immediately before the detected incline.  This
+    # captures the local-bottom/first breakout candle without pulling the anchor
+    # back into an older month-long range (or to the second rising candle).
     orig_i_start = int(i_start)
-    pre_start_left = max(0, min(i_start - 15, i_peak - 40))
+    pre_start_left = max(0, i_start - 2)
     fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
     _log(
         f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
@@ -3992,12 +4088,11 @@ def _select_fibo_long_impulse_base(
 
     i_start, fib_start = _reset_to_newer_lower_low(i_start, fib_start)
 
-    # Guard against stale multi-cycle impulses: if a *large enough* earlier
-    # formation (after the chosen start, before the chosen peak) already completed
-    # a >=61.8 correction, this start is too old. Short one-month-ish cycles are
-    # allowed to cross 61.8; bigger cycles must restart after the new bottom.
-    min_completed_cycle_days = 32
-    max_short_completed_cycle_days = 45
+    # Guard against stale multi-cycle impulses: once an established formation
+    # completes a >=61.8 correction, a later incline is a new cycle and must use
+    # the correction bottom.  Do this for short formations too; retaining their
+    # original bottom was the reason renewed inclines reused an obsolete anchor.
+    min_completed_cycle_days = 10
     min_completed_cycle_gain = 0.18
 
     def _stale_cycle_reset_candidate(start_idx: int, start_low: float) -> tuple[bool, tuple[int, float, int] | None]:
@@ -4017,7 +4112,7 @@ def _select_fibo_long_impulse_base(
                 continue
             completed_days = p - start_idx
             gain_pct = p_rng / max(abs(start_low), 1e-9)
-            if completed_days <= max_short_completed_cycle_days or gain_pct < min_completed_cycle_gain:
+            if gain_pct < min_completed_cycle_gain:
                 continue
             p_fib_618 = p_high - p_rng * 0.618
             post_slice = low.iloc[p:i_peak + 1]
@@ -4114,7 +4209,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log,
         stale_cycle_mode="reset",
         max_lookback=260,
-        reset_after_sideways=False,
+        reset_after_sideways=True,
     )
     if base is None:
         return None
@@ -4137,13 +4232,14 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         )
         return None
 
-    # The 3P steep column is an incline-quality watchlist, not a pullback
-    # scanner.  Do not reject a multi-month uptrend just because it paused in a
-    # tight consolidation for a few weeks; names like PCO should remain visible
-    # while they keep making current highs.  The regular Fibo scanner below still
-    # applies stricter sideways/correction filters for pullback setups.
-    if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=45, band_pct=0.035):
-        _log("3P steep: impulse has a very tight pause, but keeping current-high incline watchlist candidate.")
+    # A month-long flat block splits the structure into separate impulses.  Do
+    # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
+    # range); the newer post-range impulse can still be found independently.
+    has_monthly_sideways = _has_long_sideways(
+        w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.12, max_progress_pct=0.05
+    )
+    if has_monthly_sideways:
+        _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -4192,9 +4288,10 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         reversal_pattern_name="none",
         stop_loss=fib_start,
         current_close=current_close,
+        has_monthly_sideways=has_monthly_sideways,
     )
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reject", allow_equal_third_close: bool = False) -> FiboScanResult | None:
+def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reset", allow_equal_third_close: bool = False) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)
@@ -4284,45 +4381,20 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
-        correction_sideways = _latest_sideways_window(correction_seg, max_days=22, band_pct=0.12)
-        if correction_sideways is not None:
-            s, e, hi, lo, rng_pct = correction_sideways
-            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
-            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
-            _log(
-                "Rejected long: correction is sideways/flat. "
-                f"window={s}-{e} ({start_date}..{end_date}), "
-                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 12.00%."
-            )
-            return None
-        long_sideways_month = _latest_sideways_window(correction_seg, max_days=30, band_pct=0.20)
-        if long_sideways_month is not None:
-            s, e, hi, lo, rng_pct = long_sideways_month
-            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
-            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
-            _log(
-                "Rejected long: correction has a month-long sideways block. "
-                f"window={s}-{e} ({start_date}..{end_date}), "
-                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 20.00%."
-            )
-            return None
-        long_sideways_multiweek = _latest_sideways_window(correction_seg, max_days=42, band_pct=0.35)
-        if long_sideways_multiweek is not None:
-            s, e, hi, lo, rng_pct = long_sideways_multiweek
-            start_date = str(pd.to_datetime(correction_seg.iloc[s]["Date"]).date())
-            end_date = str(pd.to_datetime(correction_seg.iloc[e]["Date"]).date())
-            _log(
-                "Rejected long: correction has a multi-week sideways block. "
-                f"window={s}-{e} ({start_date}..{end_date}), "
-                f"hi={hi:.2f}, lo={lo:.2f}, range_pct={rng_pct * 100:.2f}% <= 35.00%."
-            )
-            return None
+        # A correction may consolidate while progressing from 23.6 toward 61.8;
+        # that does not invalidate its anchors.  Sideways resets belong to the
+        # impulse leg checks below, not to the post-peak waiting leg.  This keeps
+        # formations such as MBK 2026-03-09→2026-06-16 eligible in column two.
+        # A correction may pause on its way through the retracement levels.  Its
+        # anchors remain valid as long as the current 23.6/61.8 state below is
+        # valid; rejecting any flat sub-window dropped MCHP and similar setups.
         if corr_low > fib_236:
             _log("Rejected long: correction never reached 23.6.")
             return None
-        if _has_long_sideways(w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.06):
-            _log("Rejected long: impulse is sideways/flat.")
-            return None
+        # Sideways pauses inside an otherwise valid incline do not invalidate
+        # its bottom/peak anchors.  Prefer the bottom that produced the largest
+        # incline; broad stale legs are pruned only when a materially smaller
+        # current setup replaces them.
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
         if all_touch_idxs:
@@ -4342,7 +4414,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         pattern_idx = touch_idxs[-1] if touch_idxs else i_end
         detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
         # 1-candle: hammer touching 61.8 and closing above 61.8
-        for i in touch_idxs[:1]:
+        for i in touch_idxs:
             c = w.iloc[i]
             if _is_bullish_hammer(c) and _touches_level(c, fib_618) and float(c["Close"]) > fib_618:
                 pattern = "hammer"
@@ -4359,37 +4431,37 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                     and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
                 )
-                includes_first_touch = touch_idxs[0] in {i - 1, i}
-                if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
+                includes_touch = any(t in {i - 1, i} for t in touch_idxs)
+                if engulf and includes_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
                     pattern = "bullish_engulfing"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
-                includes_first_touch = touch_idxs[0] in {i - 1, i}
-                if includes_first_touch and _is_bullish_piercing_line(c1, c2, fib_618):
+                includes_touch = any(t in {i - 1, i} for t in touch_idxs)
+                if includes_touch and _is_bullish_piercing_line(c1, c2, fib_618):
                     pattern = "bullish_piercing_line"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
-                includes_first_touch = touch_idxs[0] in {i - 1, i}
-                if includes_first_touch and _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+                includes_touch = any(t in {i - 1, i} for t in touch_idxs)
+                if includes_touch and _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                     pattern = "bullish_harami"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
+                includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+                if includes_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_star"
                     pattern_idx = i
                     break
         if pattern == "none" and touch_idxs:
             for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-                if includes_first_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
+                includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+                if includes_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_doji_star"
                     pattern_idx = i
                     break
@@ -4547,36 +4619,36 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                 and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
             )
-            includes_first_touch = touch_idxs[0] in {i - 1, i}
-            if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
+            includes_touch = any(t in {i - 1, i} for t in touch_idxs)
+            if engulf and includes_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
                 pattern = "bearish_engulfing"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            includes_first_touch = touch_idxs[0] in {i - 1, i}
-            if includes_first_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_touch = any(t in {i - 1, i} for t in touch_idxs)
+            if includes_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "bearish_harami"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            includes_first_touch = touch_idxs[0] in {i - 1, i}
-            if includes_first_touch and _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_touch = any(t in {i - 1, i} for t in touch_idxs)
+            if includes_touch and _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "dark_cloud_cover"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
+            includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+            if includes_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            includes_first_touch = touch_idxs[0] in {i - 2, i - 1, i}
-            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
+            includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+            if includes_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_doji_star"
                 pattern_idx = i
                 break
@@ -4744,6 +4816,13 @@ def run_fibo_search(target: str) -> int:
             made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
             if made_higher_high:
                 return True
+            if cand.status == "touched_61_8_no_pattern" and cand.first_61_8_touch_date:
+                touch_ts = pd.to_datetime(cand.first_61_8_touch_date, errors="coerce")
+                if pd.notna(touch_ts):
+                    # Keep the touch candle plus two following candles available
+                    # for 2/3-candle reversal patterns.  Reject only after that
+                    # confirmation window closes without a pattern.
+                    return int((dts > touch_ts).sum()) >= 2
             after_low = pd.to_numeric(after["Low"], errors="coerce")
             return bool((after_low <= float(cand.fib_61_8)).any())
         # Symmetric stale condition for short waiting setups.
@@ -4753,10 +4832,14 @@ def run_fibo_search(target: str) -> int:
         made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
         if made_lower_low:
             return True
+        if cand.status == "touched_61_8_no_pattern" and cand.first_61_8_touch_date:
+            touch_ts = pd.to_datetime(cand.first_61_8_touch_date, errors="coerce")
+            if pd.notna(touch_ts):
+                return int((dts > touch_ts).sum()) >= 2
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
 
-    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult], str | None, str]:
+    def _scan_fibo_one(idx_ticker: tuple[int, str]) -> tuple[int, str, list[FiboScanResult | WedgeScanResult], str | None, str]:
         idx, ticker = idx_ticker
         instrument = "stock"
         if group_name == "forex":
@@ -4771,7 +4854,7 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
-        out_rows: list[FiboScanResult] = []
+        out_rows: list[FiboScanResult | WedgeScanResult] = []
         try:
             prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
             prev_force_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
@@ -4816,14 +4899,16 @@ def run_fibo_search(target: str) -> int:
                 out_rows.append(steep_3p)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
-            long_offset0 = _find_fibo_setup(df, "long", end_offset=0, allow_equal_third_close=(instrument == "forex"))
             for off in [0, 5, 10, 15, 20, 30, 40]:
                 cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                 if cand:
                     long_candidates.append(cand)
-                broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
-                if broad_cand:
-                    long_candidates.append(broad_cand)
+                # Broad mode is substantially more expensive and is only needed
+                # at representative offsets; regular mode covers every offset.
+                if off in {0, 10, 20, 40}:
+                    broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
+                    if broad_cand:
+                        long_candidates.append(broad_cand)
             if long_candidates:
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c) and not _is_valid_reversal_invalidated(df, c)]
                 # Keep at most three distinct formations, preferring:
@@ -4894,6 +4979,11 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
+            # A broad steep leg with a genuine monthly range is superseded only
+            # when this same scan found a much smaller regular long formation.
+            # This removes JP225's stale broad leg while preserving stepwise
+            # trends such as ROST when no actionable nested replacement exists.
+            out_rows = _prune_superseded_steep_fibo_rows(out_rows)
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc)), "error"
@@ -4969,6 +5059,7 @@ def run_fibo_search(target: str) -> int:
                 rows2.append(r)
             continue
         if r.status == "touched_61_8_no_pattern":
+            rows1.append(r)
             continue
         if r.direction == "long" and r.status == "reached_23_6_waiting_for_61_8" and r.fib_61_8 <= r.current_close < r.fib_23_6:
             rows1.append(r)
@@ -5141,7 +5232,7 @@ def run_fibo_search(target: str) -> int:
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
     rows0_md=[[r.ticker,r.direction,"🚀 3p_steep_incline",f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
-    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status == "reached_23_6_waiting_for_61_8" else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
+    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]

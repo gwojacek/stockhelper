@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import csv
+import itertools
 import re
+import statistics
 import sys
 import types
 from datetime import datetime
@@ -138,6 +141,213 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert not any("**🇵🇱 CPS" in cells[0] for cells in split_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/trn)" in text
+    assert "<!--fibo-end:2026-03-30-->" in text
+
+
+def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
+    mod = load_run_module()
+    setup = mod.ScannerRow(
+        market="WIG", scanner="FIBO", category="waiting", ticker="DROP", status="reached_23_6_waiting_for_61_8",
+        direction="long", dates={"start": "2026-06-15", "incline": "2026-06-15->2026-07-01"},
+        metrics={"near61_raw": "50.0", "ratio_raw": "2.0", "incline_days": "30"}, chart_url="https://stooq.pl/drop",
+    )
+    # A crossed setup is intentionally absent from the active columns, so seed a
+    # previous near-61.8 board cell to model yesterday's displayed candidate.
+    board = tmp_path / "fibo.md"
+    board.write_text(
+        "# Trójpolówki — Fibo\n\n"
+        "| 🚀 Steep incline / no major bearish signal | ⚠️ Waiting 23.6→61.8 / bearish close | 🎯 Near 61.8 > 75% / deeper pullback | ✅ Pattern ≤14d / SL intact |\n"
+        "|---|---|---|---|\n"
+        "|  |  | **🇵🇱 DROP ↗️ (2026-06-01) 101.2%** [🔗 stooq](https://stooq.pl/drop) |  |\n",
+        encoding="utf-8",
+    )
+    out = mod._write_trojpolowki_fibo([], tmp_path, datetime(2026, 7, 10, 9, 0, 0))
+    text = out.read_text(encoding="utf-8")
+    assert "🕘 Recent dropouts (10d)" in text
+    assert "❌ 2026-07-10 · NO_VALID_PATTERN_AT_61_8" in text
+    assert "DROP ↗️ (2026-06-01)" in text
+
+    # A currently active re-anchored formation means the ticker never dropped
+    # out and must disappear from history immediately, not after ten days.
+    mod._write_trojpolowki_fibo([setup], tmp_path, datetime(2026, 7, 11, 9, 0, 0))
+    assert "DROP ↗️ (2026-06-01)" not in (tmp_path / "fibo_dropouts.json").read_text(encoding="utf-8")
+
+
+def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
+    source = Path("run").read_text(encoding="utf-8")
+    fibo_branch = source[source.index('elif "fibo" in section_id:'):source.index('else:', source.index('elif "fibo" in section_id:'))]
+    assert "troj_row_by_ticker.get(ticker)" not in fibo_branch
+    assert "--ichimoku-mode off --fibo-lines 5" in source
+
+
+def test_fibo_sideways_rules_apply_to_impulse_not_correction():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep_start = source.index("def _find_fibo_3p_steep_setup")
+    regular_start = source.index("def _find_fibo_setup", steep_start)
+    steep_source = source[steep_start:regular_start]
+    assert "max_days=30, band_pct=0.12" in steep_source
+    assert "max_progress_pct=0.05" in steep_source
+    assert "keep only when no materially smaller regular setup replaces it" in steep_source
+    correction_start = source.index("correction_seg =", regular_start)
+    correction_end = source.index("if corr_low > fib_236", correction_start)
+    assert "_latest_sideways_window" not in source[correction_start:correction_end]
+    selector_start = source.index("def _select_impulse_start_long")
+    selector_end = source.index("def _select_peak_long", selector_start)
+    assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
+    assert "absolute_end - 10" in source[selector_start:selector_end]
+    assert "return -1" in source[selector_start:selector_end]
+    assert "rejecting any flat sub-window dropped MCHP" in source
+    base_start = source.index("def _select_fibo_long_impulse_base")
+    base_end = source.index("def _find_fibo_3p_steep_setup", base_start)
+    assert "pre_start_left = max(0, i_start - 2)" in source[base_start:base_end]
+
+
+def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def _select_peak_long")
+    end = source.index("def _reverse_stooq_symbol", start)
+    peak_source = source[start:end]
+    assert "global_max * 0.995" in peak_source
+    assert "return max(dominant)" in peak_source
+
+
+def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "touch_idxs[:1]" not in source
+    assert "any(t in {i - 1, i} for t in touch_idxs)" in source
+    assert "any(t in {i - 2, i - 1, i} for t in touch_idxs)" in source
+
+
+def test_month_long_range_requires_flat_progress_for_supplied_cases():
+    def has_flat_window(path: str, start: str, end: str) -> bool:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if start <= row["Date"] <= end]
+        for idx in range(len(rows) - 29):
+            window = rows[idx:idx + 30]
+            high = max(float(row["High"]) for row in window)
+            low = min(float(row["Low"]) for row in window)
+            band = (high - low) / ((high + low) / 2.0)
+            progress = abs(float(window[-1]["Close"]) - float(window[0]["Close"])) / float(window[0]["Close"])
+            if band <= 0.12 and progress <= 0.05:
+                return True
+        return False
+
+    assert not has_flat_window("data/csv/stocks/SCW_WA.csv", "2025-09-10", "2026-04-20")
+    assert has_flat_window("data/csv/indexes/JP225.csv", "2025-07-22", "2026-06-22")
+    assert not has_flat_window("data/csv/stocks/PCO_WA.csv", "2026-03-23", "2026-07-22")
+    assert not has_flat_window("data/csv/stocks/RBW_WA.csv", "2026-05-20", "2026-07-02")
+
+
+def test_supplied_small_long_formations_are_in_waiting_band():
+    cases = [
+        ("data/csv/stocks/SBUX_US.csv", "2026-06-04", "2026-07-17"),
+        ("data/csv/stocks/MCHP_US.csv", "2026-03-30", "2026-05-08"),
+        ("data/csv/stocks/MAR_US.csv", "2025-10-31", "2026-06-15"),
+        ("data/csv/stocks/KDP_US.csv", "2026-04-06", "2026-06-29"),
+    ]
+    for path, start, peak in cases:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        start_row = next(row for row in rows if row["Date"] == start)
+        peak_row = next(row for row in rows if row["Date"] == peak)
+        low = float(start_row["Low"])
+        high = float(peak_row["High"])
+        current = float(rows[-1]["Close"])
+        fib_236 = high - (high - low) * 0.236
+        fib_618 = high - (high - low) * 0.618
+        assert fib_618 <= current < fib_236, (path, current, fib_618, fib_236)
+
+
+def test_fibo_chart_recovers_missing_dropout_end_anchor():
+    source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+    assert "if args.fibo_lines and args.fibo_anchor_start:" in source
+    assert 'after_start = df.loc[all_dts >= s_ts]' in source
+    assert 'peak_idx = pd.to_numeric(after_start["High"], errors="coerce").idxmax()' in source
+
+
+def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "item.has_monthly_sideways" in source
+    assert "int(item.incline_duration_days) >= shortest_regular * 2" in source
+
+
+def test_dropout_reasons_use_common_status_codes():
+    source = Path("run").read_text(encoding="utf-8")
+    for status in ["NO_VALID_PATTERN_AT_61_8", "OTHER_SETUP_FILTER"]:
+        assert status in source
+
+
+def test_completed_61_8_cycle_resets_regular_fibo_anchor():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector_start = source.index("def _select_fibo_long_impulse_base")
+    selector_end = source.index("def _find_fibo_3p_steep_setup", selector_start)
+    selector = source[selector_start:selector_end]
+    assert "min_completed_cycle_days = 10" in selector
+    assert "max_short_completed_cycle_days" not in selector
+    regular_signature = source[source.index("def _find_fibo_setup"):source.index("def _find_fibo_setup") + 300]
+    assert 'stale_cycle_mode: str = "reset"' in regular_signature
+
+
+def test_sideways_detection_ignores_only_interior_spike_candles():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    stats_start = source.index("def _sideways_window_stats")
+    stats_end = source.index("def _latest_sideways_end_offset", stats_start)
+    stats_source = source[stats_start:stats_end]
+    assert "max_outlier_candles" in stats_source
+    assert "size - 4" in stats_source
+    assert "closes.iloc[:3].median()" in stats_source
+    assert "closes.iloc[-3:].median()" in stats_source
+
+
+def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
+    def latest_window(path: str, start: str, end: str) -> str | None:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if start <= row["Date"] <= end]
+        latest = None
+        for offset in range(len(rows) - 29):
+            window = rows[offset:offset + 30]
+            extremes = set(
+                sorted(range(30), key=lambda idx: float(window[idx]["High"]), reverse=True)[:3]
+                + sorted(range(30), key=lambda idx: float(window[idx]["Low"]))[:3]
+            )
+            removable = sorted(idx for idx in extremes if 2 <= idx <= 26)
+            best_band = float("inf")
+            for count in range(min(2, len(removable)) + 1):
+                for excluded in itertools.combinations(removable, count):
+                    kept = [row for idx, row in enumerate(window) if idx not in excluded]
+                    high = max(float(row["High"]) for row in kept)
+                    low = min(float(row["Low"]) for row in kept)
+                    best_band = min(best_band, (high - low) / ((high + low) / 2.0))
+            first = statistics.median(float(row["Close"]) for row in window[:3])
+            last = statistics.median(float(row["Close"]) for row in window[-3:])
+            kept_high = max(float(row["High"]) for row in window)
+            kept_low = min(float(row["Low"]) for row in window)
+            terminal_position = (last - kept_low) / max(kept_high - kept_low, 1e-9)
+            terminal_breakout = last > first and terminal_position > 0.85
+            if best_band <= 0.12 and abs(last - first) / first <= 0.05 and not terminal_breakout:
+                latest = window[-1]["Date"]
+        return latest
+
+    assert latest_window("data/csv/stocks/TOR_WA.csv", "2025-07-18", "2026-07-16") is not None
+    assert latest_window("data/csv/stocks/BNP_WA.csv", "2025-11-04", "2026-06-17") is not None
+    assert latest_window("data/csv/stocks/MCHP_US.csv", "2026-03-30", "2026-05-08") is None
+    assert latest_window("data/csv/stocks/VRTX_US.csv", "2026-05-05", "2026-07-07") is None
+
+
+def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert 'cand.status == "touched_61_8_no_pattern"' in source
+    assert 'int((dts > touch_ts).sum()) >= 2' in source
+    assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
+    assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+
+
+def test_fibo_scan_avoids_duplicate_and_reduces_broad_offset_work():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "long_offset0 =" not in source
+    assert "if off in {0, 10, 20, 40}:" in source
+    stats = source[source.index("def _sideways_window_stats"):source.index("def _latest_sideways_end_offset")]
+    assert ".iloc[keep]" not in stats
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
