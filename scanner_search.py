@@ -4832,7 +4832,7 @@ def run_fibo_search(target: str) -> int:
         return bool((close_after > float(cand.stop_loss)).any())
 
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
-        if cand.status != "reached_23_6_waiting_for_61_8" or not cand.incline_end_date:
+        if cand.status not in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} or not cand.incline_end_date:
             return False
         dts = pd.to_datetime(df_full["Date"], errors="coerce")
         try:
@@ -4842,6 +4842,18 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > end_ts]
         if after.empty:
             return False
+        # These anchors get exactly one reversal opportunity: the first 61.8
+        # touch/cross and the two candles after it.  A later return to 61.8 must
+        # not resurrect the old formation; only a newly anchored Fibo may return.
+        if cand.direction == "long":
+            touch_mask = pd.to_numeric(after["Low"], errors="coerce") <= float(cand.fib_61_8)
+        else:
+            touch_mask = pd.to_numeric(after["High"], errors="coerce") >= float(cand.fib_61_8)
+        touch_rows = after.loc[touch_mask]
+        if not touch_rows.empty:
+            first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"], errors="coerce")
+            if pd.notna(first_touch_ts):
+                return int((dts > first_touch_ts).sum()) >= 2
         if cand.direction == "long":
             # Long waiting setup becomes stale if market already made a higher high
             # after the selected impulse top (newer impulse supersedes older one),
@@ -4852,13 +4864,6 @@ def run_fibo_search(target: str) -> int:
             made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
             if made_higher_high:
                 return True
-            if cand.status == "touched_61_8_no_pattern" and cand.first_61_8_touch_date:
-                touch_ts = pd.to_datetime(cand.first_61_8_touch_date, errors="coerce")
-                if pd.notna(touch_ts):
-                    # Keep the touch candle plus two following candles available
-                    # for 2/3-candle reversal patterns.  Reject only after that
-                    # confirmation window closes without a pattern.
-                    return int((dts > touch_ts).sum()) >= 2
             after_low = pd.to_numeric(after["Low"], errors="coerce")
             return bool((after_low <= float(cand.fib_61_8)).any())
         # Symmetric stale condition for short waiting setups.
@@ -4868,10 +4873,6 @@ def run_fibo_search(target: str) -> int:
         made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
         if made_lower_low:
             return True
-        if cand.status == "touched_61_8_no_pattern" and cand.first_61_8_touch_date:
-            touch_ts = pd.to_datetime(cand.first_61_8_touch_date, errors="coerce")
-            if pd.notna(touch_ts):
-                return int((dts > touch_ts).sum()) >= 2
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
 

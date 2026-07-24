@@ -349,10 +349,22 @@ def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
 
 def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert 'cand.status == "touched_61_8_no_pattern"' in source
-    assert 'int((dts > touch_ts).sum()) >= 2' in source
+    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    assert 'cand.status not in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in stale
+    assert 'touch_mask = pd.to_numeric(after["Low"]' in stale
+    assert 'touch_mask = pd.to_numeric(after["High"]' in stale
+    assert 'first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"]' in stale
+    assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+
+
+def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    assert "exactly one reversal opportunity" in stale
+    assert "not resurrect the old formation" in stale
+    assert "only a newly anchored Fibo may return" in stale
 
 
 def test_fibo_rejects_correction_through_original_anchor():
