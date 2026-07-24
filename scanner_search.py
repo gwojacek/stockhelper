@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time as dt_time, timedelta
 import math
+from itertools import combinations
 from importlib import util
 from pathlib import Path
 from typing import Callable, Sequence
@@ -672,7 +673,52 @@ def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, 
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl3 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 < level
-def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None) -> int | None:
+def _sideways_window_stats(
+    highs: pd.Series,
+    lows: pd.Series,
+    closes: pd.Series,
+    band_pct: float,
+    max_progress_pct: float | None,
+    max_outlier_candles: int,
+) -> tuple[float, float, float, float] | None:
+    """Return a flat window's robust envelope, ignoring at most two interior spikes.
+
+    Outliers are only removable from the interior of a window.  A high/low at
+    either edge can be a real breakout or breakdown and must not be hidden.  The
+    three candles after an ignored spike prove that price returned to the range.
+    """
+    size = len(highs)
+    if size < 3:
+        return None
+    candidate_idxs = set(
+        list(highs.sort_values(ascending=False).index[:3])
+        + list(lows.sort_values(ascending=True).index[:3])
+    )
+    candidate_idxs = {int(idx) for idx in candidate_idxs if 2 <= int(idx) <= size - 4}
+    best: tuple[float, float, float] | None = None
+    for count in range(min(max_outlier_candles, 2, len(candidate_idxs)) + 1):
+        for excluded in combinations(sorted(candidate_idxs), count):
+            keep = [idx for idx in range(size) if idx not in excluded]
+            hi = float(highs.iloc[keep].max())
+            lo = float(lows.iloc[keep].min())
+            mid = (hi + lo) / 2.0
+            if mid <= 0:
+                continue
+            rng_pct = (hi - lo) / mid
+            if best is None or rng_pct < best[2]:
+                best = (hi, lo, rng_pct)
+    if best is None:
+        return None
+    hi, lo, rng_pct = best
+    first_close = float(closes.iloc[:3].median())
+    last_close = float(closes.iloc[-3:].median())
+    progress_pct = abs(last_close - first_close) / max(abs(first_close), 1e-9)
+    if rng_pct > band_pct or (max_progress_pct is not None and progress_pct > max_progress_pct):
+        return None
+    return hi, lo, rng_pct, progress_pct
+
+
+def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None, max_outlier_candles: int = 2) -> int | None:
     if len(df_slice) < max_days:
         return None
     highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
@@ -680,23 +726,20 @@ def _latest_sideways_end_offset(df_slice: pd.DataFrame, max_days: int = 22, band
     closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
     best_end: int | None = None
     for i in range(0, len(df_slice) - max_days + 1):
-        hwin = highs.iloc[i:i + max_days]
-        lwin = lows.iloc[i:i + max_days]
-        hi = float(hwin.max())
-        lo = float(lwin.min())
-        mid = (hi + lo) / 2.0
-        if mid <= 0:
-            continue
-        rng_pct = (hi - lo) / mid
-        first_close = float(closes.iloc[i])
-        last_close = float(closes.iloc[i + max_days - 1])
-        progress_pct = abs(last_close - first_close) / max(abs(first_close), 1e-9)
-        if rng_pct <= band_pct and (max_progress_pct is None or progress_pct <= max_progress_pct):
+        stats = _sideways_window_stats(
+            highs.iloc[i:i + max_days].reset_index(drop=True),
+            lows.iloc[i:i + max_days].reset_index(drop=True),
+            closes.iloc[i:i + max_days].reset_index(drop=True),
+            band_pct,
+            max_progress_pct,
+            max_outlier_candles,
+        )
+        if stats is not None:
             best_end = i + max_days - 1
     return best_end
 
 
-def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None) -> tuple[int, int, float, float, float] | None:
+def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None, max_outlier_candles: int = 2) -> tuple[int, int, float, float, float] | None:
     if len(df_slice) < max_days:
         return None
     highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
@@ -704,18 +747,16 @@ def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct
     closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
     best: tuple[int, int, float, float, float] | None = None
     for i in range(0, len(df_slice) - max_days + 1):
-        hwin = highs.iloc[i:i + max_days]
-        lwin = lows.iloc[i:i + max_days]
-        hi = float(hwin.max())
-        lo = float(lwin.min())
-        mid = (hi + lo) / 2.0
-        if mid <= 0:
-            continue
-        rng_pct = (hi - lo) / mid
-        first_close = float(closes.iloc[i])
-        last_close = float(closes.iloc[i + max_days - 1])
-        progress_pct = abs(last_close - first_close) / max(abs(first_close), 1e-9)
-        if rng_pct <= band_pct and (max_progress_pct is None or progress_pct <= max_progress_pct):
+        stats = _sideways_window_stats(
+            highs.iloc[i:i + max_days].reset_index(drop=True),
+            lows.iloc[i:i + max_days].reset_index(drop=True),
+            closes.iloc[i:i + max_days].reset_index(drop=True),
+            band_pct,
+            max_progress_pct,
+            max_outlier_candles,
+        )
+        if stats is not None:
+            hi, lo, rng_pct, _progress_pct = stats
             end = i + max_days - 1
             # keep the tightest qualifying window as most diagnostic
             if best is None or rng_pct < best[4]:
@@ -723,10 +764,10 @@ def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct
     return best
 
 
-def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None) -> bool:
+def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: float = 0.12, max_progress_pct: float | None = None, max_outlier_candles: int = 2) -> bool:
     if len(df_slice) < max_days:
         return False
-    return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct) is not None
+    return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
 
 
 def _early_sideways_after_anchor_window(
@@ -781,11 +822,23 @@ def _select_impulse_start_long(
     right = peak_idx - min_days
     if right <= left:
         return None
-    # Use the lowest low in the allowed pre-peak window as the base of the
-    # largest incline.  A later sideways pause does not move the anchor: doing
-    # so hid valid SBUX, MCHP, MAR and KDP formations.  The early-sideways and
-    # stale-cycle checks still reject an anchor that did not begin an impulse or
-    # belongs to an already completed 61.8 cycle.
+    if reset_after_sideways:
+        sideways_end = _latest_sideways_end_offset(
+            w.iloc[left:peak_idx + 1].reset_index(drop=True),
+            max_days=30,
+            band_pct=0.12,
+            max_progress_pct=0.05,
+            max_outlier_candles=2,
+        )
+        if sideways_end is not None:
+            absolute_end = left + sideways_end
+            # Include two candles at the range boundary so the first/local-bottom
+            # candle of the breakout is retained rather than anchoring its second
+            # rising candle.  Do not search deeper inside the old side trend.
+            post_range_left = max(left, absolute_end - 2)
+            if post_range_left > right:
+                return None
+            return int(low.iloc[post_range_left:right + 1].idxmin())
     return int(low.iloc[left:right + 1].idxmin())
 
 
@@ -3991,12 +4044,11 @@ def _select_fibo_long_impulse_base(
         )
         return None
 
-    # Extend fib-base search left of the selected impulse start.
-    # In strong accelerations, impulse-start selector can land on a later pullback
-    # while the true swing base is a bit earlier. Widening this local back-scan
-    # preserves recency while allowing nearby earlier lows to become the fib anchor.
+    # Include only the two candles immediately before the detected incline.  This
+    # captures the local-bottom/first breakout candle without pulling the anchor
+    # back into an older month-long range (or to the second rising candle).
     orig_i_start = int(i_start)
-    pre_start_left = max(0, min(i_start - 15, i_peak - 40))
+    pre_start_left = max(0, i_start - 2)
     fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
     _log(
         f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
@@ -4148,7 +4200,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log,
         stale_cycle_mode="reset",
         max_lookback=260,
-        reset_after_sideways=False,
+        reset_after_sideways=True,
     )
     if base is None:
         return None

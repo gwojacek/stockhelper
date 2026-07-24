@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import csv
+import itertools
 import re
+import statistics
 import sys
 import types
 from datetime import datetime
@@ -191,9 +193,12 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
-    assert "_latest_sideways_end_offset" not in source[selector_start:selector_end]
-    assert "largest incline" in source[selector_start:selector_end]
+    assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
+    assert "absolute_end - 2" in source[selector_start:selector_end]
     assert "rejecting any flat sub-window dropped MCHP" in source
+    base_start = source.index("def _select_fibo_long_impulse_base")
+    base_end = source.index("def _find_fibo_3p_steep_setup", base_start)
+    assert "pre_start_left = max(0, i_start - 2)" in source[base_start:base_end]
 
 
 def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
@@ -280,6 +285,47 @@ def test_completed_61_8_cycle_resets_regular_fibo_anchor():
     assert "max_short_completed_cycle_days" not in selector
     regular_signature = source[source.index("def _find_fibo_setup"):source.index("def _find_fibo_setup") + 300]
     assert 'stale_cycle_mode: str = "reset"' in regular_signature
+
+
+def test_sideways_detection_ignores_only_interior_spike_candles():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    stats_start = source.index("def _sideways_window_stats")
+    stats_end = source.index("def _latest_sideways_end_offset", stats_start)
+    stats_source = source[stats_start:stats_end]
+    assert "max_outlier_candles" in stats_source
+    assert "size - 4" in stats_source
+    assert "closes.iloc[:3].median()" in stats_source
+    assert "closes.iloc[-3:].median()" in stats_source
+
+
+def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
+    def latest_window(path: str, start: str, end: str) -> str | None:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if start <= row["Date"] <= end]
+        latest = None
+        for offset in range(len(rows) - 29):
+            window = rows[offset:offset + 30]
+            extremes = set(
+                sorted(range(30), key=lambda idx: float(window[idx]["High"]), reverse=True)[:3]
+                + sorted(range(30), key=lambda idx: float(window[idx]["Low"]))[:3]
+            )
+            removable = sorted(idx for idx in extremes if 2 <= idx <= 26)
+            best_band = float("inf")
+            for count in range(min(2, len(removable)) + 1):
+                for excluded in itertools.combinations(removable, count):
+                    kept = [row for idx, row in enumerate(window) if idx not in excluded]
+                    high = max(float(row["High"]) for row in kept)
+                    low = min(float(row["Low"]) for row in kept)
+                    best_band = min(best_band, (high - low) / ((high + low) / 2.0))
+            first = statistics.median(float(row["Close"]) for row in window[:3])
+            last = statistics.median(float(row["Close"]) for row in window[-3:])
+            if best_band <= 0.12 and abs(last - first) / first <= 0.05:
+                latest = window[-1]["Date"]
+        return latest
+
+    assert latest_window("data/csv/stocks/TOR_WA.csv", "2025-07-18", "2026-07-16") is not None
+    assert latest_window("data/csv/stocks/BNP_WA.csv", "2025-11-04", "2026-06-17") is not None
+    assert latest_window("data/csv/stocks/MCHP_US.csv", "2026-03-30", "2026-05-08") is None
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
