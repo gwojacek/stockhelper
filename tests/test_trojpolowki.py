@@ -342,6 +342,15 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
 
 
+def test_fibo_rejects_correction_through_original_anchor():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "if corr_low <= fib_start:" in source
+    assert "if corr_high >= fib_start:" in source
+    assert "correction invalidated the formation by reaching" in source
+    run_source = Path("run").read_text(encoding="utf-8")
+    assert "return near < 200.0" in run_source
+
+
 def test_fibo_scan_avoids_duplicate_and_reduces_broad_offset_work():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "long_offset0 =" not in source

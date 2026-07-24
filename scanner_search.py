@@ -4380,6 +4380,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
         fib_500 = fib_end - rng * 0.5
         fib_618 = fib_end - rng * 0.618
         corr_low = float(low.iloc[i_peak:i_end + 1].min())
+        if corr_low <= fib_start:
+            _log(
+                "Rejected long: correction invalidated the formation by reaching "
+                f"the 100% anchor ({corr_low:.4f} <= {fib_start:.4f})."
+            )
+            return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
         # A correction may consolidate while progressing from 23.6 toward 61.8;
         # that does not invalidate its anchors.  Sideways resets belong to the
@@ -4556,6 +4562,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     fib_500 = fib_end + rng * 0.5
     fib_618 = fib_end + rng * 0.618
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
+    if corr_high >= fib_start:
+        _log(
+            "Rejected short: correction invalidated the formation by reaching "
+            f"the 100% anchor ({corr_high:.4f} >= {fib_start:.4f})."
+        )
+        return None
     short_correction_seg = w.iloc[i_bottom:i_end + 1].reset_index(drop=True)
     if _has_long_sideways(short_correction_seg, max_days=22, band_pct=0.12):
         _log("Rejected short: correction is sideways/flat.")
