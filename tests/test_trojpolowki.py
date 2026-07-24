@@ -194,7 +194,8 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
-    assert "absolute_end - 2" in source[selector_start:selector_end]
+    assert "absolute_end - 10" in source[selector_start:selector_end]
+    assert "return -1" in source[selector_start:selector_end]
     assert "rejecting any flat sub-window dropped MCHP" in source
     base_start = source.index("def _select_fibo_long_impulse_base")
     base_end = source.index("def _find_fibo_3p_steep_setup", base_start)
@@ -319,13 +320,34 @@ def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
                     best_band = min(best_band, (high - low) / ((high + low) / 2.0))
             first = statistics.median(float(row["Close"]) for row in window[:3])
             last = statistics.median(float(row["Close"]) for row in window[-3:])
-            if best_band <= 0.12 and abs(last - first) / first <= 0.05:
+            kept_high = max(float(row["High"]) for row in window)
+            kept_low = min(float(row["Low"]) for row in window)
+            terminal_position = (last - kept_low) / max(kept_high - kept_low, 1e-9)
+            terminal_breakout = last > first and terminal_position > 0.85
+            if best_band <= 0.12 and abs(last - first) / first <= 0.05 and not terminal_breakout:
                 latest = window[-1]["Date"]
         return latest
 
     assert latest_window("data/csv/stocks/TOR_WA.csv", "2025-07-18", "2026-07-16") is not None
     assert latest_window("data/csv/stocks/BNP_WA.csv", "2025-11-04", "2026-06-17") is not None
     assert latest_window("data/csv/stocks/MCHP_US.csv", "2026-03-30", "2026-05-08") is None
+    assert latest_window("data/csv/stocks/VRTX_US.csv", "2026-05-05", "2026-07-07") is None
+
+
+def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert 'cand.status == "touched_61_8_no_pattern"' in source
+    assert 'int((dts > touch_ts).sum()) >= 2' in source
+    assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
+    assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+
+
+def test_fibo_scan_avoids_duplicate_and_reduces_broad_offset_work():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "long_offset0 =" not in source
+    assert "if off in {0, 10, 20, 40}:" in source
+    stats = source[source.index("def _sideways_window_stats"):source.index("def _latest_sideways_end_offset")]
+    assert ".iloc[keep]" not in stats
 
 
 def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):

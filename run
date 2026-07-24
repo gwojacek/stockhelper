@@ -1310,6 +1310,8 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         near = _fibo_near(row)
         if 75.0 <= near < 100.0:
             return True
+        if "touched_61_8_no_pattern" in str(row.status or "").lower():
+            return True
         return str(row.pattern or "").strip().lower() not in {"", "-", "none"}
     def _fibo_touch_date(row: ScannerRow) -> date | None:
         try:
