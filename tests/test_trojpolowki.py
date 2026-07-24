@@ -348,7 +348,26 @@ def test_fibo_rejects_correction_through_original_anchor():
     assert "if corr_high >= fib_start:" in source
     assert "correction invalidated the formation by reaching" in source
     run_source = Path("run").read_text(encoding="utf-8")
-    assert "return near < 200.0" in run_source
+    assert "return 75.0 <= near <= 100.0" in run_source
+
+
+def test_third_fibo_column_excludes_over_100_percent_no_pattern_rows(tmp_path: Path):
+    mod = load_run_module()
+    rows = [
+        mod.ScannerRow(
+            market="WIG", scanner="FIBO", category="waiting", ticker="JSW", status="touched_61_8_no_pattern",
+            direction="long", dates={"start": "2026-03-03", "incline": "2026-03-03->2026-06-01"},
+            metrics={"near61_raw": "194.2", "ratio_raw": "2.0", "incline_days": "60"}, chart_url="https://stooq.pl/jsw",
+        ),
+        mod.ScannerRow(
+            market="US100", scanner="FIBO", category="waiting", ticker="TTWO.US", status="touched_61_8_no_pattern",
+            direction="long", dates={"start": "2026-06-11", "incline": "2026-06-11->2026-07-07"},
+            metrics={"near61_raw": "96.5", "ratio_raw": "1.5", "incline_days": "26"}, chart_url="https://stooq.pl/ttwo.us",
+        ),
+    ]
+    text = mod._write_trojpolowki_fibo(rows, tmp_path, datetime(2026, 7, 24, 9, 0, 0)).read_text(encoding="utf-8")
+    assert "JSW ↗️" not in text
+    assert "TTWO.US ↗️" in text
 
 
 def test_fibo_scan_avoids_duplicate_and_reduces_broad_offset_work():
