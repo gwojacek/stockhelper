@@ -696,21 +696,22 @@ def _sideways_window_stats(
     low_order = sorted(range(size), key=low_values.__getitem__)
     candidate_idxs = set(high_order[:3] + low_order[:3])
     candidate_idxs = {int(idx) for idx in candidate_idxs if 2 <= int(idx) <= size - 4}
-    best: tuple[float, float, float] | None = None
+    best: tuple[float, float, float, int] | None = None
     for count in range(min(max_outlier_candles, 2, len(candidate_idxs)) + 1):
         for excluded in combinations(sorted(candidate_idxs), count):
             excluded_set = set(excluded)
             hi = high_values[next(idx for idx in high_order if idx not in excluded_set)]
-            lo = low_values[next(idx for idx in low_order if idx not in excluded_set)]
+            lo_idx = next(idx for idx in low_order if idx not in excluded_set)
+            lo = low_values[lo_idx]
             mid = (hi + lo) / 2.0
             if mid <= 0:
                 continue
             rng_pct = (hi - lo) / mid
             if best is None or rng_pct < best[2]:
-                best = (hi, lo, rng_pct)
+                best = (hi, lo, rng_pct, lo_idx)
     if best is None:
         return None
-    hi, lo, rng_pct = best
+    hi, lo, rng_pct, lo_idx = best
     first_close = float(closes.iloc[:3].median())
     last_close = float(closes.iloc[-3:].median())
     progress_pct = abs(last_close - first_close) / max(abs(first_close), 1e-9)
@@ -718,6 +719,10 @@ def _sideways_window_stats(
     # A range ending with closes at its upper edge is already breaking out, not
     # a flat block that should replace the earlier impulse (VRTX is such a case).
     if last_close > first_close and terminal_position > 0.85:
+        return None
+    # A low in the latter two-thirds followed by an >8% recovery is a new
+    # incline developing inside the rolling window, not continued sideways.
+    if lo_idx >= size // 3 and (last_close - lo) / max(abs(lo), 1e-9) > 0.08:
         return None
     if rng_pct > band_pct or (max_progress_pct is not None and progress_pct > max_progress_pct):
         return None
@@ -824,10 +829,27 @@ def _select_impulse_start_long(
     reset_after_sideways: bool = True,
 ) -> int | None:
     low = pd.to_numeric(w["Low"], errors="coerce")
+    close = pd.to_numeric(w["Close"], errors="coerce")
     left = max(0, peak_idx - max_lookback)
     right = peak_idx - min_days
     if right <= left:
         return None
+    def _clear_bottom(search_left: int, search_right: int) -> int | None:
+        candidates: list[int] = []
+        for idx in range(search_left, search_right + 1):
+            local_left = max(search_left, idx - 3)
+            local_right = min(peak_idx, idx + 3)
+            if float(low.iloc[idx]) > float(low.iloc[local_left:local_right + 1].min()):
+                continue
+            confirm_right = min(peak_idx, idx + 6)
+            later_closes = close.iloc[idx + 1:confirm_right + 1]
+            if len(later_closes) < 2 or int((later_closes > float(close.iloc[idx])).sum()) < 2:
+                continue
+            candidates.append(idx)
+        if not candidates:
+            return None
+        return min(candidates, key=lambda idx: (float(low.iloc[idx]), idx))
+
     if reset_after_sideways:
         sideways_end = _latest_sideways_end_offset(
             w.iloc[left:peak_idx + 1].reset_index(drop=True),
@@ -844,8 +866,10 @@ def _select_impulse_start_long(
             post_range_left = max(left, absolute_end - 10)
             if post_range_left > right:
                 return -1
-            return int(low.iloc[post_range_left:right + 1].idxmin())
-    return int(low.iloc[left:right + 1].idxmin())
+            clear = _clear_bottom(post_range_left, right)
+            return clear if clear is not None else -1
+    clear = _clear_bottom(left, right)
+    return clear if clear is not None else -1
 
 
 def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int = 8) -> int | None:
@@ -4457,16 +4481,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     pattern = "bullish_harami"
                     pattern_idx = i
                     break
-        if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+        if pattern == "none" and all_touch_idxs:
+            for i in range(max(i_peak + 2, all_touch_idxs[0]), detect_end + 1):
+                includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
                 if includes_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_star"
                     pattern_idx = i
                     break
-        if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 2, touch_idxs[0] + 2), detect_end + 1):
-                includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+        if pattern == "none" and all_touch_idxs:
+            for i in range(max(i_peak + 2, all_touch_idxs[0]), detect_end + 1):
+                includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
                 if includes_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_doji_star"
                     pattern_idx = i
@@ -4650,16 +4674,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 pattern = "dark_cloud_cover"
                 pattern_idx = i
                 break
-    if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+    if pattern == "none" and all_touch_idxs:
+        for i in range(max(i_bottom + 2, all_touch_idxs[0]), detect_end + 1):
+            includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
             if includes_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
-    if pattern == "none" and touch_idxs:
-        for i in range(max(i_bottom + 2, touch_idxs[0] + 2), detect_end + 1):
-            includes_touch = any(t in {i - 2, i - 1, i} for t in touch_idxs)
+    if pattern == "none" and all_touch_idxs:
+        for i in range(max(i_bottom + 2, all_touch_idxs[0]), detect_end + 1):
+            includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
             if includes_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_doji_star"
                 pattern_idx = i

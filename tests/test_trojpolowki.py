@@ -215,7 +215,18 @@ def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "touch_idxs[:1]" not in source
     assert "any(t in {i - 1, i} for t in touch_idxs)" in source
-    assert "any(t in {i - 2, i - 1, i} for t in touch_idxs)" in source
+    assert "any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
+    assert "all_touch_idxs[0] + 2" not in source
+
+
+def test_fibo_anchor_requires_confirmed_local_trend_bottom():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_impulse_start_long"):source.index("def _select_peak_long")]
+    assert "def _clear_bottom" in selector
+    assert "local_left = max(search_left, idx - 3)" in selector
+    assert "local_right = min(peak_idx, idx + 3)" in selector
+    assert "later_closes > float(close.iloc[idx])" in selector
+    assert "clear if clear is not None else -1" in selector
 
 
 def test_month_long_range_requires_flat_progress_for_supplied_cases():
@@ -297,6 +308,8 @@ def test_sideways_detection_ignores_only_interior_spike_candles():
     assert "size - 4" in stats_source
     assert "closes.iloc[:3].median()" in stats_source
     assert "closes.iloc[-3:].median()" in stats_source
+    assert "lo_idx >= size // 3" in stats_source
+    assert "> 0.08" in stats_source
 
 
 def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
