@@ -8,8 +8,17 @@ from utilities.stooq_playwright import (
     _POLISH_MONTHS_BY_NUMBER,
     _capture_stooq_ui_failure,
     _parse_stooq_ui_csv,
+    _stooq_history_urls,
+    _stooq_query_symbol,
     _trim_stooq_ui_history_to_window,
 )
+
+
+def test_forex_stooq_urls_use_compact_pair_without_slash():
+    assert _stooq_query_symbol("GBP/PLN") == "gbppln"
+    assert _stooq_history_urls("GBP/PLN") == ["https://stooq.pl/q/d/?s=gbppln&i=d"]
+    source = inspect.getsource(__import__("utilities.stooq_playwright", fromlist=["update_stooq_history_from_ui_csv"]).update_stooq_history_from_ui_csv)
+    assert "_stooq_query_symbol(symbol)" in source
 
 
 def test_parse_polish_stooq_ui_csv():

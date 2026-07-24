@@ -1130,13 +1130,23 @@ def _csv_path(base_dir: Path, symbol: str) -> Path:
     return base_dir / f"{safe}.csv"
 
 
+def _stooq_query_symbol(symbol: str) -> str:
+    """Return Stooq's compact URL symbol (forex pairs never contain '/')."""
+    return (symbol or "").strip().lower().replace("/", "")
+
+
+def _stooq_debug_symbol(symbol: str) -> str:
+    return _stooq_query_symbol(symbol).replace(".", "_")
+
+
 
 
 
 
 def _stooq_history_urls(symbol: str) -> list[str]:
     raw = (symbol or "").strip()
-    candidates = [raw, raw.lower()]
+    compact = _stooq_query_symbol(raw)
+    candidates = [compact]
     dedup = []
     seen = set()
     for c in candidates:
@@ -1388,7 +1398,7 @@ def _capture_stooq_ui_failure(
 ) -> str:
     """Persist enough evidence to diagnose a failed filtered-CSV session."""
     safe_stage = re.sub(r"[^a-z0-9_-]+", "_", stage.lower()).strip("_") or "failure"
-    stem = f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}"
+    stem = f"{_stooq_debug_symbol(symbol)}_ui_csv_{safe_stage}"
     out_dir = _stooq_debug_dir()
     screenshot = _debug_fail_screenshot(symbol, page, suffix=f"_ui_csv_{safe_stage}")
     raw_path = out_dir / f"{stem}.download"
@@ -1404,7 +1414,7 @@ def _capture_stooq_ui_failure(
         "tor_proxy_reachable": _stooq_tor_proxy_reachable() if _stooq_tor_enabled() else None,
         "proxy_server": (proxy or {}).get("server", ""),
         "screenshot": screenshot,
-        "html": str((out_dir / f"{symbol.lower().replace('.', '_')}_ui_csv_{safe_stage}.html").resolve()),
+        "html": str((out_dir / f"{_stooq_debug_symbol(symbol)}_ui_csv_{safe_stage}.html").resolve()),
         "download": str(raw_path.resolve()) if payload is not None else "",
         "download_preview": _stooq_ui_payload_preview(payload),
     }
@@ -1449,7 +1459,7 @@ def update_stooq_history_from_ui_csv(
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     anchor = end_date.date() if isinstance(end_date, datetime) else datetime.now(UTC).date()
     start = anchor - timedelta(days=max(1, lookback_days))
-    url = f"https://stooq.pl/q/d/?s={symbol.strip().lower()}"
+    url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}"
     with sync_playwright() as playwright:
         proxy_index = _stooq_proxy_pool_initial_index(symbol)
         browser, page = _open_page(
@@ -2155,7 +2165,7 @@ def _stooq_debug_dir() -> Path:
 
 def _debug_fail_screenshot(symbol: str, page, suffix: str = "") -> str:
     out_dir = _stooq_debug_dir()
-    stem = f"{symbol.lower().replace('.', '_')}{suffix}"
+    stem = f"{_stooq_debug_symbol(symbol)}{suffix}"
     path = out_dir / f"{stem}.png"
     html_path = out_dir / f"{stem}.html"
     try:
@@ -2179,7 +2189,7 @@ def _captcha_artifact_path(symbol: str, suffix: str) -> Path:
         out_dir = _stooq_bulk_debug_dir()
     else:
         out_dir = _stooq_debug_dir()
-    return out_dir / f"{symbol.lower().replace('.', '_')}{suffix}.png"
+    return out_dir / f"{_stooq_debug_symbol(symbol)}{suffix}.png"
 
 
 def _preprocess_stooq_captcha_image(src_path: Path, out_path: Path) -> bool:
@@ -2633,7 +2643,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         f"Timeout while fetching Stooq history for {symbol} "
                         f"(>{max_runtime_s}s without progress, last_page={page_num})."
                     )
-                url = f"https://stooq.pl/q/d/?s={symbol.lower()}&i=d&l={page_num}"
+                url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}&i=d&l={page_num}"
                 attempted_urls.append(url)
                 if verbose:
                     print(f"[stooq-web] page={page_num} goto={url}")
@@ -2895,7 +2905,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
             "(or the Wayland socket). Without that, Playwright cannot open a headed inspector, so this run continues headless.",
             flush=True,
         )
-    out_file = out_dir / f"{symbol.lower().replace('.', '_')}_debug.json"
+    out_file = out_dir / f"{_stooq_debug_symbol(symbol)}_debug.json"
 
     urls = _stooq_history_urls(symbol)
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
@@ -2928,9 +2938,9 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
             pass
 
         html = page.content()
-        html_path = out_dir / f"{symbol.lower().replace('.', '_')}.html"
+        html_path = out_dir / f"{_stooq_debug_symbol(symbol)}.html"
         html_path.write_text(html, encoding="utf-8")
-        png_path = out_dir / f"{symbol.lower().replace('.', '_')}.png"
+        png_path = out_dir / f"{_stooq_debug_symbol(symbol)}.png"
         page.screenshot(path=str(png_path), full_page=True)
         print(f"[stooq-web] debug page artifacts saved for {symbol}: {png_path.resolve()} (html: {html_path.resolve()})", flush=True)
 
