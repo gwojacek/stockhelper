@@ -864,7 +864,10 @@ def _select_impulse_start_long(
         sideways_end = _latest_sideways_end_offset(
             w.iloc[left:peak_idx + 1].reset_index(drop=True),
             max_days=30,
-            band_pct=0.12,
+            # Reset anchors only for genuinely tight bases.  The broader 12%
+            # diagnostic threshold also catches volatile consolidations inside
+            # one continuing impulse (ADP); those must keep their clear bottom.
+            band_pct=0.08,
             max_progress_pct=0.05,
             max_outlier_candles=2,
         )

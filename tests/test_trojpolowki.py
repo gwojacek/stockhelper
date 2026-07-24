@@ -227,6 +227,7 @@ def test_fibo_anchor_requires_confirmed_local_trend_bottom():
     assert "local_right = min(peak_idx, idx + 3)" in selector
     assert "later_closes > float(close.iloc[idx])" in selector
     assert "clear if clear is not None else -1" in selector
+    assert "band_pct=0.08" in selector
 
 
 def test_sbux_june_5_bottom_is_not_discarded_as_sideways_spike():
@@ -327,7 +328,7 @@ def test_sideways_detection_ignores_only_interior_spike_candles():
 
 
 def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
-    def latest_window(path: str, start: str, end: str) -> str | None:
+    def latest_window(path: str, start: str, end: str, band_limit: float = 0.12) -> str | None:
         with Path(path).open(encoding="utf-8") as handle:
             rows = [row for row in csv.DictReader(handle) if start <= row["Date"] <= end]
         latest = None
@@ -351,7 +352,7 @@ def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
             kept_low = min(float(row["Low"]) for row in window)
             terminal_position = (last - kept_low) / max(kept_high - kept_low, 1e-9)
             terminal_breakout = last > first and terminal_position > 0.85
-            if best_band <= 0.12 and abs(last - first) / first <= 0.05 and not terminal_breakout:
+            if best_band <= band_limit and abs(last - first) / first <= 0.05 and not terminal_breakout:
                 latest = window[-1]["Date"]
         return latest
 
@@ -359,6 +360,9 @@ def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
     assert latest_window("data/csv/stocks/BNP_WA.csv", "2025-11-04", "2026-06-17") is not None
     assert latest_window("data/csv/stocks/MCHP_US.csv", "2026-03-30", "2026-05-08") is None
     assert latest_window("data/csv/stocks/VRTX_US.csv", "2026-05-05", "2026-07-07") is None
+    assert latest_window("data/csv/stocks/TOR_WA.csv", "2025-07-18", "2026-07-16", 0.08) is not None
+    assert latest_window("data/csv/stocks/BNP_WA.csv", "2025-11-04", "2026-06-17", 0.08) is not None
+    assert latest_window("data/csv/stocks/ADP_US.csv", "2026-04-13", "2026-07-17", 0.08) is None
 
 
 def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
