@@ -237,6 +237,20 @@ def test_short_fibo_markets_and_chart_png_download_are_enabled():
     assert "link.download" in ui_source
 
 
+def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "function applyWedgeDerivedLevels(forceScannerLevels = false)" in ui_source
+    assert "if (forceScannerLevels) {{" in ui_source
+    assert "delete levels.entry;" in ui_source
+    assert "delete levelPoints.entry;" in ui_source
+    assert "const highIsAuto = forceScannerLevels ||" in ui_source
+    assert "const lowIsAuto = forceScannerLevels ||" in ui_source
+    assert "const stopLossIsAuto = forceScannerLevels ||" in ui_source
+    assert "const scannerWedgePreloaded = initialScannerDrawnObjects.some" in ui_source
+    assert "applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();" in ui_source
+    assert ui_source.count("applyWedgeDerivedLevels(true);") >= 2
+
+
 def test_fibo_anchor_requires_confirmed_local_trend_bottom():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     selector = source[source.index("def _select_impulse_start_long"):source.index("def _select_peak_long")]
@@ -655,6 +669,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-ichi-trend-filter" not in text
     assert "setTrojDirection" in text
     assert "data-direction='long'" in text and "data-direction='short'" in text
+    assert "data-direction='all'" not in text
+    assert "const next=(el.dataset.trojDirection||'all')===requested?'all':requested" in text
+    assert "b.dataset.direction===next" in text
     assert "card.dataset.market" in text
     assert "card.style.display=cardHit?'':'none'" in text
     assert "const visible=[];const hidden=[]" in text
