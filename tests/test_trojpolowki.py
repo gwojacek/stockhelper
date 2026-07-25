@@ -786,9 +786,12 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert "i_start_sel = _select_impulse_start_short(" in scanner_source
     assert 'i_start = int(high.iloc[:-60].idxmax())' not in scanner_source
     assert "min_decline_pct: float = 0.03" in scanner_source
-    assert "max_lookback: int = 50" in scanner_source
+    assert "max_lookback: int = 140" in scanner_source
+    assert "Select the latest clear completed low that belongs to a real decline" in scanner_source
+    assert "if completed_cycle:" in scanner_source
     assert "Short: correction returned below 23.6 without touching 61.8" in scanner_source
     assert "old top already completed a 61.8 cycle before the final bottom" in scanner_source
+    assert "anchor is followed by a month-long sideways range instead of an immediate decline" in scanner_source
 
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "obj.group_id === 'auto-fibo'" in ui_source

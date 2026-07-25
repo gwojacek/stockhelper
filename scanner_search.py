@@ -937,18 +937,32 @@ def _select_bottom_short(
     w: pd.DataFrame,
     min_decline_days: int,
     min_tail_bars: int = 8,
-    max_lookback: int = 50,
+    max_lookback: int = 140,
 ) -> int | None:
-    """Select the dominant completed low for a short impulse."""
+    """Select the latest clear completed low that belongs to a real decline."""
     low = pd.to_numeric(w["Low"], errors="coerce")
+    close = pd.to_numeric(w["Close"], errors="coerce")
     right = len(low) - min_tail_bars
     left = max(min_decline_days, right - max_lookback)
     if right <= left:
         return None
-    segment = low.iloc[left:right]
-    if segment.empty or segment.isna().all():
-        return None
-    return int(segment.idxmin())
+    for idx in range(right - 1, left - 1, -1):
+        local_left = max(left, idx - 3)
+        local_right = min(len(low) - 1, idx + 3)
+        if float(low.iloc[idx]) > float(low.iloc[local_left:local_right + 1].min()):
+            continue
+        trend_left = max(left, idx - 20)
+        if float(low.iloc[idx]) > float(low.iloc[trend_left:idx + 1].min()):
+            continue
+        confirm_right = min(len(low) - 1, idx + 6)
+        later_closes = close.iloc[idx + 1:confirm_right + 1]
+        if len(later_closes) < 2 or int((later_closes > float(close.iloc[idx])).sum()) < 2:
+            continue
+        # Ignore random recent lows that did not finish a qualifying short leg.
+        if _select_impulse_start_short(w, idx, min_decline_days, max_lookback=max_lookback) is None:
+            continue
+        return idx
+    return None
 
 
 def _select_impulse_start_short(
@@ -966,8 +980,9 @@ def _select_impulse_start_short(
     move into the selected bottom.  FX impulses commonly form clean 3-5% legs.
     """
     high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
     close = pd.to_numeric(w["Close"], errors="coerce")
-    bottom = float(pd.to_numeric(w["Low"], errors="coerce").iloc[bottom_idx])
+    bottom = float(low.iloc[bottom_idx])
     left = max(0, bottom_idx - max_lookback)
     right = bottom_idx - min_days
     if right < left:
@@ -986,6 +1001,19 @@ def _select_impulse_start_short(
         confirm_right = min(bottom_idx, idx + 6)
         later_closes = close.iloc[idx + 1:confirm_right + 1]
         if len(later_closes) < 2 or int((later_closes < float(close.iloc[idx])).sum()) < 2:
+            continue
+        completed_cycle = False
+        for interim_idx in range(idx + min_days, bottom_idx - 2):
+            interim_low = float(low.iloc[interim_idx])
+            interim_decline = (top - interim_low) / max(abs(top), 1e-9)
+            if interim_decline < min_decline_pct:
+                continue
+            interim_618 = interim_low + (top - interim_low) * 0.618
+            rebound_high = float(pd.to_numeric(high.iloc[interim_idx + 1:bottom_idx], errors="coerce").max())
+            if pd.notna(rebound_high) and rebound_high >= interim_618:
+                completed_cycle = True
+                break
+        if completed_cycle:
             continue
         candidates.append(idx)
         if decline_pct >= 0.05:
@@ -4669,13 +4697,13 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     fib_500 = fib_end + rng * 0.5
     fib_618 = fib_end + rng * 0.618
     # Do not stretch a short Fibo across an already completed large cycle.
-    # If an interim >=5% decline retraced to its own 61.8 before the selected
+    # If an interim qualifying decline retraced to its own 61.8 before the selected
     # final bottom, that old top has had its one reversal opportunity; scanning
     # must restart from a newer clear top (GBP/USD Jan->Apr is such a cycle).
     for interim_idx in range(i_start + min_incline_days, i_bottom - 2):
         interim_low = float(low.iloc[interim_idx])
         interim_decline = (fib_start - interim_low) / max(abs(fib_start), 1e-9)
-        if interim_decline < 0.05:
+        if interim_decline < 0.03:
             continue
         interim_618 = interim_low + (fib_start - interim_low) * 0.618
         later_interim_high = float(pd.to_numeric(high.iloc[interim_idx + 1:i_bottom], errors="coerce").max())
@@ -4685,6 +4713,14 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                 "restart from the next clear trend top."
             )
             return None
+    early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="short")
+    if early_sideways is not None:
+        s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
+        _log(
+            "Rejected short: anchor is followed by a month-long sideways range instead of an immediate decline. "
+            f"window={s_idx}-{e_idx}, range_pct={rng_pct * 100:.2f}%, progress={progress_pct * 100:.2f}%."
+        )
+        return None
     corr_high = float(high.iloc[i_bottom:i_end + 1].max())
     if corr_high >= fib_start:
         _log(
