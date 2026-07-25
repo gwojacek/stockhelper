@@ -1345,6 +1345,8 @@ def load_or_update_daily_data(
             "name": symbol.title(),
             "fallback_reason": "Cache-only mode enabled.",
         }
+    if cache_only:
+        raise ValueError(f"Cache-only mode: no local CSV data for {symbol}")
 
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         local_yahoo_merge = _try_local_commodity_yahoo_merge(symbol, csv_path) if local is not None else None

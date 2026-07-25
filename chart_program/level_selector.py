@@ -874,14 +874,21 @@ def run_level_selector(raw_args=None):
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
-        lot_cost_auto, pip_value_auto = _compute_margin_defaults(
-            instrument_type=instrument_type,
-            symbol=symbol,
-            source_ticker=fetch_info.get("symbol"),
-            price=last_close,
-            data_source=args.data_source,
-            api_key=args.api_key,
-        )
+        try:
+            lot_cost_auto, pip_value_auto = _compute_margin_defaults(
+                instrument_type=instrument_type,
+                symbol=symbol,
+                source_ticker=fetch_info.get("symbol"),
+                price=last_close,
+                data_source=args.data_source,
+                api_key=args.api_key,
+            )
+        except ValueError as exc:
+            # Report-launched charts deliberately prohibit network refreshes.
+            # Missing auxiliary FX/PLN caches must not delay or prevent the
+            # already-cached instrument chart from opening.
+            lot_cost_auto, pip_value_auto = None, None
+            print(f"[chart] cached margin defaults unavailable: {exc}")
         if lot_cost_auto is not None:
             existing["lot_cost"] = lot_cost_auto
         if pip_value_auto is not None:
