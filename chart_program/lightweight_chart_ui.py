@@ -715,7 +715,7 @@ class LightweightChartLevelSelectorUI:
   let levels = {{...(P.values || {{}})}};
   let levelPoints = {{...(levels.level_points || {{}})}};
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
-  const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
+  const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
@@ -2407,7 +2407,10 @@ class LightweightChartLevelSelectorUI:
     $('values-panel').innerHTML = seq.map(k => `<div class="value-tile ${{k}}"><div class="value-label">${{labels[k]}}</div><div class="value-number">${{levels[k] == null ? '--' : fmt(levels[k])}}</div></div>`).join('');
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
-    if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+    if (resetScannerBtn) {{
+      resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+      resetScannerBtn.textContent = initialScannerDrawnObjects.some(o => o.group_id === 'auto-fibo') ? 'Reset Fibo' : 'Reset scanner';
+    }}
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
     const setupInfoBtn = $('setup-debug-btn');
     if (setupInfoBtn) {{

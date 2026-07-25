@@ -933,6 +933,62 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
     return best_idx
 
 
+def _select_bottom_short(
+    w: pd.DataFrame,
+    min_decline_days: int,
+    min_tail_bars: int = 8,
+    max_lookback: int = 70,
+) -> int | None:
+    """Select the dominant completed low for a short impulse."""
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    right = len(low) - min_tail_bars
+    left = max(min_decline_days, right - max_lookback)
+    if right <= left:
+        return None
+    segment = low.iloc[left:right]
+    if segment.empty or segment.isna().all():
+        return None
+    return int(segment.idxmin())
+
+
+def _select_impulse_start_short(
+    w: pd.DataFrame,
+    bottom_idx: int,
+    min_days: int,
+    max_lookback: int = 140,
+    min_decline_pct: float = 0.05,
+) -> int | None:
+    """Return the latest clear trend top that produced the short decline.
+
+    This is the short-side mirror of clear-bottom selection.  It deliberately
+    rejects ordinary pullback highs: a candidate must be a local wick high,
+    show immediate downward confirmation, and still account for at least a 5%
+    move into the selected bottom.
+    """
+    high = pd.to_numeric(w["High"], errors="coerce")
+    close = pd.to_numeric(w["Close"], errors="coerce")
+    bottom = float(pd.to_numeric(w["Low"], errors="coerce").iloc[bottom_idx])
+    left = max(0, bottom_idx - max_lookback)
+    right = bottom_idx - min_days
+    if right < left:
+        return None
+    candidates: list[int] = []
+    for idx in range(left, right + 1):
+        local_left = max(left, idx - 3)
+        local_right = min(bottom_idx, idx + 3)
+        top = float(high.iloc[idx])
+        if top < float(high.iloc[local_left:local_right + 1].max()):
+            continue
+        if (top - bottom) / max(abs(top), 1e-9) < min_decline_pct:
+            continue
+        confirm_right = min(bottom_idx, idx + 6)
+        later_closes = close.iloc[idx + 1:confirm_right + 1]
+        if len(later_closes) < 2 or int((later_closes < float(close.iloc[idx])).sum()) < 2:
+            continue
+        candidates.append(idx)
+    return max(candidates) if candidates else None
+
+
 
 def _reverse_stooq_symbol(symbol: str) -> str | None:
     target = (symbol or "").strip().upper()
@@ -4577,11 +4633,17 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
         )
     # short setup
-    # Anchor short Fibo on the candle with the highest wick, not on the highest close.
-    # This keeps scanner anchors on the real visible peak candle (including commodity spikes).
-    i_start = int(high.iloc[:-60].idxmax())
     min_incline_days = 10
-    i_bottom = int(low.iloc[i_start + min_incline_days:].idxmin())
+    i_bottom_sel = _select_bottom_short(w, min_incline_days, min_tail_bars=8)
+    if i_bottom_sel is None:
+        _log("Rejected short: no completed dominant bottom selected.")
+        return None
+    i_bottom = int(i_bottom_sel)
+    i_start_sel = _select_impulse_start_short(w, i_bottom, min_incline_days)
+    if i_start_sel is None:
+        _log("Rejected short: no clear trend top produced the selected decline.")
+        return None
+    i_start = int(i_start_sel)
     if i_bottom <= i_start + min_incline_days:
         _log("Rejected short: invalid impulse start/bottom distance.")
         return None

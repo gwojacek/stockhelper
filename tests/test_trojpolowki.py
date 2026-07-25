@@ -779,6 +779,18 @@ def test_bullish_harami_retest_can_stay_inside_cloud():
     assert "_touches_level(c1, level) or _touches_level(c2, level)" in harami_source
 
 
+def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "def _select_impulse_start_short(" in scanner_source
+    assert "i_bottom_sel = _select_bottom_short(" in scanner_source
+    assert "i_start_sel = _select_impulse_start_short(" in scanner_source
+    assert 'i_start = int(high.iloc[:-60].idxmax())' not in scanner_source
+
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "obj.group_id === 'auto-fibo'" in ui_source
+    assert "? 'Reset Fibo' : 'Reset scanner'" in ui_source
+
+
 def test_kumo_twist_uses_projected_cloud_source():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     start = source.index("def _ichimoku_extra_metrics")
