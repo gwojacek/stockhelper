@@ -214,9 +214,11 @@ def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
 def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "touch_idxs[:1]" not in source
-    assert "any(t in {i - 1, i} for t in touch_idxs)" in source
-    assert "any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
-    assert "all_touch_idxs[0] + 2" not in source
+    assert "first_touch_idx = all_touch_idxs[0]" in source
+    assert "c = w.iloc[first_touch_idx]" in source
+    assert "c1, c2 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1]" in source
+    assert "c1, c2, c3 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1], w.iloc[first_touch_idx + 2]" in source
+    assert "A hammer on candle two is not a standalone hammer" in source
     assert "close above 61.8" in source
     assert "float(close.iloc[pattern_idx]) <= fib_618" in source
     assert "pattern_failed_close = True" in source
@@ -641,22 +643,23 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📈 Show" in text
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
-    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO'>" in text
+    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'>" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
     assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 LIN\.US", text)
-    assert "data-scanner='ICHIMOKU' data-ichi-trend='long' class='today-signal'" in text
-    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long'><strong>🇩🇪 RWE.DE" in text
-    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO'><strong>🇺🇸 VAL.US" in text
-    assert "data-scanner='FIBO' class='today-signal'" in text
+    assert "data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long' class='today-signal'" in text
+    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE.DE" in text
+    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'><strong>🇺🇸 VAL.US" in text
+    assert "data-scanner='FIBO' data-troj-direction='long' class='today-signal'" in text
     assert "AEP.US" in text and "bullish_hammer" in text
-    assert "troj-ichi-trend-filter" in text
-    assert "setTrojIchiTrend" in text
+    assert "troj-ichi-trend-filter" not in text
+    assert "setTrojDirection" in text
+    assert "data-direction='long'" in text and "data-direction='short'" in text
     assert "card.dataset.market" in text
     assert "card.style.display=cardHit?'':'none'" in text
     assert "const visible=[];const hidden=[]" in text
     assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
-    assert "const okTrend=trendFilter==='all'||!cardTrend||cardTrend===trendFilter" in text
+    assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
     assert "th.classList.add('stooq-column')" in text

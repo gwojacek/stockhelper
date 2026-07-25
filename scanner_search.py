@@ -4714,60 +4714,40 @@ def _find_fibo_setup(
         status = "valid_reversal"
         pattern = "none"
         pattern_failed_close = False
-        pattern_idx = touch_idxs[-1] if touch_idxs else i_end
-        detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
-        # 1-candle: hammer touching 61.8 and closing above 61.8
-        for i in touch_idxs:
-            c = w.iloc[i]
-            if _is_bullish_hammer(c) and _touches_level(c, fib_618) and float(c["Close"]) > fib_618:
+        first_touch_idx = all_touch_idxs[0] if all_touch_idxs else None
+        pattern_idx = first_touch_idx if first_touch_idx is not None else i_end
+        # The first candle touching 61.8 is always candle one of the pattern.
+        # A hammer on candle two is not a standalone hammer: candle one and two
+        # must instead satisfy one of the supported two-candle formations.
+        if first_touch_idx is not None:
+            c = w.iloc[first_touch_idx]
+            if _is_bullish_hammer(c) and float(c["Close"]) > fib_618:
                 pattern = "hammer"
-                pattern_idx = i
-                break
-        # 2-candle: bullish engulfing, at least one candle touches 61.8, second close > 61.8
-        if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
-                c1, c2 = w.iloc[i - 1], w.iloc[i]
-                engulf = (
-                    float(c1["Close"]) < float(c1["Open"])
-                    and float(c2["Close"]) > float(c2["Open"])
-                    and float(c2["Open"]) < float(c1["Close"])
-                    and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
-                    and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
-                )
-                includes_touch = any(t in {i - 1, i} for t in touch_idxs)
-                if engulf and includes_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) > fib_618:
-                    pattern = "bullish_engulfing"
-                    pattern_idx = i
-                    break
-        if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
-                c1, c2 = w.iloc[i - 1], w.iloc[i]
-                includes_touch = any(t in {i - 1, i} for t in touch_idxs)
-                if includes_touch and _is_bullish_piercing_line(c1, c2, fib_618):
-                    pattern = "bullish_piercing_line"
-                    pattern_idx = i
-                    break
-        if pattern == "none" and touch_idxs:
-            for i in range(max(i_peak + 1, touch_idxs[0]), detect_end + 1):
-                includes_touch = any(t in {i - 1, i} for t in touch_idxs)
-                if includes_touch and _is_bullish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
-                    pattern = "bullish_harami"
-                    pattern_idx = i
-                    break
-        if pattern == "none" and all_touch_idxs:
-            for i in range(max(i_peak + 2, all_touch_idxs[0]), detect_end + 1):
-                includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-                if includes_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
-                    pattern = "morning_star"
-                    pattern_idx = i
-                    break
-        if pattern == "none" and all_touch_idxs:
-            for i in range(max(i_peak + 2, all_touch_idxs[0]), detect_end + 1):
-                includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-                if includes_touch and _is_morning_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
-                    pattern = "morning_doji_star"
-                    pattern_idx = i
-                    break
+        if pattern == "none" and first_touch_idx is not None and first_touch_idx + 1 <= i_end:
+            c1, c2 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1]
+            engulf = (
+                float(c1["Close"]) < float(c1["Open"])
+                and float(c2["Close"]) > float(c2["Open"])
+                and float(c2["Open"]) < float(c1["Close"])
+                and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
+                and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+            )
+            if engulf and float(c2["Close"]) > fib_618:
+                pattern = "bullish_engulfing"
+            elif _is_bullish_piercing_line(c1, c2, fib_618):
+                pattern = "bullish_piercing_line"
+            elif _is_bullish_harami(c1, c2, fib_618):
+                pattern = "bullish_harami"
+            if pattern != "none":
+                pattern_idx = first_touch_idx + 1
+        if pattern == "none" and first_touch_idx is not None and first_touch_idx + 2 <= i_end:
+            c1, c2, c3 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1], w.iloc[first_touch_idx + 2]
+            if _is_morning_star(c1, c2, c3, fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
+                pattern = "morning_star"
+            elif _is_morning_star(c1, c2, c3, fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
+                pattern = "morning_doji_star"
+            if pattern != "none":
+                pattern_idx = first_touch_idx + 2
         # Every reversal formation is confirmed by its final candle.  Merely
         # having the right candle shapes around 61.8 is insufficient when that
         # final close remains below the level (GOOGL bullish-harami case).
