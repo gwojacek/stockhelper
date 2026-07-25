@@ -217,6 +217,22 @@ def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
     assert "any(t in {i - 1, i} for t in touch_idxs)" in source
     assert "any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
     assert "all_touch_idxs[0] + 2" not in source
+    assert "close above 61.8" in source
+    assert "float(close.iloc[pattern_idx]) <= fib_618" in source
+    assert "pattern_failed_close = True" in source
+    assert "the completed 61.8 pattern failed its required closing-price confirmation" in source
+    assert "first 61.8 touch produced no valid 1-, 2-, or 3-candle pattern" in source
+    assert "accepting short completed cycle despite 61.8 cross without pattern" not in source
+
+
+def test_short_fibo_markets_and_chart_png_download_are_enabled():
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert 'group_name in {"DAX40", "US100"}' in scanner_source
+    assert 'if short_fibo_enabled:' in scanner_source
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert 'id="download-chart-png"' in ui_source
+    assert "chart.takeScreenshot(true, false)" in ui_source
+    assert "link.download" in ui_source
 
 
 def test_fibo_anchor_requires_confirmed_local_trend_bottom():

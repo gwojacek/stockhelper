@@ -4713,6 +4713,7 @@ def _find_fibo_setup(
             return None
         status = "valid_reversal"
         pattern = "none"
+        pattern_failed_close = False
         pattern_idx = touch_idxs[-1] if touch_idxs else i_end
         detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
         # 1-candle: hammer touching 61.8 and closing above 61.8
@@ -4767,15 +4768,28 @@ def _find_fibo_setup(
                     pattern = "morning_doji_star"
                     pattern_idx = i
                     break
+        # Every reversal formation is confirmed by its final candle.  Merely
+        # having the right candle shapes around 61.8 is insufficient when that
+        # final close remains below the level (GOOGL bullish-harami case).
+        if pattern != "none" and float(close.iloc[pattern_idx]) <= fib_618:
+            _log(
+                "Long: rejected 61.8 pattern because its final candle did not "
+                f"close above 61.8 ({float(close.iloc[pattern_idx]):.4f} <= {fib_618:.4f})."
+            )
+            pattern = "none"
+            pattern_failed_close = True
         crossed_618 = corr_low <= fib_618
         _log(f"Long pattern={pattern}, crossed_618={crossed_618}, corr_low={corr_low:.4f}, fib_618={fib_618:.4f}")
         if pattern == "none":
             if crossed_618:
-                if (i_peak - i_start) <= 45:
-                    _log("Long: accepting short completed cycle despite 61.8 cross without pattern.")
-                else:
-                    _log("Rejected long: large formation crossed 61.8 but no valid pattern; next formation must start after the new bottom.")
+                if pattern_failed_close:
+                    _log("Rejected long: the completed 61.8 pattern failed its required closing-price confirmation.")
                     return None
+                first_touch_idx = all_touch_idxs[0] if all_touch_idxs else i_end
+                if i_end > first_touch_idx + 2:
+                    _log("Rejected long: first 61.8 touch produced no valid 1-, 2-, or 3-candle pattern.")
+                    return None
+                _log("Long: first 61.8 touch is still inside its three-candle pattern window.")
             close_after_peak = pd.to_numeric(w.iloc[i_peak:i_end + 1]["Close"], errors="coerce")
             below_236_idx = [j for j, v in enumerate(close_after_peak.tolist()) if pd.notna(v) and float(v) < fib_236]
             if below_236_idx:
@@ -5240,7 +5254,8 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.latest_candle_date = latest_candle_date
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
-            if instrument in {"forex", "commodity"}:
+            short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "US100"}
+            if short_fibo_enabled:
                 steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
                 if steep_3p_short:
                     steep_3p_short.ticker = ticker
@@ -5298,7 +5313,7 @@ def run_fibo_search(target: str) -> int:
                     c.latest_candle_date = latest_candle_date
                     c.expected_latest_session_date = expected_latest_session_date
                     out_rows.append(c)
-            if instrument in {"commodity", "forex"}:
+            if short_fibo_enabled:
                 short_candidates: list[FiboScanResult] = []
                 short_offset0 = _find_fibo_setup(df, "short", end_offset=0, allow_equal_third_close=(instrument == "forex"))
                 for off in [0, 5, 10, 15, 20, 30, 40]:

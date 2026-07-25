@@ -635,6 +635,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
+        <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
@@ -2624,6 +2625,21 @@ class LightweightChartLevelSelectorUI:
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
+  $('download-chart-png').onclick = () => {{
+    try {{
+      const canvas = chart.takeScreenshot(true, false);
+      const link = document.createElement('a');
+      const safeSymbol = String(P.symbol || 'chart').replace(/[^a-z0-9._-]+/gi, '_');
+      link.download = `${{safeSymbol}}-${{new Date().toISOString().slice(0,10)}}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }} catch (error) {{
+      console.error('chart PNG download failed', error);
+      window.alert('Could not create the chart PNG.');
+    }}
+  }};
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; $('calculation-currency').value='PLN'; setCalculationCurrencyButtons('PLN'); render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
