@@ -352,6 +352,61 @@ class FiboScanResult:
     has_monthly_sideways: bool = False
 
 
+def _mirror_ohlc_for_short(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
+    """Return a vertically mirrored chart so short scans can use long rules.
+
+    Mirroring around the midpoint of the complete price envelope preserves
+    candle lengths, gaps, elapsed time, sideways ranges and every local
+    high/low relationship.  A clear top -> bottom impulse therefore becomes
+    the exact clear bottom -> top impulse consumed by the established long
+    scanner, rather than a second set of gradually diverging short heuristics.
+    """
+    mirrored = df.copy()
+    high = pd.to_numeric(df["High"], errors="coerce")
+    low = pd.to_numeric(df["Low"], errors="coerce")
+    axis = float(high.max()) + float(low.min())
+    mirrored["Open"] = axis - pd.to_numeric(df["Open"], errors="coerce")
+    mirrored["High"] = axis - low
+    mirrored["Low"] = axis - high
+    mirrored["Close"] = axis - pd.to_numeric(df["Close"], errors="coerce")
+    return mirrored, axis
+
+
+def _unmirror_short_fibo(result: FiboScanResult | None, axis: float) -> FiboScanResult | None:
+    """Map a result from the mirrored long chart back to short prices."""
+    if result is None:
+        return None
+    short_pattern = {
+        "hammer": "shooting star",
+        "bullish_engulfing": "bearish_engulfing",
+        "bullish_piercing_line": "dark_cloud_cover",
+        "bullish_harami": "bearish_harami",
+        "morning_star": "evening_star",
+        "morning_doji_star": "evening_doji_star",
+    }.get(result.reversal_pattern_name, result.reversal_pattern_name)
+    return FiboScanResult(
+        ticker=result.ticker,
+        direction="short",
+        status=result.status,
+        incline_start_date=result.incline_start_date,
+        incline_end_date=result.incline_end_date,
+        incline_duration_days=result.incline_duration_days,
+        decline_end_date=result.decline_end_date,
+        decline_duration_days=result.decline_duration_days,
+        incline_decline_duration_ratio=result.incline_decline_duration_ratio,
+        fib_23_6=axis - result.fib_23_6,
+        fib_38_2=axis - result.fib_38_2,
+        fib_61_8=axis - result.fib_61_8,
+        first_61_8_touch_date=result.first_61_8_touch_date,
+        reversal_pattern_name=short_pattern,
+        stop_loss=axis - result.stop_loss,
+        current_close=axis - result.current_close,
+        latest_candle_date=result.latest_candle_date,
+        expected_latest_session_date=result.expected_latest_session_date,
+        has_monthly_sideways=result.has_monthly_sideways,
+    )
+
+
 def _prune_superseded_steep_fibo_rows(
     items: list[FiboScanResult | WedgeScanResult],
 ) -> list[FiboScanResult | WedgeScanResult]:
@@ -4309,6 +4364,14 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         if explain is not None:
             explain.append(msg)
 
+    if direction == "short":
+        mirrored, axis = _mirror_ohlc_for_short(df)
+        mirrored_explain: list[str] | None = [] if explain is not None else None
+        result = _find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain)
+        if explain is not None and mirrored_explain is not None:
+            explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
+        return _unmirror_short_fibo(result, axis)
+
     if len(df) < 80:
         _log("Rejected 3P steep: less than 80 candles.")
         return None
@@ -4321,7 +4384,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: missing OHLC data.")
         return None
 
-    if direction == "short":
+    if direction == "short":  # pragma: no cover - handled by mirrored long scan above
         min_decline_days = 21
         i_bottom_sel = _select_bottom_short(w, min_decline_days, min_tail_bars=2, max_lookback=260)
         if i_bottom_sel is None:
@@ -4475,6 +4538,20 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)
+    if direction == "short":
+        mirrored, axis = _mirror_ohlc_for_short(df)
+        mirrored_explain: list[str] | None = [] if explain is not None else None
+        result = _find_fibo_setup(
+            mirrored,
+            direction="long",
+            end_offset=end_offset,
+            explain=mirrored_explain,
+            stale_cycle_mode=stale_cycle_mode,
+            allow_equal_third_close=allow_equal_third_close,
+        )
+        if explain is not None and mirrored_explain is not None:
+            explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
+        return _unmirror_short_fibo(result, axis)
     if len(df) < 120:
         _log("Rejected: less than 120 candles.")
         return None
