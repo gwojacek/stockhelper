@@ -792,6 +792,8 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert "Short: correction returned below 23.6 without touching 61.8" in scanner_source
     assert "old top already completed a 61.8 cycle before the final bottom" in scanner_source
     assert "anchor is followed by a month-long sideways range instead of an immediate decline" in scanner_source
+    assert 'steep_3p_short = _find_fibo_3p_steep_setup(df, "short")' in scanner_source
+    assert "direction=\"short\", status=status" in scanner_source
 
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "obj.group_id === 'auto-fibo'" in ui_source

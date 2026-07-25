@@ -798,7 +798,7 @@ def _early_sideways_after_anchor_window(
     min_days: int = 22,
     max_days: int = 32,
     band_pct: float = 0.10,
-    max_progress_pct: float = 0.12,
+    max_progress_pct: float = 0.025,
 ) -> tuple[int, int, float, float, float, float] | None:
     """Detect an anchor followed by a flat month instead of an immediate impulse.
 
@@ -825,8 +825,10 @@ def _early_sideways_after_anchor_window(
     anchor_price = float(lows.iloc[0] if direction == "long" else highs.iloc[0])
     if anchor_price <= 0:
         return None
-    progress_pct = ((hi - anchor_price) / anchor_price) if direction == "long" else ((anchor_price - lo) / anchor_price)
-    if rng_pct <= band_pct and progress_pct <= max_progress_pct:
+    ending_close = float(pd.to_numeric(seg["Close"], errors="coerce").iloc[-3:].median())
+    progress_pct = ((ending_close - anchor_price) / anchor_price) if direction == "long" else ((anchor_price - ending_close) / anchor_price)
+    directional_efficiency = max(0.0, progress_pct) / max(rng_pct, 1e-9)
+    if rng_pct <= band_pct and max(0.0, progress_pct) <= max_progress_pct and directional_efficiency <= 0.45:
         return (i_start, i_start + len(seg) - 1, hi, lo, rng_pct, progress_pct)
     return None
 
@@ -1005,12 +1007,16 @@ def _select_impulse_start_short(
         completed_cycle = False
         for interim_idx in range(idx + min_days, bottom_idx - 2):
             interim_low = float(low.iloc[interim_idx])
+            local_low_left = max(idx, interim_idx - 3)
+            local_low_right = min(bottom_idx - 1, interim_idx + 3)
+            if interim_low > float(low.iloc[local_low_left:local_low_right + 1].min()):
+                continue
             interim_decline = (top - interim_low) / max(abs(top), 1e-9)
             if interim_decline < min_decline_pct:
                 continue
             interim_618 = interim_low + (top - interim_low) * 0.618
-            rebound_high = float(pd.to_numeric(high.iloc[interim_idx + 1:bottom_idx], errors="coerce").max())
-            if pd.notna(rebound_high) and rebound_high >= interim_618:
+            rebound_closes = pd.to_numeric(close.iloc[interim_idx + 3:bottom_idx], errors="coerce")
+            if not rebound_closes.empty and bool((rebound_closes >= interim_618).any()):
                 completed_cycle = True
                 break
         if completed_cycle:
@@ -4303,9 +4309,6 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         if explain is not None:
             explain.append(msg)
 
-    if direction != "long":
-        _log("Rejected 3P steep: only long direction is supported.")
-        return None
     if len(df) < 80:
         _log("Rejected 3P steep: less than 80 candles.")
         return None
@@ -4316,6 +4319,54 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     close = pd.to_numeric(w["Close"], errors="coerce")
     if high.dropna().empty or low.dropna().empty or close.dropna().empty:
         _log("Rejected 3P steep: missing OHLC data.")
+        return None
+
+    if direction == "short":
+        min_decline_days = 21
+        i_bottom_sel = _select_bottom_short(w, min_decline_days, min_tail_bars=2, max_lookback=260)
+        if i_bottom_sel is None:
+            _log("Rejected short 3P steep: no clear completed bottom.")
+            return None
+        i_bottom = int(i_bottom_sel)
+        i_start_sel = _select_impulse_start_short(w, i_bottom, min_decline_days, max_lookback=260)
+        if i_start_sel is None:
+            _log("Rejected short 3P steep: no clear trend top.")
+            return None
+        i_start = int(i_start_sel)
+        fib_start = float(high.iloc[i_start])
+        fib_end = float(low.iloc[i_bottom])
+        rng = fib_start - fib_end
+        if rng <= 0 or i_bottom - i_start < min_decline_days:
+            _log("Rejected short 3P steep: invalid decline range/duration.")
+            return None
+        if _early_sideways_after_anchor_window(w, i_start, direction="short") is not None:
+            _log("Rejected short 3P steep: month-long sideways range after the top.")
+            return None
+        fib_236 = fib_end + rng * 0.236
+        fib_382 = fib_end + rng * 0.382
+        fib_618 = fib_end + rng * 0.618
+        corr_high = float(high.iloc[i_bottom:].max())
+        if corr_high >= fib_618:
+            _log("Rejected short 3P steep: pullback already reached 61.8; regular first-touch pattern rules must handle it.")
+            return None
+        status = "3p_steep_23_6_zone" if corr_high >= fib_236 else "3p_steep_incline"
+        correction_bars = max(len(w) - 1 - i_bottom, 1)
+        return FiboScanResult(
+            ticker="", direction="short", status=status,
+            incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
+            incline_end_date=str(pd.to_datetime(w.iloc[i_bottom]["Date"]).date()),
+            incline_duration_days=i_bottom - i_start,
+            decline_end_date=str(pd.to_datetime(w.iloc[-1]["Date"]).date()),
+            decline_duration_days=correction_bars,
+            incline_decline_duration_ratio=round((i_bottom - i_start) / correction_bars, 2),
+            fib_23_6=fib_236, fib_38_2=fib_382, fib_61_8=fib_618,
+            first_61_8_touch_date="", reversal_pattern_name="none",
+            stop_loss=fib_start, current_close=float(close.iloc[-1]),
+            has_monthly_sideways=False,
+        )
+
+    if direction != "long":
+        _log("Rejected 3P steep: unsupported direction.")
         return None
 
     min_incline_days = 21
@@ -4702,12 +4753,16 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
     # must restart from a newer clear top (GBP/USD Jan->Apr is such a cycle).
     for interim_idx in range(i_start + min_incline_days, i_bottom - 2):
         interim_low = float(low.iloc[interim_idx])
+        local_low_left = max(i_start, interim_idx - 3)
+        local_low_right = min(i_bottom - 1, interim_idx + 3)
+        if interim_low > float(low.iloc[local_low_left:local_low_right + 1].min()):
+            continue
         interim_decline = (fib_start - interim_low) / max(abs(fib_start), 1e-9)
         if interim_decline < 0.03:
             continue
         interim_618 = interim_low + (fib_start - interim_low) * 0.618
-        later_interim_high = float(pd.to_numeric(high.iloc[interim_idx + 1:i_bottom], errors="coerce").max())
-        if pd.notna(later_interim_high) and later_interim_high >= interim_618:
+        later_interim_closes = pd.to_numeric(close.iloc[interim_idx + 3:i_bottom], errors="coerce")
+        if not later_interim_closes.empty and bool((later_interim_closes >= interim_618).any()):
             _log(
                 "Rejected short: old top already completed a 61.8 cycle before the final bottom; "
                 "restart from the next clear trend top."
@@ -5069,6 +5124,15 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.latest_candle_date = latest_candle_date
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
+            if instrument in {"forex", "commodity"}:
+                steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
+                if steep_3p_short:
+                    steep_3p_short.ticker = ticker
+                    if pd.notna(latest_close):
+                        steep_3p_short.current_close = latest_close
+                    steep_3p_short.latest_candle_date = latest_candle_date
+                    steep_3p_short.expected_latest_session_date = expected_latest_session_date
+                    out_rows.append(steep_3p_short)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
