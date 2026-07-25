@@ -411,22 +411,21 @@ def _prune_superseded_steep_fibo_rows(
     items: list[FiboScanResult | WedgeScanResult],
 ) -> list[FiboScanResult | WedgeScanResult]:
     """Drop a stale broad steep leg without inspecting unrelated wedge rows."""
-    regular_longs = [
-        item for item in items
-        if isinstance(item, FiboScanResult)
-        and item.direction == "long"
-        and not item.status.startswith("3p_steep")
-    ]
-    if not regular_longs:
-        return items
-    shortest_regular = min(int(item.incline_duration_days) for item in regular_longs)
+    shortest_regular_by_direction: dict[str, int] = {}
+    for item in items:
+        if not isinstance(item, FiboScanResult) or item.status.startswith("3p_steep"):
+            continue
+        duration = int(item.incline_duration_days)
+        previous = shortest_regular_by_direction.get(item.direction)
+        shortest_regular_by_direction[item.direction] = duration if previous is None else min(previous, duration)
     return [
         item for item in items
         if not (
             isinstance(item, FiboScanResult)
             and item.status.startswith("3p_steep")
             and item.has_monthly_sideways
-            and int(item.incline_duration_days) >= shortest_regular * 2
+            and item.direction in shortest_regular_by_direction
+            and int(item.incline_duration_days) >= shortest_regular_by_direction[item.direction] * 2
         )
     ]
 
@@ -894,6 +893,7 @@ def _select_impulse_start_long(
     min_days: int,
     max_lookback: int = 140,
     reset_after_sideways: bool = True,
+    sideways_band_pct: float = 0.08,
 ) -> int | None:
     low = pd.to_numeric(w["Low"], errors="coerce")
     close = pd.to_numeric(w["Close"], errors="coerce")
@@ -924,7 +924,7 @@ def _select_impulse_start_long(
             # Reset anchors only for genuinely tight bases.  The broader 12%
             # diagnostic threshold also catches volatile consolidations inside
             # one continuing impulse (ADP); those must keep their clear bottom.
-            band_pct=0.08,
+            band_pct=sideways_band_pct,
             max_progress_pct=0.05,
             max_outlier_candles=2,
         )
@@ -4200,6 +4200,7 @@ def _select_fibo_long_impulse_base(
     stale_cycle_mode: str = "reject",
     max_lookback: int = 140,
     reset_after_sideways: bool = True,
+    sideways_band_pct: float = 0.08,
 ) -> tuple[int, float, float] | None:
     """Select the long Fibo impulse bottom using the regular formation rules."""
     def _log(msg: str) -> None:
@@ -4214,6 +4215,7 @@ def _select_fibo_long_impulse_base(
         min_incline_days,
         max_lookback=max_lookback,
         reset_after_sideways=reset_after_sideways,
+        sideways_band_pct=sideways_band_pct,
     )
     if i_start == -1:
         _log("Rejected long: latest month-long range leaves no mature post-range incline.")
@@ -4243,11 +4245,11 @@ def _select_fibo_long_impulse_base(
         )
         return None
 
-    # Include only the two candles immediately before the detected incline.  This
-    # captures the local-bottom/first breakout candle without pulling the anchor
+    # Include the five candles immediately before the detected incline.  This
+    # captures the actual extreme under the first breakout candles without pulling the anchor
     # back into an older month-long range (or to the second rising candle).
     orig_i_start = int(i_start)
-    pre_start_left = max(0, i_start - 2)
+    pre_start_left = max(0, i_start - 5)
     fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
     _log(
         f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
@@ -4351,7 +4353,12 @@ def _select_fibo_long_impulse_base(
 
     return int(i_start), float(fib_start), float(fib_end)
 
-def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain: list[str] | None = None) -> FiboScanResult | None:
+def _find_fibo_3p_steep_setup(
+    df: pd.DataFrame,
+    direction: str = "long",
+    explain: list[str] | None = None,
+    _mirrored_short: bool = False,
+) -> FiboScanResult | None:
     """Find a 3P steep-incline candidate independently of 23.6/61.8 pullback rules.
 
     The regular Fibo scanner intentionally waits for a pullback to at least the
@@ -4367,7 +4374,7 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
     if direction == "short":
         mirrored, axis = _mirror_ohlc_for_short(df)
         mirrored_explain: list[str] | None = [] if explain is not None else None
-        result = _find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain)
+        result = _find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)
         if explain is not None and mirrored_explain is not None:
             explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
         return _unmirror_short_fibo(result, axis)
@@ -4453,6 +4460,9 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         stale_cycle_mode="reset",
         max_lookback=260,
         reset_after_sideways=True,
+        # FX impulses are much narrower than stock impulses.  Keep the same
+        # month-long range rule, normalized to a genuinely flat 2% FX band.
+        sideways_band_pct=0.02 if _mirrored_short else 0.08,
     )
     if base is None:
         return None
@@ -4463,7 +4473,12 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
-    early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="long")
+    early_sideways = _early_sideways_after_anchor_window(
+        w,
+        i_start,
+        direction="long",
+        band_pct=0.02 if _mirrored_short else 0.10,
+    )
     if early_sideways is not None:
         s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
         start_date = str(pd.to_datetime(w.iloc[s_idx]["Date"]).date())
@@ -4507,7 +4522,9 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
-    if gain_pct < 0.18 or avg_daily_gain < 0.003:
+    min_gain_pct = 0.025 if _mirrored_short else 0.18
+    min_daily_gain = 0.0004 if _mirrored_short else 0.003
+    if gain_pct < min_gain_pct or avg_daily_gain < min_daily_gain:
         _log(
             "Rejected 3P steep: incline not steep enough "
             f"(gain={gain_pct * 100:.2f}%, avg_daily={avg_daily_gain * 100:.2f}%)."
@@ -4534,7 +4551,15 @@ def _find_fibo_3p_steep_setup(df: pd.DataFrame, direction: str = "long", explain
         has_monthly_sideways=has_monthly_sideways,
     )
 
-def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int = 0, explain: list[str] | None = None, stale_cycle_mode: str = "reset", allow_equal_third_close: bool = False) -> FiboScanResult | None:
+def _find_fibo_setup(
+    df: pd.DataFrame,
+    direction: str = "long",
+    end_offset: int = 0,
+    explain: list[str] | None = None,
+    stale_cycle_mode: str = "reset",
+    allow_equal_third_close: bool = False,
+    _mirrored_short: bool = False,
+) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
             explain.append(msg)
@@ -4548,6 +4573,7 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             explain=mirrored_explain,
             stale_cycle_mode=stale_cycle_mode,
             allow_equal_third_close=allow_equal_third_close,
+            _mirrored_short=True,
         )
         if explain is not None and mirrored_explain is not None:
             explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
@@ -4572,7 +4598,15 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
             _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
-        base = _select_fibo_long_impulse_base(w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode)
+        base = _select_fibo_long_impulse_base(
+            w,
+            i_peak,
+            min_incline_days,
+            _log,
+            stale_cycle_mode=stale_cycle_mode,
+            reset_after_sideways=True,
+            sideways_band_pct=0.02 if _mirrored_short else 0.08,
+        )
         if base is None:
             return None
         i_start, fib_start, fib_end = base
@@ -4594,7 +4628,12 @@ def _find_fibo_setup(df: pd.DataFrame, direction: str = "long", end_offset: int 
                     f"idx={i_start} low={fib_start:.4f} -> idx={newer_low_idx} low={newer_low:.4f}."
                 )
                 i_start, fib_start = newer_low_idx, newer_low
-        early_sideways = _early_sideways_after_anchor_window(w, i_start, direction="long")
+        early_sideways = _early_sideways_after_anchor_window(
+            w,
+            i_start,
+            direction="long",
+            band_pct=0.02 if _mirrored_short else 0.10,
+        )
         if early_sideways is not None:
             s_idx, e_idx, hi, lo, rng_pct, progress_pct = early_sideways
             start_date = str(pd.to_datetime(w.iloc[s_idx]["Date"]).date())

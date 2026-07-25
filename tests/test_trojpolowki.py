@@ -199,7 +199,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     assert "rejecting any flat sub-window dropped MCHP" in source
     base_start = source.index("def _select_fibo_long_impulse_base")
     base_end = source.index("def _find_fibo_3p_steep_setup", base_start)
-    assert "pre_start_left = max(0, i_start - 2)" in source[base_start:base_end]
+    assert "pre_start_left = max(0, i_start - 5)" in source[base_start:base_end]
 
 
 def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
@@ -227,7 +227,8 @@ def test_fibo_anchor_requires_confirmed_local_trend_bottom():
     assert "local_right = min(peak_idx, idx + 3)" in selector
     assert "later_closes > float(close.iloc[idx])" in selector
     assert "clear if clear is not None else -1" in selector
-    assert "band_pct=0.08" in selector
+    assert "sideways_band_pct: float = 0.08" in selector
+    assert "band_pct=sideways_band_pct" in selector
     assert "absolute_end - 29" in selector
 
 
@@ -303,7 +304,7 @@ def test_fibo_chart_recovers_missing_dropout_end_anchor():
 def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "item.has_monthly_sideways" in source
-    assert "int(item.incline_duration_days) >= shortest_regular * 2" in source
+    assert "int(item.incline_duration_days) >= shortest_regular_by_direction[item.direction] * 2" in source
 
 
 def test_dropout_reasons_use_common_status_codes():
@@ -796,7 +797,12 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert "direction=\"short\", status=status" in scanner_source
     assert "def _mirror_ohlc_for_short(" in scanner_source
     assert '_find_fibo_setup(\n            mirrored,\n            direction="long"' in scanner_source
-    assert '_find_fibo_3p_steep_setup(mirrored, "long"' in scanner_source
+    assert '_find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)' in scanner_source
+    assert "min_gain_pct = 0.025 if _mirrored_short else 0.18" in scanner_source
+    assert "sideways_band_pct=0.02 if _mirrored_short else 0.08" in scanner_source
+    assert "pre_start_left = max(0, i_start - 5)" in scanner_source
+    assert "shortest_regular_by_direction" in scanner_source
+    assert "shortest_regular_by_direction[item.direction]" in scanner_source
 
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "obj.group_id === 'auto-fibo'" in ui_source

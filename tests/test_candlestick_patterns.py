@@ -113,7 +113,7 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
 
 
 def test_steep_pruning_ignores_wedge_rows():
-    from scanner_search import WedgeScanResult, _prune_superseded_steep_fibo_rows
+    from scanner_search import FiboScanResult, WedgeScanResult, _prune_superseded_steep_fibo_rows
 
     wedge = WedgeScanResult(
         ticker="ABE", start_date="2026-01-01", end_date="2026-07-01", duration_days=120,
@@ -125,3 +125,20 @@ def test_steep_pruning_ignores_wedge_rows():
     )
 
     assert _prune_superseded_steep_fibo_rows([wedge]) == [wedge]
+
+    def fibo(direction: str, status: str, days: int, sideways: bool) -> FiboScanResult:
+        return FiboScanResult(
+            ticker="FX", direction=direction, status=status,
+            incline_start_date="2026-01-01", incline_end_date="2026-06-01",
+            incline_duration_days=days, decline_end_date="2026-07-20",
+            decline_duration_days=20, incline_decline_duration_ratio=1.0,
+            fib_23_6=1.1, fib_38_2=1.2, fib_61_8=1.3,
+            first_61_8_touch_date="", reversal_pattern_name="none",
+            stop_loss=1.0, current_close=1.15, has_monthly_sideways=sideways,
+        )
+
+    regular_long = fibo("long", "reached_23_6_waiting_for_61_8", 20, False)
+    steep_short = fibo("short", "3p_steep_incline", 80, True)
+    # A regular formation in the opposite direction must never remove the
+    # forming short setup for the same forex ticker.
+    assert _prune_superseded_steep_fibo_rows([regular_long, steep_short]) == [regular_long, steep_short]
