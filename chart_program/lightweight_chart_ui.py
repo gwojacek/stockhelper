@@ -472,17 +472,7 @@ class LightweightChartLevelSelectorUI:
   <style>
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; background: #020617; color: #e5e7eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
-    .layout {{ display: grid; grid-template-columns: 1fr 430px; grid-template-rows:auto minmax(0,1fr); height: 100vh; }}
-    #balance-bar {{ grid-column:1/-1; display:grid; grid-template-columns:1.1fr .75fr 1.25fr; min-height:74px; margin:7px 20px 0; border:1px solid rgba(100,116,139,.62); border-radius:10px; overflow:hidden; background:linear-gradient(105deg,#091426,#0b1b31 52%,#0b1a2c); box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 12px 30px rgba(0,0,0,.2); }}
-    .balance-section {{ display:flex; align-items:center; gap:18px; min-width:0; padding:14px 22px; }}
-    .balance-section + .balance-section {{ border-left:1px solid rgba(100,116,139,.55); }}
-    .balance-icon {{ width:30px; text-align:center; color:#38bdf8; font-size:25px; font-weight:900; }}
-    .balance-title {{ color:#f8fafc; font-size:16px; font-weight:900; }}
-    .balance-amount {{ justify-content:center; gap:14px; }}
-    #capital {{ width:180px; min-height:44px; padding:0; border:0; background:transparent; box-shadow:none; color:#f8fafc; font:900 28px/1 ui-monospace,SFMono-Regular,Menlo,monospace; text-align:right; }}
-    #capital:focus {{ outline:none; box-shadow:none; }}
-    #balance-currency {{ min-width:38px; color:#cbd5e1; font-size:16px; font-weight:900; }}
-    .balance-note {{ color:#8fb4d4; font-size:14px; }}
+    .layout {{ display: grid; grid-template-columns: 1fr 430px; height: 100vh; }}
     .main {{ padding: 14px 0 14px 14px; min-width: 0; }}
     h3 {{ margin: 0 0 10px 0; }}
     button {{ background: #1f2937; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; font-weight: 700; }}
@@ -490,10 +480,9 @@ class LightweightChartLevelSelectorUI:
     .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
     .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
     .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
-    #chart-wrap {{ position: relative; height: calc(100vh - 311px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
+    #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     body.close-mode .layout {{ grid-template-columns: 1fr; }}
-    body.close-mode .layout {{ grid-template-rows:1fr; }}
-    body.close-mode .side, body.close-mode #balance-bar, body.close-mode .toolbar, body.close-mode .level-grid, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer, body.close-mode .main>h3 {{ display:none !important; }}
+    body.close-mode .side, body.close-mode .toolbar, body.close-mode .level-grid, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer, body.close-mode .main>h3 {{ display:none !important; }}
     body.close-mode .main {{ padding:14px; }}
     body.close-mode #chart-wrap {{ height:calc(100vh - 96px); min-height:520px; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.35),0 24px 80px rgba(0,0,0,.45); }}
     #close-mode-panel {{ display:none; align-items:center; gap:10px; margin:0 0 10px; padding:10px 12px; border:1px solid rgba(34,197,94,.45); border-radius:14px; background:linear-gradient(135deg,rgba(22,101,52,.30),rgba(15,23,42,.92)); }}
@@ -625,19 +614,10 @@ class LightweightChartLevelSelectorUI:
     #wedge-debug-panel.open {{ display:block; }}
     #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
     #wedge-debug-panel .muted {{ color:#94a3b8; }}
-    @media (max-width:900px) {{
-      #balance-bar {{ grid-template-columns:1fr 1fr; margin-inline:10px; }}
-      .balance-note-section {{ grid-column:1/-1; border-left:0 !important; border-top:1px solid rgba(100,116,139,.55); }}
-    }}
   </style>
 </head>
 <body>
   <div class="layout">
-    <section id="balance-bar" aria-label="Shared current balance">
-      <div class="balance-section"><span class="balance-icon">💰</span><span class="balance-title">Current balance</span></div>
-      <div class="balance-section balance-amount"><input id="capital" aria-label="Current balance amount" type="number" min="1" step="100" /><span id="balance-currency">PLN</span></div>
-      <div class="balance-section balance-note-section"><span class="balance-icon">▂▅█</span><span class="balance-note">Used by every StockHelper chart</span></div>
-    </section>
     <main class="main">
       <h3>Interactive Level Selector: {self.symbol}</h3>
       <div class="level-grid" id="level-buttons"></div>
@@ -697,6 +677,7 @@ class LightweightChartLevelSelectorUI:
         <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
+        <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
@@ -2488,7 +2469,6 @@ class LightweightChartLevelSelectorUI:
   function setCalculationCurrencyButtons(currency) {{
     const target = String(currency || 'PLN').toUpperCase();
     document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.classList.toggle('active', btn.dataset.currency === target));
-    if ($('balance-currency')) $('balance-currency').textContent = target;
   }}
 
   function convertMoneyField(id, fromCurrency, toCurrency, digits=2) {{

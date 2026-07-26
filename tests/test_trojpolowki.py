@@ -247,14 +247,6 @@ def test_chart_png_includes_drawings_and_context_header():
     assert "const canvas = await captureChartPng();" in ui_source
 
 
-def test_current_balance_uses_shared_header_concept():
-    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
-    assert 'id="balance-bar"' in ui_source
-    assert 'Used by every StockHelper chart' in ui_source
-    assert 'id="balance-currency"' in ui_source
-    assert "$('balance-currency').textContent = target" in ui_source
-
-
 def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function applyWedgeDerivedLevels(forceScannerLevels = false)" in ui_source
@@ -623,6 +615,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='current-balance'" in text
     assert "Used by every StockHelper chart" in text
     assert "fetch('/current-balance'" in text
+    assert ".balance-card{display:grid;grid-template-columns:1.1fr .75fr 1.25fr" in text
+    assert "class='balance-section balance-amount'" in text
+    assert "class='balance-section balance-note-section'" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text
