@@ -72,6 +72,8 @@ Each generated config includes:
   - level selection buttons: `HIGH`, `LOW`, `ENTRY`, `STOP LOSS`, `CHECK_ZR`, `LINE_CROSS`
   - drawing tools: `Line`, `Fib 61.8`, `Half→SL`
   - scanner-preloaded Fibonacci/wedge lines when opened from reports
+  - `Reset Fibo` / `Reset scanner` for restoring the original scanner-drawn structure
+  - `⬇ PNG` beside the line colors for downloading the visible chart
   - scanner-aware `Setup information` for Ichimoku, Fibo, and falling wedges
   - falling-wedge debug and alternate-candidate controls when scanner metadata is available
   - Ichimoku cloud toggle
@@ -94,12 +96,15 @@ When a chart is opened from scanner/report output, the right-panel **Setup infor
 
 The panel is generated on demand when clicked, so normal chart rendering stays lightweight.
 
+For a scanner-loaded wedge, the displayed scanner geometry is authoritative: `HIGH`, `LOW`, `LINE_CROSS`, direction, and `STOP LOSS` are recalculated from the loaded wedge instead of reusing unrelated values from an older saved session. `ENTRY` is cleared on scanner preload/reset and must be selected manually. The calculated stop-loss point is selected and drawn on the chart.
+
 ### Drawing behavior
 
 - You can pan/zoom with mouse and wheel.
 - Line/Fib points are selected via chart clicks.
 - Line tool now shows a live preview after first anchor and before second click.
 - Manual and scanner-loaded wedge lines are preserved across saves/reloads, can be extended with reachable handles, and can be cycled through alternate wedge candidates from the chart.
+- Scanner-loaded Fibonacci objects can be restored with **Reset Fibo**; wedge objects use **Reset scanner**. The PNG control exports the current rendered chart without changing saved levels.
 - The chart x-range is padded before/after available candles so lines can be drawn beyond the raw candle window.
 - For responsiveness, chart renders only the latest ~**1.5 years** of candles (about 548 days) even if local CSV contains longer history.
 
@@ -112,6 +117,8 @@ The panel is generated on demand when clicked, so normal chart rendering stays l
   - commodity: Stooq then Yahoo fallback
 - `--data-source yahoo`
 - `--data-source stooq`
+
+Charts opened from an allsearch/report button are forced into cache-only fast-cache mode. They use the CSV that was already refreshed while generating the report and do not perform a second Stooq/Yahoo download. A missing cache is reported as an error rather than triggering a remote fallback.
 
 Optional:
 

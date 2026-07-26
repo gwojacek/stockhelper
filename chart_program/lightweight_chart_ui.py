@@ -635,6 +635,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
+        <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
@@ -715,7 +716,7 @@ class LightweightChartLevelSelectorUI:
   let levels = {{...(P.values || {{}})}};
   let levelPoints = {{...(levels.level_points || {{}})}};
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
-  const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
+  const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
@@ -2018,7 +2019,7 @@ class LightweightChartLevelSelectorUI:
     return dates.length ? dates[dates.length - 1] : null;
   }}
 
-  function applyWedgeDerivedLevels() {{
+  function applyWedgeDerivedLevels(forceScannerLevels = false) {{
     const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
     if (!wedges.length) {{
       if (levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge) {{ delete levels.high; delete levelPoints.high; delete levels.__wedge_auto_high__; }}
@@ -2029,13 +2030,21 @@ class LightweightChartLevelSelectorUI:
     const lower = wedges.find(obj => String(obj.label || '').toLowerCase().includes('lower'));
     const upperAnchor = wedgeExtremePoint(upper || wedges[0], 'upper');
     const lowerAnchor = wedgeExtremePoint(lower || wedges[1], 'lower');
-    const highIsAuto = levels.high == null || levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge;
+    // A scanner chart can be opened with values saved during an older manual
+    // chart session.  Those values do not belong to the wedge currently being
+    // displayed.  On initial scanner preload (and Reset scanner), make the
+    // scanner geometry authoritative and leave ENTRY empty for manual choice.
+    if (forceScannerLevels) {{
+      delete levels.entry;
+      delete levelPoints.entry;
+    }}
+    const highIsAuto = forceScannerLevels || levels.high == null || levels.__wedge_auto_high__ || levelPoints.high?.auto_wedge;
     if (upperAnchor && highIsAuto) {{
       levels.high = upperAnchor.price;
       levels.__wedge_auto_high__ = true;
       levelPoints.high = {{price:upperAnchor.price, plot_price:upperAnchor.price, date:upperAnchor.date, auto_wedge:true}};
     }}
-    const lowIsAuto = levels.low == null || levels.__wedge_auto_low__ || levelPoints.low?.auto_wedge;
+    const lowIsAuto = forceScannerLevels || levels.low == null || levels.__wedge_auto_low__ || levelPoints.low?.auto_wedge;
     if (lowerAnchor && lowIsAuto) {{
       levels.low = lowerAnchor.price;
       levels.__wedge_auto_low__ = true;
@@ -2068,20 +2077,20 @@ class LightweightChartLevelSelectorUI:
     if (candidates.length) {{
       const cross = candidates[0];
       const wedgePositionType = cross.isLower ? 'short' : 'long';
-      const lineCrossIsAuto = levels.line_cross_value == null || levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge;
+      const lineCrossIsAuto = forceScannerLevels || levels.line_cross_value == null || levels.__wedge_auto_line_cross__ || levelPoints.line_cross_value?.auto_wedge;
       if (lineCrossIsAuto) {{
         levels.line_cross_value = cross.value;
         levels.__wedge_auto_line_cross__ = true;
         levelPoints.line_cross_value = {{price:cross.value, plot_price:cross.value, date:cross.time, auto_wedge:true}};
       }}
-      if (!levels.position_type || levels.__wedge_auto_position_type__) {{
+      if (forceScannerLevels || !levels.position_type || levels.__wedge_auto_position_type__) {{
         levels.position_type = wedgePositionType;
         levels.__wedge_auto_position_type__ = true;
         if ($('position-type')) $('position-type').value = wedgePositionType;
       }}
       const counterpart = cross.isUpper ? lower : (cross.isLower ? upper : null);
       const otherLine = lineValueForDate(counterpart, cross.time);
-      const stopLossIsAuto = levels.stop_loss == null || levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge;
+      const stopLossIsAuto = forceScannerLevels || levels.stop_loss == null || levels.__wedge_auto_stop_loss__ || levelPoints.stop_loss?.auto_wedge;
       if (Number.isFinite(otherLine) && stopLossIsAuto) {{
         const stop = roundPrice((cross.value + otherLine) / 2.0);
         levels.stop_loss = stop;
@@ -2196,7 +2205,7 @@ class LightweightChartLevelSelectorUI:
     drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(initialScannerDrawnObjects.map(deepClone));
     wedgeRouletteNoAlternative = false;
     Object.values(wedgeRouletteSeen).forEach(s => s.clear());
-    applyWedgeDerivedLevels();
+    applyWedgeDerivedLevels(true);
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
     updateSetupDebugPanel('Restored the original scanner wedge.');
@@ -2407,7 +2416,10 @@ class LightweightChartLevelSelectorUI:
     $('values-panel').innerHTML = seq.map(k => `<div class="value-tile ${{k}}"><div class="value-label">${{labels[k]}}</div><div class="value-number">${{levels[k] == null ? '--' : fmt(levels[k])}}</div></div>`).join('');
     const picker = $('object-picker'); picker.innerHTML = '<option value="">-- select --</option>';
     const resetScannerBtn = $('reset-scanner-drawings');
-    if (resetScannerBtn) resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+    if (resetScannerBtn) {{
+      resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
+      resetScannerBtn.textContent = initialScannerDrawnObjects.some(o => o.group_id === 'auto-fibo') ? 'Reset Fibo' : 'Reset scanner';
+    }}
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
     const setupInfoBtn = $('setup-debug-btn');
     if (setupInfoBtn) {{
@@ -2621,6 +2633,21 @@ class LightweightChartLevelSelectorUI:
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
+  $('download-chart-png').onclick = () => {{
+    try {{
+      const canvas = chart.takeScreenshot(true, false);
+      const link = document.createElement('a');
+      const safeSymbol = String(P.symbol || 'chart').replace(/[^a-z0-9._-]+/gi, '_');
+      link.download = `${{safeSymbol}}-${{new Date().toISOString().slice(0,10)}}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }} catch (error) {{
+      console.error('chart PNG download failed', error);
+      window.alert('Could not create the chart PNG.');
+    }}
+  }};
   $('ichimoku-toggle').onclick = () => {{ levels.__show_ichimoku__ = !levels.__show_ichimoku__; render(); }};
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; $('calculation-currency').value='PLN'; setCalculationCurrencyButtons('PLN'); render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
@@ -2641,7 +2668,7 @@ class LightweightChartLevelSelectorUI:
     wedgeRouletteNoAlternative = false;
     Object.values(wedgeRouletteSeen).forEach(s => s.clear());
     lineAnchor=fibAnchor=halfAnchor=null;
-    applyWedgeDerivedLevels();
+    applyWedgeDerivedLevels(true);
     render();
   }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
@@ -3204,7 +3231,8 @@ class LightweightChartLevelSelectorUI:
   setInterval(() => fetch('/heartbeat', {{method:'POST', keepalive:true}}).catch(()=>{{}}), 1000);
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
-  applyWedgeDerivedLevels(); applyInstrumentControls(); render();
+  const scannerWedgePreloaded = initialScannerDrawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+  applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();
 }})();
   </script>
 </body>

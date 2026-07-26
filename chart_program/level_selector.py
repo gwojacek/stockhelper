@@ -563,10 +563,19 @@ def run_level_selector(raw_args=None):
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
     df = _trim_chart_window(df, max_days=548)
 
-    if args.fibo_lines and args.fibo_anchor_start and args.fibo_anchor_end:
+    if args.fibo_lines and args.fibo_anchor_start:
         try:
             s_ts = pd.to_datetime(args.fibo_anchor_start, errors="coerce")
-            e_ts = pd.to_datetime(args.fibo_anchor_end, errors="coerce")
+            e_ts = pd.to_datetime(args.fibo_anchor_end, errors="coerce") if args.fibo_anchor_end else pd.NaT
+            # Legacy dropout history stored only the first anchor.  Recover the
+            # long impulse peak so those chart buttons still draw the exact Fibo
+            # instead of opening an empty Fibo tool.
+            if not pd.isna(s_ts) and pd.isna(e_ts):
+                all_dts = pd.to_datetime(df["Date"], errors="coerce")
+                after_start = df.loc[all_dts >= s_ts]
+                if not after_start.empty:
+                    peak_idx = pd.to_numeric(after_start["High"], errors="coerce").idxmax()
+                    e_ts = pd.to_datetime(df.loc[peak_idx, "Date"], errors="coerce")
             if not pd.isna(s_ts) and not pd.isna(e_ts):
                 dts = pd.to_datetime(df["Date"], errors="coerce")
                 s_idx = int((dts - s_ts).abs().idxmin())
@@ -650,7 +659,8 @@ def run_level_selector(raw_args=None):
                     "group_id": gid,
                 })
                 existing["drawn_objects"] = objs
-                print(f"[chart] auto-fibo preloaded: {len(objs) - 1} lines, anchors={args.fibo_anchor_start}->{args.fibo_anchor_end}, direction={'short' if is_short else 'long'}")
+                resolved_end = str(pd.to_datetime(e_ts).date())
+                print(f"[chart] auto-fibo preloaded: {len(objs) - 1} lines, anchors={args.fibo_anchor_start}->{resolved_end}, direction={'short' if is_short else 'long'}")
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
 
@@ -864,14 +874,21 @@ def run_level_selector(raw_args=None):
 
     if instrument_type in ("commodity", "forex"):
         last_close = float(df.iloc[-1]["Close"]) if not df.empty else 0.0
-        lot_cost_auto, pip_value_auto = _compute_margin_defaults(
-            instrument_type=instrument_type,
-            symbol=symbol,
-            source_ticker=fetch_info.get("symbol"),
-            price=last_close,
-            data_source=args.data_source,
-            api_key=args.api_key,
-        )
+        try:
+            lot_cost_auto, pip_value_auto = _compute_margin_defaults(
+                instrument_type=instrument_type,
+                symbol=symbol,
+                source_ticker=fetch_info.get("symbol"),
+                price=last_close,
+                data_source=args.data_source,
+                api_key=args.api_key,
+            )
+        except ValueError as exc:
+            # Report-launched charts deliberately prohibit network refreshes.
+            # Missing auxiliary FX/PLN caches must not delay or prevent the
+            # already-cached instrument chart from opening.
+            lot_cost_auto, pip_value_auto = None, None
+            print(f"[chart] cached margin defaults unavailable: {exc}")
         if lot_cost_auto is not None:
             existing["lot_cost"] = lot_cost_auto
         if pip_value_auto is not None:

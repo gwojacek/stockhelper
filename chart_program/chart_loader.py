@@ -1077,6 +1077,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         )
 
     if instrument_type == "forex":
+        # Stooq accepts forex pairs in compact form only (``gbppln``).  Keep
+        # the display/cache symbol unchanged, but never pass a slash-form pair
+        # into either browser downloader.  This boundary normalization also
+        # protects callers which use human-readable pairs such as ``GBP/PLN``.
+        stooq_forex_symbol = symbol.replace("/", "")
         if not fetch_older_data and _local_forex_has_required_window(csv_path_ref):
             local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
             return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
@@ -1086,7 +1091,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         for attempt in range(1, attempts + 1):
             try:
                 df = update_stooq_history_from_ui_csv(
-                    symbol=symbol,
+                    symbol=stooq_forex_symbol,
                     csv_path=csv_path_ref,
                     lookback_days=lookback,
                     end_date=older_anchor if fetch_older_data else None,
@@ -1134,7 +1139,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         # The filtered UI CSV can deny or time out. Fall back to the same
         # paginated Stooq UI table scraper used for literal commodities.
         df = update_stooq_history_with_playwright(
-            symbol=symbol.lower(),
+            symbol=stooq_forex_symbol.lower(),
             csv_path=csv_path_ref,
             lookback_days=lookback,
             end_date=older_anchor if fetch_older_data else None,
@@ -1340,6 +1345,8 @@ def load_or_update_daily_data(
             "name": symbol.title(),
             "fallback_reason": "Cache-only mode enabled.",
         }
+    if cache_only:
+        raise ValueError(f"Cache-only mode: no local CSV data for {symbol}")
 
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         local_yahoo_merge = _try_local_commodity_yahoo_merge(symbol, csv_path) if local is not None else None
