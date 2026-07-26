@@ -624,10 +624,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert ".balance-section{display:flex;align-items:center;justify-content:center" in text
     assert "class='choice-reason'" in text
     assert "class='choice-reason-kind'" in text
-    assert ".fibo-dir-long{color:#166534" in text
-    assert ".fibo-dir-short{color:#991b1b" in text
-    assert "class='fibo-dir fibo-dir-long'" in text
-    assert "class='fibo-dir fibo-dir-short'" in text
+    assert ".fibo-arrow{display:inline-grid;place-items:center;width:18px;height:18px" in text
+    assert "class='ichi-status-chip fibo-direction ichi-good'>↗ LONG" in text
+    assert "class='ichi-status-chip fibo-direction ichi-bad'>↘ SHORT" in text
+    assert "class='choice-reason-sep'>|</span>" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text
@@ -751,7 +751,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'>near 61.8</span><span class='choice-reason-detail'>98.5%</span>" in text
+    assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
     assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
