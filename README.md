@@ -83,13 +83,13 @@ Normal output is kept minimal: one captcha/consent line per symbol and page prog
   - Stooq bulk `wse indices/wig20.txt` import as `data/csv/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
   - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument, with breakout/retest metadata that can be forwarded into chart Setup information.
-- **Fibonacci formation scanner** with long/short setup search, 23.6/61.8 retracement states, reversal-pattern checks, stale-anchor rejection when the first month after an anchor is flat, and an explain/debug mode.
+- **Fibonacci formation scanner** with long setups across supported markets and mirrored short setup search for forex, commodities, DAX40, and US100; 23.6/61.8 lifecycle states; first-touch reversal-pattern checks; robust month-long-sideways rejection; stale-cycle anchor resets; and an explain/debug mode.
 - **Scanner candle-pattern checks** for hammer/shooting-star style one-candle rejections, engulfing, harami, piercing-line/dark-cloud-cover, and morning/evening star variants used by Ichimoku retests and Fibo 61.8 reversals.
 - **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, stricter wick/contact validation, improved anchor scoring, and chart commands that preload wedge lines.
-- **Trójpolówki (3P) watchlists** generated from allsearch output, with compact Fibo columns, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner metadata for filtering, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
+- **Trójpolówki (3P) watchlists** generated from allsearch output, with four active Fibo lifecycle columns plus a hidden-by-default 10-day dropout column, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner/direction metadata for filtering, toggleable Long/Short buttons, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
-- **Interactive chart tool** powered by TradingView Lightweight Charts, with an in-chart searchable instrument switcher for every symbol already available in the local CSV cache, shared saved PLN balance, manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, manual wedge preservation/import, alternate-wedge cycling controls, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
+- **Interactive chart tool** powered by TradingView Lightweight Charts, with an in-chart searchable instrument switcher for every symbol already available in the local CSV cache, shared saved PLN balance, manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, scanner-aware Fibo/wedge reset, manual wedge preservation/import, alternate-wedge cycling controls, one-click PNG download, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
 - **Setup information panel** in the chart UI for scanner-loaded setups: Ichimoku shows scanner breakout/retest context plus CSV candles from the scanner check window, Fibo shows anchor dates/values and 61.8 diagnostics, and wedge/Kliny shows touch diagnostics plus CSV candles since the oldest wedge anchor.
 - **Transaction journal** stored locally under `data/journal/`, with opening screenshots, close-adjust chart screenshots, Trade Summary autosave, long/short direction, estimated profit/loss, compressed review mode, year filtering, delete/update/close actions, and PDF-friendly HTML output.
 - **Reports and artifacts**:
@@ -114,6 +114,15 @@ StockHelper's scanner pattern names are intentionally stored as machine-friendly
 | Bearish / short | `shooting_star`, `bearish_hammer`, `bearish_engulfing`, `bearish_harami`, `dark_cloud_cover`, `evening_star`, `evening_doji_star` | Ichimoku below-cloud retests and short Fibo 61.8 reversals | Bearish rejection/reversal patterns that must touch the active cloud/level zone and lose the relevant threshold. |
 
 For Ichimoku, retest patterns are tied to the current cloud side: above-cloud setups search bullish patterns against the cloud top/bottom zone, while below-cloud setups search bearish patterns against the cloud bottom/top zone. For Fibo, patterns are tied to the 61.8 retracement and must include the first 61.8 touch window. The chart Setup information panel prefers scanner-provided pattern metadata when it is available.
+
+### Fibonacci lifecycle and first-touch rules
+
+- The first anchor must be a confirmed trend extreme: a clear low before a long impulse or a clear high before a short impulse. The scanner prefers the true extreme rather than a later candle part-way through the move.
+- A month-long sideways block inside the impulse invalidates or resets that anchor. Sideways detection uses a robust price envelope and may ignore up to two isolated interior spike candles, so one-off wicks do not split an otherwise flat range.
+- Short formations reuse the long detector on vertically mirrored OHLC data. Short scanning is enabled for forex, commodities, DAX40, and US100; WIG Fibo scanning remains long-only.
+- The near-61.8 watch state represents a pullback that is at least 75% of the way from 50% toward 61.8 (or deeper). A setup that retreats away before touching 61.8 returns to the earlier waiting state when no other rejection applies.
+- Pattern evaluation begins on the **first** candle that touches 61.8. That candle may form a valid one-candle pattern, or it may be candle 1 of a connected two- or three-candle pattern. A later standalone hammer/shooting star is not accepted merely because an earlier unrelated candle touched the level.
+- The last candle of an accepted pattern must close back on the valid side of 61.8: above it for long formations and below it for short formations. If the first-touch window completes without a valid confirmed pattern, that Fibo cycle is dropped and the scanner must find a new formation/anchor pair.
 
 ## Repository layout
 
@@ -253,7 +262,7 @@ cache, run:
 docker ps -aq --filter "label=com.docker.compose.service=stockhelper" | xargs -r docker rm -f
 ```
 
-Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container. If the served report is recent (default: 24 hours), chart buttons use fast cache mode because `-allsearch` already refreshed the latest candle before writing the HTML report; stale reports fall back to normal chart freshness checks.
+Report buttons open the journal through the report server directly, and report chart buttons launch `chart_program` directly inside the warm report container. Report-launched charts always use cache-only fast-cache mode because `-allsearch` already refreshed and persisted the data used to build the report. Opening a chart from a report therefore does not start another Stooq/Yahoo download; if the required local CSV is missing, chart loading fails explicitly instead of silently fetching remotely.
 
 For commands that launch a local web UI, Compose uses host networking because StockHelper binds chart/report servers to dynamic `127.0.0.1` ports.
 
@@ -262,7 +271,7 @@ For commands that launch a local web UI, Compose uses host networking because St
 - Warsaw WIG/WIG20 data uses the Stooq `d_pl_txt` bulk archive when a bulk refresh is needed.
 - A successful WIG bulk refresh imports WIG stocks and WIG20/index data from the same zip, so the later indexes phase should reuse the refreshed local WIG20 CSV instead of downloading the same zip again.
 - Yahoo-only instruments now keep about 1.5 years of recent data in runtime/chart flows, rather than only about 1 year.
-- All-search is the default way to refresh latest candles before viewing the HTML report; report-launched charts can then open faster from the freshly generated cache.
+- All-search is the default way to refresh latest candles before viewing the HTML report; report-launched charts then reuse that generated cache without another provider request.
 
 #### File ownership and permissions
 
@@ -522,6 +531,8 @@ stock -c ena
 - Opens the TradingView Lightweight Charts UI in your browser.
 - Loads cached data first, with data provider fallback support.
 - Lets you click/select levels such as high, low, entry, stop loss, optional check/risk-reward levels, and drawn objects; the active level can be cleared from the sidebar.
+- Scanner-loaded wedge charts replace stale saved HIGH/LOW/LINE_CROSS/STOP LOSS values with values derived from the displayed wedge. ENTRY is intentionally cleared and remains a manual selection; the derived stop-loss line is selected and visible.
+- The chart toolbar includes **⬇ PNG** for downloading the currently visible chart directly from the browser. **Reset Fibo** or **Reset scanner** restores the original scanner-drawn structure.
 - Includes a **Transaction journal** button for saving the current setup, selected technique/reason, transaction amount/currency, notes, calculated context, and chart screenshot.
 - When launched from the journal for closing a trade, the chart opens in a focused close-adjust mode where only ENTRY, SOLD, and SL lines are edited before saving the closing screenshot back into the journal.
 - Stock charts include a CFD mode toggle; `stock -c AAPL.US cfd` opens the same symbol directly with CFD sizing inputs enabled. Stock CFDs use lot/deposit cost plus spread entered as price units with pips shown as `spread / 0.01`, so no separate pip-value field is required.
@@ -615,7 +626,9 @@ stock -fibo_search wig
 **Description:**
 
 - Searches for Fibonacci pullback setups.
-- Reports setups waiting between 23.6 and 61.8, valid recent reversal formations, ratios, first 61.8 touch dates, liquidity metrics, chart links, and ready-to-copy chart commands.
+- Reports steep/early impulses, setups waiting between 23.6 and 61.8, near-61.8 pullbacks, valid recent reversal formations, ratios, first 61.8 touch dates, liquidity metrics, chart links, and ready-to-copy chart commands.
+- Searches long formations for all supported scopes and short formations for forex, commodities, DAX40, and US100 by applying the same anchor/lifecycle rules in reverse.
+- Rejects a completed first-touch cycle when no connected one-, two-, or three-candle pattern closes back on the valid side of 61.8; later touches do not resurrect the old anchors.
 
 **When to use it:**
 
@@ -694,9 +707,9 @@ stock -allsearch all
 
 **Trójpolówki details:**
 
-- `Trojpolowki/fibo.md` uses three compact columns: steep/early `WYNIKI FIBO #0` setups, 23.6 warning-zone setups, and deep pullbacks near/over 75% toward 61.8.
+- `Trojpolowki/fibo.md` uses four active columns: steep/early setups, the 23.6→61.8 waiting state, deep pullbacks at least 75% of the way toward 61.8, and confirmed patterns retained for up to 14 days while their stop remains intact. A fifth **Recent dropouts (10d)** column preserves recently removed setups for review and is hidden by default in HTML.
 - `Trojpolowki/ichimoku.md` uses compact continuation/watch/cloud/retest columns and keeps risk/context details only where they are relevant.
-- The HTML report renders both 3P files as tabs, not as separate links; every 3P cell carries market/scanner metadata so the toolbar can filter instruments in-place without collapsing columns. Every 3P column and top-choice block has a `📊` StockHelper chart-open control, plus compact Stooq and Google-Sheets copy icons next to instruments. Grouped `📊` controls open one chart first and then show the rest of that button's instruments in the chart sidebar as quick buttons grouped by the originating section/source.
+- The HTML report renders both 3P files as tabs, not as separate links; every 3P cell carries market/scanner/direction metadata so the toolbar can filter instruments in-place without collapsing columns. **Long** and **Short** are independent toggle buttons—click the active direction again to clear that filter; there is no separate All button. Every 3P column and top-choice block has a `📊` StockHelper chart-open control, plus compact Stooq and Google-Sheets copy icons next to instruments. Grouped `📊` controls open one chart first and then show the rest of that button's instruments in the chart sidebar as quick buttons grouped by the originating section/source.
 - Top choices are intentionally selective: recent breakouts/patterns, returned-to-cloud/deep-cloud retest candidates, deeper Fibo pullbacks, and the strongest falling-wedge setups are prioritized.
 - The `🔻 Kliny` tab groups falling wedges by market, keeps Stooq/StockHelper/Google-Sheets-copy controls next to each table, hides empty market groups while filtering, marks statuses as `⏳ unbroken` or `🚀 breakout`, and shows `Breakout date` plus `Breakout direction` (`long` for upper-line breakout, `short` for lower-line breakdown).
 - Falling-wedge scanner rows are written at the end of Fibo markdown under `WYNIKI KLINY OPADAJĄCE`; wedges must pass the same Avg10d liquidity threshold used by Fibonacci formations, and the wedge tables include `Avg10d PLN`. A wedge remains valid only while no candle closes outside its boundaries, except for an accepted breakout/breakdown on the latest candle or within the last 5 candles, which becomes the absolute top-choice wedge case. Touch counts are based on anchor candles plus separate local-extreme wick contacts on the wedge boundary, matching the chart markers: larger anchor dots and smaller colored touch dots. In 5.0, wedge scoring favors longer structures with stronger boundary touches, active anchors, and exact wick-contact debug markers; report chart links can also expose alternate wedge candidates in the chart UI. The report keeps wedge table columns compact (months, touches, slope, breakout, size, score) and does not show fit/proximity/compression columns.
