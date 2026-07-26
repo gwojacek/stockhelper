@@ -625,8 +625,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "class='choice-reason'" in text
     assert "class='choice-reason-kind'" in text
     assert ".fibo-arrow{display:inline-grid;place-items:center;width:18px;height:18px" in text
-    assert "class='ichi-status-chip fibo-direction ichi-good'>↗ LONG" in text
-    assert "class='ichi-status-chip fibo-direction ichi-bad'>↘ SHORT" in text
+    assert "class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long" in text
+    assert "class='ichi-status-chip fibo-direction ichi-bad'>↘&nbsp;Short" in text
+    assert ".fibo-direction{display:inline-flex;align-items:center;white-space:nowrap}" in text
     assert "class='choice-reason-sep'>|</span>" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
@@ -705,7 +706,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "th.classList.add('stooq-column')" in text
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
-    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>Long trend</span>" in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>↗ Long</span>" in text
     assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
@@ -715,6 +716,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-info-default" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
+    assert "<col class='top-choice-instrument'><col class='top-choice-reason'>" in text
+    assert ".top-choice-compact .top-choice-instrument{width:24%}" in text
     assert "troj-table sortable" not in text
     assert "top-choice-compact sortable" not in text
     assert "table.data, table.sortable" not in text
@@ -753,6 +756,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<h3>📐 Fibo" in text
     assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
+    assert "class='choice-reason choice-reason-wedge'" in text
+    assert "<i>◆</i>Falling wedge" in text
+    assert "<i>♧</i>U/D: 3/3" in text
     assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
     assert "Fibo pattern: none" not in text
