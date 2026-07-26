@@ -2888,13 +2888,13 @@ class LightweightChartLevelSelectorUI:
     const overlay = $('cloud-overlay');
     const position = String($('position-type')?.value || levels.position_type || '').toUpperCase();
     const currency = String($('calculation-currency')?.value || levels.calculation_currency || 'PLN').toUpperCase();
+    const selectedValues = seq.map(field => [labels[field] || field, levels[field]])
+      .filter(([, value]) => value !== '' && value != null && Number.isFinite(Number(value)))
+      .map(([label, value]) => [label, fmt(Number(value))]);
     const values = [
       ['Balance', money(Number($('capital')?.value || levels.capital || 0), currency)],
       ['Position', position],
-      ['Entry', levels.entry != null ? fmt(Number(levels.entry)) : ''],
-      ['Stop loss', levels.stop_loss != null ? fmt(Number(levels.stop_loss)) : ''],
-      ['Target / check', levels.check_zr_value_fibo_or_elevation != null ? fmt(Number(levels.check_zr_value_fibo_or_elevation)) : ''],
-      ['Line cross', levels.line_cross_value != null ? fmt(Number(levels.line_cross_value)) : ''],
+      ...selectedValues,
       ['Drawings', String(drawnObjects.length)],
     ].filter(([, value]) => value !== '');
     const columns = Math.max(2, Math.min(4, Math.floor(base.width / 190)));

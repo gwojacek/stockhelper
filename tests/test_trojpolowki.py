@@ -243,6 +243,8 @@ def test_chart_png_includes_drawings_and_context_header():
     assert "drawCloud();" in ui_source
     assert "ctx.drawImage(overlay, 0, headerHeight, base.width, base.height)" in ui_source
     assert "['Balance', money(Number($('capital')?.value" in ui_source
+    assert "const selectedValues = seq.map(field => [labels[field] || field, levels[field]])" in ui_source
+    assert "...selectedValues" in ui_source
     assert "['Drawings', String(drawnObjects.length)]" in ui_source
     assert "const canvas = await captureChartPng();" in ui_source
 
@@ -590,7 +592,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| EARLY.DE | short | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "\n# WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)\n\n"
         "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
@@ -620,6 +622,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "class='balance-section balance-note-section'" in text
     assert "class='balance-icon'" not in text
     assert ".balance-section{display:flex;align-items:center;justify-content:center" in text
+    assert "class='choice-reason'" in text
+    assert "class='choice-reason-kind'" in text
+    assert ".fibo-dir-long{color:#166534" in text
+    assert ".fibo-dir-short{color:#991b1b" in text
+    assert "class='fibo-dir fibo-dir-long'" in text
+    assert "class='fibo-dir fibo-dir-short'" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text
@@ -743,7 +751,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 SBUX.US</strong></td><td>near 61.8: 98.5%" in text
+    assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'>near 61.8</span><span class='choice-reason-detail'>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
     assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
