@@ -2633,9 +2633,10 @@ class LightweightChartLevelSelectorUI:
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
-  $('download-chart-png').onclick = () => {{
+  $('download-chart-png').onclick = async () => {{
     try {{
-      const canvas = chart.takeScreenshot(true, false);
+      const canvas = await captureChartPng();
+      if (!canvas) throw new Error('chart capture returned no image');
       const link = document.createElement('a');
       const safeSymbol = String(P.symbol || 'chart').replace(/[^a-z0-9._-]+/gi, '_');
       link.download = `${{safeSymbol}}-${{new Date().toISOString().slice(0,10)}}.png`;
@@ -2876,6 +2877,58 @@ class LightweightChartLevelSelectorUI:
     setJournalReasonOptions(tech?.value || activeJournalTechnique(), (force || !reason?.dataset.manual) ? activeJournalReason() : reason?.value);
     updateJournalTouchesVisibility();
     if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
+  }}
+  async function captureChartPng() {{
+    // Lightweight Charts only captures its own canvases. Compose our overlay
+    // and a compact context footer so exported images match what the user sees.
+    drawCloud();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const base = chart.takeScreenshot(true, false);
+    if (!base || !base.width || !base.height) return null;
+    const overlay = $('cloud-overlay');
+    const position = String($('position-type')?.value || levels.position_type || '').toUpperCase();
+    const values = [
+      ['Position', position],
+      ['Entry', levels.entry != null ? fmt(Number(levels.entry)) : ''],
+      ['Stop loss', levels.stop_loss != null ? fmt(Number(levels.stop_loss)) : ''],
+      ['Target / check', levels.check_zr_value_fibo_or_elevation != null ? fmt(Number(levels.check_zr_value_fibo_or_elevation)) : ''],
+      ['Line cross', levels.line_cross_value != null ? fmt(Number(levels.line_cross_value)) : ''],
+      ['Drawings', String(drawnObjects.length)],
+    ].filter(([, value]) => value !== '');
+    const columns = Math.max(2, Math.min(4, Math.floor(base.width / 190)));
+    const footerHeight = 70 + Math.ceil(values.length / columns) * 43;
+    const canvas = document.createElement('canvas');
+    canvas.width = base.width;
+    canvas.height = base.height + footerHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(base, 0, 0);
+    if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
+
+    const y0 = base.height;
+    const gradient = ctx.createLinearGradient(0, y0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#071426');
+    gradient.addColorStop(1, '#111827');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, y0, canvas.width, footerHeight);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 20px Inter, Arial, sans-serif';
+    ctx.fillText(String(P.symbol || 'Chart'), 18, y0 + 30);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px Inter, Arial, sans-serif';
+    const exportedAt = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    ctx.fillText(`Exported ${{exportedAt}}`, 18, y0 + 50);
+    const columnWidth = Math.floor((canvas.width - 36) / columns);
+    values.forEach(([label, value], index) => {{
+      const x = 18 + (index % columns) * columnWidth;
+      const y = y0 + 78 + Math.floor(index / columns) * 43;
+      ctx.fillStyle = '#7dd3fc';
+      ctx.font = 'bold 11px Inter, Arial, sans-serif';
+      ctx.fillText(String(label).toUpperCase(), x, y);
+      ctx.fillStyle = '#e5e7eb';
+      ctx.font = 'bold 14px ui-monospace, Menlo, monospace';
+      ctx.fillText(String(value).slice(0, 26), x, y + 19);
+    }});
+    return canvas;
   }}
   function journalScreenshotRange() {{
     const idxs = [];

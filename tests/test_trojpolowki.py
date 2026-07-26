@@ -237,6 +237,15 @@ def test_short_fibo_markets_and_chart_png_download_are_enabled():
     assert "link.download" in ui_source
 
 
+def test_chart_png_includes_drawings_and_context_footer():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "async function captureChartPng()" in ui_source
+    assert "drawCloud();" in ui_source
+    assert "ctx.drawImage(overlay, 0, 0, base.width, base.height)" in ui_source
+    assert "['Drawings', String(drawnObjects.length)]" in ui_source
+    assert "const canvas = await captureChartPng();" in ui_source
+
+
 def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function applyWedgeDerivedLevels(forceScannerLevels = false)" in ui_source
