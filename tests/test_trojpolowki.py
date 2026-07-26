@@ -237,6 +237,18 @@ def test_short_fibo_markets_and_chart_png_download_are_enabled():
     assert "link.download" in ui_source
 
 
+def test_chart_png_includes_drawings_and_context_header():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "async function captureChartPng()" in ui_source
+    assert "drawCloud();" in ui_source
+    assert "ctx.drawImage(overlay, 0, headerHeight, base.width, base.height)" in ui_source
+    assert "['Balance', money(Number($('capital')?.value" in ui_source
+    assert "const selectedValues = seq.map(field => [labels[field] || field, levels[field]])" in ui_source
+    assert "...selectedValues" in ui_source
+    assert "['Drawings', String(drawnObjects.length)]" in ui_source
+    assert "const canvas = await captureChartPng();" in ui_source
+
+
 def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function applyWedgeDerivedLevels(forceScannerLevels = false)" in ui_source
@@ -580,7 +592,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
         "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| EARLY.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| EARLY.DE | short | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "\n# WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)\n\n"
         "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
@@ -605,6 +617,18 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "id='current-balance'" in text
     assert "Used by every StockHelper chart" in text
     assert "fetch('/current-balance'" in text
+    assert ".balance-card{display:grid;grid-template-columns:1.1fr .75fr 1.25fr" in text
+    assert "class='balance-section balance-amount'" in text
+    assert "class='balance-section balance-note-section'" in text
+    assert "class='balance-icon'" not in text
+    assert ".balance-section{display:flex;align-items:center;justify-content:center" in text
+    assert "class='choice-reason'" in text
+    assert "class='choice-reason-kind'" in text
+    assert ".fibo-arrow{display:inline-grid;place-items:center;width:18px;height:18px" in text
+    assert "class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long" in text
+    assert "class='ichi-status-chip fibo-direction ichi-bad'>↘&nbsp;Short" in text
+    assert ".fibo-direction{display:inline-flex;align-items:center;white-space:nowrap}" in text
+    assert "class='choice-reason-sep'>|</span>" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text
@@ -682,7 +706,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "th.classList.add('stooq-column')" in text
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
-    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>Long trend</span>" in text
+    assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span> <br><span class='ichi-status-chip ichi-good'>↗ Long</span>" in text
     assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
@@ -692,6 +716,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-info-default" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
+    assert "<col class='top-choice-instrument'><col class='top-choice-reason'>" in text
+    assert ".top-choice-compact .top-choice-instrument{width:24%}" in text
     assert "troj-table sortable" not in text
     assert "top-choice-compact sortable" not in text
     assert "table.data, table.sortable" not in text
@@ -728,8 +754,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 SBUX.US</strong></td><td>near 61.8: 98.5%" in text
+    assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
+    assert "class='choice-reason choice-reason-wedge'" in text
+    assert "<i>◆</i>Falling wedge" in text
+    assert "<i>♧</i>U/D: 3/3" in text
     assert "near 61.8: 98.5%" in text
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
     assert "Fibo pattern: none" not in text
