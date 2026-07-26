@@ -618,6 +618,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert ".balance-card{display:grid;grid-template-columns:1.1fr .75fr 1.25fr" in text
     assert "class='balance-section balance-amount'" in text
     assert "class='balance-section balance-note-section'" in text
+    assert "class='balance-icon'" not in text
+    assert ".balance-section{display:flex;align-items:center;justify-content:center" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
     assert "id='tab-troj-ichimoku' class='tab-panel'" in text
     assert "id='trojpolowki-fibo'" in text
