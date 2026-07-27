@@ -651,8 +651,9 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
     c1_body_low = min(c1_open, c1_close)
+    open_at_body_low = c2_open < c1_body_low or abs(c2_open - c1_body_low) <= max(abs(c1_open), abs(c1_close), 1e-9) * 0.005
     return (
-        c2_open < c1_body_low
+        open_at_body_low
         and c2_close > midpoint_c1
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level
@@ -732,7 +733,10 @@ def _is_bearish_engulfing(
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
     c1_body_high = max(o1, cl1)
-    if not (cl1 > o1 and cl2 < o2 and o2 > c1_body_high):
+    # Futures frequently reopen a few ticks below the preceding close even when
+    # the second candle starts at the top of the first body.  Treat a <=0.5%
+    # difference as the same open-at/above-top structure (OIL 100.67 vs 100.69).
+    if not (cl1 > o1 and cl2 < o2 and o2 >= c1_body_high * 0.995):
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
@@ -987,12 +991,26 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
     near_top_idxs: list[int] = []
     near_top_threshold = global_max * 0.92
     recent_near_top_idxs: list[int] = []
+    independent_recent_idxs: list[int] = []
     recent_left = max(left, right - 35)
     for i in range(left, right):
         win_l = max(0, i - 5)
         win_r = min(len(high), i + 6)
         if float(high.iloc[i]) < float(high.iloc[win_l:win_r].max()):
             continue
+        # A powerful new leg can be fully independent even while an obsolete,
+        # much higher peak remains inside the 220-candle window.  Require a
+        # recent local bottom, at least the normal incline duration and 25%
+        # expansion before allowing this override (COFFEE Jun→Jul, MTX May→Jul).
+        if i >= recent_left:
+            base_left = max(0, i - 80)
+            base_right = i - min_incline_days
+            if base_right >= base_left:
+                recent_base_idx = int(pd.to_numeric(w["Low"].iloc[base_left:base_right + 1], errors="coerce").idxmin())
+                recent_base = float(pd.to_numeric(w["Low"], errors="coerce").iloc[recent_base_idx])
+                recent_gain = (float(high.iloc[i]) - recent_base) / max(abs(recent_base), 1e-9)
+                if i - recent_base_idx >= min_incline_days and recent_gain >= 0.25:
+                    independent_recent_idxs.append(i)
         if float(high.iloc[i]) >= near_top_threshold:
             near_top_idxs.append(i)
             if i >= recent_left and float(high.iloc[i]) >= (global_max * 0.94):
@@ -1005,6 +1023,8 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
         if score > best_score:
             best_score = score
             best_idx = i
+    if independent_recent_idxs:
+        return max(independent_recent_idxs)
     dominant = [i for i in near_top_idxs if float(high.iloc[i]) >= global_max * 0.995]
     if dominant:
         return max(dominant)
@@ -5559,7 +5579,11 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         if any(w.ticker == ticker for w in wedge_rows):
             wedge_source_by_ticker[ticker] = (fetch_symbol, instrument)
-        for r in rows + rows0:
+        # Include every already-routed bucket.  `3p_steep_23_6_zone` lives in
+        # rows1, so omitting rows1 made its source lookup fail and silently
+        # removed MTX.DE (and commodity waiting/pattern rows such as OIL) in the
+        # later liquidity pass even when liquidity itself was bypassed.
+        for r in rows + rows0 + rows1 + rows2:
             if r.ticker == ticker:
                 rows_by_key[(r.ticker, r.direction, r.incline_start_date, r.incline_end_date)] = (fetch_symbol, instrument)
 

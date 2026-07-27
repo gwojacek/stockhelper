@@ -32,8 +32,10 @@ sys.modules.setdefault("utilities.yahoo_finance", yahoo_finance)
 sys.modules.setdefault("utilities.output_silence", output_silence)
 
 from scanner_search import (
+    _is_bullish_piercing_line,
     _is_bearish_shooting_star,
     _is_bullish_hammer,
+    _is_dark_cloud_cover,
     _is_evening_star,
     _is_morning_star,
 )
@@ -76,6 +78,18 @@ def test_evening_star_requires_middle_body_above_first_and_third_body():
 
     assert not _is_evening_star(first, middle, third, 13.0)
     assert _is_evening_star(first, middle, third, 13.0, allow_equal_third_close=True)
+
+
+def test_oil_two_candle_reversal_allows_tiny_futures_open_difference():
+    first = candle(95.36, 102.00, 94.89, 100.69)
+    second = candle(100.67, 101.19, 95.13, 96.78)
+
+    assert _is_dark_cloud_cover(first, second, 98.05)
+
+    axis = 200.0
+    mirrored_first = candle(axis - first["Open"], axis - first["Low"], axis - first["High"], axis - first["Close"])
+    mirrored_second = candle(axis - second["Open"], axis - second["Low"], axis - second["High"], axis - second["Close"])
+    assert _is_bullish_piercing_line(mirrored_first, mirrored_second, axis - 98.05)
 
 
 def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
