@@ -1520,6 +1520,12 @@ def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, m
     return avg_10d_pln is not None and avg_10d_pln >= min_avg
 
 
+def _fibo_liquidity_threshold(symbol: str, instrument_type: str) -> float:
+    """Return the Fibo turnover floor without treating futures as US shares."""
+    base = 500000.0
+    return base if instrument_type == "commodity" else base * _gdp_multiplier_for_ticker(symbol)
+
+
 
 def _business_day_gap_after_local(local_latest: date, remote_latest: date) -> int:
     if remote_latest <= local_latest:
@@ -4231,6 +4237,7 @@ def _select_fibo_long_impulse_base(
     max_lookback: int = 140,
     reset_after_sideways: bool = True,
     sideways_band_pct: float = 0.08,
+    preserve_deeper_short_continuation: bool = False,
 ) -> tuple[int, float, float] | None:
     """Select the long Fibo impulse bottom using the regular formation rules."""
     def _log(msg: str) -> None:
@@ -4341,6 +4348,18 @@ def _select_fibo_long_impulse_base(
             post_idx = int(post_slice.idxmin())
             post_low = float(low.iloc[post_idx])
             if post_low <= p_fib_618:
+                # In mirrored-short data, a rebound through 61.8 can be a lower
+                # high inside one broad decline rather than a completed cycle.
+                # If price subsequently extends the original decline by at least
+                # 15% of its first leg, retain the dominant original wick top
+                # (XAUUSD Jan→Jul 2026) instead of re-anchoring at the lower high.
+                continuation_extension = (fib_end - p_high) / max(p_rng, 1e-9)
+                if preserve_deeper_short_continuation and continuation_extension >= 0.15:
+                    _log(
+                        "Short continuation: retained dominant original top after a 61.8 rebound "
+                        f"because the later bottom extended the decline by {continuation_extension * 100:.2f}%."
+                    )
+                    continue
                 stale_msg_prefix = "Long: stale impulse start" if stale_cycle_mode == "reset" else "Rejected long: stale impulse start"
                 _log(
                     f"{stale_msg_prefix} (earlier large formation peak idx={p}, "
@@ -4493,6 +4512,7 @@ def _find_fibo_3p_steep_setup(
         # FX impulses are much narrower than stock impulses.  Keep the same
         # month-long range rule, normalized to a genuinely flat 2% FX band.
         sideways_band_pct=0.02 if _mirrored_short else 0.08,
+        preserve_deeper_short_continuation=_mirrored_short,
     )
     if base is None:
         return None
@@ -4636,6 +4656,7 @@ def _find_fibo_setup(
             stale_cycle_mode=stale_cycle_mode,
             reset_after_sideways=True,
             sideways_band_pct=0.02 if _mirrored_short else 0.08,
+            preserve_deeper_short_continuation=_mirrored_short,
         )
         if base is None:
             return None
@@ -5485,7 +5506,11 @@ def run_fibo_search(target: str) -> int:
         # Spot metals and several commodity feeds legitimately publish zero or
         # unavailable volume. Do not discard a price-valid technical setup merely
         # because that feed cannot provide a meaningful turnover figure.
-        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
+        # Commodity futures are not US shares merely because their Stooq symbol
+        # ends in `.F`.  Applying the US GDP multiplier silently removed valid
+        # technical matches such as WHEAT after volume eased.  Use the common
+        # base threshold for commodities; GDP scaling remains stock-only.
+        min_avg = _fibo_liquidity_threshold(symbol, instrument_type)
         if not _passes_scanner_liquidity(avg_10d_pln, instrument_type, min_avg):
             return False
         if avg_10d_pln is not None:
@@ -5498,7 +5523,7 @@ def run_fibo_search(target: str) -> int:
             return False
         symbol, instrument_type = row
         avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
-        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
+        min_avg = _fibo_liquidity_threshold(symbol, instrument_type)
         if not _passes_scanner_liquidity(avg_10d_pln, instrument_type, min_avg):
             return False
         r.avg_turnover_10d_pln = avg_10d_pln

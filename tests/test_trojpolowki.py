@@ -479,6 +479,16 @@ def test_current_3p_match_survives_historical_offset_deduplication():
     assert 'regular.status in {"returned_before_61_8", "reached_23_6_waiting_for_61_8"}' in dedupe
 
 
+def test_short_fibo_keeps_dominant_top_when_later_bottom_extends_decline():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+    assert "preserve_deeper_short_continuation" in selector
+    assert "continuation_extension >= 0.15" in selector
+    assert "retained dominant original top after a 61.8 rebound" in selector
+    regular = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+    assert "preserve_deeper_short_continuation=_mirrored_short" in regular
+
+
 def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
