@@ -510,7 +510,13 @@ def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
 
 
 def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_ticker: int = 2) -> list[FiboScanResult]:
-    """Keep at most two Fibo formations per ticker across both directions."""
+    """Keep at most two formations without evicting a current 3P match.
+
+    A live 3P result is calculated from the newest candle.  Historical regular
+    candidates found at end offsets must not consume both slots and make that
+    current formation disappear from the report (the WHEAT 2026-06-15 leg was
+    dropped this way even though ``_find_fibo_3p_steep_setup`` matched it).
+    """
     grouped: dict[str, list[FiboScanResult]] = {}
     for item in items:
         if not _fibo_has_minimum_small_impulse(item):
@@ -521,11 +527,16 @@ def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_ticke
         if len(group) <= max_per_ticker:
             limited.extend(group)
             continue
-        ordered = sorted(
-            group,
-            key=lambda r: (int(r.incline_duration_days), _fibo_formation_size(r), str(r.incline_start_date)),
-        )
-        keep = [ordered[0], ordered[-1]] if max_per_ticker >= 2 else [ordered[-1]]
+        ordered = sorted(group, key=lambda r: (int(r.incline_duration_days), _fibo_formation_size(r), str(r.incline_start_date)))
+        current_steep = [r for r in group if str(r.status) == "3p_steep_incline"]
+        if current_steep:
+            steep = max(current_steep, key=lambda r: (_fibo_formation_strength(r), int(r.incline_duration_days)))
+            remaining = [r for r in ordered if r is not steep]
+            keep = [steep]
+            if max_per_ticker >= 2 and remaining:
+                keep.append(remaining[-1])
+        else:
+            keep = [ordered[0], ordered[-1]] if max_per_ticker >= 2 else [ordered[-1]]
         keep_ids = {id(x) for x in keep[:max_per_ticker]}
         limited.extend([item for item in group if id(item) in keep_ids])
     return limited
@@ -536,10 +547,15 @@ def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[Fibo
     def prefer(candidate: FiboScanResult, current: FiboScanResult) -> bool:
         candidate_steep = str(candidate.status).startswith("3p_steep")
         current_steep = str(current.status).startswith("3p_steep")
-        # If a synthetic #0 steep row and a regular Fibo row describe the same
-        # scale, keep the regular row. The #0 row is only a watchlist substitute
-        # while regular 23.6/61.8 logic has not produced a formation.
+        # A newest-candle 3P incline is not superseded by a historical regular
+        # row from an end offset.  Preserve it so a confirmed current match can
+        # reach the report; completed/touched regular setups still win below.
         if candidate_steep != current_steep:
+            candidate_live_steep = candidate_steep and candidate.status == "3p_steep_incline"
+            current_live_steep = current_steep and current.status == "3p_steep_incline"
+            regular = current if candidate_steep else candidate
+            if (candidate_live_steep or current_live_steep) and regular.status in {"returned_before_61_8", "reached_23_6_waiting_for_61_8"}:
+                return candidate_live_steep
             return not candidate_steep
         candidate_anchor = float(candidate.stop_loss)
         current_anchor = float(current.stop_loss)
@@ -5534,9 +5550,9 @@ def run_fibo_search(target: str) -> int:
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows2_ids = {id(r) for r in rows2_liquid}
     deduped_fibo_rows = _limit_fibo_formations_per_ticker(_dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid))
-    rows0 = [r for r in deduped_fibo_rows if r.status.startswith("3p_steep")]
+    rows0 = [r for r in deduped_fibo_rows if r.status.startswith("3p_steep") or r.status == "returned_before_61_8"]
     rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
-    rows1 = [r for r in deduped_fibo_rows if not r.status.startswith("3p_steep") and id(r) not in rows2_ids]
+    rows1 = [r for r in deduped_fibo_rows if not r.status.startswith("3p_steep") and r.status != "returned_before_61_8" and id(r) not in rows2_ids]
     rows0 = sorted(
         rows0,
         key=lambda r: (

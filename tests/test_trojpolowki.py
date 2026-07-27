@@ -467,6 +467,16 @@ def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
     assert 'if r.status == "returned_before_61_8":\n            rows0.append(r)' in source[routing_start:]
     assert 'if made_higher_high and cand.status != "returned_before_61_8"' in source
     assert 'if made_lower_low and cand.status != "returned_before_61_8"' in source
+    assert 'r.status.startswith("3p_steep") or r.status == "returned_before_61_8"' in source
+
+
+def test_current_3p_match_survives_historical_offset_deduplication():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    limiter = source[source.index("def _limit_fibo_formations_per_ticker"):source.index("def _dedupe_same_scale_fibo_formations")]
+    dedupe = source[source.index("def _dedupe_same_scale_fibo_formations"):source.index("def _is_bullish_hammer")]
+    assert 'str(r.status) == "3p_steep_incline"' in limiter
+    assert "Historical regular" in limiter
+    assert 'regular.status in {"returned_before_61_8", "reached_23_6_waiting_for_61_8"}' in dedupe
 
 
 def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
