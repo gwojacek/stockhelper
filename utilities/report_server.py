@@ -441,6 +441,41 @@ def main() -> int:
             if parsed.path == "/current-balance":
                 payload = {"ok": True, "balance": _current_balance(), "currency": "PLN"}
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/fibo-dropout-analysis":
+                qs = parse_qs(parsed.query)
+                ticker = (qs.get("ticker", [""])[0] or "").strip().upper()
+                context = (qs.get("context", [""])[0] or "").strip()
+                if not re.fullmatch(r"[A-Z0-9._-]{1,25}", ticker):
+                    payload = {"ok": False, "error": "invalid ticker"}
+                    self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+                command = [sys.executable, str(project_root / "run"), "-explain", ticker]
+                env = os.environ.copy()
+                env["STOCKHELPER_IN_DOCKER"] = "1"
+                env["STOCKHELPER_CACHE_ONLY"] = "1"
+                try:
+                    completed = subprocess.run(
+                        command, cwd=str(project_root), env=env, stdin=subprocess.DEVNULL,
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+                    )
+                    analysis = (completed.stdout + ("\n" + completed.stderr if completed.stderr else "")).strip()
+                    codex_text = (
+                        f"Analyze and fix this StockHelper Fibo dropout if the scanner rejected a valid formation.\n"
+                        f"Instrument: {ticker}\nPrevious dropout card: {context or '-'}\n"
+                        f"Reproduction: {' '.join(command)}\nExit code: {completed.returncode}\n\n"
+                        f"FULL SCANNER REJECTION TRACE\n{'=' * 36}\n{analysis}"
+                    )
+                    payload = {"ok": completed.returncode == 0, "ticker": ticker, "analysis": analysis, "codex_text": codex_text, "exit_code": completed.returncode}
+                    # A non-zero scanner exit is itself useful diagnostic output;
+                    # return the trace to the sidebar instead of hiding it behind
+                    # an HTTP error response.
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
+                except subprocess.TimeoutExpired as exc:
+                    payload = {"ok": False, "error": "analysis timed out after 120 seconds", "ticker": ticker, "output": str(exc.stdout or "")}
+                    self.send_response(504); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
+                except Exception as exc:
+                    payload = {"ok": False, "error": str(exc), "ticker": ticker}
+                    self.send_response(500); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8"))
+                return
             if parsed.path == "/journal-html":
                 try:
                     payload = _journal_response_payload()

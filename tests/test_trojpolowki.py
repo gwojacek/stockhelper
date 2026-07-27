@@ -180,6 +180,21 @@ def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
     assert "--ichimoku-mode off --fibo-lines 5" in source
 
 
+def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "class='btn fibo-analyzer-btn'" in source
+    assert "data-ticker='{html.escape(ticker, quote=True)}'" in source
+    assert "onclick='openFiboDropoutAnalyzer(this)'" in source
+    assert "id='fibo-analyzer-sidebar'" in source
+    assert "📋 Copy for Codex" in source
+    assert "Analysis complete · copied automatically" in source
+    server = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    assert 'parsed.path == "/fibo-dropout-analysis"' in server
+    assert '"STOCKHELPER_CACHE_ONLY"] = "1"' in server
+    assert '"-explain", ticker' in server
+    assert "FULL SCANNER REJECTION TRACE" in server
+
+
 def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     steep_start = source.index("def _find_fibo_3p_steep_setup")
