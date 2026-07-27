@@ -37,8 +37,8 @@ def load_run_module():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v20"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v20"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v21"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"' in server_source
 
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
@@ -188,6 +188,7 @@ def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
     assert "id='fibo-analyzer-sidebar'" in source
     assert "📋 Copy for Codex" in source
     assert "Analysis complete · copied automatically" in source
+    assert ".join(String.fromCharCode(10))" in source
     server = Path("utilities/report_server.py").read_text(encoding="utf-8")
     assert 'parsed.path == "/fibo-dropout-analysis"' in server
     assert '"STOCKHELPER_CACHE_ONLY"] = "1"' in server
