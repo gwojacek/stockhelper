@@ -446,6 +446,20 @@ def _format_fibo_progress_pct(result: FiboScanResult) -> str:
     pct = _fibo_retracement_progress_pct(result)
     return f"{pct:5.1f}%" if pct >= 0 else "-"
 
+
+def _fibo_pre_61_8_status(direction: str, current_close: float, fib_23_6: float) -> str:
+    """Classify only an already-qualified, not-yet-61.8 Fibo correction.
+
+    This is deliberately price-state based, not ticker based.  It sends a long
+    back to the early column only while its close is above 23.6 (below 23.6 for
+    a short).  Every other pre-61.8 setup remains in the waiting/3P column.
+    """
+    returned_to_impulse_side = (
+        current_close > fib_23_6 if direction == "long" else current_close < fib_23_6
+    )
+    return "returned_before_61_8" if returned_to_impulse_side else "reached_23_6_waiting_for_61_8"
+
+
 def _fibo_formation_size(result: FiboScanResult) -> float:
     """Approximate absolute fib range from the 23.6 line and stop anchor."""
     try:
@@ -4784,12 +4798,11 @@ def _find_fibo_setup(
                         for v in after_first_below[first_back_above_idx + 1:]
                     )
                     if not returned_below_again:
-                        _log("Rejected long: price closed back above 23.6 after first close below 23.6 and did not return below again.")
-                        return None
-            if float(close.iloc[-1]) > fib_236:
-                _log("Rejected long: current close is above 23.6, so not waiting-for-61.8 anymore.")
-                return None
-            status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
+                        _log("Long: price returned above 23.6 without touching 61.8; move the formation back to the early column.")
+            status = (
+                _fibo_pre_61_8_status("long", float(close.iloc[-1]), fib_236)
+                if not crossed_618 else "touched_61_8_no_pattern"
+            )
         pattern_start_idx = pattern_idx
         if pattern in {"bullish_engulfing", "bullish_piercing_line", "bullish_harami"}:
             pattern_start_idx = max(i_peak, pattern_idx - 1)
@@ -5009,11 +5022,13 @@ def _find_fibo_setup(
                     for v in after_first_above[first_back_below_idx + 1:]
                 )
                 if not returned_above_again:
-                    _log("Rejected short: price closed back below 23.6 after first close above 23.6 and did not return above again.")
-                    return None
-        if float(close.iloc[-1]) < fib_236:
-            _log("Short: correction returned below 23.6 without touching 61.8; keep the formation in the early waiting column.")
-        status = "reached_23_6_waiting_for_61_8" if not crossed_618 else "touched_61_8_no_pattern"
+                    _log("Short: price returned below 23.6 without touching 61.8; move the formation back to the early column.")
+        if not crossed_618 and float(close.iloc[-1]) < fib_236:
+            _log("Short: correction returned below 23.6 without touching 61.8; move the formation back to the early column.")
+        status = (
+            _fibo_pre_61_8_status("short", float(close.iloc[-1]), fib_236)
+            if not crossed_618 else "touched_61_8_no_pattern"
+        )
     pattern_start_idx = pattern_idx
     if pattern in {"bearish_engulfing", "bearish_harami", "dark_cloud_cover"}:
         pattern_start_idx = max(i_bottom, pattern_idx - 1)
@@ -5132,7 +5147,7 @@ def run_fibo_search(target: str) -> int:
         return bool((close_after > float(cand.stop_loss)).any())
 
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
-        if cand.status not in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} or not cand.incline_end_date:
+        if cand.status not in {"returned_before_61_8", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} or not cand.incline_end_date:
             return False
         dts = pd.to_datetime(df_full["Date"], errors="coerce")
         try:
@@ -5162,7 +5177,7 @@ def run_fibo_search(target: str) -> int:
             end_high = pd.to_numeric(end_rows["High"], errors="coerce").max() if not end_rows.empty else float("nan")
             after_high = pd.to_numeric(after["High"], errors="coerce")
             made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
-            if made_higher_high:
+            if made_higher_high and cand.status != "returned_before_61_8":
                 return True
             after_low = pd.to_numeric(after["Low"], errors="coerce")
             return bool((after_low <= float(cand.fib_61_8)).any())
@@ -5171,7 +5186,7 @@ def run_fibo_search(target: str) -> int:
         end_low = pd.to_numeric(end_rows["Low"], errors="coerce").min() if not end_rows.empty else float("nan")
         after_low = pd.to_numeric(after["Low"], errors="coerce")
         made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
-        if made_lower_low:
+        if made_lower_low and cand.status != "returned_before_61_8":
             return True
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
@@ -5400,6 +5415,9 @@ def run_fibo_search(target: str) -> int:
     rows2 = []
     rows1 = [r for r in rows3p_steep if r.status == "3p_steep_23_6_zone"]
     for r in rows:
+        if r.status == "returned_before_61_8":
+            rows0.append(r)
+            continue
         touch_ts = pd.to_datetime(r.first_61_8_touch_date, errors="coerce") if r.first_61_8_touch_date else pd.NaT
         if r.status == "valid_reversal" and r.reversal_pattern_name != "none" and pd.notna(touch_ts):
             if touch_ts >= valid_recent_cutoff:
@@ -5578,7 +5596,7 @@ def run_fibo_search(target: str) -> int:
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
-    rows0_md=[[r.ticker,r.direction,"🚀 3p_steep_incline",f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/1 ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
+    rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
     rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)

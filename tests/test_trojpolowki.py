@@ -425,13 +425,32 @@ def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
 def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
-    assert 'cand.status not in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in stale
+    assert 'cand.status not in {"returned_before_61_8", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in stale
     assert 'touch_mask = pd.to_numeric(after["Low"]' in stale
     assert 'touch_mask = pd.to_numeric(after["High"]' in stale
     assert 'first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"]' in stale
     assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+
+
+def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    long_start = source.index("def _find_fibo_setup")
+    routing_start = source.index("valid_recent_cutoff")
+    classifier_start = source.index("def _fibo_pre_61_8_status")
+    classifier_end = source.index("def _fibo_formation_size", classifier_start)
+    classifier = source[classifier_start:classifier_end]
+    assert 'current_close > fib_23_6 if direction == "long" else current_close < fib_23_6' in classifier
+    assert 'return "returned_before_61_8" if returned_to_impulse_side else "reached_23_6_waiting_for_61_8"' in classifier
+    setup = source[long_start:routing_start]
+    assert '_fibo_pre_61_8_status("long", float(close.iloc[-1]), fib_236)' in setup
+    assert '_fibo_pre_61_8_status("short", float(close.iloc[-1]), fib_236)' in setup
+    assert "Long: price returned above 23.6 without touching 61.8" in source
+    assert "Short: correction returned below 23.6 without touching 61.8" in source
+    assert 'if r.status == "returned_before_61_8":\n            rows0.append(r)' in source[routing_start:]
+    assert 'if made_higher_high and cand.status != "returned_before_61_8"' in source
+    assert 'if made_lower_low and cand.status != "returned_before_61_8"' in source
 
 
 def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
