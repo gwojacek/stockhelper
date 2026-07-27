@@ -2927,7 +2927,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         side = _allsearch_ichi_cloud_side(row)
         if side == "-":
             return side
-        return _ichi_status_chips_only_html([side])
+        return _ichi_status_chips_only_html([f"{side} cloud"])
 
     def _allsearch_ichi_direction_html(row: ScannerRow) -> str:
         side = _allsearch_ichi_cloud_side(row)
@@ -2971,11 +2971,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             elif is_i2:
                 thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f0:
-                thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Near61.8</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Near61.8</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f1:
-                thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Near61.8</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Near61.8</th><th>Status</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             else:
-                thead = "<tr><th>Ticker</th><th>Dir</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir</th><th>Near61.8</th><th>Pattern</th><th>Incline</th><th>Ratio(d)</th><th>Touched_61.8_date</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             empty_cls = " empty-group" if not grows else ""
             html_parts.append(f"<div class='subhead{empty_cls}' data-empty='{1 if not grows else 0}'>{html.escape(gname)} ({len(grows)}) <button class='iconbtn' title='Open all stooq links from this table' onclick='openTableStooqLinks(this)'>🔗</button> <button class='iconbtn' title='Open all stockhelper charts from this table' onclick='openTableStockhelperCharts(this)'>📊</button></div><div style='overflow:auto'>")
             if not grows:
@@ -2998,7 +2998,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
                     near_value = r.metrics.get('near61') or (f"{_parse_float_text(r.metrics.get('near61_raw', '-1'), -1.0):.1f}%" if _parse_float_text(r.metrics.get('near61_raw', '-1'), -1.0) >= 0 else "-")
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.status)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{_color_fibo_metric(near_value)}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(near_value)}</td><td>{_color_fibo_metric(r.status)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f1:
                     s = str(r.status)
                     color_status = ("touched_61_8" in s) or ("valid_reversal" in s)
@@ -3006,12 +3006,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{status_html}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{status_html}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 else:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div>")
