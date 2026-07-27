@@ -574,7 +574,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "\n# WYNIKI 1 ICHIMOKU\n\n"
         "| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-        "| ENR.DE | ⚪ above | 175 | 8.2 | 2025-11-24 | 160.0000 | 1761117868 | Unsuccessful breakout to the other side | 2 | 2026-05-29 | hammer | https://stooq.pl/enr | python run -c ENR.DE | yes | 2026-06-01 | 2026-06-01 |\n",
+        "| ENR.DE | ⚪ above | 175 | 8.2 | 2025-11-24 | 160.0000 | 1761117868 | Unsuccessful breakout to the other side | 2 | 2026-05-29 | hammer | https://stooq.pl/enr | python run -c ENR.DE | yes | 2026-06-01 | 2026-06-01 |\n"
+        "| PAT.US | ⚪ above | 148 | 6.5 | 2026-01-12 | 107.4100 | 815666730 | Inside the cloud - PATTERN! | 2 | 2026-07-22 | bearish_harami | https://stooq.pl/pat | python run -c PAT.US | yes | 2026-07-22 | 2026-07-22 |\n",
         encoding="utf-8",
     )
     fibo_md = tmp_path / "fibo_search_wig_latest.md"
@@ -590,9 +591,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
         "\n# WYNIKI FIBO #1\n\n"
         "| Ticker | Dir | Status | Pattern | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-        "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
-        "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
         "| EARLY.DE | short | reached_23_6_waiting_for_61_8 | none | 2026-04-15->2026-05-20 | 35/20 (1.75:1) | - | 1000 | 10.0% | https://stooq.pl/early | python run -c EARLY.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| RWE.DE | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 80.0% | https://stooq.pl/rwe-fibo | python run -c RWE.DE | yes | 2026-05-30 | 2026-05-30 |\n"
+        "| AEP.US | long | reached_23_6_waiting_for_61_8 | none | 2026-01-05->2026-02-20 | 46/30 (1.53:1) | - | 1000 | 90.0% | https://stooq.pl/aep | python run -c AEP.US | yes | 2026-05-30 | 2026-05-30 |\n"
         "\n# WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)\n\n"
         "| Ticker | Status | Wedge | Days | Months | Upper line | Lower line | Upper touches | Lower touches | Start width | End width | Slope | Breakout date | Breakout direction | Score | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |\n"
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
@@ -675,6 +676,15 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 3
     assert "<b>SBUX.US</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text
+    fibo_one_start = text.index("WYNIKI FIBO #1 (Waiting")
+    fibo_one_end = text.index("</table>", fibo_one_start)
+    fibo_one_html = text[fibo_one_start:fibo_one_end]
+    assert fibo_one_html.index("<b>AEP.US</b>") < fibo_one_html.index("<b>RWE.DE</b>") < fibo_one_html.index("<b>EARLY.DE</b>")
+    ichi_one_start = text.index("WYNIKI 1 ICHIMOKU")
+    ichi_one_end = text.index("</table>", ichi_one_start)
+    ichi_one_html = text[ichi_one_start:ichi_one_end]
+    assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>ENR.DE</b>")
+    assert "data-status='⚪ above' class='today-signal'" in ichi_one_html
     assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text

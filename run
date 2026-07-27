@@ -2982,7 +2982,19 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 html_parts.append("<div class='muted empty-table-msg'>Brak wyników.</div></div>")
                 continue
             html_parts.append(f"<table class='data'><thead>{thead}</thead><tbody>")
-            for r in grows:
+            def default_row_key(item: tuple[int, ScannerRow]) -> tuple[int, int, float, int]:
+                original_index, row = item
+                signal_rank = 0 if _row_has_search_day_signal(row) else 1
+                ichi_status = str(row.metrics.get("ichimoku_status", "") or "").lower()
+                ichi_attention_rank = 0 if row.scanner == "ICHIMOKU" and ("inside the cloud" in ichi_status or "pattern" in ichi_status) else 1
+                near_rank = -_parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0) if is_f1 else 0.0
+                return signal_rank, ichi_attention_rank, near_rank, original_index
+
+            # Keep actionable green rows first in every Allsearch table. FIBO #1
+            # then defaults to nearest-to-61.8 first; Ichimoku cloud/pattern
+            # attention rows likewise stay ahead of ordinary statuses.
+            display_rows = [row for _idx, row in sorted(enumerate(grows), key=default_row_key)]
+            for r in display_rows:
                 cmd = html.escape(_chart_command_for_row(r))
                 chart_btn = _stooq_link_with_cell_button(r.chart_url, r.ticker)
                 if is_i1:
