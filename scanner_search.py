@@ -995,7 +995,7 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
             continue
         if float(high.iloc[i]) >= near_top_threshold:
             near_top_idxs.append(i)
-            if i >= recent_left and float(high.iloc[i]) >= (global_max * 0.97):
+            if i >= recent_left and float(high.iloc[i]) >= (global_max * 0.94):
                 recent_near_top_idxs.append(i)
         recency = i / max(len(high) - 1, 1)
         prominence = float(high.iloc[i]) / max(float(high.iloc[max(0, i - 20):i + 1].mean()), 1e-9)
@@ -1013,7 +1013,7 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
         # the real impulse peak.  MBK's 2026-07-15 lower high (1450) previously
         # displaced the 2026-06-16 maximum (1474), after which the dominant-peak
         # guard correctly rejected the mismatched candidate.  Prefer the latest
-        # actual dominant high and only use the 97% fallback if none is present.
+        # actual dominant high and only use the 94% fallback if none is present.
         return max(recent_near_top_idxs)
     if near_top_idxs:
         return max(near_top_idxs)
@@ -4490,7 +4490,10 @@ def _find_fibo_3p_steep_setup(
     global_high = float(high.max())
     i_peak = int(high.iloc[recent_left:].idxmax())
     peak_high = float(high.iloc[i_peak])
-    if global_high <= 0 or peak_high < global_high * 0.97:
+    # A new, independent incline may peak modestly below an older high that is
+    # still inside the 320-candle window.  MTX.DE's May→July leg reaches 94.4%
+    # of the February high and is a valid new Fibo after the May bottom.
+    if global_high <= 0 or peak_high < global_high * 0.94:
         _log("Rejected 3P steep: recent high is not near the dominant high.")
         return None
 
@@ -4560,6 +4563,11 @@ def _find_fibo_3p_steep_setup(
     reached_618_after_peak = bool((pd.to_numeric(w["Low"].iloc[i_peak:], errors="coerce") <= fib_618).any())
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
+        return None
+    if _mirrored_short and _has_long_sideways(
+        w.iloc[i_peak:].reset_index(drop=True), max_days=22, band_pct=0.12
+    ):
+        _log("Rejected short 3P steep: post-bottom correction contains a month-long sideways range.")
         return None
     crossed_23_6 = progress_to_618 >= 0.0
 
@@ -4727,6 +4735,12 @@ def _find_fibo_setup(
             )
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
+        if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
+            _log(
+                "Rejected short: post-bottom correction contains a month-long sideways range; "
+                "the decline is no longer an active Fibo formation."
+            )
+            return None
         # A correction may consolidate while progressing from 23.6 toward 61.8;
         # that does not invalidate its anchors.  Sideways resets belong to the
         # impulse leg checks below, not to the post-peak waiting leg.  This keeps
@@ -5187,6 +5201,13 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > end_ts]
         if after.empty:
             return False
+        # Offset scans can capture a short before its later correction turns
+        # into a month-long range. Re-check against the full current dataset so
+        # an old NG.F candidate cannot bypass the live side-trend rejection.
+        if cand.direction == "short" and _has_long_sideways(
+            after.reset_index(drop=True), max_days=22, band_pct=0.12
+        ):
+            return True
         # These anchors get exactly one reversal opportunity: the first 61.8
         # touch/cross and the two candles after it.  A later return to 61.8 must
         # not resurrect the old formation; only a newly anchored Fibo may return.

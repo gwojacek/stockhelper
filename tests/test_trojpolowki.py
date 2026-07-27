@@ -196,7 +196,7 @@ def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
     assert "FULL SCANNER REJECTION TRACE" in server
 
 
-def test_fibo_sideways_rules_apply_to_impulse_not_correction():
+def test_long_fibo_sideways_rules_apply_to_impulse_not_correction():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
@@ -207,6 +207,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
+    assert "_mirrored_short and _has_long_sideways" in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
@@ -225,6 +226,25 @@ def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
     peak_source = source[start:end]
     assert "global_max * 0.995" in peak_source
     assert "return max(dominant)" in peak_source
+
+
+def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    peak_start = source.index("def _select_peak_long")
+    peak_end = source.index("def _select_bottom_short", peak_start)
+    assert "global_max * 0.94" in source[peak_start:peak_end]
+    steep_start = source.index("def _find_fibo_3p_steep_setup")
+    steep_end = source.index("def _find_fibo_setup", steep_start)
+    assert "peak_high < global_high * 0.94" in source[steep_start:steep_end]
+
+
+def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "Rejected short 3P steep: post-bottom correction contains a month-long sideways range" in source
+    assert "Rejected short: post-bottom correction contains a month-long sideways range" in source
+    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    assert 'cand.direction == "short" and _has_long_sideways' in stale
+    assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
 
 
 def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
