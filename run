@@ -2223,13 +2223,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         elif low == "short trend":
             txt = "↘ Short"
         cls = "ichi-status-chip"
-        if "above cloud" in low or "long trend" in low or low == "↗ long":
+        if "above cloud" in low or low == "above" or "long trend" in low or low == "↗ long":
             cls += " ichi-good"
-        elif "below cloud" in low or "short trend" in low or low == "↘ short":
+        elif "below cloud" in low or low == "below" or "short trend" in low or low == "↘ short":
             cls += " ichi-bad"
-        elif "inside cloud" in low:
+        elif "inside cloud" in low or low == "inside":
             cls += " ichi-warn"
-        elif "touched cloud" in low or "kijun" in low or "pattern" in low or "retest" in low or "hammer" in low:
+        elif "touched cloud" in low or low == "touched" or "kijun" in low or "pattern" in low or "retest" in low or "hammer" in low:
             cls += " ichi-neutral"
         return f"<span class='{cls}'>{html.escape(txt)}</span>"
 
@@ -2927,7 +2927,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         side = _allsearch_ichi_cloud_side(row)
         if side == "-":
             return side
-        return _ichi_status_chips_only_html([f"{side} cloud"])
+        return _ichi_status_chips_only_html([side])
 
     def _allsearch_ichi_direction_html(row: ScannerRow) -> str:
         side = _allsearch_ichi_cloud_side(row)
