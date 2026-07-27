@@ -1512,18 +1512,11 @@ def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, m
     """Apply turnover filtering only when the data source has usable volume."""
     # FX feeds expose either zero volume or broker-specific tick volume, neither
     # of which is comparable to the PLN turnover threshold used for shares.
-    # Commodity turnover is enforced only when the source supplies usable volume.
-    if instrument_type == "forex":
-        return True
-    if instrument_type == "commodity" and (avg_10d_pln is None or avg_10d_pln <= 0):
+    # Futures volume is likewise not comparable to cash-equity PLN turnover.
+    # Liquidity gates are therefore stock-only.
+    if instrument_type in {"commodity", "forex"}:
         return True
     return avg_10d_pln is not None and avg_10d_pln >= min_avg
-
-
-def _fibo_liquidity_threshold(symbol: str, instrument_type: str) -> float:
-    """Return the Fibo turnover floor without treating futures as US shares."""
-    base = 500000.0
-    return base if instrument_type == "commodity" else base * _gdp_multiplier_for_ticker(symbol)
 
 
 
@@ -5502,15 +5495,10 @@ def run_fibo_search(target: str) -> int:
         if row is None:
             return False
         symbol, instrument_type = row
+        if instrument_type in {"commodity", "forex"}:
+            return True
         avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
-        # Spot metals and several commodity feeds legitimately publish zero or
-        # unavailable volume. Do not discard a price-valid technical setup merely
-        # because that feed cannot provide a meaningful turnover figure.
-        # Commodity futures are not US shares merely because their Stooq symbol
-        # ends in `.F`.  Applying the US GDP multiplier silently removed valid
-        # technical matches such as WHEAT after volume eased.  Use the common
-        # base threshold for commodities; GDP scaling remains stock-only.
-        min_avg = _fibo_liquidity_threshold(symbol, instrument_type)
+        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
         if not _passes_scanner_liquidity(avg_10d_pln, instrument_type, min_avg):
             return False
         if avg_10d_pln is not None:
@@ -5522,8 +5510,10 @@ def run_fibo_search(target: str) -> int:
         if row is None:
             return False
         symbol, instrument_type = row
+        if instrument_type in {"commodity", "forex"}:
+            return True
         avg_10d_pln = _avg10d_turnover_pln_for_symbol(symbol, instrument_type)
-        min_avg = _fibo_liquidity_threshold(symbol, instrument_type)
+        min_avg = 500000.0 * _gdp_multiplier_for_ticker(symbol)
         if not _passes_scanner_liquidity(avg_10d_pln, instrument_type, min_avg):
             return False
         r.avg_turnover_10d_pln = avg_10d_pln

@@ -489,6 +489,16 @@ def test_short_fibo_keeps_dominant_top_when_later_bottom_extends_decline():
     assert "preserve_deeper_short_continuation=_mirrored_short" in regular
 
 
+def test_fibo_and_wedge_liquidity_filters_are_stock_only():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    liquidity = source[source.index("def _passes_scanner_liquidity"):source.index("def _business_day_gap_after_local")]
+    assert 'if instrument_type in {"commodity", "forex"}:\n        return True' in liquidity
+    fibo_filter = source[source.index("def _passes_fibo_liquidity"):source.index("def _passes_wedge_liquidity")]
+    wedge_filter = source[source.index("def _passes_wedge_liquidity"):source.index("rows_by_key:")]
+    assert 'if instrument_type in {"commodity", "forex"}:\n            return True' in fibo_filter
+    assert 'if instrument_type in {"commodity", "forex"}:\n            return True' in wedge_filter
+
+
 def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]

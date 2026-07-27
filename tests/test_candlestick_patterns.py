@@ -118,12 +118,14 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
     assert len(limited_with_current_match) == 2
 
 
-def test_fibo_commodity_liquidity_does_not_apply_us_gdp_multiplier():
-    from scanner_search import _fibo_liquidity_threshold
+def test_commodities_and_forex_are_not_liquidity_filtered():
+    from scanner_search import _passes_scanner_liquidity
 
-    assert _fibo_liquidity_threshold("ZW.F", "commodity") == 500000.0
-    assert _fibo_liquidity_threshold("XAUUSD", "commodity") == 500000.0
-    assert _fibo_liquidity_threshold("AAPL.US", "stock") > 500000.0
+    assert _passes_scanner_liquidity(None, "commodity", 1_000_000_000.0)
+    assert _passes_scanner_liquidity(0.0, "forex", 1_000_000_000.0)
+    assert not _passes_scanner_liquidity(None, "stock", 500000.0)
+    assert not _passes_scanner_liquidity(499999.0, "stock", 500000.0)
+    assert _passes_scanner_liquidity(500000.0, "stock", 500000.0)
 
 
 def test_steep_pruning_ignores_wedge_rows():
