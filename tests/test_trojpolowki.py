@@ -671,7 +671,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-info-slider" in text
     assert "troj-status-info" in text
     assert "troj-detail-info" in text
-    assert "<th>Pozycja</th><th>Ichimoku status</th><th>Data wybicia</th>" in text
+    assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th>" in text
+    assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
@@ -707,8 +708,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
-    assert "<b>CRI</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td><td>Over Kijun-sen</td>" in text
-    assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip ichi-good'>above cloud</span></td>" in text
+    assert "<b>CRI</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip'>above</span></td><td>Over Kijun-sen</td>" in text
+    assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
     assert "<span class='ichi-status-label'>last:</span>" not in text

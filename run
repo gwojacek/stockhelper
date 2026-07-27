@@ -2898,55 +2898,43 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append(_liquidity_legend_html())
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
-    def _allsearch_ichi_current_html(row: ScannerRow, *, compact_position: bool = False) -> str:
-        raw_status = str(row.status or "")
-        ichi_status = str(row.metrics.get("ichimoku_status", "") or "")
+    def _allsearch_ichi_cloud_side(row: ScannerRow) -> str:
         cloud_text = " ".join([
-            raw_status,
+            str(row.status or ""),
             str(row.metrics.get("current_side", "") or ""),
-            ichi_status,
             str(row.metrics.get("cloud", "") or ""),
         ]).lower()
-        pieces: list[str] = []
         if "inside" in cloud_text and "cloud" in cloud_text:
-            pieces.append("inside cloud")
-        elif "touch" in cloud_text and "cloud" in cloud_text:
-            pieces.append("touched cloud")
-        elif "above" in cloud_text or "over cloud" in cloud_text:
-            pieces.append("above cloud")
-        elif "below" in cloud_text or "under cloud" in cloud_text:
-            pieces.append("below cloud")
-        if compact_position:
-            # WYNIKI 2 records the pre-flip side separately. When the status is
-            # an event name rather than a position, infer the current side as
-            # the opposite side of the completed cloud flip.
-            previous_side = str(row.metrics.get("previous_side", "") or "").lower()
-            if not pieces and row.category == "retest_breakout":
-                if "below" in previous_side:
-                    pieces.append("above cloud")
-                elif "above" in previous_side:
-                    pieces.append("below cloud")
-            status = raw_status.replace("⚪", "").replace("🟢", "").replace("🔴", "").strip()
-            if status and status not in {"-", "above", "below"} and not pieces:
-                pieces.append(status)
-            if pieces:
-                return _ichi_status_chips_only_html(list(dict.fromkeys(pieces)))
-            return html.escape(raw_status or "-")
-        kijun_text = ichi_status.lower()
-        if "over kijun" in kijun_text or "kijun: over" in kijun_text:
-            pieces.append("Kijun: over")
-        elif "under kijun" in kijun_text or "kijun: under" in kijun_text:
-            pieces.append("Kijun: under")
-        elif "touch" in kijun_text and "kijun" in kijun_text:
-            pieces.append("Kijun: touched")
-        if not any(p.endswith("trend") for p in pieces):
-            if "short" in cloud_text or "below cloud" in pieces or "under kijun" in kijun_text:
-                pieces.append("↘ Short")
-            elif "long" in cloud_text or "above cloud" in pieces or "over kijun" in kijun_text:
-                pieces.append("↗ Long")
-        if pieces:
-            return _ichi_status_chips_only_html(list(dict.fromkeys(pieces)), break_before_trend=True)
-        return _color_ichimoku_status(ichi_status or raw_status)
+            return "inside"
+        if "touch" in cloud_text and "cloud" in cloud_text:
+            return "touched"
+        if "above" in cloud_text or "over cloud" in cloud_text:
+            return "above"
+        if "below" in cloud_text or "under cloud" in cloud_text:
+            return "below"
+
+        # WYNIKI 2 stores the side before a completed flip. Its current price
+        # side is therefore the opposite side, even when status is an event.
+        previous_side = str(row.metrics.get("previous_side", "") or "").lower()
+        if row.category == "retest_breakout":
+            if "below" in previous_side:
+                return "above"
+            if "above" in previous_side:
+                return "below"
+        return "-"
+
+    def _allsearch_ichi_price_to_cloud_html(row: ScannerRow) -> str:
+        side = _allsearch_ichi_cloud_side(row)
+        if side == "-":
+            return side
+        return _ichi_status_chips_only_html([side])
+
+    def _allsearch_ichi_direction_html(row: ScannerRow) -> str:
+        side = _allsearch_ichi_cloud_side(row)
+        direction = "long" if side == "above" else ("short" if side == "below" else _ichimoku_trend_side(row))
+        if direction not in {"long", "short"}:
+            return "-"
+        return _fibo_direction_html(direction)
 
     def _latest_retest_summary_html(row: ScannerRow, recent_retest: bool) -> str:
         pattern = str(row.metrics.get("latest_retest_pattern", "") or "").strip()
@@ -2979,9 +2967,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             is_f0 = gname.startswith("WYNIKI FIBO #0")
             is_f1 = gname.startswith("WYNIKI FIBO #1")
             if is_i1:
-                thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Ichimoku status</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_i2:
-                thead = "<tr><th>Ticker</th><th>Pozycja</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f0:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Near61.8</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th></tr>"
             elif is_f1:
@@ -3000,11 +2988,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_current_html(r, compact_position=True)}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_current_html(r, compact_position=True)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f0:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
