@@ -648,9 +648,16 @@ def _is_bullish_engulfing(
 def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     c1_open = float(c1["Open"])
     c1_close = float(c1["Close"])
+    c1_high = float(c1["High"])
+    c1_low = float(c1["Low"])
     c2_open = float(c2["Open"])
     c2_close = float(c2["Close"])
     if not (c1_close < c1_open and c2_close > c2_open):
+        return False
+    # Piercing/dark-cloud formations require a meaningful first real body.
+    # A tiny near-doji followed by an opposite candle is not this pattern
+    # (OPL 2026-07-15/16 was previously mislabeled dark_cloud_cover).
+    if abs(c1_close - c1_open) / max(c1_high - c1_low, 1e-9) < 0.30:
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
     c1_body_low = min(c1_open, c1_close)
@@ -734,12 +741,14 @@ def _is_bearish_engulfing(
 
 
 def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
-    o1, cl1, _, _, _ = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
+    o1, cl1, h1, l1, b1 = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
     c1_body_high = max(o1, cl1)
     # Futures frequently reopen a few ticks below the preceding close even when
     # the second candle starts at the top of the first body.  Treat a <=0.5%
     # difference as the same open-at/above-top structure (OIL 100.67 vs 100.69).
     if not (cl1 > o1 and cl2 < o2 and o2 >= c1_body_high * 0.995):
+        return False
+    if b1 / max(h1 - l1, 1e-9) < 0.30:
         return False
     mid1 = (o1 + cl1) / 2.0
     return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
