@@ -238,6 +238,7 @@ def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
     assert "peak_high < global_high * 0.94" in source[steep_start:steep_end]
     assert "independent_recent_idxs" in source[peak_start:peak_end]
     assert "recent_gain >= 0.25" in source[peak_start:peak_end]
+    assert "mirrored_short_axis - recent_base" in source[peak_start:peak_end]
 
 
 def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
@@ -469,7 +470,7 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"]' in stale
     assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
-    assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+    assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
 
 
 def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
@@ -521,6 +522,19 @@ def test_fibo_and_wedge_liquidity_filters_are_stock_only():
     assert 'if instrument_type in {"commodity", "forex"}:\n            return True' in wedge_filter
     lookup = source[source.index("rows_by_key:"):source.index("# Populate Avg10Turn")]
     assert "for r in rows + rows0 + rows1 + rows2:" in lookup
+
+
+def test_3p_23_6_zone_exports_progress_for_trojpolowki_waiting_column():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    rows1 = source[source.index("rows1_md="):source.index("rows2_md=")]
+    assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in rows1
+
+
+def test_short_recent_decline_gain_uses_unmirrored_price_denominator():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    signature = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+    assert "_mirrored_short_axis=axis" in signature
+    assert "mirrored_short_axis=_mirrored_short_axis" in signature
 
 
 def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():

@@ -977,7 +977,12 @@ def _select_impulse_start_long(
     return clear if clear is not None else -1
 
 
-def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int = 8) -> int | None:
+def _select_peak_long(
+    w: pd.DataFrame,
+    min_incline_days: int,
+    min_tail_bars: int = 8,
+    mirrored_short_axis: float | None = None,
+) -> int | None:
     high = pd.to_numeric(w["High"], errors="coerce")
     if len(high) < min_incline_days + 10:
         return None
@@ -1008,7 +1013,11 @@ def _select_peak_long(w: pd.DataFrame, min_incline_days: int, min_tail_bars: int
             if base_right >= base_left:
                 recent_base_idx = int(pd.to_numeric(w["Low"].iloc[base_left:base_right + 1], errors="coerce").idxmin())
                 recent_base = float(pd.to_numeric(w["Low"], errors="coerce").iloc[recent_base_idx])
-                recent_gain = (float(high.iloc[i]) - recent_base) / max(abs(recent_base), 1e-9)
+                gain_denominator = (
+                    mirrored_short_axis - recent_base
+                    if mirrored_short_axis is not None else abs(recent_base)
+                )
+                recent_gain = (float(high.iloc[i]) - recent_base) / max(gain_denominator, 1e-9)
                 if i - recent_base_idx >= min_incline_days and recent_gain >= 0.25:
                     independent_recent_idxs.append(i)
         if float(high.iloc[i]) >= near_top_threshold:
@@ -4630,6 +4639,7 @@ def _find_fibo_setup(
     stale_cycle_mode: str = "reset",
     allow_equal_third_close: bool = False,
     _mirrored_short: bool = False,
+    _mirrored_short_axis: float | None = None,
 ) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
@@ -4645,6 +4655,7 @@ def _find_fibo_setup(
             stale_cycle_mode=stale_cycle_mode,
             allow_equal_third_close=allow_equal_third_close,
             _mirrored_short=True,
+            _mirrored_short_axis=axis,
         )
         if explain is not None and mirrored_explain is not None:
             explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
@@ -4664,7 +4675,12 @@ def _find_fibo_setup(
     if direction == "long":
         min_incline_days = 10  # ~2 weeks
         min_correction_days = 2
-        i_peak_sel = _select_peak_long(w, min_incline_days, min_tail_bars=min_correction_days)
+        i_peak_sel = _select_peak_long(
+            w,
+            min_incline_days,
+            min_tail_bars=min_correction_days,
+            mirrored_short_axis=_mirrored_short_axis,
+        )
         if i_peak_sel is None:
             _log("Rejected long: no valid peak selected.")
             return None
@@ -5673,7 +5689,7 @@ def run_fibo_search(target: str) -> int:
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
     rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
-    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
+    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
     rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
