@@ -268,12 +268,21 @@ def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
 
 def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert 'group_name in {"DAX40", "US100"}' in scanner_source
+    assert 'group_name in {"DAX40", "NDX100"}' in scanner_source
     assert 'if short_fibo_enabled:' in scanner_source
+    assert 'for direction in ("long", "short"):' in scanner_source
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="download-chart-png"' in ui_source
     assert "chart.takeScreenshot(true, false)" in ui_source
     assert "link.download" in ui_source
+
+
+def test_fibo_final_routing_keeps_23_6_zone_in_second_column_and_directions_independent():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+
+    assert 'r.status == "3p_steep_incline" or r.status == "returned_before_61_8"' in source
+    assert 'if r.status != "3p_steep_incline"' in source
+    assert 'key = (str(item.ticker).upper(), str(item.direction).lower())' in source
 
 
 def test_chart_png_includes_drawings_and_context_header():
@@ -490,7 +499,7 @@ def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
     assert 'if r.status == "returned_before_61_8":\n            rows0.append(r)' in source[routing_start:]
     assert 'if made_higher_high and cand.status != "returned_before_61_8"' in source
     assert 'if made_lower_low and cand.status != "returned_before_61_8"' in source
-    assert 'r.status.startswith("3p_steep") or r.status == "returned_before_61_8"' in source
+    assert 'r.status == "3p_steep_incline" or r.status == "returned_before_61_8"' in source
 
 
 def test_current_3p_match_survives_historical_offset_deduplication():

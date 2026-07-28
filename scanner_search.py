@@ -510,18 +510,21 @@ def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
 
 
 def _limit_fibo_formations_per_ticker(items: list[FiboScanResult], max_per_ticker: int = 2) -> list[FiboScanResult]:
-    """Keep at most two formations without evicting a current 3P match.
+    """Keep at most two formations per ticker and direction.
 
     A live 3P result is calculated from the newest candle.  Historical regular
     candidates found at end offsets must not consume both slots and make that
     current formation disappear from the report (the WHEAT 2026-06-15 leg was
     dropped this way even though ``_find_fibo_3p_steep_setup`` matched it).
+    Long and short structures are independent, so a long candidate must never
+    consume the slot of a valid short structure such as MBG.DE.
     """
-    grouped: dict[str, list[FiboScanResult]] = {}
+    grouped: dict[tuple[str, str], list[FiboScanResult]] = {}
     for item in items:
         if not _fibo_has_minimum_small_impulse(item):
             continue
-        grouped.setdefault(str(item.ticker).upper(), []).append(item)
+        key = (str(item.ticker).upper(), str(item.direction).lower())
+        grouped.setdefault(key, []).append(item)
     limited: list[FiboScanResult] = []
     for group in grouped.values():
         if len(group) <= max_per_ticker:
@@ -5336,7 +5339,7 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.latest_candle_date = latest_candle_date
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
-            short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "US100"}
+            short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "NDX100"}
             if short_fibo_enabled:
                 steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
                 if steep_3p_short:
@@ -5626,9 +5629,14 @@ def run_fibo_search(target: str) -> int:
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows2_ids = {id(r) for r in rows2_liquid}
     deduped_fibo_rows = _limit_fibo_formations_per_ticker(_dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid))
-    rows0 = [r for r in deduped_fibo_rows if r.status.startswith("3p_steep") or r.status == "returned_before_61_8"]
+    rows0 = [r for r in deduped_fibo_rows if r.status == "3p_steep_incline" or r.status == "returned_before_61_8"]
     rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
-    rows1 = [r for r in deduped_fibo_rows if not r.status.startswith("3p_steep") and r.status != "returned_before_61_8" and id(r) not in rows2_ids]
+    rows1 = [
+        r for r in deduped_fibo_rows
+        if r.status != "3p_steep_incline"
+        and r.status != "returned_before_61_8"
+        and id(r) not in rows2_ids
+    ]
     rows0 = sorted(
         rows0,
         key=lambda r: (
@@ -5746,7 +5754,10 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         )
     for s in steep_steps:
         print(f"    • {s}")
-    for direction in (["long", "short"] if instrument in {"commodity", "forex"} else ["long"]):
+    # Explain mode is diagnostic and scans one instrument only.  Always show
+    # both directions, including stock shorts, so a DAX/NDX dropout does not
+    # misleadingly print only the unrelated long rejection trace (MBG.DE).
+    for direction in ("long", "short"):
         print(f"\n=== Direction: {direction} ===")
         for off in [0, 5, 10, 15, 20, 30, 40]:
             steps: list[str] = []

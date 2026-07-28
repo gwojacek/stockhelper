@@ -95,10 +95,19 @@ def test_oil_two_candle_reversal_allows_tiny_futures_open_difference():
 def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
     from scanner_search import FiboScanResult, _limit_fibo_formations_per_ticker
 
-    def result(start: str, days: int, stop: float = 100.0, fib_23_6: float = 130.0, fib_38_2: float = 150.0, fib_61_8: float = 180.0, status: str = "reached_23_6_waiting_for_61_8") -> FiboScanResult:
+    def result(
+        start: str,
+        days: int,
+        stop: float = 100.0,
+        fib_23_6: float = 130.0,
+        fib_38_2: float = 150.0,
+        fib_61_8: float = 180.0,
+        status: str = "reached_23_6_waiting_for_61_8",
+        direction: str = "short",
+    ) -> FiboScanResult:
         return FiboScanResult(
             ticker="COCOA",
-            direction="short",
+            direction=direction,
             status=status,
             incline_start_date=start,
             incline_end_date="2026-03-02",
@@ -130,6 +139,14 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
 
     assert current_wheat in limited_with_current_match
     assert len(limited_with_current_match) == 2
+
+    opposite_direction = result("2026-05-13", 45, direction="long")
+    limited_both_directions = _limit_fibo_formations_per_ticker(
+        [small, middle, big, current_wheat, opposite_direction]
+    )
+
+    assert opposite_direction in limited_both_directions
+    assert len(limited_both_directions) == 3
 
 
 def test_commodities_and_forex_are_not_liquidity_filtered():
