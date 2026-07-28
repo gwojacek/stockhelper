@@ -285,6 +285,20 @@ def test_fibo_final_routing_keeps_23_6_zone_in_second_column_and_directions_inde
     assert 'key = (str(item.ticker).upper(), str(item.direction).lower())' in source
 
 
+def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    peak_selector = source[source.index("def _select_peak_long"):source.index("def _select_bottom_short")]
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _scan_fibo_one")]
+
+    assert "post_dominant_low <= old_618" in peak_selector
+    assert "recent_left = max(min_incline_days, len(w) - 60)" in steep
+    assert "allow_independent_peak=independent_recent_peak" in steep
+    assert "reset_after_sideways=False" in steep
+    assert "newest_near_recovery_extreme" in setup
+    assert "retained sideways correction because the newest close" in setup
+
+
 def test_chart_png_includes_drawings_and_context_header():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "async function captureChartPng()" in ui_source

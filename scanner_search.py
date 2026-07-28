@@ -1035,9 +1035,27 @@ def _select_peak_long(
         if score > best_score:
             best_score = score
             best_idx = i
-    if independent_recent_idxs:
-        return max(independent_recent_idxs)
     dominant = [i for i in near_top_idxs if float(high.iloc[i]) >= global_max * 0.995]
+    if independent_recent_idxs:
+        independent_idx = max(independent_recent_idxs)
+        if dominant:
+            dominant_idx = max(dominant)
+            # A recent local peak replaces the dominant peak only after the old
+            # impulse completed a real 61.8 cycle.  Otherwise it is merely a
+            # lower high inside the still-live broad formation (OPL), or an
+            # older candidate preceding the actual current high (CTAS).
+            if independent_idx > dominant_idx:
+                base_left = max(0, dominant_idx - 140)
+                base_right = dominant_idx - min_incline_days
+                if base_right >= base_left:
+                    old_base = float(pd.to_numeric(w["Low"].iloc[base_left:base_right + 1], errors="coerce").min())
+                    old_peak = float(high.iloc[dominant_idx])
+                    old_618 = old_peak - (old_peak - old_base) * 0.618
+                    post_dominant_low = float(pd.to_numeric(w["Low"].iloc[dominant_idx:independent_idx + 1], errors="coerce").min())
+                    if post_dominant_low <= old_618:
+                        return independent_idx
+            return dominant_idx
+        return independent_idx
     if dominant:
         return max(dominant)
     if recent_near_top_idxs:
@@ -4263,6 +4281,7 @@ def _select_fibo_long_impulse_base(
     reset_after_sideways: bool = True,
     sideways_band_pct: float = 0.08,
     preserve_deeper_short_continuation: bool = False,
+    allow_independent_peak: bool = False,
 ) -> tuple[int, float, float] | None:
     """Select the long Fibo impulse bottom using the regular formation rules."""
     def _log(msg: str) -> None:
@@ -4300,7 +4319,7 @@ def _select_fibo_long_impulse_base(
     # This prevents anchoring a newer/lower local top while an earlier higher top
     # in the same structure was never fully reset by a proper 61.8 cycle.
     win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
-    if win_peak != i_peak:
+    if win_peak != i_peak and not allow_independent_peak:
         _log(
             "Rejected long: selected peak is not dominant in window "
             f"(selected={i_peak}, dominant={win_peak})."
@@ -4514,7 +4533,10 @@ def _find_fibo_3p_steep_setup(
         return None
 
     min_incline_days = 21
-    recent_left = max(min_incline_days, len(w) - 35)
+    # A completed peak can remain a live first-column formation throughout a
+    # normal correction.  Sixty sessions keeps OPL's May peak visible in late
+    # July while the 61.8 level is still untouched.
+    recent_left = max(min_incline_days, len(w) - 60)
     if recent_left >= len(w):
         _log("Rejected 3P steep: not enough recent candles.")
         return None
@@ -4525,7 +4547,15 @@ def _find_fibo_3p_steep_setup(
     # A new, independent incline may peak modestly below an older high that is
     # still inside the 320-candle window.  MTX.DE's May→July leg reaches 94.4%
     # of the February high and is a valid new Fibo after the May bottom.
-    if global_high <= 0 or peak_high < global_high * 0.94:
+    independent_recent_peak = False
+    if global_high > 0 and peak_high < global_high * 0.94:
+        independent_base_right = i_peak - min_incline_days
+        independent_base_left = max(0, i_peak - 80)
+        if independent_base_right >= independent_base_left:
+            independent_base = float(low.iloc[independent_base_left:independent_base_right + 1].min())
+            independent_gain = (peak_high - independent_base) / max(abs(independent_base), 1e-9)
+            independent_recent_peak = independent_gain >= 0.25
+    if global_high <= 0 or (peak_high < global_high * 0.94 and not independent_recent_peak):
         _log("Rejected 3P steep: recent high is not near the dominant high.")
         return None
 
@@ -4536,11 +4566,15 @@ def _find_fibo_3p_steep_setup(
         _log,
         stale_cycle_mode="reset",
         max_lookback=260,
-        reset_after_sideways=True,
+        # The 3P path already validates the initial post-anchor window and tags
+        # broad internal ranges below.  Resetting on every later pause hid
+        # steady stepwise inclines such as OPL Nov→May.
+        reset_after_sideways=False,
         # FX impulses are much narrower than stock impulses.  Keep the same
         # month-long range rule, normalized to a genuinely flat 2% FX band.
         sideways_band_pct=0.02 if _mirrored_short else 0.08,
         preserve_deeper_short_continuation=_mirrored_short,
+        allow_independent_peak=independent_recent_peak,
     )
     if base is None:
         return None
@@ -4661,7 +4695,13 @@ def _find_fibo_setup(
             _mirrored_short_axis=axis,
         )
         if explain is not None and mirrored_explain is not None:
-            explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
+            explain.extend(
+                msg.replace("long", "short")
+                .replace("Long", "Short")
+                .replace("month-short", "month-long")
+                .replace("no shorter", "no longer")
+                for msg in mirrored_explain
+            )
         return _unmirror_short_fibo(result, axis)
     if len(df) < 120:
         _log("Rejected: less than 120 candles.")
@@ -4775,11 +4815,22 @@ def _find_fibo_setup(
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
         if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
-            _log(
-                "Rejected short: post-bottom correction contains a month-long sideways range; "
-                "the decline is no longer an active Fibo formation."
+            mirrored_corr_low = float(pd.to_numeric(correction_seg["Low"], errors="coerce").min())
+            mirrored_corr_high = float(pd.to_numeric(correction_seg["High"], errors="coerce").max())
+            mirrored_corr_range = max(mirrored_corr_high - mirrored_corr_low, 1e-9)
+            newest_near_recovery_extreme = (
+                (float(close.iloc[-1]) - mirrored_corr_low) / mirrored_corr_range <= 0.25
             )
-            return None
+            if not newest_near_recovery_extreme:
+                _log(
+                    "Rejected short: post-bottom correction contains a month-long sideways range; "
+                    "the decline is no longer an active Fibo formation."
+                )
+                return None
+            _log(
+                "Short: retained sideways correction because the newest close is still near "
+                "the recovery extreme."
+            )
         # A correction may consolidate while progressing from 23.6 toward 61.8;
         # that does not invalidate its anchors.  Sideways resets belong to the
         # impulse leg checks below, not to the post-peak waiting leg.  This keeps
