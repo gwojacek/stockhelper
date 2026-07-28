@@ -151,6 +151,9 @@ def _canonical_commodity_symbol(symbol: str) -> str:
         return cleaned
     if cleaned in COMMODITY_YAHOO_MAP or cleaned in COMMODITY_STOOQ_MAP:
         return cleaned
+    for key, value in COMMODITY_DISPLAY_NAME.items():
+        if str(value).upper() == cleaned:
+            return key.upper()
     for key, value in COMMODITY_STOOQ_MAP.items():
         if str(value).upper() == cleaned:
             return key.upper()
@@ -270,7 +273,7 @@ def _storage_symbol_for_csv(symbol: str, instrument_type: str) -> str:
     canonical = _canonical_commodity_symbol(symbol)
     if canonical in COMMODITY_YAHOO_MAP and _is_index_like_commodity(canonical):
         return canonical
-    mapped = COMMODITY_STOOQ_MAP.get((symbol or "").strip().upper())
+    mapped = COMMODITY_STOOQ_MAP.get(canonical)
     return str(mapped or symbol)
 
 
