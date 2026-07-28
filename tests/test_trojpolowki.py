@@ -295,8 +295,16 @@ def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection
     assert "recent_left = max(min_incline_days, len(w) - 60)" in steep
     assert "allow_independent_peak=independent_recent_peak" in steep
     assert "reset_after_sideways=False" in steep
+    assert "reset_after_extended_sideways=True" in steep
+    assert "reset fib start after extended sideways base" in source
     assert "newest_near_recovery_extreme" in setup
     assert "retained sideways correction because the newest close" in setup
+
+
+def test_manual_fibo_drawing_does_not_rescale_chart_viewport():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "!isEditableLineObject(obj) && !isFib && !isFibBoundary" in source
 
 
 def test_chart_png_includes_drawings_and_context_header():

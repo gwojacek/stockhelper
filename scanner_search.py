@@ -4282,6 +4282,7 @@ def _select_fibo_long_impulse_base(
     sideways_band_pct: float = 0.08,
     preserve_deeper_short_continuation: bool = False,
     allow_independent_peak: bool = False,
+    reset_after_extended_sideways: bool = False,
 ) -> tuple[int, float, float] | None:
     """Select the long Fibo impulse bottom using the regular formation rules."""
     def _log(msg: str) -> None:
@@ -4313,6 +4314,47 @@ def _select_fibo_long_impulse_base(
     if i_peak <= i_start + min_incline_days:
         _log("Rejected long: invalid impulse start/peak distance.")
         return None
+
+    if reset_after_extended_sideways:
+        # A genuinely long base is different from the shorter pauses that can
+        # occur inside a stepwise incline. Find a sustained run of overlapping
+        # 30-session flat windows, then anchor at the lowest candle immediately
+        # after that base. OPL's Aug-Nov range therefore starts its Fibo at the
+        # Nov 21 low, rather than the obsolete Aug low or a later March pause.
+        qualifying_starts: list[int] = []
+        for window_start in range(0, max(0, i_peak - 29)):
+            window_end = window_start + 30
+            if window_end > i_peak:
+                break
+            window = w.iloc[window_start:window_end]
+            window_high = float(pd.to_numeric(window["High"], errors="coerce").max())
+            window_low = float(pd.to_numeric(window["Low"], errors="coerce").min())
+            window_mid = (window_high + window_low) / 2.0
+            first_close = float(pd.to_numeric(window["Close"], errors="coerce").iloc[0])
+            last_close = float(pd.to_numeric(window["Close"], errors="coerce").iloc[-1])
+            band = (window_high - window_low) / max(window_mid, 1e-9)
+            progress = abs(last_close - first_close) / max(abs(first_close), 1e-9)
+            if band <= 0.12 and progress <= 0.05:
+                qualifying_starts.append(window_start)
+        runs: list[list[int]] = []
+        for window_start in qualifying_starts:
+            if not runs or window_start != runs[-1][-1] + 1:
+                runs.append([window_start])
+            else:
+                runs[-1].append(window_start)
+        extended_runs = [run for run in runs if len(run) >= 10]
+        if extended_runs:
+            last_run = extended_runs[-1]
+            base_end = last_run[-1] + 29
+            breakout_search_end = min(i_peak - min_incline_days, base_end + 15)
+            if breakout_search_end > base_end:
+                post_base_idx = int(low.iloc[base_end + 1:breakout_search_end + 1].idxmin())
+                if post_base_idx > i_start:
+                    _log(
+                        "Long: reset fib start after extended sideways base "
+                        f"idx={i_start} -> {post_base_idx}."
+                    )
+                    i_start = post_base_idx
 
     i_end = len(w) - 1
     # Guard: selected impulse peak should be the dominant high in analyzed window.
@@ -4575,6 +4617,7 @@ def _find_fibo_3p_steep_setup(
         sideways_band_pct=0.02 if _mirrored_short else 0.08,
         preserve_deeper_short_continuation=_mirrored_short,
         allow_independent_peak=independent_recent_peak,
+        reset_after_extended_sideways=True,
     )
     if base is None:
         return None
