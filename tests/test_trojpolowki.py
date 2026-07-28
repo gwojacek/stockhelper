@@ -307,6 +307,18 @@ def test_manual_fibo_drawing_does_not_rescale_chart_viewport():
     assert "!isEditableLineObject(obj) && !isFib && !isFibBoundary" in source
 
 
+def test_ichimoku_retest_counts_only_best_local_extreme_until_close_resets_cycle():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    retest = source[source.index("def _detect_ichimoku_retest"):source.index("def run_ichimoku_search")]
+
+    assert 'n_outside = float(df["Close"].iloc[n]) > float(top.iloc[n])' in retest
+    assert 'n_outside = float(df["Close"].iloc[n]) < float(bottom.iloc[n])' in retest
+    assert retest.index("if n_outside:") < retest.index("if n_touched:", retest.index("if n_outside:"))
+    assert "def _pattern_reaction_extreme" in retest
+    assert "-_pattern_reaction_extreme(x)" in retest
+    assert "One cloud visit is one retest cycle" in retest
+
+
 def test_chart_png_includes_drawings_and_context_header():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "async function captureChartPng()" in ui_source

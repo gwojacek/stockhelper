@@ -3073,10 +3073,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
     while i < len(df):
         if current_side == "above":
             touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
-            outside = body_low.iloc[i] > top.iloc[i]
+            outside = float(df["Close"].iloc[i]) > float(top.iloc[i])
         else:
             touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
-            outside = body_high.iloc[i] < bottom.iloc[i]
+            outside = float(df["Close"].iloc[i]) < float(bottom.iloc[i])
 
         if not touched:
             i += 1
@@ -3088,15 +3088,18 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             n = cycle_end + 1
             if current_side == "above":
                 n_touched = float(df["Low"].iloc[n]) <= float(top.iloc[n])
-                n_outside = body_low.iloc[n] > top.iloc[n]
+                n_outside = float(df["Close"].iloc[n]) > float(top.iloc[n])
             else:
                 n_touched = float(df["High"].iloc[n]) >= float(bottom.iloc[n])
-                n_outside = body_high.iloc[n] < bottom.iloc[n]
+                n_outside = float(df["Close"].iloc[n]) < float(bottom.iloc[n])
+            # A close back on the trend side completes this retest cycle even
+            # if the same candle's wick still touches the cloud. A later return
+            # to the cloud is a new retest and gets its own local extreme.
+            if n_outside:
+                break
             if n_touched:
                 cycle_end = n
                 continue
-            if n_outside:
-                break
             cycle_end = n
 
         w_start = max(cycle_start - 2, flip_idx + 1)
@@ -3177,9 +3180,42 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 "shooting_star": 4,
                 "bearish_hammer": 4,
             }
+            pattern_span = {
+                "hammer": 1,
+                "shooting_star": 1,
+                "bearish_hammer": 1,
+                "bullish_engulfing": 2,
+                "bearish_engulfing": 2,
+                "bullish_piercing_line": 2,
+                "dark_cloud_cover": 2,
+                "bullish_harami": 2,
+                "bearish_harami": 2,
+                "morning_star": 3,
+                "morning_doji_star": 3,
+                "evening_star": 3,
+                "evening_doji_star": 3,
+            }
+
+            def _pattern_reaction_extreme(candidate: tuple[int, str]) -> float:
+                pattern_idx, formation = candidate
+                span = pattern_span.get(formation, 1)
+                start_idx = max(0, pattern_idx - span + 1)
+                segment = w.iloc[start_idx:pattern_idx + 1]
+                if current_side == "above":
+                    return float(pd.to_numeric(segment["Low"], errors="coerce").min())
+                return float(pd.to_numeric(segment["High"], errors="coerce").max())
+
+            # One cloud visit is one retest cycle. Select only the pattern at
+            # that cycle's best reaction extreme: lowest for a long setup,
+            # highest for a short setup. Lower secondary bearish patterns (or
+            # higher secondary bullish patterns) are not additional retests.
             ordered_candidates = sorted(
                 set(pattern_candidates),
-                key=lambda x: (x[0], formation_priority.get(x[1], 99)),
+                key=lambda x: (
+                    _pattern_reaction_extreme(x) if current_side == "above" else -_pattern_reaction_extreme(x),
+                    formation_priority.get(x[1], 99),
+                    x[0],
+                ),
             )
             for pattern_idx, formation in ordered_candidates:
                 pattern_abs = w_start + pattern_idx
@@ -3187,7 +3223,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 if pattern_abs - local_reaction_abs >= 2:
                     found_too_late = True
                     continue
-                probe = float(df["Low"].iloc[pattern_abs]) if current_side == "above" else float(df["High"].iloc[pattern_abs])
+                probe = _pattern_reaction_extreme((pattern_idx, formation))
                 depth = _classify_retest_depth(float(top.iloc[pattern_abs]), float(bottom.iloc[pattern_abs]), probe, current_side)
                 # shallow if only shadow pierces/touches cloud or very slight entry
                 body_lo = min(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
