@@ -1,0 +1,85 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (81.81)",
+      "x0": "2026-06-26",
+      "x1": "2034-06-16",
+      "y0": 81.81,
+      "y1": 81.81,
+      "price": 81.81,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (125.81258)",
+      "x0": "2026-06-09",
+      "x1": "2034-06-16",
+      "y0": 125.81258,
+      "y1": 125.81258,
+      "price": 125.81258,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (139.405)",
+      "x0": "2026-06-03",
+      "x1": "2034-06-16",
+      "y0": 139.405,
+      "y1": 139.405,
+      "price": 139.405,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (152.99742)",
+      "x0": "2026-05-28",
+      "x1": "2034-06-16",
+      "y0": 152.99742,
+      "y1": 152.99742,
+      "price": 152.99742,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (197.0)",
+      "x0": "2026-05-11",
+      "x1": "2034-06-16",
+      "y0": 197.0,
+      "y1": 197.0,
+      "price": 197.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-11",
+      "x1": "2026-06-26",
+      "y0": 197.0,
+      "y1": 81.81,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}

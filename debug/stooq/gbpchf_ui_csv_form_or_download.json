@@ -1,7 +1,7 @@
 {
   "symbol": "GBPCHF",
   "stage": "form_or_download",
-  "error": "Locator.wait_for: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input[name=\\\"d7\\\"]\") to be visible\n    - waiting for\" https://stooq.pl/q/d/?s=gbpchf\" navigation to finish...\n    - navigated to \"https://stooq.pl/q/d/?s=gbpchf\"\n",
+  "error": "Stooq CAPTCHA/rate limit remained after automatic commodity-style retries for GBPCHF",
   "page_url": "https://stooq.pl/q/d/?s=gbpchf",
   "tor_enabled": true,
   "tor_proxy_reachable": true,

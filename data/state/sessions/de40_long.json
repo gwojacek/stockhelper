@@ -1,0 +1,86 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (25900.09961)",
+      "x0": "2026-07-06",
+      "x1": "2034-06-15",
+      "y0": 25900.09961,
+      "y1": 25900.09961,
+      "price": 25900.09961,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (25190.88602)",
+      "x0": "2026-06-25",
+      "x1": "2034-06-15",
+      "y0": 25190.88602,
+      "y1": 25190.88602,
+      "price": 25190.88602,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (24971.80957)",
+      "x0": "2026-06-23",
+      "x1": "2034-06-15",
+      "y0": 24971.80957,
+      "y1": 24971.80957,
+      "price": 24971.80957,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (24752.73312)",
+      "x0": "2026-06-19",
+      "x1": "2034-06-15",
+      "y0": 24752.73312,
+      "y1": 24752.73312,
+      "price": 24752.73312,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (24043.51953)",
+      "x0": "2026-06-10",
+      "x1": "2034-06-15",
+      "y0": 24043.51953,
+      "y1": 24043.51953,
+      "price": 24043.51953,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-10",
+      "x1": "2026-07-06",
+      "y0": 24043.51953,
+      "y1": 25900.09961,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 128369.9,
+  "pip_value": 106.48,
+  "spread_multiplier": 1.7,
+  "spread": 181.02
+}

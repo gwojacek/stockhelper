@@ -1,0 +1,92 @@
+{
+  "high": 4.148,
+  "low": 2.689,
+  "entry": 2.893,
+  "stop_loss": 2.71,
+  "position_type": "long",
+  "capital": 233000,
+  "lot_cost": 102.43,
+  "pip_value": 3.8,
+  "spread": 54.66275,
+  "name": "Natural Gas",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (2.495)",
+      "x0": "2026-04-24",
+      "x1": "2034-06-17",
+      "y0": 2.495,
+      "y1": 2.495,
+      "price": 2.495,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (3.70021)",
+      "x0": "2026-03-20",
+      "x1": "2034-06-17",
+      "y0": 3.70021,
+      "y1": 3.70021,
+      "price": 3.70021,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (4.0725)",
+      "x0": "2026-03-10",
+      "x1": "2034-06-17",
+      "y0": 4.0725,
+      "y1": 4.0725,
+      "price": 4.0725,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (4.44479)",
+      "x0": "2026-02-26",
+      "x1": "2034-06-17",
+      "y0": 4.44479,
+      "y1": 4.44479,
+      "price": 4.44479,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (5.65)",
+      "x0": "2026-01-22",
+      "x1": "2034-06-17",
+      "y0": 5.65,
+      "y1": 5.65,
+      "price": 5.65,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-01-22",
+      "x1": "2026-04-24",
+      "y0": 5.65,
+      "y1": 2.495,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}

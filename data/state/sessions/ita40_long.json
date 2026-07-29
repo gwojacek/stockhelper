@@ -1,0 +1,86 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (53221.0)",
+      "x0": "2026-07-07",
+      "x1": "2034-06-15",
+      "y0": 53221.0,
+      "y1": 53221.0,
+      "price": 53221.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (51221.994)",
+      "x0": "2026-06-17",
+      "x1": "2034-06-15",
+      "y0": 51221.994,
+      "y1": 51221.994,
+      "price": 51221.994,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (50604.5)",
+      "x0": "2026-06-11",
+      "x1": "2034-06-15",
+      "y0": 50604.5,
+      "y1": 50604.5,
+      "price": 50604.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (49987.006)",
+      "x0": "2026-06-05",
+      "x1": "2034-06-15",
+      "y0": 49987.006,
+      "y1": 49987.006,
+      "price": 49987.006,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (47988.0)",
+      "x0": "2026-05-18",
+      "x1": "2034-06-15",
+      "y0": 47988.0,
+      "y1": 47988.0,
+      "price": 47988.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-18",
+      "x1": "2026-07-07",
+      "y0": 47988.0,
+      "y1": 53221.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 100279.33,
+  "pip_value": 21.3,
+  "spread_multiplier": 23.0,
+  "spread": 489.9
+}
