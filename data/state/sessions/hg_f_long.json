@@ -1,0 +1,84 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (6.321)",
+      "x0": "2026-07-28",
+      "x1": "2034-06-16",
+      "y0": 6.321,
+      "y1": 6.321,
+      "price": 6.321,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (260.45758)",
+      "x0": "2026-06-29",
+      "x1": "2034-06-16",
+      "y0": 260.45758,
+      "y1": 260.45758,
+      "price": 260.45758,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (338.9605)",
+      "x0": "2026-06-19",
+      "x1": "2034-06-16",
+      "y0": 338.9605,
+      "y1": 338.9605,
+      "price": 338.9605,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (417.46342)",
+      "x0": "2026-06-11",
+      "x1": "2034-06-16",
+      "y0": 417.46342,
+      "y1": 417.46342,
+      "price": 417.46342,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (671.6)",
+      "x0": "2026-05-13",
+      "x1": "2034-06-16",
+      "y0": 671.6,
+      "y1": 671.6,
+      "price": 671.6,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-13",
+      "x1": "2026-07-28",
+      "y0": 671.6,
+      "y1": 6.321,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 72.43,
+  "pip_value": 114.06
+}

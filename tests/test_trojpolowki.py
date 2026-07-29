@@ -37,8 +37,8 @@ def load_run_module():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v20"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v20"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v21"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"' in server_source
 
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
@@ -148,7 +148,7 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     mod = load_run_module()
     setup = mod.ScannerRow(
         market="WIG", scanner="FIBO", category="waiting", ticker="DROP", status="reached_23_6_waiting_for_61_8",
-        direction="long", dates={"start": "2026-06-15", "incline": "2026-06-15->2026-07-01"},
+        direction="short", dates={"start": "2026-06-15", "incline": "2026-06-15->2026-07-01"},
         metrics={"near61_raw": "50.0", "ratio_raw": "2.0", "incline_days": "30"}, chart_url="https://stooq.pl/drop",
     )
     # A crossed setup is intentionally absent from the active columns, so seed a
@@ -180,7 +180,23 @@ def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
     assert "--ichimoku-mode off --fibo-lines 5" in source
 
 
-def test_fibo_sideways_rules_apply_to_impulse_not_correction():
+def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "class='btn fibo-analyzer-btn'" in source
+    assert "data-ticker='{html.escape(ticker, quote=True)}'" in source
+    assert "onclick='openFiboDropoutAnalyzer(this)'" in source
+    assert "id='fibo-analyzer-sidebar'" in source
+    assert "📋 Copy for Codex" in source
+    assert "Analysis complete · copied automatically" in source
+    assert ".join(String.fromCharCode(10))" in source
+    server = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    assert 'parsed.path == "/fibo-dropout-analysis"' in server
+    assert '"STOCKHELPER_CACHE_ONLY"] = "1"' in server
+    assert '"-explain", ticker' in server
+    assert "FULL SCANNER REJECTION TRACE" in server
+
+
+def test_long_fibo_sideways_rules_apply_to_impulse_not_correction():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
@@ -191,6 +207,7 @@ def test_fibo_sideways_rules_apply_to_impulse_not_correction():
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
     assert "_latest_sideways_window" not in source[correction_start:correction_end]
+    assert "_mirrored_short and _has_long_sideways" in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
@@ -211,6 +228,28 @@ def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
     assert "return max(dominant)" in peak_source
 
 
+def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    peak_start = source.index("def _select_peak_long")
+    peak_end = source.index("def _select_bottom_short", peak_start)
+    assert "global_max * 0.94" in source[peak_start:peak_end]
+    steep_start = source.index("def _find_fibo_3p_steep_setup")
+    steep_end = source.index("def _find_fibo_setup", steep_start)
+    assert "peak_high < global_high * 0.94" in source[steep_start:steep_end]
+    assert "independent_recent_idxs" in source[peak_start:peak_end]
+    assert "recent_gain >= 0.25" in source[peak_start:peak_end]
+    assert "mirrored_short_axis - recent_base" in source[peak_start:peak_end]
+
+
+def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "Rejected short 3P steep: post-bottom correction contains a month-long sideways range" in source
+    assert "Rejected short: post-bottom correction contains a month-long sideways range" in source
+    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    assert 'cand.direction == "short" and _has_long_sideways' in stale
+    assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
+
+
 def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "touch_idxs[:1]" not in source
@@ -229,12 +268,59 @@ def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
 
 def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert 'group_name in {"DAX40", "US100"}' in scanner_source
+    assert 'group_name in {"DAX40", "NDX100"}' in scanner_source
     assert 'if short_fibo_enabled:' in scanner_source
+    assert 'for direction in ("long", "short"):' in scanner_source
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="download-chart-png"' in ui_source
     assert "chart.takeScreenshot(true, false)" in ui_source
     assert "link.download" in ui_source
+
+
+def test_fibo_final_routing_keeps_23_6_zone_in_second_column_and_directions_independent():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+
+    assert 'r.status == "3p_steep_incline" or r.status == "returned_before_61_8"' in source
+    assert 'if r.status != "3p_steep_incline"' in source
+    assert 'key = (str(item.ticker).upper(), str(item.direction).lower())' in source
+
+
+def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    peak_selector = source[source.index("def _select_peak_long"):source.index("def _select_bottom_short")]
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _scan_fibo_one")]
+
+    assert "post_dominant_low <= old_618" in peak_selector
+    assert "recent_left = max(min_incline_days, len(w) - 60)" in steep
+    assert "allow_independent_peak=independent_recent_peak" in steep
+    assert "reset_after_sideways=False" in steep
+    assert "reset_after_extended_sideways=not _mirrored_short" in steep
+    assert "reset fib start after extended sideways base" in source
+    assert "base_end + 35" in source
+    assert "newest_near_recovery_extreme" in setup
+    assert "retained sideways correction because the newest close" in setup
+    assert "_sideways_correction_near_active_extreme" in setup
+    assert "adjusted the top anchor" in setup
+    assert "Short 3P steep: retained the broad decline" in steep
+
+
+def test_manual_fibo_drawing_does_not_rescale_chart_viewport():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "!isEditableLineObject(obj) && !isFib && !isFibBoundary" in source
+
+
+def test_ichimoku_retest_counts_only_best_local_extreme_until_close_resets_cycle():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    retest = source[source.index("def _detect_ichimoku_retest"):source.index("def run_ichimoku_search")]
+
+    assert 'n_outside = float(df["Close"].iloc[n]) > float(top.iloc[n])' in retest
+    assert 'n_outside = float(df["Close"].iloc[n]) < float(bottom.iloc[n])' in retest
+    assert retest.index("if n_outside:") < retest.index("if n_touched:", retest.index("if n_outside:"))
+    assert "def _pattern_reaction_extreme" in retest
+    assert "-_pattern_reaction_extreme(x)" in retest
+    assert "One cloud visit is one retest cycle" in retest
 
 
 def test_chart_png_includes_drawings_and_context_header():
@@ -425,13 +511,87 @@ def test_robust_sideways_windows_match_tor_bnp_and_not_mchp():
 def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
-    assert 'cand.status not in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in stale
+    assert 'cand.status not in {"returned_before_61_8", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in stale
     assert 'touch_mask = pd.to_numeric(after["Low"]' in stale
     assert 'touch_mask = pd.to_numeric(after["High"]' in stale
     assert 'first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"]' in stale
     assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
-    assert 'r.status in {"reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+    assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+    run_source = Path("run").read_text(encoding="utf-8")
+    touched = run_source[run_source.index('if "touched_61_8_no_pattern"'):run_source.index("def _fibo_touch_date")]
+    assert "return near >= 75.0" in touched
+
+
+def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    long_start = source.index("def _find_fibo_setup")
+    routing_start = source.index("valid_recent_cutoff")
+    classifier_start = source.index("def _fibo_pre_61_8_status")
+    classifier_end = source.index("def _fibo_formation_size", classifier_start)
+    classifier = source[classifier_start:classifier_end]
+    assert 'current_close > fib_23_6 if direction == "long" else current_close < fib_23_6' in classifier
+    assert 'return "returned_before_61_8" if returned_to_impulse_side else "reached_23_6_waiting_for_61_8"' in classifier
+    setup = source[long_start:routing_start]
+    assert '_fibo_pre_61_8_status("long", float(close.iloc[-1]), fib_236)' in setup
+    assert '_fibo_pre_61_8_status("short", float(close.iloc[-1]), fib_236)' in setup
+    assert "Long: price returned above 23.6 without touching 61.8" in source
+    assert "Short: correction returned below 23.6 without touching 61.8" in source
+    assert 'if r.status == "returned_before_61_8":\n            rows0.append(r)' in source[routing_start:]
+    assert 'if made_higher_high and cand.status != "returned_before_61_8"' in source
+    assert 'if made_lower_low and cand.status != "returned_before_61_8"' in source
+    assert 'r.status == "3p_steep_incline" or r.status == "returned_before_61_8"' in source
+
+
+def test_current_3p_match_survives_historical_offset_deduplication():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    limiter = source[source.index("def _limit_fibo_formations_per_ticker"):source.index("def _dedupe_same_scale_fibo_formations")]
+    dedupe = source[source.index("def _dedupe_same_scale_fibo_formations"):source.index("def _is_bullish_hammer")]
+    assert 'str(r.status) == "3p_steep_incline"' in limiter
+    assert "Historical regular" in limiter
+    assert 'regular.status in {"returned_before_61_8", "reached_23_6_waiting_for_61_8"}' in dedupe
+
+
+def test_valid_61_8_pattern_gets_slightly_longer_correction_ratio_window():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+
+    assert 'max_ratio = 10.0 if pattern != "none" else 8.0' in source
+    assert 'incline/decline ratio too high ({ratio} > {max_ratio})' in source
+
+
+def test_short_fibo_keeps_dominant_top_when_later_bottom_extends_decline():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+    assert "preserve_deeper_short_continuation" in selector
+    assert "continuation_extension >= 0.15" in selector
+    assert "retained dominant original top after a 61.8 rebound" in selector
+    regular = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+    assert "preserve_deeper_short_continuation=_mirrored_short" in regular
+
+
+def test_fibo_and_wedge_liquidity_filters_are_stock_only():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    liquidity = source[source.index("def _passes_scanner_liquidity"):source.index("def _business_day_gap_after_local")]
+    assert 'if instrument_type in {"commodity", "forex"}:\n        return True' in liquidity
+    fibo_filter = source[source.index("def _passes_fibo_liquidity"):source.index("def _passes_wedge_liquidity")]
+    wedge_filter = source[source.index("def _passes_wedge_liquidity"):source.index("rows_by_key:")]
+    assert 'if instrument_type in {"commodity", "forex"}:\n            return True' in fibo_filter
+    assert 'if instrument_type in {"commodity", "forex"}:\n            return True' in wedge_filter
+    lookup = source[source.index("rows_by_key:"):source.index("# Populate Avg10Turn")]
+    assert "for r in rows + rows0 + rows1 + rows2:" in lookup
+
+
+def test_3p_23_6_zone_exports_progress_for_trojpolowki_waiting_column():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    rows1 = source[source.index("rows1_md="):source.index("rows2_md=")]
+    assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in rows1
+
+
+def test_short_recent_decline_gain_uses_unmirrored_price_denominator():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    signature = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+    assert "_mirrored_short_axis=axis" in signature
+    assert "mirrored_short_axis=_mirrored_short_axis" in signature
 
 
 def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
@@ -448,10 +608,10 @@ def test_fibo_rejects_correction_through_original_anchor():
     assert "if corr_high >= fib_start:" in source
     assert "correction invalidated the formation by reaching" in source
     run_source = Path("run").read_text(encoding="utf-8")
-    assert "return 75.0 <= near <= 100.0" in run_source
+    assert "return near >= 75.0" in run_source
 
 
-def test_third_fibo_column_excludes_over_100_percent_no_pattern_rows(tmp_path: Path):
+def test_third_fibo_column_keeps_crossed_61_8_row_during_pattern_window(tmp_path: Path):
     mod = load_run_module()
     rows = [
         mod.ScannerRow(
@@ -466,7 +626,7 @@ def test_third_fibo_column_excludes_over_100_percent_no_pattern_rows(tmp_path: P
         ),
     ]
     text = mod._write_trojpolowki_fibo(rows, tmp_path, datetime(2026, 7, 24, 9, 0, 0)).read_text(encoding="utf-8")
-    assert "JSW ↗️" not in text
+    assert "JSW ↗️" in text
     assert "TTWO.US ↗️" in text
 
 

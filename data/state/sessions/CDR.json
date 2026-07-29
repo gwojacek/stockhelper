@@ -1,11 +1,6 @@
 {
-  "high": 260.7,
-  "low": 234,
-  "entry": 243,
-  "stop_loss": 234,
   "check_zr_value_fibo_or_elevation": null,
-  "line_cross_value": null,
-  "capital": 225000,
+  "capital": 298000,
   "symbol": "CDR.WA",
   "name": "CDR",
   "apply_currency_conversion_fee": false,
@@ -24,20 +19,20 @@
         "2027-07-20"
       ],
       "y": [
-        272.0,
+        272,
         267.3,
         26.81667
       ],
       "x0": "2026-05-06",
       "x1": "2027-07-20",
-      "y0": 272.0,
+      "y0": 272,
       "y1": 26.81667,
       "anchor_x": [
         "2026-05-06",
         "2026-05-14"
       ],
       "anchor_y": [
-        272.0,
+        272,
         267.3
       ],
       "price": 26.81667,
@@ -50,31 +45,29 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-06-11",
-        "2026-06-26",
-        "2027-07-20"
+        "2026-03-02",
+        "2026-09-14"
       ],
       "y": [
-        218.6,
-        211.3,
-        27.47273
+        231.7,
+        197.67
       ],
       "x0": "2026-06-11",
       "x1": "2027-07-20",
       "y0": 218.6,
       "y1": 27.47273,
       "anchor_x": [
-        "2026-06-11",
+        "2026-03-02",
         "2026-06-26"
       ],
       "anchor_y": [
-        218.6,
+        231.7,
         211.3
       ],
       "price": 27.47273,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": false
+      "free_extension": true
     }
   ],
   "position_calculations": {
@@ -153,12 +146,47 @@
     "warnings": [],
     "zr_ratio": null
   },
-  "position_type": "long",
   "calculation_currency": "PLN",
   "lot_cost": 0,
   "pip_value": 0,
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
-  "level_points": {}
+  "level_points": {
+    "high": {
+      "price": 272,
+      "plot_price": 272,
+      "date": "2026-05-06",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 211.3,
+      "plot_price": 211.3,
+      "date": "2026-06-26",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 235.58,
+      "plot_price": 235.58,
+      "date": "2026-07-07",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 222.61,
+      "plot_price": 222.61,
+      "date": "2026-07-07",
+      "auto_wedge": true
+    }
+  },
+  "__half_points__": [],
+  "high": 272,
+  "__wedge_auto_high__": true,
+  "low": 211.3,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 235.58,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "long",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 222.61,
+  "__wedge_auto_stop_loss__": true
 }

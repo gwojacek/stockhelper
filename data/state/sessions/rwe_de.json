@@ -10,30 +10,28 @@
       "label": "Falling wedge upper",
       "x": [
         "2026-04-30",
-        "2026-07-07",
-        "2026-11-27"
+        "2026-10-05"
       ],
       "y": [
-        62.0,
-        58.0,
-        49.23404
+        62,
+        52.58
       ],
       "x0": "2026-04-30",
       "x1": "2026-11-27",
-      "y0": 62.0,
+      "y0": 62,
       "y1": 49.23404,
       "anchor_x": [
         "2026-04-30",
         "2026-07-07"
       ],
       "anchor_y": [
-        62.0,
-        58.0
+        62,
+        58
       ],
       "price": 49.23404,
       "color": "#dc2626",
       "group_id": "auto-wedge",
-      "free_extension": false
+      "free_extension": true
     },
     {
       "id": "auto-wedge-lower",
@@ -67,5 +65,49 @@
       "free_extension": false
     }
   ],
-  "__journal_source_technique__": "Kliny"
+  "__journal_source_technique__": "Kliny",
+  "high": 62,
+  "__wedge_auto_high__": true,
+  "low": 51.4,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 57.17,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "long",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 55.88,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 293898,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 62,
+      "plot_price": 62,
+      "date": "2026-04-30",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 51.4,
+      "plot_price": 51.4,
+      "date": "2026-03-09",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 57.17,
+      "plot_price": 57.17,
+      "date": "2026-07-20",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 55.88,
+      "plot_price": 55.88,
+      "date": "2026-07-20",
+      "auto_wedge": true
+    }
+  }
 }

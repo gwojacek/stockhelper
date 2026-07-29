@@ -32,8 +32,11 @@ sys.modules.setdefault("utilities.yahoo_finance", yahoo_finance)
 sys.modules.setdefault("utilities.output_silence", output_silence)
 
 from scanner_search import (
+    _is_bullish_piercing_line,
+    _is_bearish_harami,
     _is_bearish_shooting_star,
     _is_bullish_hammer,
+    _is_dark_cloud_cover,
     _is_evening_star,
     _is_morning_star,
 )
@@ -78,14 +81,45 @@ def test_evening_star_requires_middle_body_above_first_and_third_body():
     assert _is_evening_star(first, middle, third, 13.0, allow_equal_third_close=True)
 
 
+def test_oil_two_candle_reversal_allows_tiny_futures_open_difference():
+    first = candle(95.36, 102.00, 94.89, 100.69)
+    second = candle(100.67, 101.19, 95.13, 96.78)
+
+    assert _is_dark_cloud_cover(first, second, 98.05)
+
+    axis = 200.0
+    mirrored_first = candle(axis - first["Open"], axis - first["Low"], axis - first["High"], axis - first["Close"])
+    mirrored_second = candle(axis - second["Open"], axis - second["Low"], axis - second["High"], axis - second["Close"])
+    assert _is_bullish_piercing_line(mirrored_first, mirrored_second, axis - 98.05)
+
+
+def test_opl_tiny_bullish_body_is_not_dark_cloud_and_later_harami_is_valid():
+    july_15 = candle(14.48, 14.54, 14.38, 14.50)
+    july_16 = candle(14.50, 14.50, 14.29, 14.29)
+    july_21 = candle(14.62, 14.77, 14.53, 14.77)
+    july_22 = candle(14.76, 14.81, 14.53, 14.70)
+
+    assert not _is_dark_cloud_cover(july_15, july_16, 14.40)
+    assert _is_bearish_harami(july_21, july_22, 14.60)
+
+
 def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
     from scanner_search import FiboScanResult, _limit_fibo_formations_per_ticker
 
-    def result(start: str, days: int, stop: float = 100.0, fib_23_6: float = 130.0, fib_38_2: float = 150.0, fib_61_8: float = 180.0) -> FiboScanResult:
+    def result(
+        start: str,
+        days: int,
+        stop: float = 100.0,
+        fib_23_6: float = 130.0,
+        fib_38_2: float = 150.0,
+        fib_61_8: float = 180.0,
+        status: str = "reached_23_6_waiting_for_61_8",
+        direction: str = "short",
+    ) -> FiboScanResult:
         return FiboScanResult(
             ticker="COCOA",
-            direction="short",
-            status="reached_23_6_waiting_for_61_8",
+            direction=direction,
+            status=status,
             incline_start_date=start,
             incline_end_date="2026-03-02",
             incline_duration_days=days,
@@ -110,6 +144,30 @@ def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction(
     limited = _limit_fibo_formations_per_ticker([small, middle, big, tiny_fast])
 
     assert limited == [small, big]
+
+    current_wheat = result("2026-06-15", 29, stop=571.0, fib_23_6=678.151, fib_61_8=624.5755, status="3p_steep_incline")
+    limited_with_current_match = _limit_fibo_formations_per_ticker([small, middle, big, current_wheat])
+
+    assert current_wheat in limited_with_current_match
+    assert len(limited_with_current_match) == 2
+
+    opposite_direction = result("2026-05-13", 45, direction="long")
+    limited_both_directions = _limit_fibo_formations_per_ticker(
+        [small, middle, big, current_wheat, opposite_direction]
+    )
+
+    assert opposite_direction in limited_both_directions
+    assert len(limited_both_directions) == 3
+
+
+def test_commodities_and_forex_are_not_liquidity_filtered():
+    from scanner_search import _passes_scanner_liquidity
+
+    assert _passes_scanner_liquidity(None, "commodity", 1_000_000_000.0)
+    assert _passes_scanner_liquidity(0.0, "forex", 1_000_000_000.0)
+    assert not _passes_scanner_liquidity(None, "stock", 500000.0)
+    assert not _passes_scanner_liquidity(499999.0, "stock", 500000.0)
+    assert _passes_scanner_liquidity(500000.0, "stock", 500000.0)
 
 
 def test_steep_pruning_ignores_wedge_rows():

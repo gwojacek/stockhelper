@@ -526,6 +526,14 @@ def test_index_like_commodity_csv_path_uses_indexes_folder():
     assert path.parts[-2:] == ("indexes", "WIG20.csv")
 
 
+def test_commodity_display_name_csv_path_uses_canonical_stooq_symbol():
+    from chart_program.chart_loader import local_csv_path_for_symbol
+
+    path = local_csv_path_for_symbol("Natural Gas", "commodity")
+
+    assert path.parts[-2:] == ("commodities", "NG_F.csv")
+
+
 def test_indexes_refresh_triggers_stooq_bulk_when_wig20_missing_multiple_sessions(monkeypatch):
     import scanner_search as scanner
 
