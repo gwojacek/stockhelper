@@ -25,7 +25,10 @@ def test_wedge_start_can_overlap_the_second_anchor_without_hiding_the_line():
     start_drag = source[source.index("if (mode === 'start')"):source.index("else if (mode === 'end'")]
     wedge_renderer = source[source.index("function drawWedgeStraightLines"):source.index("function drawCloud")]
 
-    assert "compareTime(x0" not in start_drag
+    assert "compareTime(x0, anchorsX[1]) >= 0" not in start_drag
     assert "if (x0 === x1)" in wedge_renderer
     assert "ctx.moveTo(x0, y0);" in wedge_renderer
-    assert "ctx.lineTo(x1, y1);" in wedge_renderer
+    assert "ctx.lineTo(targetX, targetY);" in wedge_renderer
+    assert "const coincidentAnchors = compareTime(anchors.x0, anchors.x1) === 0;" in source
+    assert "(obj.free_extension || coincidentAnchors) ? rawY1" in source
+    assert "compareTime(x0, anchorsX[1]) !== 0" in start_drag
