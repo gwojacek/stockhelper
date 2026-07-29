@@ -891,6 +891,23 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
 
 
+def _sideways_correction_near_active_extreme(df_slice: pd.DataFrame, direction: str) -> bool:
+    """Return whether a sideways correction is still pressing its recovery edge."""
+    if df_slice.empty:
+        return False
+    highs = pd.to_numeric(df_slice["High"], errors="coerce")
+    lows = pd.to_numeric(df_slice["Low"], errors="coerce")
+    closes = pd.to_numeric(df_slice["Close"], errors="coerce").dropna()
+    if highs.dropna().empty or lows.dropna().empty or closes.empty:
+        return False
+    high = float(highs.max())
+    low = float(lows.min())
+    span = max(high - low, 1e-9)
+    latest = float(closes.iloc[-1])
+    distance = (high - latest) if direction == "short" else (latest - low)
+    return distance / span <= 0.30
+
+
 def _early_sideways_after_anchor_window(
     w: pd.DataFrame,
     i_start: int,
@@ -4864,13 +4881,35 @@ def _find_fibo_setup(
             )
             return None
         i_end = len(w) - 1
-        later_high = float(pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce").max()) if i_peak + 1 <= i_end else float("nan")
+        later_high_slice = pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce") if i_peak + 1 <= i_end else pd.Series(dtype=float)
+        later_high = float(later_high_slice.max()) if not later_high_slice.empty else float("nan")
         if pd.notna(later_high) and later_high > fib_end * 1.005:
+            previous_peak = fib_end
+            i_peak = int(later_high_slice.idxmax())
+            fib_end = float(high.iloc[i_peak])
             _log(
-                "Rejected long: later high exceeded selected Fibo peak; "
-                f"still an incline/new-high structure (peak={fib_end:.4f}, later_high={later_high:.4f})."
+                "Long: later high exceeded selected Fibo peak; adjusted the top anchor "
+                f"from {previous_peak:.4f} to {fib_end:.4f}."
             )
-            return None
+            new_peak_correction_bars = i_end - i_peak
+            if new_peak_correction_bars < min_correction_days:
+                rng = fib_end - fib_start
+                if rng <= 0:
+                    return None
+                return FiboScanResult(
+                    ticker="", direction="long", status="3p_steep_incline",
+                    incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),
+                    incline_end_date=str(pd.to_datetime(w.iloc[i_peak]["Date"]).date()),
+                    incline_duration_days=i_peak - i_start,
+                    decline_end_date=str(pd.to_datetime(w.iloc[i_end]["Date"]).date()),
+                    decline_duration_days=max(new_peak_correction_bars, 1),
+                    incline_decline_duration_ratio=round((rng / max(abs(fib_start), 1e-9)) * 100.0, 2),
+                    fib_23_6=fib_end - rng * 0.236,
+                    fib_38_2=fib_end - rng * 0.382,
+                    fib_61_8=fib_end - rng * 0.618,
+                    first_61_8_touch_date="", reversal_pattern_name="none",
+                    stop_loss=fib_start, current_close=float(close.iloc[-1]),
+                )
         corr_bars = i_end - i_peak
         early_correction_accepted = False
         if corr_bars < 8:
@@ -4903,12 +4942,7 @@ def _find_fibo_setup(
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
         if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
-            mirrored_corr_low = float(pd.to_numeric(correction_seg["Low"], errors="coerce").min())
-            mirrored_corr_high = float(pd.to_numeric(correction_seg["High"], errors="coerce").max())
-            mirrored_corr_range = max(mirrored_corr_high - mirrored_corr_low, 1e-9)
-            newest_near_recovery_extreme = (
-                (float(close.iloc[-1]) - mirrored_corr_low) / mirrored_corr_range <= 0.25
-            )
+            newest_near_recovery_extreme = _sideways_correction_near_active_extreme(correction_seg, "long")
             if not newest_near_recovery_extreme:
                 _log(
                     "Rejected short: post-bottom correction contains a month-long sideways range; "
@@ -5385,7 +5419,8 @@ def run_fibo_search(target: str) -> int:
         if cand.direction == "short" and _has_long_sideways(
             after.reset_index(drop=True), max_days=22, band_pct=0.12
         ):
-            return True
+            if not _sideways_correction_near_active_extreme(after.reset_index(drop=True), "short"):
+                return True
         # These anchors get exactly one reversal opportunity: the first 61.8
         # touch/cross and the two candles after it.  A later return to 61.8 must
         # not resurrect the old formation; only a newly anchored Fibo may return.

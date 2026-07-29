@@ -299,6 +299,8 @@ def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection
     assert "reset fib start after extended sideways base" in source
     assert "newest_near_recovery_extreme" in setup
     assert "retained sideways correction because the newest close" in setup
+    assert "_sideways_correction_near_active_extreme" in setup
+    assert "adjusted the top anchor" in setup
 
 
 def test_manual_fibo_drawing_does_not_rescale_chart_viewport():
@@ -514,6 +516,9 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+    run_source = Path("run").read_text(encoding="utf-8")
+    touched = run_source[run_source.index('if "touched_61_8_no_pattern"'):run_source.index("def _fibo_touch_date")]
+    assert "return near >= 75.0" in touched
 
 
 def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
@@ -594,10 +599,10 @@ def test_fibo_rejects_correction_through_original_anchor():
     assert "if corr_high >= fib_start:" in source
     assert "correction invalidated the formation by reaching" in source
     run_source = Path("run").read_text(encoding="utf-8")
-    assert "return 75.0 <= near <= 100.0" in run_source
+    assert "return near >= 75.0" in run_source
 
 
-def test_third_fibo_column_excludes_over_100_percent_no_pattern_rows(tmp_path: Path):
+def test_third_fibo_column_keeps_crossed_61_8_row_during_pattern_window(tmp_path: Path):
     mod = load_run_module()
     rows = [
         mod.ScannerRow(
@@ -612,7 +617,7 @@ def test_third_fibo_column_excludes_over_100_percent_no_pattern_rows(tmp_path: P
         ),
     ]
     text = mod._write_trojpolowki_fibo(rows, tmp_path, datetime(2026, 7, 24, 9, 0, 0)).read_text(encoding="utf-8")
-    assert "JSW ↗️" not in text
+    assert "JSW ↗️" in text
     assert "TTWO.US ↗️" in text
 
 
