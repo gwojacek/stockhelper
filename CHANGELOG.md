@@ -2,11 +2,40 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.2`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.3`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
-Compare: [`7.2...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.2...HEAD)
+Compare: [`7.3...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.3...HEAD)
+
+## [7.3] - 2026-07-29
+
+Tag: `7.3`
+Compare: [`7.2...7.3`](https://github.com/gwojacek/stockhelper/compare/7.2...7.3)
+
+### Added
+
+- Added a per-instrument Fibo dropout analyzer to the combined HTML report. The analyzer opens in a sidebar, runs the scanner's cache-only explain mode through the local report server, displays the complete rejection trace, and can copy a Codex-ready diagnostic.
+- Added the report-server `/fibo-dropout-analysis` endpoint and bumped the report protocol to v21.
+- Added explicit Fibo lifecycle handling for formations that return across 23.6 before touching 61.8, allowing them to move back to the early column and return to the waiting column if correction resumes.
+- Added extended-sideways-base and independent-recent-impulse handling for automatic Fibo anchors, including current new-high re-anchoring and direction-aware broad-short preservation.
+
+### Changed
+
+- Refined Fibo peak, base, stale-cycle, deduplication, and per-ticker limiting rules. Long and short candidates now have independent limits, live 3P matches are preserved, and active re-anchored/opposite-direction formations clear obsolete dropout cards.
+- Refined 3P routing so pure inclines remain in column one, 23.6-zone formations remain in the waiting column, fresh 61.8 touches stay in the near-61.8 column for their complete three-candle pattern window, and recent confirmed reversals use the valid-pattern column.
+- Improved mirrored-short behavior for commodities, forex, DAX40, and Nasdaq-100, including broad decline preservation while the correction remains near its active recovery extreme.
+- Made liquidity/turnover gates stock-only; commodity and forex Fibo/wedge candidates no longer depend on unavailable or unreliable volume metadata.
+- Updated Ichimoku retest counting so one continuous cloud visit contributes only the pattern at its best local reaction extreme. A close back on the trend side completes that cycle; a later cloud visit starts a new retest.
+- Improved chart symbol handling so commodity display names resolve to canonical Stooq cache paths, including `Natural Gas -> NG_F.csv`.
+- Kept the chart viewport stable when users complete a manual Fibonacci drawing.
+
+### Fixed
+
+- Fixed valid WHEAT, OIL, COFFEE, COCOA, MBG.DE, MTX.DE, OPL, CTAS.US, ALV.DE, QIA.DE, and related formations being lost through liquidity lookup, historical-offset deduplication, stale-sideways, dominant-peak, ratio, or anchor-reset paths.
+- Fixed false dark-cloud-cover/piercing-line matches whose first candle was doji-like, while retaining the small reopen tolerance required by futures.
+- Fixed old opposite-direction or old-anchor cards remaining in the ten-day dropout history when the instrument is active under a current Fibo classification.
+- Fixed report-launched Natural Gas charts failing in cache-only mode because the display name was used instead of its canonical storage symbol.
 
 ## [7.2] - 2026-07-21
 

@@ -15,6 +15,15 @@ It helps you:
 
 The project is practical and config-driven: most workflows start from a ticker/config slug, write reusable files under `configs/`, cache market data under `data/`, and save reports under `chart_program/data/`.
 
+## What's new in 7.3
+
+- **Fibo dropout diagnostics:** every recent Fibo dropout card has an analyzer action that opens a report sidebar, runs cache-only `-explain` diagnostics through the local report server, and copies a Codex-ready trace.
+- **More stable Fibo lifecycle routing:** live 3P inclines survive historical-offset deduplication; corrections can move between the early and 23.6→61.8 columns; fresh 61.8 touches remain visible for their full three-candle pattern window; and confirmed patterns are kept separate from waiting setups.
+- **Better automatic anchors:** the scanner recognizes independent recent impulses, re-anchors continuing inclines at new highs/lows, starts after genuinely extended sideways bases, and preserves broad mirrored-short formations when their recovery remains active.
+- **Cleaner non-stock scanning:** liquidity filters remain enforced for stocks but are bypassed for commodity and forex feeds whose volume is absent or not comparable.
+- **Improved pattern and retest rules:** piercing/dark-cloud patterns require a meaningful first candle body, and Ichimoku counts only the pattern at the best local extreme during each cloud-retest cycle.
+- **Chart fixes:** commodity display names resolve to canonical cached symbols, and completing a manual Fibo drawing no longer moves the chart viewport.
+
 ## Quick command table
 
 Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy a command from the **Recommended command** column and paste it into the terminal. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
@@ -83,10 +92,10 @@ Normal output is kept minimal: one captcha/consent line per symbol and page prog
   - Stooq bulk `wse indices/wig20.txt` import as `data/csv/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
   - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument, with breakout/retest metadata that can be forwarded into chart Setup information.
-- **Fibonacci formation scanner** with long setups across supported markets and mirrored short setup search for forex, commodities, DAX40, and US100; 23.6/61.8 lifecycle states; first-touch reversal-pattern checks; robust month-long-sideways rejection; stale-cycle anchor resets; and an explain/debug mode.
+- **Fibonacci formation scanner** with long setups across supported markets and mirrored short setup search for forex, commodities, DAX40, and US100; movable early/23.6/61.8 lifecycle states; first-touch three-candle reversal windows; independent/new-high and extended-base re-anchoring; robust sideways/stale-cycle handling; and an explain/debug mode.
 - **Scanner candle-pattern checks** for hammer/shooting-star style one-candle rejections, engulfing, harami, piercing-line/dark-cloud-cover, and morning/evening star variants used by Ichimoku retests and Fibo 61.8 reversals.
 - **Falling-wedge (Kliny) scanner** exported from the Fibo scan flow, including unbroken wedges and fresh breakouts (up to 5 candles after breakout), Avg10d liquidity filtering, stricter wick/contact validation, improved anchor scoring, and chart commands that preload wedge lines.
-- **Trójpolówki (3P) watchlists** generated from allsearch output, with four active Fibo lifecycle columns plus a hidden-by-default 10-day dropout column, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner/direction metadata for filtering, toggleable Long/Short buttons, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
+- **Trójpolówki (3P) watchlists** generated from allsearch output, with four active Fibo lifecycle columns plus a hidden-by-default 10-day dropout column and per-card Fibo dropout analysis, compact Ichimoku continuation/watch/cloud/retest columns, market ordering, top choices, per-cell market/scanner/direction metadata for filtering, toggleable Long/Short buttons, per-column `📊` StockHelper bulk-open buttons, Stooq/Sheets controls, and PDF export from every report tab.
 - **Quick charts from `📊` groups** in HTML reports: a group button opens the first chart and carries the rest as an in-chart quick-navigation panel, with visually grouped buttons for the original report source/column.
 - **Liquidity/volume filters** for stock scanner output, including Avg10d PLN and GDP-adjusted thresholds.
 - **Interactive chart tool** powered by TradingView Lightweight Charts, with an in-chart searchable instrument switcher for every symbol already available in the local CSV cache, shared saved PLN balance, manual level selection, optional Ichimoku overlay, optional Fibonacci/wedge lines, scanner-aware Fibo/wedge reset, manual wedge preservation/import, alternate-wedge cycling controls, one-click PNG download, stock-CFD mode, clear-active-value controls, saved sessions, generated configs, chart snapshots, and a transaction-journal panel.
@@ -113,16 +122,17 @@ StockHelper's scanner pattern names are intentionally stored as machine-friendly
 | Bullish / long | `hammer`, `bullish_engulfing`, `bullish_piercing_line`, `bullish_harami`, `morning_star`, `morning_doji_star` | Ichimoku above-cloud retests and long Fibo 61.8 reversals | Bullish rejection/reversal patterns that must touch the active cloud/level zone and reclaim the relevant threshold. |
 | Bearish / short | `shooting_star`, `bearish_hammer`, `bearish_engulfing`, `bearish_harami`, `dark_cloud_cover`, `evening_star`, `evening_doji_star` | Ichimoku below-cloud retests and short Fibo 61.8 reversals | Bearish rejection/reversal patterns that must touch the active cloud/level zone and lose the relevant threshold. |
 
-For Ichimoku, retest patterns are tied to the current cloud side: above-cloud setups search bullish patterns against the cloud top/bottom zone, while below-cloud setups search bearish patterns against the cloud bottom/top zone. For Fibo, patterns are tied to the 61.8 retracement and must include the first 61.8 touch window. The chart Setup information panel prefers scanner-provided pattern metadata when it is available.
+For Ichimoku, retest patterns are tied to the current cloud side: above-cloud setups search bullish patterns against the cloud top/bottom zone, while below-cloud setups search bearish patterns against the cloud bottom/top zone. One continuous cloud visit counts only the pattern at its best local reaction extreme (lowest for long, highest for short); a close back on the trend side ends that cycle, and a later cloud visit begins a new retest. For Fibo, patterns are tied to the 61.8 retracement and must include the first 61.8 touch window. The chart Setup information panel prefers scanner-provided pattern metadata when it is available.
 
 ### Fibonacci lifecycle and first-touch rules
 
 - The first anchor must be a confirmed trend extreme: a clear low before a long impulse or a clear high before a short impulse. The scanner prefers the true extreme rather than a later candle part-way through the move.
-- A month-long sideways block inside the impulse invalidates or resets that anchor. Sideways detection uses a robust price envelope and may ignore up to two isolated interior spike candles, so one-off wicks do not split an otherwise flat range.
+- A genuinely extended sideways base resets the anchor to the reaction extreme after that base; shorter pauses inside a continuing stepwise impulse do not automatically replace the broad formation. Sideways detection uses a robust price envelope and may ignore up to two isolated interior spike candles.
 - Short formations reuse the long detector on vertically mirrored OHLC data. Short scanning is enabled for forex, commodities, DAX40, and US100; WIG Fibo scanning remains long-only.
-- The near-61.8 watch state represents a pullback that is at least 75% of the way from 50% toward 61.8 (or deeper). A setup that retreats away before touching 61.8 returns to the earlier waiting state when no other rejection applies.
+- If price exceeds the current impulse extreme, the scanner moves the top/bottom anchor to the new high/low and keeps the still-live formation in the early column. A correction that retreats back across 23.6 before touching 61.8 also returns to the early column; if it crosses 23.6 again, it returns to the waiting column.
+- The near-61.8 watch state represents a pullback that is at least 75% of the way from 50% toward 61.8 (or deeper).
 - Pattern evaluation begins on the **first** candle that touches 61.8. That candle may form a valid one-candle pattern, or it may be candle 1 of a connected two- or three-candle pattern. A later standalone hammer/shooting star is not accepted merely because an earlier unrelated candle touched the level.
-- The last candle of an accepted pattern must close back on the valid side of 61.8: above it for long formations and below it for short formations. If the first-touch window completes without a valid confirmed pattern, that Fibo cycle is dropped and the scanner must find a new formation/anchor pair.
+- The candidate remains in the near-61.8 column while candle two or three can still complete the first-touch pattern, even if price briefly crosses deeper than 61.8. The last candle of an accepted pattern must close back on the valid side of 61.8: above it for long formations and below it for short formations. If the first-touch window completes without a valid confirmed pattern, that Fibo cycle is dropped and the scanner must find a new formation/anchor pair.
 
 ## Repository layout
 
