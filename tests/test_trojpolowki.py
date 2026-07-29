@@ -148,7 +148,7 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     mod = load_run_module()
     setup = mod.ScannerRow(
         market="WIG", scanner="FIBO", category="waiting", ticker="DROP", status="reached_23_6_waiting_for_61_8",
-        direction="long", dates={"start": "2026-06-15", "incline": "2026-06-15->2026-07-01"},
+        direction="short", dates={"start": "2026-06-15", "incline": "2026-06-15->2026-07-01"},
         metrics={"near61_raw": "50.0", "ratio_raw": "2.0", "incline_days": "30"}, chart_url="https://stooq.pl/drop",
     )
     # A crossed setup is intentionally absent from the active columns, so seed a
@@ -548,6 +548,13 @@ def test_current_3p_match_survives_historical_offset_deduplication():
     assert 'str(r.status) == "3p_steep_incline"' in limiter
     assert "Historical regular" in limiter
     assert 'regular.status in {"returned_before_61_8", "reached_23_6_waiting_for_61_8"}' in dedupe
+
+
+def test_valid_61_8_pattern_gets_slightly_longer_correction_ratio_window():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+
+    assert 'max_ratio = 10.0 if pattern != "none" else 8.0' in source
+    assert 'incline/decline ratio too high ({ratio} > {max_ratio})' in source
 
 
 def test_short_fibo_keeps_dominant_top_when_later_bottom_extends_decline():

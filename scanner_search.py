@@ -5075,10 +5075,11 @@ def _find_fibo_setup(
             _log(f"Rejected long: decline leg too short for scoring ({decline_bars} bars).")
             return None
         ratio = round((i_peak - i_start) / max(decline_end_idx - i_peak, 1), 2)
-        if ratio > 8.0 and not early_correction_accepted:
-            _log(f"Rejected long: incline/decline ratio too high ({ratio} > 8.0).")
+        max_ratio = 10.0 if pattern != "none" else 8.0
+        if ratio > max_ratio and not early_correction_accepted:
+            _log(f"Rejected long: incline/decline ratio too high ({ratio} > {max_ratio}).")
             return None
-        if ratio > 8.0 and early_correction_accepted:
+        if ratio > max_ratio and early_correction_accepted:
             _log(
                 f"Long: keeping setup despite high incline/decline ratio ({ratio}) "
                 "because early correction mode is active."
@@ -5299,7 +5300,8 @@ def _find_fibo_setup(
     if (decline_end_idx - i_bottom) < 2:
         return None
     ratio = round((i_bottom - i_start) / max(decline_end_idx - i_bottom, 1), 2)
-    if ratio > 8.0:
+    max_ratio = 10.0 if pattern != "none" else 8.0
+    if ratio > max_ratio:
         return None
     return FiboScanResult(
         ticker="", direction=direction, status=status,
