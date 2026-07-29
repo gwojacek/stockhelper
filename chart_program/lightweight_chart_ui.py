@@ -1689,7 +1689,11 @@ class LightweightChartLevelSelectorUI:
         const last = Math.min(xs.length, ys.length) - 1;
         const x1 = String(xs[last]).slice(0, 10);
         const rawY1 = Number(ys[last]);
-        const y1 = obj.free_extension ? rawY1 : projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, x1);
+        // Two anchors on one candle do not define a horizontal slope. Preserve
+        // the existing display endpoint in that transient state so the boundary
+        // stays visible while either anchor is dragged away again.
+        const coincidentAnchors = compareTime(anchors.x0, anchors.x1) === 0;
+        const y1 = (obj.free_extension || coincidentAnchors) ? rawY1 : projectedLineValue(anchors.x0, anchors.y0, anchors.x1, anchors.y1, x1);
         if (x1 && Number.isFinite(y1)) return {{x0:anchors.x0, y0:anchors.y0, x1, y1}};
       }}
       if (anchors) return anchors;
@@ -1730,9 +1734,8 @@ class LightweightChartLevelSelectorUI:
       const anchorsY = Array.isArray(obj.anchor_y) ? obj.anchor_y.map(Number) : [];
       if (mode === 'start') {{
         x0 = nearest(x0).time;
-        if (compareTime(x0, x1) >= 0) x0 = dateAtIndex(Math.max(0, nearest(x1).idx - 1));
         y0 = candleExtremeForDate(x0, side, y0);
-        if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
+        if (anchorsX[1] && Number.isFinite(anchorsY[1]) && compareTime(x0, anchorsX[1]) !== 0) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
       }} else if (mode === 'end' && anchorsX[0] && Number.isFinite(anchorsY[0])) {{
@@ -2238,7 +2241,26 @@ class LightweightChartLevelSelectorUI:
       const x1 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null;
       const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null;
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
-      if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
+      if (![x0, x1, y0, y1].every(Number.isFinite)) return;
+      if (x0 === x1) {{
+        const display = lineDisplayValues(obj);
+        const displayX = display && chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
+        const displayY = display && candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(display.y1) : null;
+        // Prefer the preserved display endpoint. If there is none, a vertical
+        // segment still makes distinct coincident-anchor prices visible.
+        const targetX = Number.isFinite(displayX) && displayX !== x0 ? displayX : x1;
+        const targetY = Number.isFinite(displayY) && displayX !== x0 ? displayY : y1;
+        ctx.save();
+        ctx.strokeStyle = obj.color || '#facc15';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(targetX, targetY);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }}
       const display = lineDisplayValues(obj) || anchors;
       const endSourceX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
       let endX = endSourceX;
