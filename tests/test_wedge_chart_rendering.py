@@ -17,3 +17,11 @@ def test_manual_wedge_start_is_snapped_to_the_selected_candle_extreme():
 
     assert "y0 = candleExtremeForDate(x0, side, y0);" in source
     assert "obj.anchor_y = [y0," in source
+
+
+def test_wedge_start_cannot_overlap_the_second_anchor_candle():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "const secondAnchorX = anchorsX[1] || x1;" in source
+    assert "if (compareTime(x0, secondAnchorX) >= 0)" in source
+    assert "nearest(secondAnchorX).idx - 1" in source

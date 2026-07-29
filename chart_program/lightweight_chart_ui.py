@@ -1730,7 +1730,11 @@ class LightweightChartLevelSelectorUI:
       const anchorsY = Array.isArray(obj.anchor_y) ? obj.anchor_y.map(Number) : [];
       if (mode === 'start') {{
         x0 = nearest(x0).time;
-        if (compareTime(x0, x1) >= 0) x0 = dateAtIndex(Math.max(0, nearest(x1).idx - 1));
+        // x1 is the projected display endpoint for wedges, not anchor #2. Keep
+        // the two actual anchors on separate candles so their pixel-space slope
+        // remains defined when anchor #1 is dragged onto (or past) anchor #2.
+        const secondAnchorX = anchorsX[1] || x1;
+        if (compareTime(x0, secondAnchorX) >= 0) x0 = dateAtIndex(Math.max(0, nearest(secondAnchorX).idx - 1));
         y0 = candleExtremeForDate(x0, side, y0);
         if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
         obj.anchor_x = [x0, anchorsX[1] || x1];
