@@ -15,15 +15,6 @@ It helps you:
 
 The project is practical and config-driven: most workflows start from a ticker/config slug, write reusable files under `configs/`, cache market data under `data/`, and save reports under `chart_program/data/`.
 
-## What's new in 7.3
-
-- **Fibo dropout diagnostics:** every recent Fibo dropout card has an analyzer action that opens a report sidebar, runs cache-only `-explain` diagnostics through the local report server, and copies a Codex-ready trace.
-- **More stable Fibo lifecycle routing:** live 3P inclines survive historical-offset deduplication; corrections can move between the early and 23.6→61.8 columns; fresh 61.8 touches remain visible for their full three-candle pattern window; and confirmed patterns are kept separate from waiting setups.
-- **Better automatic anchors:** the scanner recognizes independent recent impulses, re-anchors continuing inclines at new highs/lows, starts after genuinely extended sideways bases, and preserves broad mirrored-short formations when their recovery remains active.
-- **Cleaner non-stock scanning:** liquidity filters remain enforced for stocks but are bypassed for commodity and forex feeds whose volume is absent or not comparable.
-- **Improved pattern and retest rules:** piercing/dark-cloud patterns require a meaningful first candle body, and Ichimoku counts only the pattern at the best local extreme during each cloud-retest cycle.
-- **Chart fixes:** commodity display names resolve to canonical cached symbols, and completing a manual Fibo drawing no longer moves the chart viewport.
-
 ## Quick command table
 
 Use this table as the fastest path to the commands you will run most often. The recommended install is Docker-backed and the day-to-day command is `stock ...`. Copy a command from the **Recommended command** column and paste it into the terminal. Detailed explanations and variants are later in [Most useful commands](#most-useful-commands) and [Install with Docker (easiest)](#install-with-docker-easiest).
