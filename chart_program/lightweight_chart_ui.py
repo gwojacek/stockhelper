@@ -1730,11 +1730,6 @@ class LightweightChartLevelSelectorUI:
       const anchorsY = Array.isArray(obj.anchor_y) ? obj.anchor_y.map(Number) : [];
       if (mode === 'start') {{
         x0 = nearest(x0).time;
-        // x1 is the projected display endpoint for wedges, not anchor #2. Keep
-        // the two actual anchors on separate candles so their pixel-space slope
-        // remains defined when anchor #1 is dragged onto (or past) anchor #2.
-        const secondAnchorX = anchorsX[1] || x1;
-        if (compareTime(x0, secondAnchorX) >= 0) x0 = dateAtIndex(Math.max(0, nearest(secondAnchorX).idx - 1));
         y0 = candleExtremeForDate(x0, side, y0);
         if (anchorsX[1] && Number.isFinite(anchorsY[1])) y1 = roundPrice(projectedLineValue(x0, y0, anchorsX[1], anchorsY[1], x1));
         obj.anchor_x = [x0, anchorsX[1] || x1];
@@ -2242,7 +2237,22 @@ class LightweightChartLevelSelectorUI:
       const x1 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(anchors.x1) : null;
       const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y0) : null;
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(anchors.y1) : null;
-      if (![x0, x1, y0, y1].every(Number.isFinite) || x0 === x1) return;
+      if (![x0, x1, y0, y1].every(Number.isFinite)) return;
+      if (x0 === x1) {{
+        // Coincident candle anchors describe a vertical boundary. It cannot be
+        // projected horizontally, but it must remain visible and editable so
+        // either anchor can be moved away from the shared candle again.
+        ctx.save();
+        ctx.strokeStyle = obj.color || '#facc15';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }}
       const display = lineDisplayValues(obj) || anchors;
       const endSourceX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(display.x1) : null;
       let endX = endSourceX;
