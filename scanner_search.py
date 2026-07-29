@@ -4408,7 +4408,10 @@ def _select_fibo_long_impulse_base(
         if extended_runs:
             last_run = extended_runs[-1]
             base_end = last_run[-1] + 29
-            breakout_search_end = min(i_peak - min_incline_days, base_end + 15)
+            # The first durable impulse low may form several weeks after a very
+            # long base ends. Search roughly seven weeks so ALV/CTAS retain the
+            # May reaction low instead of being anchored to a later June pause.
+            breakout_search_end = min(i_peak - min_incline_days, base_end + 35)
             if breakout_search_end > base_end:
                 post_base_idx = int(low.iloc[base_end + 1:breakout_search_end + 1].idxmin())
                 if post_base_idx > i_start:
@@ -4679,7 +4682,10 @@ def _find_fibo_3p_steep_setup(
         sideways_band_pct=0.02 if _mirrored_short else 0.08,
         preserve_deeper_short_continuation=_mirrored_short,
         allow_independent_peak=independent_recent_peak,
-        reset_after_extended_sideways=True,
+        # Extended-base re-anchoring is for rising impulses. In mirrored short
+        # data it would move the original dominant top forward into an ordinary
+        # pause inside the decline (COFFEE Oct→Jun).
+        reset_after_extended_sideways=not _mirrored_short,
     )
     if base is None:
         return None
@@ -4738,8 +4744,14 @@ def _find_fibo_3p_steep_setup(
     if _mirrored_short and _has_long_sideways(
         w.iloc[i_peak:].reset_index(drop=True), max_days=22, band_pct=0.12
     ):
-        _log("Rejected short 3P steep: post-bottom correction contains a month-long sideways range.")
-        return None
+        short_correction = w.iloc[i_peak:].reset_index(drop=True)
+        if not _sideways_correction_near_active_extreme(short_correction, "long"):
+            _log("Rejected short 3P steep: post-bottom correction contains a month-long sideways range.")
+            return None
+        _log(
+            "Short 3P steep: retained the broad decline because the current correction "
+            "is still pressing its recovery extreme."
+        )
     crossed_23_6 = progress_to_618 >= 0.0
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
