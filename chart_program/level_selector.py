@@ -938,6 +938,7 @@ def run_level_selector(raw_args=None):
         source_ticker=display_ticker,
         source_name=display_name or fetch_info.get("name"),
         source_provider=fetch_info.get("source"),
+        save_callback=lambda values: _save_session_state(config_path, values),
     )
     selected = ui.run()
     _save_session_state(config_path, selected)
