@@ -82,6 +82,28 @@ def test_forex_health_does_not_retry_complete_rolling_window(monkeypatch, tmp_pa
     assert "summary: ok=1, warn=0, total=1" in output
 
 
+def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    today = datetime.now(UTC).date()
+    expected_latest = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
+    latest = expected_latest - timedelta(days=2)
+    # Keep the assertion deterministic when the two calendar days cross a weekend.
+    while len(pd.bdate_range(latest + timedelta(days=1), expected_latest)) != 2:
+        latest -= timedelta(days=1)
+    pd.DataFrame({"Date": pd.date_range(today - timedelta(days=548), latest)}).to_csv(csv_path, index=False)
+
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY", "0")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda _symbol, _instrument: csv_path)
+
+    scanner._forex_csv_health_check(["USDJPY"], {"USDJPY": "cache"})
+
+    output = capsys.readouterr().out
+    assert "WARN USDJPY:" in output
+    assert "missing_candles=2" in output
+    assert f"expected_latest={expected_latest}" in output
+    assert "summary: ok=0, warn=1, total=1" in output
+
+
 def test_fibo_forex_reports_per_ticker_sources_and_health_summary():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert '_print_forex_source_summary("fibo", members, data_source_by_ticker)' in source

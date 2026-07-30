@@ -1483,7 +1483,7 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
 
 
 def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> None:
-    """Report and retry FX caches that do not cover the rolling 1.5-year window."""
+    """Report and retry FX caches that are incomplete or missing recent sessions."""
     source_by_ticker = {
         (ticker or "").strip().upper(): source
         for ticker, source in (sources or {}).items()
@@ -1493,6 +1493,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     except ValueError:
         required_days = 548
     today = datetime.now(UTC).date()
+    expected_latest = get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
     required_start = today - timedelta(days=required_days)
     # Markets may be closed on the exact boundary date.
     oldest_tolerance = required_start + timedelta(days=7)
@@ -1510,6 +1511,21 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
         except Exception as exc:
             return raw, csv_path, 0, "-", "-", 0, exc
 
+    def _missing_candles(latest: str) -> int:
+        if latest == "-":
+            return 0
+        latest_date = date.fromisoformat(latest)
+        if latest_date >= expected_latest:
+            return 0
+        rule = MARKET_DATA_RULES["forex_market"]
+        return sum(
+            candidate.weekday() in rule.trading_weekdays and candidate not in rule.holidays
+            for candidate in (
+                latest_date + timedelta(days=offset)
+                for offset in range(1, (expected_latest - latest_date).days + 1)
+            )
+        )
+
     def _warned(row: tuple[str, Path, int, str, str, int, Exception | None]) -> bool:
         _raw, _path, _rows, oldest, _latest, _span, exc = row
         return (
@@ -1517,7 +1533,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
             or oldest == "-"
             or date.fromisoformat(oldest) > oldest_tolerance
             or _latest == "-"
-            or date.fromisoformat(_latest) < today - timedelta(days=7)
+            or _missing_candles(_latest) > 0
         )
 
     def _print_summary(rows: Sequence[tuple[str, Path, int, str, str, int, Exception | None]]) -> list[str]:
@@ -1526,13 +1542,23 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
             warn = _warned((raw, csv_path, row_count, oldest, latest, span_days, exc))
             if warn:
                 retry.append(raw)
-            detail = f"error={_retry_error_brief(exc)}" if exc else f"rows={row_count}, oldest={oldest}, latest={latest}, span_days={span_days}"
+            detail = (
+                f"error={_retry_error_brief(exc)}"
+                if exc
+                else (
+                    f"rows={row_count}, oldest={oldest}, latest={latest}, span_days={span_days}, "
+                    f"missing_candles={_missing_candles(latest)}"
+                )
+            )
             source = _forex_source_summary_label(source_by_ticker.get(raw, "unknown"))
             print(f"[forex-check] {'WARN' if warn else 'OK'} {raw}: {detail}, source={source}, csv={csv_path}")
         print(f"[forex-check] summary: ok={len(rows) - len(retry)}, warn={len(retry)}, total={len(rows)}")
         return retry
 
-    print(f"[forex-check] rolling 1.5-year coverage check (required_start<={required_start}, tolerance=7d)")
+    print(
+        f"[forex-check] rolling 1.5-year coverage check with session freshness "
+        f"(required_start<={required_start}, oldest_tolerance=7d, expected_latest={expected_latest})"
+    )
     retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
     if not retry_tickers or os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY", "1") == "0":
         return
