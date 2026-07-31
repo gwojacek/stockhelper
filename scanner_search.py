@@ -1482,6 +1482,20 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         _print_summary([_health_row(ticker) for ticker in members])
 
 
+def _forex_missing_session_count(latest: date, expected_latest: date) -> int:
+    """Count provider-expected FX sessions after ``latest`` through the expectation."""
+    if latest >= expected_latest:
+        return 0
+    rule = MARKET_DATA_RULES["forex_market"]
+    return sum(
+        candidate.weekday() in rule.trading_weekdays and candidate not in rule.holidays
+        for candidate in (
+            latest + timedelta(days=offset)
+            for offset in range(1, (expected_latest - latest).days + 1)
+        )
+    )
+
+
 def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> None:
     """Report and retry FX caches that are incomplete or missing recent sessions."""
     source_by_ticker = {
@@ -1514,17 +1528,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     def _missing_candles(latest: str) -> int:
         if latest == "-":
             return 0
-        latest_date = date.fromisoformat(latest)
-        if latest_date >= expected_latest:
-            return 0
-        rule = MARKET_DATA_RULES["forex_market"]
-        return sum(
-            candidate.weekday() in rule.trading_weekdays and candidate not in rule.holidays
-            for candidate in (
-                latest_date + timedelta(days=offset)
-                for offset in range(1, (expected_latest - latest_date).days + 1)
-            )
-        )
+        return _forex_missing_session_count(date.fromisoformat(latest), expected_latest)
 
     def _warned(row: tuple[str, Path, int, str, str, int, Exception | None]) -> bool:
         _raw, _path, _rows, oldest, _latest, _span, exc = row
@@ -1588,26 +1592,42 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                 csv_path.write_bytes(backup)
             raise
 
-    for retry_round in range(1, retry_rounds + 1):
-        retry_workers = min(retry_workers_setting, len(retry_tickers))
-        print(
-            f"[forex-check] retry round {retry_round}/{retry_rounds}: replacing and retrying "
-            f"{len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}"
-        )
-        with ThreadPoolExecutor(max_workers=retry_workers) as executor:
-            futures = {executor.submit(_replace, raw): raw for raw in retry_tickers}
-            for future, raw in [(future, futures[future]) for future in futures]:
-                try:
-                    source_by_ticker[raw] = future.result()
-                except Exception as exc:
-                    print(f"[forex-check] retry round {retry_round} failed for {raw}: {_retry_error_brief(exc)}")
-        print(f"[forex-check] post-retry round {retry_round} rolling coverage check")
-        retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
-        if not retry_tickers:
-            print(f"[forex-check] all forex CSVs complete after retry round {retry_round}.")
-            break
-        if retry_round < retry_rounds:
-            print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; starting another condition-driven download round.")
+    old_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    old_force_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+    try:
+        # The health check is authoritative: once it found a stale CSV, an
+        # earlier Yahoo probe must not leave the replacement path cache-only.
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        for retry_round in range(1, retry_rounds + 1):
+            retry_workers = min(retry_workers_setting, len(retry_tickers))
+            print(
+                f"[forex-check] retry round {retry_round}/{retry_rounds}: replacing and retrying "
+                f"{len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}"
+            )
+            with ThreadPoolExecutor(max_workers=retry_workers) as executor:
+                futures = {executor.submit(_replace, raw): raw for raw in retry_tickers}
+                for future, raw in [(future, futures[future]) for future in futures]:
+                    try:
+                        source_by_ticker[raw] = future.result()
+                    except Exception as exc:
+                        print(f"[forex-check] retry round {retry_round} failed for {raw}: {_retry_error_brief(exc)}")
+            print(f"[forex-check] post-retry round {retry_round} rolling coverage check")
+            retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
+            if not retry_tickers:
+                print(f"[forex-check] all forex CSVs complete after retry round {retry_round}.")
+                break
+            if retry_round < retry_rounds:
+                print(f"[forex-check] {len(retry_tickers)} CSV(s) still incomplete; starting another condition-driven download round.")
+    finally:
+        if old_cache_only is None:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        else:
+            os.environ["STOCKHELPER_CACHE_ONLY"] = old_cache_only
+        if old_force_refresh is None:
+            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        else:
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force_refresh
 
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
@@ -1898,6 +1918,29 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     return True
                 continue
+            if instrument == "forex":
+                csv_path = local_csv_path_for_symbol(fetch_symbol, "forex")
+                local_dates = (
+                    pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+                    if csv_path.exists()
+                    else pd.Series(dtype="datetime64[ns]")
+                )
+                expected_latest = get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC), fetch_symbol)
+                local_latest = local_dates.max().date() if not local_dates.empty else None
+                missing_expected = (
+                    _forex_missing_session_count(local_latest, expected_latest)
+                    if local_latest is not None
+                    else 9999
+                )
+                if missing_expected > 0:
+                    checked += 1
+                    print(
+                        f"[refresh-check] {ticker}: local latest={local_latest}, expected_latest={expected_latest}, "
+                        f"missing expected sessions={missing_expected} -> refresh mode ON (Stooq + Yahoo merge)"
+                    )
+                    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+                    return True
             newer = has_new_remote_data(fetch_symbol, instrument)
             checked += 1
             print(f"[refresh-check] {ticker}: remote {'newer' if newer else 'not newer'}")
