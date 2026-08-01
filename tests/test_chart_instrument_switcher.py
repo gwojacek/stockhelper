@@ -32,3 +32,13 @@ def test_chart_html_has_searchable_instrument_switcher():
     assert "function setupInstrumentSwitcher()" in source
     assert "input.addEventListener('input', openSelected)" in source
     assert "url.searchParams.set('command', `python run -c ${{selected.symbol}}`)" in source
+
+
+def test_chart_has_save_and_save_close_actions():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert 'id="save-btn"' in source
+    assert '<span>Save &amp; Close</span>' in source
+    assert "$('save-btn').onclick = () => saveChart(false)" in source
+    assert "$('finish-btn').onclick = () => saveChart(true)" in source
+    assert '@app.route("/save", methods=["POST"])' in source

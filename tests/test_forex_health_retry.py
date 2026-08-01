@@ -21,6 +21,8 @@ def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp
     def replace_csv(**kwargs):
         calls.append(kwargs)
         assert not csv_path.exists()
+        assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") is None
+        assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
         pd.DataFrame({"Date": pd.date_range(today - timedelta(days=548), today)}).to_csv(csv_path, index=False)
         return pd.DataFrame(), csv_path, {}
 
@@ -34,6 +36,51 @@ def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp
     assert "post-retry round 1 rolling coverage check" in output
     assert "all forex CSVs complete after retry round 1" in output
     assert len(calls) == 1
+
+
+def test_forex_health_retry_overrides_and_restores_cache_only(monkeypatch, tmp_path):
+    csv_path = tmp_path / "AUDUSD.csv"
+    today = datetime.now(UTC).date()
+    pd.DataFrame({"Date": pd.date_range(today - timedelta(days=100), today)}).to_csv(csv_path, index=False)
+
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda _symbol, _instrument: csv_path)
+
+    def replace_csv(**_kwargs):
+        assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") is None
+        assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+        pd.DataFrame({"Date": pd.date_range(today - timedelta(days=548), today)}).to_csv(csv_path, index=False)
+        return pd.DataFrame(), csv_path, {"source": "stooq_web_csv+yahoo"}
+
+    monkeypatch.setattr(scanner, "load_or_update_daily_data", replace_csv)
+    scanner._forex_csv_health_check(["AUDUSD"])
+
+    assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") is None
+
+
+def test_forex_scope_refreshes_stale_cache_without_trusting_yahoo_probe(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "AUDUSD.csv"
+    expected_latest = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC), "AUDUSD")
+    pd.DataFrame({"Date": [expected_latest - timedelta(days=3)]}).to_csv(csv_path, index=False)
+
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda _symbol, _instrument: csv_path)
+    monkeypatch.setattr(
+        scanner,
+        "has_new_remote_data",
+        lambda *_args, **_kwargs: pytest.fail("stale local FX cache must refresh before the Yahoo probe"),
+    )
+
+    assert scanner._should_refresh_group_data("forex", ["AUDUSD"], None) is True
+
+    output = capsys.readouterr().out
+    assert "missing expected sessions=" in output
+    assert "refresh mode ON (Stooq + Yahoo merge)" in output
+    assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") is None
+    assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
 def test_forex_health_retries_transient_tor_failure_in_next_round(monkeypatch, tmp_path, capsys):
@@ -80,6 +127,28 @@ def test_forex_health_does_not_retry_complete_rolling_window(monkeypatch, tmp_pa
     assert "OK USDJPY:" in output
     assert "source=cache" in output
     assert "summary: ok=1, warn=0, total=1" in output
+
+
+def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    today = datetime.now(UTC).date()
+    expected_latest = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
+    latest = expected_latest - timedelta(days=2)
+    # Keep the assertion deterministic when the two calendar days cross a weekend.
+    while len(pd.bdate_range(latest + timedelta(days=1), expected_latest)) != 2:
+        latest -= timedelta(days=1)
+    pd.DataFrame({"Date": pd.date_range(today - timedelta(days=548), latest)}).to_csv(csv_path, index=False)
+
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY", "0")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda _symbol, _instrument: csv_path)
+
+    scanner._forex_csv_health_check(["USDJPY"], {"USDJPY": "cache"})
+
+    output = capsys.readouterr().out
+    assert "WARN USDJPY:" in output
+    assert "missing_candles=2" in output
+    assert f"expected_latest={expected_latest}" in output
+    assert "summary: ok=0, warn=1, total=1" in output
 
 
 def test_fibo_forex_reports_per_ticker_sources_and_health_summary():
