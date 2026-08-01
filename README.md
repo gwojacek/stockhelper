@@ -34,6 +34,7 @@ Use this table as the fastest path to the commands you will run most often. The 
 | Run Ichimoku scan | `stock -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
 | Run Fibonacci scan | `stock -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
 | Build combined report | `stock -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
+| Scan candlestick patterns | `stock -pattern_search forex` | Independently checks every enumerated candlestick detector over the latest 10 candles and writes an iconed hit/audit report; add `--pattern morning_star` to search for only one formation. |
 | Reopen combined report | `stock --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
 | Explain one Fibo symbol | `stock -fibo_search single -explain MPWR.US` | Shows why one symbol matched or failed Fibonacci rules. |
 | Check liquidity | `stock -checkavg XTB.WA` | Prints recent average turnover/liquidity for one instrument. |

@@ -3262,6 +3262,13 @@ def main()->int:
     parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
     parser.add_argument('-onlycache', '--onlycache', action='store_true', help='Use local CSV cache only; skip remote freshness probes/updates (works for commodities too).')
     parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
+    parser.add_argument('-pattern_search', '--pattern-search', dest='pattern_search_target', nargs='?', const='all', help='Scan recent candles for every enumerated candlestick pattern, independently of Fibo/Ichimoku.')
+    parser.add_argument('--pattern-lookback', type=int, default=10, help='Completed daily candles to inspect per instrument (default: 10).')
+    parser.add_argument('--pattern', dest='pattern_name', choices=(
+        'bullish_hammer', 'shooting_star', 'bullish_engulfing', 'bearish_engulfing',
+        'piercing_line', 'dark_cloud_cover', 'bullish_harami', 'bearish_harami',
+        'morning_star', 'morning_doji_star', 'evening_star', 'evening_doji_star',
+    ), help='Scan only one named candlestick pattern (default: scan every pattern).')
     parser.add_argument('--open-allsearch-report', dest='open_allsearch_report', nargs='?', const='all', help='Open existing allsearch HTML report via local server')
     parser.add_argument('--journal-html', action='store_true', help='Open the transaction journal HTML only.')
     parser.add_argument('--journal-pdf', action='store_true', help='Open the transaction journal HTML and use the PDF button/print dialog to save it as PDF.')
@@ -3634,6 +3641,13 @@ def main()->int:
         from scanner_search import run_ichimoku_search; return run_ichimoku_search(args.search_target)
     if args.checkavg_target:
         from scanner_search import run_checkavg; return run_checkavg(args.checkavg_target)
+    if args.pattern_search_target:
+        from pattern_search import run_pattern_search
+        target = args.pattern_search_target.strip().lower()
+        if target == 'all':
+            failures = sum(run_pattern_search(scope, max(1, args.pattern_lookback), args.pattern_name) != 0 for scope in DEFAULT_ALLSEARCH_SCOPES)
+            return 1 if failures else 0
+        return run_pattern_search(target, max(1, args.pattern_lookback), args.pattern_name)
     if args.allsearch_target:
         normalized = args.allsearch_target.strip().lower()
         if normalized == "all":
