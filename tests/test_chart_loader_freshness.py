@@ -397,6 +397,30 @@ def test_recent_yahoo_candle_count_checks_only_last_twenty_cached_rows():
     assert loader._recent_yahoo_candle_count(cached, yahoo) == 2
 
 
+def test_recent_high_precision_count_detects_yahoo_float_artifacts():
+    cached = pd.DataFrame(
+        [
+            {"Date": "2026-07-23", "Open": 59.666, "High": 60.07, "Low": 57.073, "Close": 57.658},
+            {"Date": "2026-07-27", "Open": 59.810001373291016, "High": 60.39500045776367, "Low": 59.400001525878906, "Close": 59.68999862670898},
+            {"Date": "2026-07-28", "Open": 58.744998931884766, "High": 58.82500076293945, "Low": 56.900001525878906, "Close": 57.69499969482422},
+        ]
+    )
+
+    assert loader._recent_high_precision_candle_count(cached) == 2
+
+
+def test_high_precision_cache_forces_rebase_without_yahoo_probe(monkeypatch):
+    cached = _df("2026-07-27", "2026-07-28")
+    cached.loc[:, "Open"] = [59.810001373291016, 58.744998931884766]
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("precision detector should decide locally")),
+    )
+
+    assert loader._cache_has_too_many_recent_yahoo_candles(cached, "SILVER", "commodity")
+
+
 def test_non_warsaw_stock_uses_yahoo_without_stooq_api(monkeypatch):
     calls = []
 

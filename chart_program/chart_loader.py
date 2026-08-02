@@ -443,7 +443,7 @@ def _merge_yahoo_fresh_candle(
     yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
     sanitized_base = _sanitize_ohlc_dataframe(base)
     if sanitized_base.empty:
-        merged = yahoo_df
+        merged = yahoo_df.sort_values("Date").tail(1)
         added_count = len(yahoo_df)
     else:
         local_latest = _latest_date_from_df(sanitized_base)
@@ -491,11 +491,36 @@ def _recent_yahoo_candle_count(
     return int(matches.sum())
 
 
+def _recent_high_precision_candle_count(
+    cached: pd.DataFrame,
+    *,
+    window: int = YAHOO_RECENT_CANDLE_WINDOW,
+) -> int:
+    """Count Yahoo-shaped float artifacts in the recent cache window.
+
+    Stooq daily OHLC values are published with at most six decimal places.
+    Yahoo's binary float export commonly produces values such as
+    ``59.09000015258789``.  This check works directly from the CSV and is more
+    reliable than re-downloading Yahoo history, whose adjusted values can
+    change after the row was originally cached.
+    """
+    recent = _sanitize_ohlc_dataframe(cached).sort_values("Date").tail(window)
+    if recent.empty:
+        return 0
+    high_precision = pd.Series(False, index=recent.index)
+    for field in ("Open", "High", "Low", "Close"):
+        values = pd.to_numeric(recent[field], errors="coerce")
+        high_precision |= values.notna() & ((values - values.round(6)).abs() > 1e-10)
+    return int(high_precision.sum())
+
+
 def _cache_has_too_many_recent_yahoo_candles(
     cached: pd.DataFrame,
     symbol: str,
     instrument_type: str,
 ) -> bool:
+    if _recent_high_precision_candle_count(cached) >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD:
+        return True
     try:
         yahoo, _ticker, _name = _yahoo_download_window(
             symbol,

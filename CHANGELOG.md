@@ -1,6 +1,6 @@
 # Changelog
 
-- Rebased commodity and forex caches from Stooq when at least two of the last 20 candles match Yahoo, and limited Yahoo freshness data to the single newest candle.
+- Rebased commodity and forex caches from Stooq when at least two of the last 20 candles match Yahoo, including Yahoo's long binary-float values already stored in CSV files, and limited Yahoo freshness data to the single newest candle.
 
 All notable release changes for StockHelper are documented here.
 
