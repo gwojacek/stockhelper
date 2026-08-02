@@ -1,5 +1,7 @@
 # Changelog
 
+- Made forced Stooq rebases authoritative for the downloaded tail, removing Yahoo-only dates that an overlapping date merge could not replace.
+
 - Changed commodity and forex `--force-refresh` into a last-20-candle audit that refreshes only CSVs containing at least two Yahoo-precision candles (or missing CSVs), avoiding duplicate full-market downloads in both allsearch phases.
 
 - Rebased commodity and forex caches from Stooq when at least two of the last 20 candles match Yahoo, including Yahoo's long binary-float values already stored in CSV files, and limited Yahoo freshness data to the single newest candle.
