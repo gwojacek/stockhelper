@@ -2,7 +2,7 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
@@ -81,7 +81,7 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__journal_source_technique__": "Fibo",
+  "__journal_source_technique__": "Ichimoku",
   "__scanner_breakout_date__": "2026-07-17",
   "__scanner_retest_count__": "1",
   "__scanner_previous_respect_months__": "7.4",

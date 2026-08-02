@@ -1,0 +1,20 @@
+## WYNIKI
+
+WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).
+
+| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PALLADIUM | 🔴 below | 112 | 5.0 | 2026-03-03 | 1292.0000 | - | Inside the cloud | 3 | 2026-05-12 | dark_cloud_cover | - | bullish TK cross | mild | thick | ↑ over | red | no | no | [📈](https://stooq.pl/q/a2/?s=pa.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c PALLADIUM --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+| SILVER | 🔴 below | 109 | 5.0 | 2026-03-12 | 57.8900 | - | Touched Kijun-sen | 5 | 2026-06-03 | bearish_engulfing | - | bearish TK cross | slow | thick | ↑ over | red | yes | no | [📈](https://stooq.pl/q/a2/?s=xagusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SILVER --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+| GOLD | 🔴 below | 98 | 4.5 | 2026-03-18 | 4100.5000 | - | Over Kijun-sen | 1 | 2026-05-07 | shooting_star | - | bullish TK cross | slow | normal | ↑ over | red | no | no | [📈](https://stooq.pl/q/a2/?s=xauusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c GOLD --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+## WYNIKI 2
+
+WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.
+
+| Ticker | Było | Jest | Data wybicia | Mies. od wybicia | Mies. respektu przed wybiciem | Latest Retest status | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SILVER | above | 🔴 below | 2026-03-06 | 4.9 | 3.8 | shallow_retest_pattern | 5 | - | 2026-06-03 | bearish_engulfing | Touched Kijun-sen | 3% | bearish TK cross | slow | thick | ↑ over | red | yes | no | [📈](https://stooq.pl/q/a2/?s=xagusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SILVER --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+| GOLD | above | 🔴 below | 2026-03-19 | 4.4 | 4.4 | deep_retest_pattern | 1 | - | 2026-05-07 | shooting_star | Over Kijun-sen | 3% | bullish TK cross | slow | normal | ↑ over | red | no | no | [📈](https://stooq.pl/q/a2/?s=xauusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c GOLD --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+| COCOA | below | ⚪ above | 2026-05-06 | 2.9 | 5.9 | no_breakout | 0 | - | - | - | Under Kijun-sen | - | bearish TK cross | mild | normal | ↑ over | green | no | no | [📈](https://stooq.pl/q/a2/?s=cc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c COCOA --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+| ALUMINIUM | above | 🔴 below | 2026-06-24 | 1.2 | 7.6 | no_breakout | 0 | - | - | - | Touched Kijun-sen | - | bullish TK cross | aggressive | shallow | ↑ over | red | no | no | [📈](https://stooq.pl/q/a2/?s=al.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c ALUMINIUM --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |
+| COFFEE | below | ⚪ above | 2026-07-01 | 1.0 | 7.2 | no_breakout | 0 | - | - | - | Over Kijun-sen | - | bullish TK cross | slow | normal | ↑ over | green | yes | no | [📈](https://stooq.pl/q/a2/?s=kc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c COFFEE --ichimoku-mode on | ✅ | 2026-07-31 | 2026-07-31 |

@@ -5,12 +5,89 @@
   "stop_loss": 3.68955,
   "position_type": "short",
   "capital": 238000,
-  "lot_cost": 18973.9,
+  "lot_cost": 18779.75,
   "pip_value": 10.0,
   "pip_size": 0.0001,
   "spread": 130,
   "pair": "USD/PLN",
-  "drawn_objects": [],
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (3.78855)",
+      "x0": "2026-06-24",
+      "x1": "2034-06-19",
+      "y0": 3.78855,
+      "y1": 3.78855,
+      "price": 3.78855,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (3.71174)",
+      "x0": "2026-06-05",
+      "x1": "2034-06-19",
+      "y0": 3.71174,
+      "y1": 3.71174,
+      "price": 3.71174,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (3.68801)",
+      "x0": "2026-06-01",
+      "x1": "2034-06-19",
+      "y0": 3.68801,
+      "y1": 3.68801,
+      "price": 3.68801,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (3.66428)",
+      "x0": "2026-05-26",
+      "x1": "2034-06-19",
+      "y0": 3.66428,
+      "y1": 3.66428,
+      "price": 3.66428,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (3.58747)",
+      "x0": "2026-05-07",
+      "x1": "2034-06-19",
+      "y0": 3.58747,
+      "y1": 3.58747,
+      "price": 3.58747,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-07",
+      "x1": "2026-06-24",
+      "y0": 3.58747,
+      "y1": 3.78855,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
   "level_points": {
     "high": {
       "price": 3.752,
@@ -26,5 +103,6 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo"
 }

@@ -1,84 +1,70 @@
 {
   "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__journal_source_technique__": "Kliny",
   "lot_cost": 85171.26,
   "pip_value": 361.86,
   "drawn_objects": [
     {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (4023.955)",
-      "x0": "2026-06-11",
-      "x1": "2034-06-15",
-      "y0": 4023.955,
-      "y1": 4023.955,
-      "price": 4023.955,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-03-10",
+        "2026-05-12",
+        "2026-12-04"
+      ],
+      "y": [
+        5238.45,
+        4773.42,
+        3243.988
+      ],
+      "x0": "2026-03-10",
+      "x1": "2026-12-04",
+      "y0": 5238.45,
+      "y1": 3243.988,
+      "anchor_x": [
+        "2026-03-10",
+        "2026-05-12"
+      ],
+      "anchor_y": [
+        5238.45,
+        4773.42
+      ],
+      "price": 3243.988,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
     },
     {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (4541.91262)",
-      "x0": "2026-05-04",
-      "x1": "2034-06-15",
-      "y0": 4541.91262,
-      "y1": 4541.91262,
-      "price": 4541.91262,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (4701.91)",
-      "x0": "2026-04-22",
-      "x1": "2034-06-15",
-      "y0": 4701.91,
-      "y1": 4701.91,
-      "price": 4701.91,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (4861.90738)",
-      "x0": "2026-04-10",
-      "x1": "2034-06-15",
-      "y0": 4861.90738,
-      "y1": 4861.90738,
-      "price": 4861.90738,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (5379.865)",
-      "x0": "2026-03-03",
-      "x1": "2034-06-15",
-      "y0": 5379.865,
-      "y1": 5379.865,
-      "price": 5379.865,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-03-03",
-      "x1": "2026-06-11",
-      "y0": 5379.865,
-      "y1": 4023.955,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-06-30",
+        "2026-07-17",
+        "2026-11-20"
+      ],
+      "y": [
+        3945.245,
+        3960.095,
+        4062.90269
+      ],
+      "x0": "2026-06-30",
+      "x1": "2026-11-20",
+      "y0": 3945.245,
+      "y1": 4062.90269,
+      "anchor_x": [
+        "2026-06-30",
+        "2026-07-17"
+      ],
+      "anchor_y": [
+        3945.245,
+        3960.095
+      ],
+      "price": 4062.90269,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": false
     }
   ],
   "high": 5418.77,
@@ -86,7 +72,7 @@
   "low": 3945.24,
   "__wedge_auto_low__": true,
   "position_type": "long",
-  "capital": 255000,
+  "capital": 400,
   "calculation_currency": "PLN",
   "spread_multiplier": 0,
   "spread": 0,
@@ -103,6 +89,23 @@
       "plot_price": 3945.24,
       "date": "2026-06-30",
       "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 4067.6,
+      "plot_price": 4067.6,
+      "date": "2026-07-30",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 4019.88,
+      "plot_price": 4019.88,
+      "date": "2026-07-30",
+      "auto_wedge": true
     }
-  }
+  },
+  "__half_points__": [],
+  "line_cross_value": 4067.6,
+  "__wedge_auto_line_cross__": true,
+  "stop_loss": 4019.88,
+  "__wedge_auto_stop_loss__": true
 }
