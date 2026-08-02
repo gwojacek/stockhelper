@@ -12,18 +12,13 @@ scanner = pytest.importorskip("scanner_search")
 def test_forced_commodity_refresh_ignores_daily_refresh_state(monkeypatch, capsys):
     monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
     monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
-    monkeypatch.setenv("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", "SILVER")
-    monkeypatch.setattr(
-        scanner,
-        "_read_refresh_state",
-        lambda: {"commodities:today:pre1945": {"result": "fresh"}},
-    )
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, _instrument: Path(f"/missing/{symbol}.csv"))
 
     assert scanner._should_refresh_group_data("commodities", ["GOLD", "SILVER"], None) is True
-    assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") is None
-    assert scanner.os.environ.get("STOCKHELPER_COMMODITIES_REFRESH_TICKERS") is None
-    assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
-    assert "forced remote refresh -> refreshing all instruments" in capsys.readouterr().out
+    assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    assert scanner.os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS") == "XAUUSD,XAGUSD"
+    assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") is None
+    assert "audited last 20 candles" in capsys.readouterr().out
 
 
 def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp_path, capsys):

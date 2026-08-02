@@ -32,6 +32,7 @@ from chart_program.chart_loader import (
     local_csv_path_for_symbol,
     _yahoo_download,
     _yahoo_download_window,
+    _recent_high_precision_candle_count,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 from utilities.output_silence import call_silenced
@@ -45,6 +46,7 @@ FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 STOP_SCAN_EVENT = threading.Event()
 PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
+MARKET_REFRESH_LOCK = threading.Lock()
 REFRESH_STATE_FILE = STATE_DATA_DIR / "sessions" / "search_refresh_state.json"
 API_METAL_COMMODITIES: set[str] = set()
 
@@ -1808,11 +1810,31 @@ def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
 
 def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
     if os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1":
-        # An explicit caller request must win over the per-day freshness state.
-        # In particular, do not let the commodities "already checked today"
-        # bucket turn cache-only mode back on after allsearch disabled it.
+        group_l = (group_name or "").lower()
+        if group_l in {"commodities", "forex"}:
+            refresh_symbols: list[str] = []
+            for ticker in members:
+                fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+                csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+                try:
+                    cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+                    yahoo_like = _recent_high_precision_candle_count(cached)
+                except Exception:
+                    yahoo_like = 0
+                if not csv_path.exists() or yahoo_like >= 2:
+                    refresh_symbols.append(fetch_symbol.upper())
+            os.environ["STOCKHELPER_MARKET_REFRESH_SYMBOLS"] = ",".join(refresh_symbols)
+            os.environ["STOCKHELPER_MARKET_REFRESH_AUDITED"] = "1"
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+            preview = ", ".join(refresh_symbols) if refresh_symbols else "none"
+            print(
+                f"[refresh-check] {group_name}: audited last 20 candles; "
+                f"Stooq refresh needed for {len(refresh_symbols)}/{len(members)}: {preview}"
+            )
+            return bool(refresh_symbols)
         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
         print(f"[refresh-check] {group_name}: forced remote refresh -> refreshing all instruments")
         return True
     if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
@@ -2317,19 +2339,37 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     # must not prevent the scanner from merging the newest Yahoo candle for the
     # actual calculation.  Only the explicit --onlycache mode should skip this.
     old_auto_cache = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    refresh_symbols = {
+        item.strip().upper()
+        for item in os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS", "").split(",")
+        if item.strip()
+    }
+    refresh_audited = os.environ.get("STOCKHELPER_MARKET_REFRESH_AUDITED") == "1"
+    targeted_refresh = symbol.upper() in refresh_symbols
     user_onlycache = os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
-    if old_auto_cache == "1" and not user_onlycache:
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-    try:
-        _runtime_df, csv_path, meta = _load_daily_data_with_retries(
-            symbol=symbol,
-            instrument_type=instrument_type,
-            persist=True,
-            fetch_older_data=False,
-        )
-    finally:
-        if old_auto_cache == "1" and not user_onlycache:
-            os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
+    unlock_cache = old_auto_cache == "1" and not user_onlycache and (not refresh_audited or targeted_refresh)
+    # Environment variables are process-global, so serialize the short scoped
+    # override instead of letting parallel workers leak forced mode to peers.
+    with MARKET_REFRESH_LOCK:
+        old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        if unlock_cache:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        if targeted_refresh:
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        try:
+            _runtime_df, csv_path, meta = _load_daily_data_with_retries(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=True,
+                fetch_older_data=False,
+            )
+        finally:
+            if old_auto_cache == "1":
+                os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
+            if old_force is None:
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
