@@ -1,5 +1,7 @@
 # Changelog
 
+- Rebased commodity and forex caches from Stooq when at least two of the last 20 candles match Yahoo, and limited Yahoo freshness data to the single newest candle.
+
 All notable release changes for StockHelper are documented here.
 
 The project currently documents release tags `1.0` through `7.3`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.

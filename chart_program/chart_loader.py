@@ -27,6 +27,8 @@ WARSAW_MARKET_CLOSE_REFRESH_TIME = time(17, 30)
 YAHOO_STOCK_FRESHNESS_PROBE_DAYS = 10
 YAHOO_STOCK_STOOQ_REBASE_THRESHOLD = 2
 YAHOO_COMMODITY_STOOQ_UI_THRESHOLD = 1
+YAHOO_RECENT_CANDLE_WINDOW = 20
+YAHOO_RECENT_CANDLE_REBASE_THRESHOLD = 2
 
 DATA_DIR_BY_INSTRUMENT = {
     "stock": CSV_DATA_DIR / "stocks",
@@ -452,10 +454,57 @@ def _merge_yahoo_fresh_candle(
             yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
         added_count = len(yahoo_new_rows)
         if added_count > 0:
-            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_new_rows], ignore_index=True))
+            # Stooq remains the historical source.  A Yahoo probe may contain
+            # several days when Stooq is behind, but only the newest/live day
+            # is allowed into the cache.
+            yahoo_newest_row = yahoo_new_rows.sort_values("Date").tail(1)
+            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True))
         else:
             merged = sanitized_base
     return (_last_year_only(merged) if trim_to_last_year else merged), yahoo_symbol, display_name, added_count
+
+
+def _recent_yahoo_candle_count(
+    cached: pd.DataFrame,
+    yahoo: pd.DataFrame,
+    *,
+    window: int = YAHOO_RECENT_CANDLE_WINDOW,
+) -> int:
+    """Count recent cached rows whose OHLC values came from Yahoo.
+
+    Yahoo rows are appended without changing their values, while overlapping
+    Stooq rows are deliberately preserved.  Comparing the four price fields is
+    therefore a durable way to identify Yahoo rows in legacy CSVs that do not
+    have a provider column.
+    """
+    cached_recent = _sanitize_ohlc_dataframe(cached).sort_values("Date").tail(window)
+    yahoo_clean = _sanitize_ohlc_dataframe(yahoo)
+    if cached_recent.empty or yahoo_clean.empty:
+        return 0
+    joined = cached_recent.merge(yahoo_clean, on="Date", suffixes=("_cached", "_yahoo"))
+    matches = pd.Series(True, index=joined.index)
+    for field in ("Open", "High", "Low", "Close"):
+        left = pd.to_numeric(joined[f"{field}_cached"], errors="coerce")
+        right = pd.to_numeric(joined[f"{field}_yahoo"], errors="coerce")
+        tolerance = 1e-9 * right.abs().clip(lower=1.0)
+        matches &= left.notna() & right.notna() & ((left - right).abs() <= tolerance)
+    return int(matches.sum())
+
+
+def _cache_has_too_many_recent_yahoo_candles(
+    cached: pd.DataFrame,
+    symbol: str,
+    instrument_type: str,
+) -> bool:
+    try:
+        yahoo, _ticker, _name = _yahoo_download_window(
+            symbol,
+            instrument_type,
+            period=f"{YAHOO_RECENT_CANDLE_WINDOW * 2}d",
+        )
+    except Exception:
+        return False
+    return _recent_yahoo_candle_count(cached, yahoo) >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
 
 
 def _try_yahoo_fresh_candle_merge(
@@ -494,6 +543,8 @@ def _try_local_commodity_yahoo_merge(
     try:
         local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
         if local_df.empty:
+            return None
+        if _cache_has_too_many_recent_yahoo_candles(local_df, symbol, "commodity"):
             return None
         return _try_yahoo_fresh_candle_merge(
             local_df,
@@ -1087,7 +1138,20 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         stooq_forex_symbol = symbol.replace("/", "")
         if not fetch_older_data and _local_forex_has_required_window(csv_path_ref):
             local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
-            return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
+            if not _cache_has_too_many_recent_yahoo_candles(local_df, symbol, "forex"):
+                yahoo_merged = _try_yahoo_fresh_candle_merge(
+                    local_df,
+                    symbol,
+                    "forex",
+                    source="cache",
+                    source_symbol=symbol.upper(),
+                    source_name=None,
+                    reason="Forex cache already covers the rolling 1.5-year window.",
+                    trim_to_last_year=False,
+                )
+                if yahoo_merged is not None and yahoo_merged[-1] <= 1:
+                    return yahoo_merged[:5]
+                return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
         lookback = older_days if fetch_older_data else 548
         attempts = 2
         primary_error: Exception | None = None

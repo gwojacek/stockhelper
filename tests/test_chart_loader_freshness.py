@@ -370,6 +370,33 @@ def test_yahoo_merge_appends_only_newer_rows_and_preserves_stooq_overlap():
     assert float(june_10["Volume"]) == 23547.0
 
 
+def test_yahoo_merge_keeps_only_newest_when_stooq_is_multiple_days_behind(monkeypatch):
+    base = _df("2026-06-08")
+    yahoo = _df("2026-06-09", "2026-06-10", "2026-06-11")
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo, "EURUSD=X", None),
+    )
+
+    merged, _symbol, _name, available_count = loader._merge_yahoo_fresh_candle(
+        base, "EURUSD", "forex", trim_to_last_year=False
+    )
+
+    assert available_count == 3
+    assert list(merged["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-08", "2026-06-11"]
+
+
+def test_recent_yahoo_candle_count_checks_only_last_twenty_cached_rows():
+    cached = _df(*pd.date_range("2026-05-01", periods=25).strftime("%Y-%m-%d"))
+    yahoo = cached.copy()
+    # One match falls outside the inspected cache tail, leaving exactly two.
+    yahoo.loc[~yahoo["Date"].isin(cached.tail(2)["Date"]), "Close"] += 10
+    yahoo.loc[yahoo.index[0], "Close"] = cached.loc[cached.index[0], "Close"]
+
+    assert loader._recent_yahoo_candle_count(cached, yahoo) == 2
+
+
 def test_non_warsaw_stock_uses_yahoo_without_stooq_api(monkeypatch):
     calls = []
 
