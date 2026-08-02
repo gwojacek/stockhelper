@@ -1,5 +1,7 @@
 # Changelog
 
+- Prevented the chart-loader cache merge from restoring Yahoo-only rows after a downloader had already completed an authoritative Stooq-tail rebase.
+
 - Made forced Stooq rebases authoritative for the downloaded tail, removing Yahoo-only dates that an overlapping date merge could not replace.
 
 - Changed commodity and forex `--force-refresh` into a last-20-candle audit that refreshes only CSVs containing at least two Yahoo-precision candles (or missing CSVs), avoiding duplicate full-market downloads in both allsearch phases.

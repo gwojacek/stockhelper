@@ -409,6 +409,36 @@ def test_recent_high_precision_count_detects_yahoo_float_artifacts():
     assert loader._recent_high_precision_candle_count(cached) == 2
 
 
+def test_forced_load_does_not_reintroduce_yahoo_tail_after_remote_rebase(monkeypatch, tmp_path):
+    csv_path = tmp_path / "XAGUSD.csv"
+    pd.DataFrame(
+        [
+            {"Date": "2026-07-24", "Open": 57.706, "High": 58.972, "Low": 57.1, "Close": 58.203, "Volume": 0},
+            {"Date": "2026-07-28", "Open": 58.744998931884766, "High": 58.82500076293945, "Low": 56.900001525878906, "Close": 57.69499969482422, "Volume": 8767},
+            {"Date": "2026-07-29", "Open": 57.3849983215332, "High": 58.459999084472656, "Low": 57.09000015258789, "Close": 58.415000915527344, "Volume": 5892},
+        ]
+    ).to_csv(csv_path, index=False)
+    remote = pd.DataFrame(
+        [
+            {"Date": "2026-07-27", "Open": 59.508, "High": 60.086, "Low": 58.177, "Close": 58.403, "Volume": 0},
+            {"Date": "2026-07-31", "Open": 59.039, "High": 59.168, "Low": 57.037, "Close": 57.928, "Volume": 0},
+        ]
+    )
+    monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "_download_remote",
+        lambda **_kwargs: (remote, "stooq_web", "XAGUSD", None, "forced test rebase"),
+    )
+    loader._SESSION_REFRESHED_KEYS.clear()
+
+    _df_out, _path, _meta = loader.load_or_update_daily_data("XAGUSD", "commodity", persist=True)
+
+    written = pd.read_csv(csv_path)
+    assert written["Date"].tolist() == ["2026-07-24", "2026-07-27", "2026-07-31"]
+
+
 def test_high_precision_cache_forces_rebase_without_yahoo_probe(monkeypatch):
     cached = _df("2026-07-27", "2026-07-28")
     cached.loc[:, "Open"] = [59.810001373291016, 58.744998931884766]

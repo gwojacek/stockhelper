@@ -13,7 +13,12 @@ import os
 
 import pandas as pd
 
-from utilities.stooq_playwright import StooqUIDownloadDenied, update_stooq_history_from_ui_csv, update_stooq_history_with_playwright
+from utilities.stooq_playwright import (
+    StooqUIDownloadDenied,
+    _drop_local_tail_covered_by_remote,
+    update_stooq_history_from_ui_csv,
+    update_stooq_history_with_playwright,
+)
 from utilities.output_silence import call_silenced
 
 STOOQ_DEFAULT_API_KEY = "FY7eN0urJV3My6FH5LU9COh2qxnP8Kci"
@@ -1467,6 +1472,18 @@ def load_or_update_daily_data(
             cached_df = local if fetch_older_data else _last_year_only(local)
             return cached_df, csv_path, {"source": "cache", "symbol": symbol, "name": symbol.title(), "fallback_reason": "Remote download failed, using local cache."}
         raise
+
+    if (
+        local is not None
+        and not local.empty
+        and _force_remote_refresh_enabled()
+        and instrument_type in {"commodity", "forex"}
+        and not fetch_older_data
+    ):
+        # The downloader already produced an authoritative Stooq tail.  Apply
+        # the same boundary here as well; otherwise this outer cache merge
+        # reintroduces Yahoo-only rows from the pre-download local snapshot.
+        local = _drop_local_tail_covered_by_remote(local, remote)
 
     if local is not None and not local.empty:
         merged_full = _sanitize_ohlc_dataframe(pd.concat([local, remote], ignore_index=True))
