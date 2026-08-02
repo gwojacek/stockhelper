@@ -161,8 +161,9 @@
   "spread": 0,
   "spread_pips": null,
   "level_points": {},
-  "__scanner_breakout_date__": "2026-03-27",
-  "__scanner_retest_count__": "1",
+  "__scanner_breakout_date__": "2026-07-31",
+  "__scanner_retest_count__": "0",
   "__scanner_latest_retest_date__": "2026-07-23",
-  "__scanner_latest_retest_pattern__": "dark_cloud_cover"
+  "__scanner_latest_retest_pattern__": "dark_cloud_cover",
+  "__scanner_previous_respect_months__": "4.1"
 }

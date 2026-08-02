@@ -370,6 +370,87 @@ def test_yahoo_merge_appends_only_newer_rows_and_preserves_stooq_overlap():
     assert float(june_10["Volume"]) == 23547.0
 
 
+def test_yahoo_merge_keeps_only_newest_when_stooq_is_multiple_days_behind(monkeypatch):
+    base = _df("2026-06-08")
+    yahoo = _df("2026-06-09", "2026-06-10", "2026-06-11")
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo, "EURUSD=X", None),
+    )
+
+    merged, _symbol, _name, available_count = loader._merge_yahoo_fresh_candle(
+        base, "EURUSD", "forex", trim_to_last_year=False
+    )
+
+    assert available_count == 3
+    assert list(merged["Date"].dt.strftime("%Y-%m-%d")) == ["2026-06-08", "2026-06-11"]
+
+
+def test_recent_yahoo_candle_count_checks_only_last_twenty_cached_rows():
+    cached = _df(*pd.date_range("2026-05-01", periods=25).strftime("%Y-%m-%d"))
+    yahoo = cached.copy()
+    # One match falls outside the inspected cache tail, leaving exactly two.
+    yahoo.loc[~yahoo["Date"].isin(cached.tail(2)["Date"]), "Close"] += 10
+    yahoo.loc[yahoo.index[0], "Close"] = cached.loc[cached.index[0], "Close"]
+
+    assert loader._recent_yahoo_candle_count(cached, yahoo) == 2
+
+
+def test_recent_high_precision_count_detects_yahoo_float_artifacts():
+    cached = pd.DataFrame(
+        [
+            {"Date": "2026-07-23", "Open": 59.666, "High": 60.07, "Low": 57.073, "Close": 57.658},
+            {"Date": "2026-07-27", "Open": 59.810001373291016, "High": 60.39500045776367, "Low": 59.400001525878906, "Close": 59.68999862670898},
+            {"Date": "2026-07-28", "Open": 58.744998931884766, "High": 58.82500076293945, "Low": 56.900001525878906, "Close": 57.69499969482422},
+        ]
+    )
+
+    assert loader._recent_high_precision_candle_count(cached) == 2
+
+
+def test_forced_load_does_not_reintroduce_yahoo_tail_after_remote_rebase(monkeypatch, tmp_path):
+    csv_path = tmp_path / "XAGUSD.csv"
+    pd.DataFrame(
+        [
+            {"Date": "2026-07-24", "Open": 57.706, "High": 58.972, "Low": 57.1, "Close": 58.203, "Volume": 0},
+            {"Date": "2026-07-28", "Open": 58.744998931884766, "High": 58.82500076293945, "Low": 56.900001525878906, "Close": 57.69499969482422, "Volume": 8767},
+            {"Date": "2026-07-29", "Open": 57.3849983215332, "High": 58.459999084472656, "Low": 57.09000015258789, "Close": 58.415000915527344, "Volume": 5892},
+        ]
+    ).to_csv(csv_path, index=False)
+    remote = pd.DataFrame(
+        [
+            {"Date": "2026-07-27", "Open": 59.508, "High": 60.086, "Low": 58.177, "Close": 58.403, "Volume": 0},
+            {"Date": "2026-07-31", "Open": 59.039, "High": 59.168, "Low": 57.037, "Close": 57.928, "Volume": 0},
+        ]
+    )
+    monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "_download_remote",
+        lambda **_kwargs: (remote, "stooq_web", "XAGUSD", None, "forced test rebase"),
+    )
+    loader._SESSION_REFRESHED_KEYS.clear()
+
+    _df_out, _path, _meta = loader.load_or_update_daily_data("XAGUSD", "commodity", persist=True)
+
+    written = pd.read_csv(csv_path)
+    assert written["Date"].tolist() == ["2026-07-24", "2026-07-27", "2026-07-31"]
+
+
+def test_high_precision_cache_forces_rebase_without_yahoo_probe(monkeypatch):
+    cached = _df("2026-07-27", "2026-07-28")
+    cached.loc[:, "Open"] = [59.810001373291016, 58.744998931884766]
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("precision detector should decide locally")),
+    )
+
+    assert loader._cache_has_too_many_recent_yahoo_candles(cached, "SILVER", "commodity")
+
+
 def test_non_warsaw_stock_uses_yahoo_without_stooq_api(monkeypatch):
     calls = []
 

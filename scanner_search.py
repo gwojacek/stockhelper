@@ -32,6 +32,8 @@ from chart_program.chart_loader import (
     local_csv_path_for_symbol,
     _yahoo_download,
     _yahoo_download_window,
+    _recent_high_precision_candle_count,
+    YAHOO_RECENT_CANDLE_REBASE_THRESHOLD,
 )
 from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 from utilities.output_silence import call_silenced
@@ -45,6 +47,7 @@ FIBO_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "fibo"
 STOP_SCAN_EVENT = threading.Event()
 PAUSE_SCAN_EVENT = threading.Event()
 PROMPT_LOCK = threading.Lock()
+MARKET_REFRESH_LOCK = threading.Lock()
 REFRESH_STATE_FILE = STATE_DATA_DIR / "sessions" / "search_refresh_state.json"
 API_METAL_COMMODITIES: set[str] = set()
 
@@ -1415,7 +1418,7 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
     except ValueError:
         min_rows = 250
 
-    def _health_row(ticker: str) -> tuple[str, Path, int, str, Exception | None]:
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, int, Exception | None]:
         raw = (ticker or "").strip().upper()
         csv_path = local_csv_path_for_symbol(raw, "commodity")
         if not csv_path.exists():
@@ -1424,29 +1427,34 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         try:
             if not csv_path.exists():
                 raise FileNotFoundError(str(csv_path))
-            df = pd.read_csv(csv_path, usecols=lambda col: col in {"Date"})
+            df = pd.read_csv(csv_path)
             rows = len(df)
             dates = pd.to_datetime(df.get("Date"), errors="coerce").dropna() if "Date" in df.columns else pd.Series(dtype="datetime64[ns]")
             latest = dates.max().date().isoformat() if not dates.empty else "-"
-            return raw, csv_path, rows, latest, None
+            yahoo_like = _recent_high_precision_candle_count(df)
+            return raw, csv_path, rows, latest, yahoo_like, None
         except Exception as exc:
-            return raw, csv_path, 0, "-", exc
+            return raw, csv_path, 0, "-", 0, exc
 
     print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
-    def _print_summary(checked: Sequence[tuple[str, Path, int, str, Exception | None]]) -> list[str]:
+    def _print_summary(checked: Sequence[tuple[str, Path, int, str, int, Exception | None]]) -> list[str]:
         ok_count = 0
         retry_tickers: list[str] = []
-        for raw, csv_path, rows, latest, exc in checked:
+        for raw, csv_path, rows, latest, yahoo_like, exc in checked:
             if exc is not None:
                 retry_tickers.append(raw)
                 print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
                 continue
-            status = "OK" if rows >= min_rows else "WARN"
+            contaminated = yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+            status = "OK" if rows >= min_rows and not contaminated else "WARN"
             if status == "OK":
                 ok_count += 1
             else:
                 retry_tickers.append(raw)
-            print(f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, csv={csv_path}")
+            print(
+                f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, "
+                f"yahoo_like_last20={yahoo_like}, csv={csv_path}"
+            )
         print(f"[commodity-check] summary: ok={ok_count}, warn={len(retry_tickers)}, total={len(checked)}")
         return retry_tickers
 
@@ -1459,7 +1467,7 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         try:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
-                _raw, csv_path, _rows, _latest, _exc = _health_row(raw)
+                _raw, csv_path, _rows, _latest, _yahoo_like, _exc = _health_row(raw)
                 backup = csv_path.read_bytes() if csv_path.exists() else None
                 try:
                     # A forced merge can leave a short CSV short. Remove it first so
@@ -1512,38 +1520,41 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     # Markets may be closed on the exact boundary date.
     oldest_tolerance = required_start + timedelta(days=7)
 
-    def _health_row(ticker: str) -> tuple[str, Path, int, str, str, int, Exception | None]:
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, str, int, int, Exception | None]:
         raw = (ticker or "").strip().upper()
         csv_path = local_csv_path_for_symbol(raw, "forex")
         try:
-            dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+            df = pd.read_csv(csv_path)
+            dates = pd.to_datetime(df["Date"], errors="coerce").dropna()
             if dates.empty:
                 raise ValueError("CSV has no valid dates")
             oldest = dates.min().date()
             latest = dates.max().date()
-            return raw, csv_path, len(dates), oldest.isoformat(), latest.isoformat(), (latest - oldest).days, None
+            yahoo_like = _recent_high_precision_candle_count(df)
+            return raw, csv_path, len(dates), oldest.isoformat(), latest.isoformat(), (latest - oldest).days, yahoo_like, None
         except Exception as exc:
-            return raw, csv_path, 0, "-", "-", 0, exc
+            return raw, csv_path, 0, "-", "-", 0, 0, exc
 
     def _missing_candles(latest: str) -> int:
         if latest == "-":
             return 0
         return _forex_missing_session_count(date.fromisoformat(latest), expected_latest)
 
-    def _warned(row: tuple[str, Path, int, str, str, int, Exception | None]) -> bool:
-        _raw, _path, _rows, oldest, _latest, _span, exc = row
+    def _warned(row: tuple[str, Path, int, str, str, int, int, Exception | None]) -> bool:
+        _raw, _path, _rows, oldest, _latest, _span, yahoo_like, exc = row
         return (
             exc is not None
             or oldest == "-"
             or date.fromisoformat(oldest) > oldest_tolerance
             or _latest == "-"
             or _missing_candles(_latest) > 0
+            or yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
         )
 
-    def _print_summary(rows: Sequence[tuple[str, Path, int, str, str, int, Exception | None]]) -> list[str]:
+    def _print_summary(rows: Sequence[tuple[str, Path, int, str, str, int, int, Exception | None]]) -> list[str]:
         retry: list[str] = []
-        for raw, csv_path, row_count, oldest, latest, span_days, exc in rows:
-            warn = _warned((raw, csv_path, row_count, oldest, latest, span_days, exc))
+        for raw, csv_path, row_count, oldest, latest, span_days, yahoo_like, exc in rows:
+            warn = _warned((raw, csv_path, row_count, oldest, latest, span_days, yahoo_like, exc))
             if warn:
                 retry.append(raw)
             detail = (
@@ -1551,7 +1562,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                 if exc
                 else (
                     f"rows={row_count}, oldest={oldest}, latest={latest}, span_days={span_days}, "
-                    f"missing_candles={_missing_candles(latest)}"
+                    f"missing_candles={_missing_candles(latest)}, yahoo_like_last20={yahoo_like}"
                 )
             )
             source = _forex_source_summary_label(source_by_ticker.get(raw, "unknown"))
@@ -1576,7 +1587,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     except ValueError:
         retry_rounds = 4
     def _replace(raw: str) -> str:
-        _raw, csv_path, _rows, _oldest, _latest, _span, _exc = _health_row(raw)
+        _raw, csv_path, _rows, _oldest, _latest, _span, _yahoo_like, _exc = _health_row(raw)
         backup = csv_path.read_bytes() if csv_path.exists() else None
         try:
             csv_path.unlink(missing_ok=True)
@@ -1807,6 +1818,34 @@ def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
         return False
 
 def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+    if os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1":
+        group_l = (group_name or "").lower()
+        if group_l in {"commodities", "forex"}:
+            refresh_symbols: list[str] = []
+            for ticker in members:
+                fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+                csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+                try:
+                    cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+                    yahoo_like = _recent_high_precision_candle_count(cached)
+                except Exception:
+                    yahoo_like = 0
+                if not csv_path.exists() or yahoo_like >= 2:
+                    refresh_symbols.append(fetch_symbol.upper())
+            os.environ["STOCKHELPER_MARKET_REFRESH_SYMBOLS"] = ",".join(refresh_symbols)
+            os.environ["STOCKHELPER_MARKET_REFRESH_AUDITED"] = "1"
+            os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+            preview = ", ".join(refresh_symbols) if refresh_symbols else "none"
+            print(
+                f"[refresh-check] {group_name}: audited last 20 candles; "
+                f"Stooq refresh needed for {len(refresh_symbols)}/{len(members)}: {preview}"
+            )
+            return bool(refresh_symbols)
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        print(f"[refresh-check] {group_name}: forced remote refresh -> refreshing all instruments")
+        return True
     if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
         print(f"[refresh-check] {group_name}: cache-only already requested; skipping remote probe.")
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
@@ -2309,19 +2348,37 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     # must not prevent the scanner from merging the newest Yahoo candle for the
     # actual calculation.  Only the explicit --onlycache mode should skip this.
     old_auto_cache = os.environ.get("STOCKHELPER_CACHE_ONLY")
+    refresh_symbols = {
+        item.strip().upper()
+        for item in os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS", "").split(",")
+        if item.strip()
+    }
+    refresh_audited = os.environ.get("STOCKHELPER_MARKET_REFRESH_AUDITED") == "1"
+    targeted_refresh = symbol.upper() in refresh_symbols
     user_onlycache = os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
-    if old_auto_cache == "1" and not user_onlycache:
-        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-    try:
-        _runtime_df, csv_path, meta = _load_daily_data_with_retries(
-            symbol=symbol,
-            instrument_type=instrument_type,
-            persist=True,
-            fetch_older_data=False,
-        )
-    finally:
-        if old_auto_cache == "1" and not user_onlycache:
-            os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
+    unlock_cache = old_auto_cache == "1" and not user_onlycache and (not refresh_audited or targeted_refresh)
+    # Environment variables are process-global, so serialize the short scoped
+    # override instead of letting parallel workers leak forced mode to peers.
+    with MARKET_REFRESH_LOCK:
+        old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        if unlock_cache:
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        if targeted_refresh:
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        try:
+            _runtime_df, csv_path, meta = _load_daily_data_with_retries(
+                symbol=symbol,
+                instrument_type=instrument_type,
+                persist=True,
+                fetch_older_data=False,
+            )
+        finally:
+            if old_auto_cache == "1":
+                os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
+            if old_force is None:
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")

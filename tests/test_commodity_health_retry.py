@@ -51,3 +51,30 @@ def test_health_check_restores_warned_csv_when_replacement_fails(monkeypatch, tm
     scanner._commodity_csv_health_check(["PALLADIUM"])
 
     assert len(pd.read_csv(csv_path)) == 80
+
+
+def test_health_check_warns_and_retries_yahoo_contaminated_tail(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "PALLADIUM.csv"
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2025-01-01", periods=260),
+        "Open": [1600.0] * 258 + [1602.9000244140625, 1643.4000244140625],
+        "High": [1610.0] * 260,
+        "Low": [1590.0] * 260,
+        "Close": [1605.0] * 260,
+    })
+    frame.to_csv(csv_path, index=False)
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    def replace_csv(**_kwargs):
+        clean = frame.copy()
+        clean["Open"] = clean["Open"].round(3)
+        clean.to_csv(csv_path, index=False)
+        return clean, csv_path, {}
+
+    monkeypatch.setattr(scanner, "load_or_update_daily_data", replace_csv)
+    scanner._commodity_csv_health_check(["PALLADIUM"])
+
+    output = capsys.readouterr().out
+    assert "WARN PALLADIUM" in output
+    assert "yahoo_like_last20=2" in output
+    assert output.rfind("summary: ok=1, warn=0, total=1") > output.index("WARN PALLADIUM")

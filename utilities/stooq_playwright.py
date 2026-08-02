@@ -1548,6 +1548,8 @@ def update_stooq_history_from_ui_csv(
     local = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
     if not local.empty:
         local["Date"] = pd.to_datetime(local["Date"], errors="coerce")
+        if os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1":
+            local = _drop_local_tail_covered_by_remote(local, remote)
         remote = pd.concat([local, remote], ignore_index=True)
     remote = remote.sort_values("Date").drop_duplicates("Date", keep="last").reset_index(drop=True)
     # The UI should honor the submitted start date, but defensively enforce the
@@ -1555,6 +1557,24 @@ def update_stooq_history_from_ui_csv(
     remote = _trim_stooq_ui_history_to_window(remote, start)
     remote.to_csv(csv_path, index=False, date_format="%Y-%m-%d")
     return remote
+
+
+def _drop_local_tail_covered_by_remote(local: pd.DataFrame, remote: pd.DataFrame) -> pd.DataFrame:
+    """Remove the cached tail before a forced Stooq rebase.
+
+    A normal date-based merge cannot remove Yahoo-only sessions: if Stooq has
+    no row for that date, the old Yahoo row survives forever.  A forced rebase
+    treats Stooq's first returned date as the start of an authoritative tail,
+    dropping every cached row from that date onward before the remote rows are
+    appended.  Yahoo freshness may then add only the single newest candle.
+    """
+    if local.empty or remote.empty or "Date" not in local or "Date" not in remote:
+        return local
+    local_dates = pd.to_datetime(local["Date"], errors="coerce")
+    remote_dates = pd.to_datetime(remote["Date"], errors="coerce").dropna()
+    if remote_dates.empty:
+        return local
+    return local.loc[local_dates < remote_dates.min()].copy()
 
 
 
@@ -2831,6 +2851,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
         # If cached file is shorter than requested 1-year window, rebuild from fresh remote pull.
         merged = remote.copy()
     else:
+        if os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1":
+            local = _drop_local_tail_covered_by_remote(local, remote)
         merged = pd.concat([local, remote], ignore_index=True)
     merged = merged.drop_duplicates(subset=["Date"], keep="last").sort_values("Date").reset_index(drop=True)
     if end_date is None:

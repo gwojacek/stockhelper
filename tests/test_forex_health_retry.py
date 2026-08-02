@@ -9,6 +9,18 @@ pd = pytest.importorskip("pandas")
 scanner = pytest.importorskip("scanner_search")
 
 
+def test_forced_commodity_refresh_ignores_daily_refresh_state(monkeypatch, capsys):
+    monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, _instrument: Path(f"/missing/{symbol}.csv"))
+
+    assert scanner._should_refresh_group_data("commodities", ["GOLD", "SILVER"], None) is True
+    assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    assert scanner.os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS") == "XAUUSD,XAGUSD"
+    assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") is None
+    assert "audited last 20 candles" in capsys.readouterr().out
+
+
 def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "AUDUSD.csv"
     today = datetime.now(UTC).date()
@@ -127,6 +139,28 @@ def test_forex_health_does_not_retry_complete_rolling_window(monkeypatch, tmp_pa
     assert "OK USDJPY:" in output
     assert "source=cache" in output
     assert "summary: ok=1, warn=0, total=1" in output
+
+
+def test_forex_health_warns_on_yahoo_contaminated_tail(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    today = datetime.now(UTC).date()
+    dates = pd.date_range(today - timedelta(days=548), today)
+    frame = pd.DataFrame({
+        "Date": dates,
+        "Open": [150.0] * (len(dates) - 2) + [150.10000610351562, 150.1999969482422],
+        "High": [151.0] * len(dates),
+        "Low": [149.0] * len(dates),
+        "Close": [150.5] * len(dates),
+    })
+    frame.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY", "0")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    scanner._forex_csv_health_check(["USDJPY"], {"USDJPY": "cache"})
+
+    output = capsys.readouterr().out
+    assert "WARN USDJPY" in output
+    assert "yahoo_like_last20=2" in output
 
 
 def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path, capsys):

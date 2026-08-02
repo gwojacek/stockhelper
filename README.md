@@ -43,6 +43,7 @@ Use this table as the fastest path to the commands you will run most often. The 
 | Trim WIG stock CSVs | `stock --trim-wig-csvs` | Trims existing `data/csv/stocks/*_WA.csv` files to the last two years without downloading Stooq bulk data. |
 | Use cache only | `stock -onlycache -ichimoku_search wig` | Avoids remote refresh/probing when you want to rely on local CSVs, including commodities. |
 | Force refresh | `STOCKHELPER_FORCE_REMOTE_REFRESH=1 stock -fibo_search wig` | Ignores usable cache and refreshes market data. |
+| Force allsearch refresh | `stock -allsearch commodities --force-refresh` | Disables the recent-report cache rule and refreshes remote candle data. |
 | Extend history | `stock --fetch-older-data --fetch-older-data-scope stocks --fetch-workers 4` | Backfills older stock CSV history. |
 | Fix old Docker file ownership | `stock --fix-permissions` | Repairs root-owned generated files from older Docker runs; run the printed `sudo chown ...` command if needed. |
 | Clean Docker disk usage | `stock --cleanup` | Stops StockHelper report containers, removes dangling images, and prunes unused build cache. |

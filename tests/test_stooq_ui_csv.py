@@ -8,10 +8,31 @@ from utilities.stooq_playwright import (
     _POLISH_MONTHS_BY_NUMBER,
     _capture_stooq_ui_failure,
     _parse_stooq_ui_csv,
+    _drop_local_tail_covered_by_remote,
     _stooq_history_urls,
     _stooq_query_symbol,
     _trim_stooq_ui_history_to_window,
 )
+
+
+def test_forced_rebase_drops_yahoo_only_rows_from_remote_tail():
+    local = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2026-07-24", "2026-07-28", "2026-07-29", "2026-07-30"]),
+            "Close": [58.203, 57.69499969482422, 58.415000915527344, 58.36000061035156],
+        }
+    )
+    remote = pd.DataFrame(
+        {
+            # Stooq may omit a Yahoo-only date; that old row must still vanish.
+            "Date": pd.to_datetime(["2026-07-27", "2026-07-31"]),
+            "Close": [58.403, 57.928],
+        }
+    )
+
+    retained = _drop_local_tail_covered_by_remote(local, remote)
+
+    assert retained["Date"].dt.strftime("%Y-%m-%d").tolist() == ["2026-07-24"]
 
 
 def test_forex_stooq_urls_use_compact_pair_without_slash():

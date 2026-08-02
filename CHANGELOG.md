@@ -1,10 +1,21 @@
 # Changelog
 
+- Prevented the chart-loader cache merge from restoring Yahoo-only rows after a downloader had already completed an authoritative Stooq-tail rebase.
+
+- Made forced Stooq rebases authoritative for the downloaded tail, removing Yahoo-only dates that an overlapping date merge could not replace.
+
+- Changed commodity and forex `--force-refresh` into a last-20-candle audit that refreshes only CSVs containing at least two Yahoo-precision candles (or missing CSVs), avoiding duplicate full-market downloads in both allsearch phases.
+
+- Rebased commodity and forex caches from Stooq when at least two of the last 20 candles match Yahoo, including Yahoo's long binary-float values already stored in CSV files, and limited Yahoo freshness data to the single newest candle.
+
 All notable release changes for StockHelper are documented here.
 
 The project currently documents release tags `1.0` through `7.3`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
+
+- Allsearch now clears `debug/stooq` at startup, and the generated Playwright diagnostics are ignored by Git.
+- Commodity and forex post-scan health checks now warn on two or more Yahoo-style high-precision candles in the last 20 rows and include those CSVs in the final clean Stooq retry.
 
 Compare: [`7.3...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.3...HEAD)
 

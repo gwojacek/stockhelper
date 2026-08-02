@@ -9,62 +9,83 @@
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-01-22",
-        "2026-07-08",
-        "2027-06-25"
+        "2026-01-30",
+        "2026-10-05"
       ],
       "y": [
-        5.65,
-        3.355,
-        -1.505
+        4.42,
+        2.66
       ],
-      "x0": "2026-01-22",
-      "x1": "2027-06-25",
-      "y0": 5.65,
-      "y1": -1.505,
+      "x0": "2026-01-30",
+      "x1": "2027-03-02",
+      "y0": 4.42,
+      "y1": 0.8982,
       "anchor_x": [
-        "2026-01-22",
-        "2026-07-08"
+        "2026-01-30",
+        "2026-06-30"
       ],
       "anchor_y": [
-        5.65,
-        3.355
+        4.42,
+        3.33
       ],
-      "price": -1.505,
+      "price": 0.8982,
       "color": "#dc2626",
       "group_id": "auto-wedge",
-      "free_extension": false
+      "free_extension": true
     },
     {
       "id": "auto-wedge-lower",
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-05-22",
-        "2026-07-16",
-        "2026-11-17"
+        "2026-04-24",
+        "2026-10-21"
       ],
       "y": [
-        2.888,
-        2.823,
-        2.67633
+        2.5,
+        2.84
       ],
-      "x0": "2026-05-22",
-      "x1": "2026-11-17",
-      "y0": 2.888,
-      "y1": 2.67633,
+      "x0": "2026-04-24",
+      "x1": "2027-03-02",
+      "y0": 2.5,
+      "y1": 4.06,
       "anchor_x": [
-        "2026-05-22",
-        "2026-07-16"
+        "2026-04-24",
+        "2026-07-20"
       ],
       "anchor_y": [
-        2.888,
-        2.823
+        2.5,
+        2.83
       ],
-      "price": 2.67633,
+      "price": 4.06,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": false
+      "free_extension": true
     }
-  ]
+  ],
+  "high": 4.42,
+  "__wedge_auto_high__": true,
+  "low": 2.5,
+  "__wedge_auto_low__": true,
+  "__half_points__": [],
+  "capital": 308500,
+  "calculation_currency": "PLN",
+  "position_type": "short",
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 4.42,
+      "plot_price": 4.42,
+      "date": "2026-01-30",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 2.5,
+      "plot_price": 2.5,
+      "date": "2026-04-24",
+      "auto_wedge": true
+    }
+  }
 }

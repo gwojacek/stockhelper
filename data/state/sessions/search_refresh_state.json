@@ -288,6 +288,69 @@
       "SUGAR"
     ]
   },
+  "commodities:2026-07-30:pre1945": {
+    "checked_at": "2026-07-30T13:08:19.298230+00:00",
+    "result": "stale",
+    "tickers": [
+      "COFFEE",
+      "COCOA",
+      "SUGAR",
+      "WHEAT",
+      "CORN",
+      "SOYBEAN",
+      "SOYOIL",
+      "COPPER",
+      "ALUMINIUM",
+      "PLATINUM",
+      "PALLADIUM",
+      "WTI",
+      "OIL",
+      "NATURAL_GAS",
+      "GOLD",
+      "SILVER"
+    ]
+  },
+  "commodities:2026-07-31:post1945": {
+    "checked_at": "2026-07-31T21:28:11.788745+00:00",
+    "result": "fresh"
+  },
+  "commodities:2026-07-31:pre1945": {
+    "checked_at": "2026-07-31T12:50:25.578950+00:00",
+    "result": "stale",
+    "tickers": [
+      "COFFEE",
+      "COCOA",
+      "SUGAR",
+      "WHEAT",
+      "CORN",
+      "SOYBEAN",
+      "SOYOIL",
+      "COPPER",
+      "ALUMINIUM",
+      "PLATINUM",
+      "PALLADIUM",
+      "WTI",
+      "OIL",
+      "NATURAL_GAS",
+      "GOLD",
+      "SILVER"
+    ]
+  },
+  "commodities:2026-08-01:pre1945": {
+    "checked_at": "2026-08-01T14:04:04.247004+00:00",
+    "result": "fresh"
+  },
+  "commodities:2026-08-02:post1945": {
+    "checked_at": "2026-08-02T18:47:35.115242+00:00",
+    "result": "fresh"
+  },
+  "commodities:2026-08-02:pre1945": {
+    "checked_at": "2026-08-02T09:11:07.835093+00:00",
+    "result": "stale",
+    "tickers": [
+      "GOLD"
+    ]
+  },
   "dax40": {
     "last_remote_check": "2026-05-28T16:58:39.959472+02:00"
   },
@@ -403,6 +466,22 @@
   "stooq_bulk:2026-07-29": {
     "checked_at": "2026-07-29T07:46:58.019836+00:00",
     "result": "attempted"
+  },
+  "stooq_bulk:2026-07-30": {
+    "checked_at": "2026-07-30T13:06:38.208624+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-07-31": {
+    "checked_at": "2026-07-31T12:48:40.964500+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-01": {
+    "checked_at": "2026-08-01T14:02:23.683572+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-02": {
+    "checked_at": "2026-08-02T08:34:02.014448+00:00",
+    "result": "bulk"
   },
   "wig": {
     "last_remote_check": "2026-05-28T16:57:52.510319+02:00"

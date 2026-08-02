@@ -23,3 +23,6 @@ build/
 data/downloads/stooq/*.zip
 
 .docker-home/
+
+# Playwright failure screenshots/HTML are recreated for each allsearch run.
+debug/stooq/
