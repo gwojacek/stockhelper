@@ -1807,6 +1807,14 @@ def _try_refresh_wig_with_stooq_bulk(group_name: str, reason: str) -> bool:
         return False
 
 def _should_refresh_group_data(group_name: str, members: list[str], exchange_suffix: str | None) -> bool:
+    if os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1":
+        # An explicit caller request must win over the per-day freshness state.
+        # In particular, do not let the commodities "already checked today"
+        # bucket turn cache-only mode back on after allsearch disabled it.
+        os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        print(f"[refresh-check] {group_name}: forced remote refresh -> refreshing all instruments")
+        return True
     if os.environ.get("STOCKHELPER_CACHE_ONLY") == "1":
         print(f"[refresh-check] {group_name}: cache-only already requested; skipping remote probe.")
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
