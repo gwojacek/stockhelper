@@ -54,6 +54,18 @@ TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
 DEFAULT_ALLSEARCH_SCOPES = ["wig", "dax", "us100", "forex", "commodities", "indexes"]
 JOURNAL_HTML = PROJECT_ROOT / "data" / "journal" / "transactions.html"
 
+
+def _clear_stooq_debug_artifacts() -> None:
+    """Start allsearch with an empty, unversioned Stooq diagnostics directory."""
+    debug_dir = PROJECT_ROOT / "debug" / "stooq"
+    if not debug_dir.exists():
+        return
+    try:
+        shutil.rmtree(debug_dir)
+        print(f"[allsearch] cleared old Stooq debug artifacts: {debug_dir}")
+    except OSError as exc:
+        print(f"[allsearch] warning: could not clear Stooq debug artifacts ({exc})")
+
 TROJPOLLOWKI_RETEST_LABELS = {
     "breakout_confirmed": "breakout confirmed",
     "retest_breakout": "retest breakout",
@@ -3098,6 +3110,7 @@ def _retry_missing_scope_csvs_once(scope: str) -> bool:
     return True
 
 def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, force_remote_refresh: bool = False) -> int:
+    _clear_stooq_debug_artifacts()
     # Preserve a shell-provided request across both batch phases; each phase
     # otherwise cleans its temporary environment at completion.
     force_remote_refresh = force_remote_refresh or os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"

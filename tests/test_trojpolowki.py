@@ -41,6 +41,19 @@ def test_report_launcher_protocol_matches_report_server():
     assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"' in server_source
 
 
+def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
+    mod = load_run_module()
+    debug_dir = tmp_path / "debug" / "stooq"
+    debug_dir.mkdir(parents=True)
+    (debug_dir / "old_failure.png").write_bytes(b"old")
+    mod.PROJECT_ROOT = tmp_path
+
+    mod._clear_stooq_debug_artifacts()
+
+    assert not debug_dir.exists()
+    assert "cleared old Stooq debug artifacts" in capsys.readouterr().out
+
+
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [

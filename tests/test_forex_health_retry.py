@@ -141,6 +141,28 @@ def test_forex_health_does_not_retry_complete_rolling_window(monkeypatch, tmp_pa
     assert "summary: ok=1, warn=0, total=1" in output
 
 
+def test_forex_health_warns_on_yahoo_contaminated_tail(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    today = datetime.now(UTC).date()
+    dates = pd.date_range(today - timedelta(days=548), today)
+    frame = pd.DataFrame({
+        "Date": dates,
+        "Open": [150.0] * (len(dates) - 2) + [150.10000610351562, 150.1999969482422],
+        "High": [151.0] * len(dates),
+        "Low": [149.0] * len(dates),
+        "Close": [150.5] * len(dates),
+    })
+    frame.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_RETRY", "0")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    scanner._forex_csv_health_check(["USDJPY"], {"USDJPY": "cache"})
+
+    output = capsys.readouterr().out
+    assert "WARN USDJPY" in output
+    assert "yahoo_like_last20=2" in output
+
+
 def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "USDJPY.csv"
     today = datetime.now(UTC).date()

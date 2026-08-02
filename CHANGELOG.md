@@ -14,6 +14,9 @@ The project currently documents release tags `1.0` through `7.3`, plus unrelease
 
 ## [Unreleased]
 
+- Allsearch now clears `debug/stooq` at startup, and the generated Playwright diagnostics are ignored by Git.
+- Commodity and forex post-scan health checks now warn on two or more Yahoo-style high-precision candles in the last 20 rows and include those CSVs in the final clean Stooq retry.
+
 Compare: [`7.3...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.3...HEAD)
 
 ## [7.3] - 2026-07-29
