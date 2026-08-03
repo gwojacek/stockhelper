@@ -3758,14 +3758,37 @@ def _scanner_session_path_for_ticker(ticker: str) -> Path:
     return STATE_DATA_DIR / "sessions" / f"{stem}.json"
 
 
+def _scanner_session_paths_for_ticker(ticker: str) -> list[Path]:
+    """Return chart sessions which may contain a user's scanner correction."""
+    base = _scanner_session_path_for_ticker(ticker)
+    stem = base.stem
+    candidates = [base, base.with_name(f"{stem.lower()}.json")]
+    candidates.extend(base.with_name(f"{stem.lower()}_{side}.json") for side in ("long", "short"))
+    return list(dict.fromkeys(candidates))
+
+
+def _scanner_session_for_ticker(ticker: str, object_types: set[str] | None = None) -> dict:
+    existing = [path for path in _scanner_session_paths_for_ticker(ticker) if path.exists()]
+    for path in sorted(existing, key=lambda item: item.stat().st_mtime, reverse=True):
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(state, dict):
+                if object_types is not None:
+                    objects = state.get("drawn_objects")
+                    if not isinstance(objects, list) or not any(
+                        isinstance(obj, dict)
+                        and (str(obj.get("type")) in object_types or str(obj.get("group_id")) in object_types)
+                        for obj in objects
+                    ):
+                        continue
+                return state
+        except Exception:
+            continue
+    return {}
+
+
 def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
-    path = _scanner_session_path_for_ticker(ticker)
-    if not path.exists():
-        return None
-    try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    state = _scanner_session_for_ticker(ticker, {"wedge", "auto-wedge"})
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
         return None
@@ -3779,6 +3802,79 @@ def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
     if lower is None:
         return None
     return upper, lower
+
+
+def _find_manual_fibo_setup(df: pd.DataFrame, ticker: str) -> FiboScanResult | None:
+    """Re-evaluate the Fibo anchors last accepted in the chart editor.
+
+    Saving a scanner chart is an explicit correction of scanner output.  Keep
+    that correction as a scanner hit until the ordinary first-61.8-touch
+    lifecycle has completed or price invalidates the original anchor.
+    """
+    state = _scanner_session_for_ticker(ticker, {"fib", "fib-boundary", "auto-fibo"})
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return None
+    boundaries = [obj for obj in objects if isinstance(obj, dict) and obj.get("type") == "fib-boundary"]
+    if not boundaries:
+        return None
+    boundary = boundaries[-1]
+    try:
+        start_date = str(pd.to_datetime(boundary["x0"]).date())
+        end_date = str(pd.to_datetime(boundary["x1"]).date())
+        start_price = float(boundary["y0"])
+        end_price = float(boundary["y1"])
+    except Exception:
+        return None
+    direction = "long" if end_price > start_price else "short"
+    low, high = sorted((start_price, end_price))
+    impulse = high - low
+    if impulse <= 0 or df is None or df.empty or not {"Date", "High", "Low", "Close"}.issubset(df.columns):
+        return None
+    w = df.copy()
+    w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
+    for col in ("High", "Low", "Close"):
+        w[col] = pd.to_numeric(w[col], errors="coerce")
+    w = w.dropna(subset=["Date", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
+    end_ts = pd.to_datetime(end_date)
+    after = w.loc[w["Date"] > end_ts]
+    if after.empty:
+        return None
+    fib_236 = high - impulse * 0.236 if direction == "long" else low + impulse * 0.236
+    fib_382 = high - impulse * 0.382 if direction == "long" else low + impulse * 0.382
+    fib_618 = high - impulse * 0.618 if direction == "long" else low + impulse * 0.618
+    # A move through the origin has conclusively invalidated the edited cycle.
+    if direction == "long" and bool((after["Close"] < low).any()):
+        return None
+    if direction == "short" and bool((after["Close"] > high).any()):
+        return None
+    touch_mask = after["Low"] <= fib_618 if direction == "long" else after["High"] >= fib_618
+    touches = after.loc[touch_mask]
+    touch_date = "-"
+    if not touches.empty:
+        touch_idx = int(touches.index[0])
+        touch_date = str(pd.to_datetime(w.loc[touch_idx, "Date"]).date())
+        # The standard scanner gives the touch candle plus two candles to make
+        # a connected pattern.  Once that window passes, automatic logic owns
+        # discovery again rather than indefinitely reviving a manual Fibo.
+        if len(w) - 1 - touch_idx >= 2:
+            return None
+        status = "touched_61_8_no_pattern"
+    else:
+        status = _fibo_pre_61_8_status(direction, float(w.iloc[-1]["Close"]), fib_236)
+    start_ts = pd.to_datetime(start_date)
+    incline_days = max(1, int((end_ts - start_ts).days))
+    decline_days = max(1, int((w.iloc[-1]["Date"] - end_ts).days))
+    return FiboScanResult(
+        ticker=ticker, direction=direction, status=status,
+        incline_start_date=start_date, incline_end_date=end_date,
+        incline_duration_days=incline_days,
+        decline_end_date=str(w.iloc[-1]["Date"].date()), decline_duration_days=decline_days,
+        incline_decline_duration_ratio=incline_days / decline_days,
+        fib_23_6=round(fib_236, 5), fib_38_2=round(fib_382, 5), fib_61_8=round(fib_618, 5),
+        first_61_8_touch_date=touch_date, reversal_pattern_name="none",
+        stop_loss=round(low if direction == "long" else high, 5), current_close=float(w.iloc[-1]["Close"]),
+    )
 
 
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
@@ -5645,6 +5741,11 @@ def run_fibo_search(target: str) -> int:
                 if pd.notna(latest_close):
                     wedge.current_close = latest_close
                 out_rows.append(wedge)
+            manual_fibo = _find_manual_fibo_setup(df, ticker)
+            if manual_fibo:
+                manual_fibo.latest_candle_date = latest_candle_date
+                manual_fibo.expected_latest_session_date = expected_latest_session_date
+                out_rows.append(manual_fibo)
             steep_3p = _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
