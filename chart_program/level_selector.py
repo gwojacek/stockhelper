@@ -82,6 +82,9 @@ def _parse_args(raw_args=None):
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
     parser.add_argument("--scanner-breakout-date")
+    parser.add_argument("--scanner-breakout-direction")
+    parser.add_argument("--scanner-pattern-date")
+    parser.add_argument("--scanner-pattern-name")
     parser.add_argument("--scanner-retest-count")
     parser.add_argument("--scanner-latest-retest-date")
     parser.add_argument("--scanner-latest-retest-pattern")
@@ -545,6 +548,9 @@ def run_level_selector(raw_args=None):
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
     for key, value in [
         ("__scanner_breakout_date__", args.scanner_breakout_date),
+        ("__scanner_breakout_direction__", args.scanner_breakout_direction),
+        ("__scanner_pattern_date__", args.scanner_pattern_date),
+        ("__scanner_pattern_name__", args.scanner_pattern_name),
         ("__scanner_retest_count__", args.scanner_retest_count),
         ("__scanner_latest_retest_date__", args.scanner_latest_retest_date),
         ("__scanner_latest_retest_pattern__", args.scanner_latest_retest_pattern),

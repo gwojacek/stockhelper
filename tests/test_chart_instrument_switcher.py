@@ -42,3 +42,13 @@ def test_chart_has_save_and_save_close_actions():
     assert "$('save-btn').onclick = () => saveChart(false)" in source
     assert "$('finish-btn').onclick = () => saveChart(true)" in source
     assert '@app.route("/save", methods=["POST"])' in source
+
+
+def test_scanner_pattern_and_breakout_candles_are_highlighted():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function drawScannerHighlights(ctx)" in source
+    assert "__scanner_pattern_date__" in source
+    assert "__scanner_latest_retest_date__" in source
+    assert "__scanner_breakout_date__" in source
+    assert "ctx.strokeRect(x - 8" in source

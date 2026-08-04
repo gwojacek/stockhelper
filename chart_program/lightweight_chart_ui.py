@@ -2297,6 +2297,45 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function drawScannerHighlights(ctx) {{
+    const events = [];
+    const add = (date, label, color, position='above') => {{
+      const day = String(date || '').slice(0, 10);
+      if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(day) || !ohlc.some(c => c.time === day)) return;
+      if (!events.some(event => event.date === day && event.label === label)) events.push({{date:day, label, color, position}});
+    }};
+    const breakoutDirection = scannerMetaValue('__scanner_breakout_direction__');
+    add(scannerMetaValue('__scanner_breakout_date__'), breakoutDirection === 'short' ? '▼ BREAKOUT' : '▲ BREAKOUT', '#f97316', breakoutDirection === 'short' ? 'below' : 'above');
+    const retestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    add(scannerMetaValue('__scanner_latest_retest_date__'), `◆ ${{scannerPatternLabel(retestPattern || 'RETEST')}}`, '#a855f7', 'below');
+    const fibPattern = scannerMetaValue('__scanner_pattern_name__');
+    add(scannerMetaValue('__scanner_pattern_date__'), `◆ ${{scannerPatternLabel(fibPattern || '61.8 PATTERN')}}`, '#eab308', 'below');
+    events.forEach(event => {{
+      const candle = ohlc.find(c => c.time === event.date);
+      const x = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(event.date) : null;
+      if (!candle || x === null || !Number.isFinite(x)) return;
+      const highY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(candle.high) : null;
+      const lowY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(candle.low) : null;
+      if (highY === null || lowY === null) return;
+      ctx.save();
+      ctx.fillStyle = `${{event.color}}33`;
+      ctx.strokeStyle = event.color;
+      ctx.lineWidth = 2;
+      ctx.fillRect(x - 8, Math.min(highY, lowY) - 5, 16, Math.abs(lowY - highY) + 10);
+      ctx.strokeRect(x - 8, Math.min(highY, lowY) - 5, 16, Math.abs(lowY - highY) + 10);
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      const width = ctx.measureText(event.label).width + 10;
+      const labelY = event.position === 'above' ? Math.max(16, highY - 25) : Math.min(ctx.canvas.height / (window.devicePixelRatio || 1) - 8, lowY + 25);
+      ctx.fillStyle = 'rgba(15,23,42,.94)';
+      ctx.fillRect(x - width / 2, labelY - 13, width, 18);
+      ctx.strokeRect(x - width / 2, labelY - 13, width, 18);
+      ctx.fillStyle = event.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(event.label, x, labelY);
+      ctx.restore();
+    }});
+  }}
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const chartEl = $('chart');
@@ -2310,7 +2349,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
+    if (!levels.__show_ichimoku__) {{ drawScannerHighlights(ctx); drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -2325,6 +2364,7 @@ class LightweightChartLevelSelectorUI:
       ctx.fillStyle = p1.bull ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
       ctx.fill();
     }}
+    drawScannerHighlights(ctx);
     drawWedgeStraightLines(ctx);
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);

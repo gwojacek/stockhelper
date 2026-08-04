@@ -21,6 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-source", choices=["auto", "yahoo", "stooq"], default="auto")
     parser.add_argument("--ichimoku-mode", choices=["on", "off"], default="off")
     parser.add_argument("--scanner-breakout-date")
+    parser.add_argument("--scanner-breakout-direction")
+    parser.add_argument("--scanner-pattern-date")
+    parser.add_argument("--scanner-pattern-name")
     parser.add_argument("--scanner-retest-count")
     parser.add_argument("--scanner-latest-retest-date")
     parser.add_argument("--scanner-latest-retest-pattern")
@@ -90,6 +93,9 @@ def main() -> int:
     forwarded.extend(["--ichimoku-mode", args.ichimoku_mode])
     for flag, value in [
         ("--scanner-breakout-date", args.scanner_breakout_date),
+        ("--scanner-breakout-direction", args.scanner_breakout_direction),
+        ("--scanner-pattern-date", args.scanner_pattern_date),
+        ("--scanner-pattern-name", args.scanner_pattern_name),
         ("--scanner-retest-count", args.scanner_retest_count),
         ("--scanner-latest-retest-date", args.scanner_latest_retest_date),
         ("--scanner-latest-retest-pattern", args.scanner_latest_retest_pattern),
