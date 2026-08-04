@@ -2354,9 +2354,8 @@ class LightweightChartLevelSelectorUI:
     const idx = ohlc.findIndex(c => c.time === date);
     if (idx < 0) return null;
     const span = Math.max(1, Math.min(3, Number(candles) || 1));
-    const halfLeft = Math.floor((span - 1) / 2);
-    const startIdx = Math.max(0, idx - halfLeft);
-    const endIdx = Math.min(ohlc.length - 1, startIdx + span - 1);
+    const startIdx = Math.max(0, idx - (span - 1));
+    const endIdx = idx;
     const xStart = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(ohlc[startIdx].time) : null;
     const xEnd = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(ohlc[endIdx].time) : null;
     if (xStart === null || xEnd === null || !Number.isFinite(xStart) || !Number.isFinite(xEnd)) return null;

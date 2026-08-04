@@ -57,3 +57,4 @@ def test_scanner_pattern_and_breakout_candles_are_highlighted():
     assert "scannerPatternSpan" in source
     assert "scanner-highlight-legend" in source
     assert "hiddenLegendKeys.has(event.key)" in source
+    assert "idx - (span - 1)" in source
