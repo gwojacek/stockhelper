@@ -51,4 +51,6 @@ def test_scanner_pattern_and_breakout_candles_are_highlighted():
     assert "__scanner_pattern_date__" in source
     assert "__scanner_latest_retest_date__" in source
     assert "__scanner_breakout_date__" in source
-    assert "ctx.strokeRect(x - 8" in source
+    assert "scannerCandleBand(event.date, event.candles)" in source
+    assert "scanner-highlight-tooltip" in source
+    assert "addScannerHighlightLegend()" in source
