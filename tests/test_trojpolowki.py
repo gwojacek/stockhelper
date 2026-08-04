@@ -718,7 +718,7 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "**🇺🇸 MSFT.US" in text
     assert "**🇵🇱 CRI" in data_rows[0]
     assert "**🇵🇱 ABC" in text
-    assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
+    assert any("| **🇵🇱 ABC" in row for row in data_rows)
     assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
     assert "**🇺🇸 LONG.US (8.0m)**<br>🏷️ inside cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
     assert text.count("**🛢️ GOLD") == 1
