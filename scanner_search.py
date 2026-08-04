@@ -3741,6 +3741,27 @@ def _post_anchor_touch_tolerance_static(price: float) -> float:
     return max(pip * 5, abs(float(price)) * 0.0005)
 
 
+def _wedge_visible_breakout_margin(tol: float, price: float) -> float:
+    """Minimum close distance required to call a wedge breakout visible.
+
+    A tiny close barely beyond a trendline is too sensitive for the scanner: on
+    the rendered chart it can still appear at/under the line because of line
+    thickness, scaling, gaps between sessions, and anchor rounding.  Require a
+    modest, volatility-aware close beyond the boundary before labeling a wedge
+    as broken out.
+    """
+    return max(float(tol) * 0.18, abs(float(price)) * 0.001)
+
+
+def _wedge_close_breakout_direction(close: float, upper: float, lower: float, tol: float, reference_price: float) -> str | None:
+    margin = _wedge_visible_breakout_margin(tol, reference_price)
+    if float(close) > float(upper) + margin:
+        return "long"
+    if float(close) < float(lower) - margin:
+        return "short"
+    return None
+
+
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     # Touches separated only by glued/adjacent candles count as one contact;
     # a new contact requires at least one full non-touching candle between them.
@@ -3951,8 +3972,8 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
         up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
         if lo >= up:
             return None
-        if closes[i] > up + close_eps or closes[i] < lo - close_eps:
-            direction = "long" if closes[i] > up + close_eps else "short"
+        direction = _wedge_close_breakout_direction(closes[i], up, lo, tol, closes[end])
+        if direction:
             if i < end - 5:
                 return None
             if breakout_idx is None:
@@ -4219,14 +4240,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # five candles, this candidate was already broken and another
                 # anchor set must be found instead.
                 for i in range(min(high_abs, uh2), end + 1):
-                    if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
+                    if _wedge_close_breakout_direction(closes[i], _wedge_line_value(i, upper_a, upper_b), float("-inf"), tol, closes[end]) == "long":
                         if i < end - 5:
                             invalid = True
                             break
                 if invalid:
                     continue
                 for i in range(min(lh1, lh2), end + 1):
-                    if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
+                    if _wedge_close_breakout_direction(closes[i], float("inf"), _wedge_line_value(i, lower_a, lower_b), tol, closes[end]) == "short":
                         if i < end - 5:
                             invalid = True
                             break
@@ -4243,8 +4264,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # The only accepted outside close is the first breakout/breakdown
                     # candle, and it must be very recent (latest candle or up to the
                     # previous 5 candles) to be treated as an absolute top-choice setup.
-                    if closes[i] > up + close_eps or closes[i] < lo - close_eps:
-                        direction = "long" if closes[i] > up + close_eps else "short"
+                    direction = _wedge_close_breakout_direction(closes[i], up, lo, tol, closes[end])
+                    if direction:
                         if _accept_or_reject_breakout(i, direction):
                             continue
                         if breakout_idx is not None:
