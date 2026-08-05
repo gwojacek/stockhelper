@@ -353,6 +353,7 @@ class FiboScanResult:
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
     has_monthly_sideways: bool = False
+    reversal_pattern_date: str = "-"
 
 
 def _mirror_ohlc_for_short(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
@@ -407,6 +408,7 @@ def _unmirror_short_fibo(result: FiboScanResult | None, axis: float) -> FiboScan
         latest_candle_date=result.latest_candle_date,
         expected_latest_session_date=result.expected_latest_session_date,
         has_monthly_sideways=result.has_monthly_sideways,
+        reversal_pattern_date=result.reversal_pattern_date,
     )
 
 
@@ -593,10 +595,10 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     candle_range = float(c["High"] - c["Low"])
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
-    if body == 0:
-        # Doji hammers are valid only when the lower shadow is dominant;
-        # balanced long-legged doji candles should not be treated as hammers.
-        return candle_range > 0 and lower > 0 and lower >= 1.5 * max(upper, 1e-9)
+    if candle_range > 0 and body / candle_range <= 0.20:
+        # Doji / near-doji hammers are valid only when the lower shadow is
+        # dominant; balanced long-legged doji candles remain neutral.
+        return lower > 0 and lower >= 1.2 * max(upper, 1e-9) and lower >= candle_range * 0.35
     return lower >= 2 * body and upper <= 2 * body and lower >= 1.5 * max(upper, 1e-9)
 
 
@@ -664,9 +666,8 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
     c1_body_low = min(c1_open, c1_close)
-    open_at_body_low = c2_open < c1_body_low or abs(c2_open - c1_body_low) <= max(abs(c1_open), abs(c1_close), 1e-9) * 0.005
     return (
-        open_at_body_low
+        c2_open < c1_body_low
         and c2_close > midpoint_c1
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level
@@ -2662,7 +2663,7 @@ def _print_forex_source_summary(prefix: str, members: Sequence[str], sources: di
 
 
 
-def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "", wedge: WedgeScanResult | None = None) -> str:
+def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_end: str = "", wedge: WedgeScanResult | None = None, pattern_date: str = "", pattern_name: str = "", breakout_date: str = "", breakout_direction: str = "", retest_date: str = "", retest_pattern: str = "") -> str:
     t = (ticker or "").strip()
     if "." not in t and len(t) <= 5:
         cfg_stocks = PROJECT_ROOT / "configs" / "stocks"
@@ -2673,7 +2674,12 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
     if mode == "fibo":
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"
-        return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
+        suffix = ""
+        if pattern_date and pattern_date != "-":
+            suffix += f" --scanner-pattern-date {pattern_date}"
+        if pattern_name and pattern_name not in {"", "-", "none"}:
+            suffix += f" --scanner-pattern-name {pattern_name}"
+        return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{suffix}"
     if mode == "wedge" and wedge is not None:
         return (
             f"{base} --wedge-lines "
@@ -2682,8 +2688,18 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
             f"--wedge-lower-start {wedge.lower_start_date},{wedge.lower_start_price} "
             f"--wedge-lower-end {wedge.lower_end_date},{wedge.lower_end_price} "
             f"--wedge-right"
+            + (f" --scanner-breakout-date {wedge.breakout_date} --scanner-breakout-direction {wedge.breakout_direction}" if wedge.breakout_date not in {"", "-"} else "")
         )
-    return base + " --ichimoku-mode on"
+    cmd = base + " --ichimoku-mode on"
+    for flag, value in (
+        ("--scanner-breakout-date", breakout_date),
+        ("--scanner-breakout-direction", breakout_direction),
+        ("--scanner-latest-retest-date", retest_date),
+        ("--scanner-latest-retest-pattern", retest_pattern),
+    ):
+        if value and value != "-":
+            cmd += f" {flag} {value}"
+    return cmd
 
 
 def _is_http_url(value: str) -> bool:
@@ -3625,7 +3641,7 @@ def run_ichimoku_search(target: str) -> int:
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku', breakout_date=row.start_date, retest_date=row.latest_retest_date or "", retest_pattern=row.latest_retest_pattern or ""), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md,
         "WYNIKI",
@@ -3653,7 +3669,7 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku', breakout_date=row.flip_date, retest_date=(row.retest_events[-1][0] if row.retest_events else ""), retest_pattern=(row.retest_events[-1][1] if row.retest_events else "")), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
@@ -3724,6 +3740,27 @@ def _post_anchor_touch_tolerance_static(price: float) -> float:
     return max(pip * 5, abs(float(price)) * 0.0005)
 
 
+def _wedge_visible_breakout_margin(tol: float, price: float) -> float:
+    """Minimum close distance required to call a wedge breakout visible.
+
+    A tiny close barely beyond a trendline is too sensitive for the scanner: on
+    the rendered chart it can still appear at/under the line because of line
+    thickness, scaling, gaps between sessions, and anchor rounding.  Require a
+    modest, volatility-aware close beyond the boundary before labeling a wedge
+    as broken out.
+    """
+    return max(float(tol) * 0.18, abs(float(price)) * 0.001)
+
+
+def _wedge_close_breakout_direction(close: float, upper: float, lower: float, tol: float, reference_price: float) -> str | None:
+    margin = _wedge_visible_breakout_margin(tol, reference_price)
+    if float(close) > float(upper) + margin:
+        return "long"
+    if float(close) < float(lower) - margin:
+        return "short"
+    return None
+
+
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     # Touches separated only by glued/adjacent candles count as one contact;
     # a new contact requires at least one full non-touching candle between them.
@@ -3758,14 +3795,37 @@ def _scanner_session_path_for_ticker(ticker: str) -> Path:
     return STATE_DATA_DIR / "sessions" / f"{stem}.json"
 
 
+def _scanner_session_paths_for_ticker(ticker: str) -> list[Path]:
+    """Return chart sessions which may contain a user's scanner correction."""
+    base = _scanner_session_path_for_ticker(ticker)
+    stem = base.stem
+    candidates = [base, base.with_name(f"{stem.lower()}.json")]
+    candidates.extend(base.with_name(f"{stem.lower()}_{side}.json") for side in ("long", "short"))
+    return list(dict.fromkeys(candidates))
+
+
+def _scanner_session_for_ticker(ticker: str, object_types: set[str] | None = None) -> dict:
+    existing = [path for path in _scanner_session_paths_for_ticker(ticker) if path.exists()]
+    for path in sorted(existing, key=lambda item: item.stat().st_mtime, reverse=True):
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(state, dict):
+                if object_types is not None:
+                    objects = state.get("drawn_objects")
+                    if not isinstance(objects, list) or not any(
+                        isinstance(obj, dict)
+                        and (str(obj.get("type")) in object_types or str(obj.get("group_id")) in object_types)
+                        for obj in objects
+                    ):
+                        continue
+                return state
+        except Exception:
+            continue
+    return {}
+
+
 def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
-    path = _scanner_session_path_for_ticker(ticker)
-    if not path.exists():
-        return None
-    try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    state = _scanner_session_for_ticker(ticker, {"wedge", "auto-wedge"})
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
         return None
@@ -3779,6 +3839,79 @@ def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
     if lower is None:
         return None
     return upper, lower
+
+
+def _find_manual_fibo_setup(df: pd.DataFrame, ticker: str) -> FiboScanResult | None:
+    """Re-evaluate the Fibo anchors last accepted in the chart editor.
+
+    Saving a scanner chart is an explicit correction of scanner output.  Keep
+    that correction as a scanner hit until the ordinary first-61.8-touch
+    lifecycle has completed or price invalidates the original anchor.
+    """
+    state = _scanner_session_for_ticker(ticker, {"fib", "fib-boundary", "auto-fibo"})
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return None
+    boundaries = [obj for obj in objects if isinstance(obj, dict) and obj.get("type") == "fib-boundary"]
+    if not boundaries:
+        return None
+    boundary = boundaries[-1]
+    try:
+        start_date = str(pd.to_datetime(boundary["x0"]).date())
+        end_date = str(pd.to_datetime(boundary["x1"]).date())
+        start_price = float(boundary["y0"])
+        end_price = float(boundary["y1"])
+    except Exception:
+        return None
+    direction = "long" if end_price > start_price else "short"
+    low, high = sorted((start_price, end_price))
+    impulse = high - low
+    if impulse <= 0 or df is None or df.empty or not {"Date", "High", "Low", "Close"}.issubset(df.columns):
+        return None
+    w = df.copy()
+    w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
+    for col in ("High", "Low", "Close"):
+        w[col] = pd.to_numeric(w[col], errors="coerce")
+    w = w.dropna(subset=["Date", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
+    end_ts = pd.to_datetime(end_date)
+    after = w.loc[w["Date"] > end_ts]
+    if after.empty:
+        return None
+    fib_236 = high - impulse * 0.236 if direction == "long" else low + impulse * 0.236
+    fib_382 = high - impulse * 0.382 if direction == "long" else low + impulse * 0.382
+    fib_618 = high - impulse * 0.618 if direction == "long" else low + impulse * 0.618
+    # A move through the origin has conclusively invalidated the edited cycle.
+    if direction == "long" and bool((after["Close"] < low).any()):
+        return None
+    if direction == "short" and bool((after["Close"] > high).any()):
+        return None
+    touch_mask = after["Low"] <= fib_618 if direction == "long" else after["High"] >= fib_618
+    touches = after.loc[touch_mask]
+    touch_date = "-"
+    if not touches.empty:
+        touch_idx = int(touches.index[0])
+        touch_date = str(pd.to_datetime(w.loc[touch_idx, "Date"]).date())
+        # The standard scanner gives the touch candle plus two candles to make
+        # a connected pattern.  Once that window passes, automatic logic owns
+        # discovery again rather than indefinitely reviving a manual Fibo.
+        if len(w) - 1 - touch_idx >= 2:
+            return None
+        status = "touched_61_8_no_pattern"
+    else:
+        status = _fibo_pre_61_8_status(direction, float(w.iloc[-1]["Close"]), fib_236)
+    start_ts = pd.to_datetime(start_date)
+    incline_days = max(1, int((end_ts - start_ts).days))
+    decline_days = max(1, int((w.iloc[-1]["Date"] - end_ts).days))
+    return FiboScanResult(
+        ticker=ticker, direction=direction, status=status,
+        incline_start_date=start_date, incline_end_date=end_date,
+        incline_duration_days=incline_days,
+        decline_end_date=str(w.iloc[-1]["Date"].date()), decline_duration_days=decline_days,
+        incline_decline_duration_ratio=incline_days / decline_days,
+        fib_23_6=round(fib_236, 5), fib_38_2=round(fib_382, 5), fib_61_8=round(fib_618, 5),
+        first_61_8_touch_date=touch_date, reversal_pattern_name="none",
+        stop_loss=round(low if direction == "long" else high, 5), current_close=float(w.iloc[-1]["Close"]),
+    )
 
 
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
@@ -3838,8 +3971,8 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
         up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
         if lo >= up:
             return None
-        if closes[i] > up + close_eps or closes[i] < lo - close_eps:
-            direction = "long" if closes[i] > up + close_eps else "short"
+        direction = _wedge_close_breakout_direction(closes[i], up, lo, tol, closes[end])
+        if direction:
             if i < end - 5:
                 return None
             if breakout_idx is None:
@@ -4106,14 +4239,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # five candles, this candidate was already broken and another
                 # anchor set must be found instead.
                 for i in range(min(high_abs, uh2), end + 1):
-                    if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
+                    if _wedge_close_breakout_direction(closes[i], _wedge_line_value(i, upper_a, upper_b), float("-inf"), tol, closes[end]) == "long":
                         if i < end - 5:
                             invalid = True
                             break
                 if invalid:
                     continue
                 for i in range(min(lh1, lh2), end + 1):
-                    if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
+                    if _wedge_close_breakout_direction(closes[i], float("inf"), _wedge_line_value(i, lower_a, lower_b), tol, closes[end]) == "short":
                         if i < end - 5:
                             invalid = True
                             break
@@ -4130,8 +4263,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # The only accepted outside close is the first breakout/breakdown
                     # candle, and it must be very recent (latest candle or up to the
                     # previous 5 candles) to be treated as an absolute top-choice setup.
-                    if closes[i] > up + close_eps or closes[i] < lo - close_eps:
-                        direction = "long" if closes[i] > up + close_eps else "short"
+                    direction = _wedge_close_breakout_direction(closes[i], up, lo, tol, closes[end])
+                    if direction:
                         if _accept_or_reject_breakout(i, direction):
                             continue
                         if breakout_idx is not None:
@@ -5234,7 +5367,8 @@ def _find_fibo_setup(
             fib_38_2=fib_382,
             fib_61_8=fib_618,
             first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
-            reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
+            reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1]),
+            reversal_pattern_date=(str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()) if pattern != "none" else "-")
         )
     # short setup
     min_incline_days = 10
@@ -5453,7 +5587,8 @@ def _find_fibo_setup(
         fib_38_2=fib_382,
         fib_61_8=fib_618,
         first_61_8_touch_date=(str(pd.to_datetime(w.iloc[all_touch_idxs[0]]["Date"]).date()) if all_touch_idxs else ""),
-        reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1])
+        reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1]),
+        reversal_pattern_date=(str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()) if pattern != "none" else "-")
     )
 
 
@@ -5645,6 +5780,11 @@ def run_fibo_search(target: str) -> int:
                 if pd.notna(latest_close):
                     wedge.current_close = latest_close
                 out_rows.append(wedge)
+            manual_fibo = _find_manual_fibo_setup(df, ticker)
+            if manual_fibo:
+                manual_fibo.latest_candle_date = latest_candle_date
+                manual_fibo.expected_latest_session_date = expected_latest_session_date
+                out_rows.append(manual_fibo)
             steep_3p = _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
@@ -6011,8 +6151,8 @@ def run_fibo_search(target: str) -> int:
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
     rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
-    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
-    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
+    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
+    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)

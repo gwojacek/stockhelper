@@ -42,3 +42,26 @@ def test_chart_has_save_and_save_close_actions():
     assert "$('save-btn').onclick = () => saveChart(false)" in source
     assert "$('finish-btn').onclick = () => saveChart(true)" in source
     assert '@app.route("/save", methods=["POST"])' in source
+
+
+def test_scanner_pattern_and_breakout_candles_are_highlighted():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function drawScannerHighlights(ctx)" in source
+    assert "__scanner_pattern_date__" in source
+    assert "__scanner_latest_retest_date__" in source
+    assert "__scanner_breakout_date__" in source
+    assert "scannerCandleBand(event.date, event.candles)" in source
+    assert "scanner-highlight-tooltip" in source
+    assert "addScannerHighlightLegend()" in source
+    assert "scannerPatternSpan" in source
+    assert "scanner-highlight-legend" in source
+    assert "hiddenLegendKeys.has(event.key)" in source
+    assert "idx - (span - 1)" in source
+    assert "shooting[ _-]?star|hammer|doji|pin[ _-]?bar" in source
+    assert "#a855f7', 'below', scannerPatternSpan(fibPattern)" in source
+    assert "function ichimokuHighlightBreakoutDate" in source
+    assert "ichimokuScannerBreakoutContext(scanner).displayDate || scanner" in source
+    assert "side === 'inside_cloud'" in source
+    assert "function ichimokuCloudSideForDate" in source
+    assert "String(retestDate) > String(breakoutDate)" in source
