@@ -1152,7 +1152,10 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function scannerPatternLabel(pattern) {{
-    return String(pattern || '').trim().replace(/_/g, ' ');
+    return String(pattern || '')
+      .trim()
+      .replace(/_/g, ' ')
+      .replace(/\\w\\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
   }}
 
   function detectIchimokuBreakout() {{
@@ -1273,8 +1276,7 @@ class LightweightChartLevelSelectorUI:
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
     if (scannerBreakout) {{
-      const suffix = scannerContext.displayDate && scannerContext.displayDate !== scannerContext.scannerDate ? ` (scanner: ${{scannerContext.scannerDate}})` : ' (scanner)';
-      lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}${{suffix}}`);
+      lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}`);
       if (scannerContext.note) lines.push(scannerContext.note);
     }} else {{
       lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
@@ -2380,27 +2382,31 @@ class LightweightChartLevelSelectorUI:
 
   function scannerHighlightEvents() {{
     const events = [];
-    const isFiboScanner = Number(levels.__fibo_lines__ || 0) > 0 || drawnObjects.some(o => o && (o.group_id === 'auto-fibo' || o.type === 'fib'));
     const breakoutDate = ichimokuHighlightBreakoutDate();
-    if (!isFiboScanner && levels.__show_ichimoku__ && breakoutDate && ohlcByTime.has(String(breakoutDate).slice(0, 10))) {{
-      const direction = scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate);
-      events.push({{kind:'breakout', key:'scanner:breakout', label:'Ichimoku breakout', time:String(breakoutDate).slice(0,10), span:1, color:'#38bdf8', detail:`Ichimoku breakout ${{direction || ''}}`.trim()}});
-    }}
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
-    if (!isFiboScanner && levels.__show_ichimoku__ && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
-      events.push({{kind:'retest', key:'scanner:retest', label:'Ichimoku retest pattern', time:String(latestRetestDate).slice(0,10), span:scannerPatternSpan(latestRetestPattern), color:'#f59e0b', detail:`Retest pattern: ${{scannerPatternLabel(latestRetestPattern)}}`}});
-    }}
     const patternDate = scannerMetaValue('__scanner_pattern_date__');
     const patternName = scannerMetaValue('__scanner_pattern_name__');
-    if (isFiboScanner && patternDate && isValidScannerPattern(patternName)) {{
-      events.push({{kind:'fibo-pattern', key:'scanner:pattern', label:'Fibo 61.8 pattern', time:String(patternDate).slice(0,10), span:scannerPatternSpan(patternName), color:'#f59e0b', detail:`Fibo pattern: ${{scannerPatternLabel(patternName)}}`}});
+    const hasIchimokuScannerContext = !!(breakoutDate || latestRetestDate || latestRetestPattern || scannerMetaValue('__scanner_retest_count__'));
+    const hasFiboScannerContext = !!(patternDate || patternName);
+    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && breakoutDate && ohlcByTime.has(String(breakoutDate).slice(0, 10))) {{
+      const direction = scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate);
+      events.push({{kind:'breakout', key:'scanner:breakout', label:'Ichimoku Breakout', time:String(breakoutDate).slice(0,10), span:1, color:'#f97316', detail:`Ichimoku breakout ${{direction || ''}}`.trim()}});
+    }}
+    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
+      const label = scannerPatternLabel(latestRetestPattern);
+      events.push({{kind:'retest pattern', key:`scanner:retest:${{label}}`, label, time:String(latestRetestDate).slice(0,10), span:scannerPatternSpan(latestRetestPattern), color:'#e11d48', detail:`${{label}} retest pattern`}});
+    }}
+    if (hasFiboScannerContext && patternDate && isValidScannerPattern(patternName)) {{
+      const label = scannerPatternLabel(patternName);
+      events.push({{kind:'Fibo 61.8 pattern', key:`scanner:fibo:${{label}}`, label, time:String(patternDate).slice(0,10), span:scannerPatternSpan(patternName), color:'#e11d48', detail:`${{label}} Fibo 61.8 pattern`}});
     }}
     return events;
   }}
 
   function addScannerHighlightLegend(events) {{
     const legend = $('scanner-highlight-legend');
+    legend.innerHTML = '';
     const seen = new Set();
     events.forEach(ev => {{
       if (seen.has(ev.key)) return; seen.add(ev.key);
@@ -2427,10 +2433,10 @@ class LightweightChartLevelSelectorUI:
       if (!Number.isFinite(yHigh) || !Number.isFinite(yLow)) return;
       const top = Math.min(yHigh, yLow) - 8, height = Math.abs(yLow - yHigh) + 16;
       ctx.save();
-      ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(56,189,248,.16)' : 'rgba(245,158,11,.18)';
+      ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(249,115,22,.16)' : 'rgba(225,29,72,.16)';
       ctx.strokeStyle = ev.color;
       ctx.lineWidth = 2;
-      ctx.setLineDash(ev.kind === 'breakout' ? [] : [5, 3]);
+      ctx.setLineDash([]);
       ctx.fillRect(band.left, top, band.right - band.left, height);
       ctx.strokeRect(band.left + .5, top + .5, band.right - band.left - 1, height - 1);
       ctx.restore();
@@ -3438,7 +3444,7 @@ class LightweightChartLevelSelectorUI:
     const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
     const hit = scannerHighlightRects.find(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
     if (!hit) {{ tip.style.display = 'none'; return; }}
-    tip.textContent = `${{hit.label}} · ${{hit.time}} · ${{hit.detail || ''}}`;
+    tip.textContent = `${{hit.detail || hit.label}} · ${{hit.time}}`;
     tip.style.left = `${{Math.min(rect.width - 290, Math.max(8, x + 12))}}px`;
     tip.style.top = `${{Math.max(8, y + 12)}}px`;
     tip.style.display = 'block';
