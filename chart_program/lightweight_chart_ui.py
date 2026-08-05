@@ -556,7 +556,13 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
+    .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
+    #scanner-highlight-legend {{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; min-height:20px; margin:0 0 7px 0; font-size:12px; font-weight:800; }}
+    #scanner-highlight-legend span {{ display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }}
+    #scanner-highlight-legend span.hidden {{ opacity:.38; text-decoration:line-through; }}
+    #scanner-highlight-legend i {{ width:14px; height:10px; display:inline-block; border-radius:3px; border:1px solid rgba(255,255,255,.45); }}
+    #scanner-highlight-tooltip {{ display:none; position:absolute; z-index:55; pointer-events:none; max-width:280px; padding:8px 10px; border:1px solid #475569; border-radius:8px; background:rgba(15,23,42,.94); color:#e5e7eb; font-size:12px; font-weight:800; box-shadow:0 10px 28px rgba(0,0,0,.35); }}
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
@@ -644,8 +650,8 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div id="chart-legend"></div>
-      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div></div>
+      <div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div>
+      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -740,6 +746,7 @@ class LightweightChartLevelSelectorUI:
   const ohlc = Array.isArray(P.ohlc) ? P.ohlc : [];
   const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
+  let scannerHighlightRects = [];
 
   const $ = id => document.getElementById(id);
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
@@ -799,7 +806,7 @@ class LightweightChartLevelSelectorUI:
     }}
     legend.appendChild(item);
   }};
-  const resetLegend = () => {{ $('chart-legend').innerHTML = ''; }};
+  const resetLegend = () => {{ $('chart-legend').innerHTML = ''; $('scanner-highlight-legend').innerHTML = ''; }};
 
   const chart = LightweightCharts.createChart($('chart'), {{
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
@@ -2310,7 +2317,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
+    if (!levels.__show_ichimoku__) {{ drawScannerHighlights(ctx); drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -2325,11 +2332,110 @@ class LightweightChartLevelSelectorUI:
       ctx.fillStyle = p1.bull ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
       ctx.fill();
     }}
+    drawScannerHighlights(ctx);
     drawWedgeStraightLines(ctx);
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);
     drawLineObjectHandles(ctx);
     drawDomChartIcons();
+  }}
+
+
+
+  function scannerPatternSpan(name) {{
+    const n = String(name || '').toLowerCase().replace(/[-\\s]+/g, '_');
+    if (/engulfing|piercing_line|dark_cloud_cover|harami/.test(n)) return 2;
+    if (/morning_star|evening_star|three_|3_/.test(n)) return 3;
+    return 1;
+  }}
+
+  function scannerCandleBand(time, span=1) {{
+    const row = ohlcByTime.get(String(time).slice(0, 10));
+    if (!row) return null;
+    const startIdx = Math.max(0, row.idx - Math.max(1, span) + 1);
+    const endIdx = row.idx;
+    const x0 = chart.timeScale().timeToCoordinate(ohlc[startIdx]?.time);
+    const x1 = chart.timeScale().timeToCoordinate(ohlc[endIdx]?.time);
+    if (!Number.isFinite(x0) || !Number.isFinite(x1)) return null;
+    const prevX = startIdx > 0 ? chart.timeScale().timeToCoordinate(ohlc[startIdx - 1].time) : null;
+    const nextX = endIdx + 1 < ohlc.length ? chart.timeScale().timeToCoordinate(ohlc[endIdx + 1].time) : null;
+    const halfLeft = Number.isFinite(prevX) ? Math.max(2, (x0 - prevX) / 2) : 5;
+    const halfRight = Number.isFinite(nextX) ? Math.max(2, (nextX - x1) / 2) : halfLeft;
+    return {{left: x0 - halfLeft, right: x1 + halfRight, row}};
+  }}
+
+  function ichimokuCloudSideForDate(time) {{
+    const row = ohlcByTime.get(String(time || '').slice(0, 10));
+    if (!row) return '';
+    const spanA = Number(ichiValueAt('spanA', row.time));
+    const spanB = Number(ichiValueAt('spanB', row.time));
+    if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return '';
+    const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
+    return Number(row.close) > top ? 'above cloud' : (Number(row.close) < bottom ? 'below cloud' : 'inside cloud');
+  }}
+
+  function ichimokuHighlightBreakoutDate() {{
+    return scannerMetaValue('__scanner_breakout_date__') || '';
+  }}
+
+  function scannerHighlightEvents() {{
+    const events = [];
+    const isFiboScanner = Number(levels.__fibo_lines__ || 0) > 0 || drawnObjects.some(o => o && (o.group_id === 'auto-fibo' || o.type === 'fib'));
+    const breakoutDate = ichimokuHighlightBreakoutDate();
+    if (!isFiboScanner && levels.__show_ichimoku__ && breakoutDate && ohlcByTime.has(String(breakoutDate).slice(0, 10))) {{
+      const direction = scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate);
+      events.push({{kind:'breakout', key:'scanner:breakout', label:'Ichimoku breakout', time:String(breakoutDate).slice(0,10), span:1, color:'#38bdf8', detail:`Ichimoku breakout ${{direction || ''}}`.trim()}});
+    }}
+    const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
+    const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    if (!isFiboScanner && levels.__show_ichimoku__ && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
+      events.push({{kind:'retest', key:'scanner:retest', label:'Ichimoku retest pattern', time:String(latestRetestDate).slice(0,10), span:scannerPatternSpan(latestRetestPattern), color:'#f59e0b', detail:`Retest pattern: ${{scannerPatternLabel(latestRetestPattern)}}`}});
+    }}
+    const patternDate = scannerMetaValue('__scanner_pattern_date__');
+    const patternName = scannerMetaValue('__scanner_pattern_name__');
+    if (isFiboScanner && patternDate && isValidScannerPattern(patternName)) {{
+      events.push({{kind:'fibo-pattern', key:'scanner:pattern', label:'Fibo 61.8 pattern', time:String(patternDate).slice(0,10), span:scannerPatternSpan(patternName), color:'#f59e0b', detail:`Fibo pattern: ${{scannerPatternLabel(patternName)}}`}});
+    }}
+    return events;
+  }}
+
+  function addScannerHighlightLegend(events) {{
+    const legend = $('scanner-highlight-legend');
+    const seen = new Set();
+    events.forEach(ev => {{
+      if (seen.has(ev.key)) return; seen.add(ev.key);
+      const item = document.createElement('span');
+      item.dataset.key = ev.key;
+      item.classList.toggle('hidden', hiddenLegendKeys.has(ev.key));
+      item.innerHTML = `<i style="background:${{ev.color}}"></i><b>${{ev.label}}</b>`;
+      item.onclick = () => {{ hiddenLegendKeys.has(ev.key) ? hiddenLegendKeys.delete(ev.key) : hiddenLegendKeys.add(ev.key); render(); }};
+      legend.appendChild(item);
+    }});
+  }}
+
+  function drawScannerHighlights(ctx) {{
+    scannerHighlightRects = [];
+    const events = scannerHighlightEvents();
+    addScannerHighlightLegend(events);
+    events.forEach(ev => {{
+      if (hiddenLegendKeys.has(ev.key)) return;
+      const band = scannerCandleBand(ev.time, ev.span);
+      if (!band) return;
+      const row = band.row;
+      const yHigh = candleSeries.priceToCoordinate(Number(row.high));
+      const yLow = candleSeries.priceToCoordinate(Number(row.low));
+      if (!Number.isFinite(yHigh) || !Number.isFinite(yLow)) return;
+      const top = Math.min(yHigh, yLow) - 8, height = Math.abs(yLow - yHigh) + 16;
+      ctx.save();
+      ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(56,189,248,.16)' : 'rgba(245,158,11,.18)';
+      ctx.strokeStyle = ev.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash(ev.kind === 'breakout' ? [] : [5, 3]);
+      ctx.fillRect(band.left, top, band.right - band.left, height);
+      ctx.strokeRect(band.left + .5, top + .5, band.right - band.left - 1, height - 1);
+      ctx.restore();
+      scannerHighlightRects.push({{...ev, left:band.left, right:band.right, top, bottom:top+height}});
+    }});
   }}
 
   function captureViewport() {{
@@ -3324,6 +3430,21 @@ class LightweightChartLevelSelectorUI:
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
   const scannerWedgePreloaded = initialScannerDrawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+
+  $('chart-wrap')?.addEventListener('mousemove', (ev) => {{
+    const tip = $('scanner-highlight-tooltip');
+    if (!tip) return;
+    const rect = $('chart').getBoundingClientRect();
+    const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+    const hit = scannerHighlightRects.find(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+    if (!hit) {{ tip.style.display = 'none'; return; }}
+    tip.textContent = `${{hit.label}} · ${{hit.time}} · ${{hit.detail || ''}}`;
+    tip.style.left = `${{Math.min(rect.width - 290, Math.max(8, x + 12))}}px`;
+    tip.style.top = `${{Math.max(8, y + 12)}}px`;
+    tip.style.display = 'block';
+  }});
+  $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
+
   applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();
 }})();
   </script>
