@@ -153,11 +153,18 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         return cmd + " --wedge-lines --wedge-right"
     if row.scanner == "FIBO":
         incline = (row.dates.get("incline", "") or "").strip()
+        if "->" not in incline and row.dates.get("incline_start") and row.dates.get("incline_end"):
+            incline = f"{row.dates.get('incline_start')}->{row.dates.get('incline_end')}"
+        pattern = str(row.pattern or "").strip()
+        pattern_date = str(row.dates.get("pattern_date") or row.dates.get("touch_61") or "").strip()
+        pattern_args = ""
+        if pattern_date and pattern_date != "-" and pattern and pattern.lower() not in {"-", "none"}:
+            pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern)}"
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
-        return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5"
+                return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
+        return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5{pattern_args}"
     return f"python run -c {ticker_cmd}"
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
@@ -2081,7 +2088,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                         rows.append(ScannerRow(
                             market=market, scanner="FIBO", category=actual_cat, ticker=str(r.get("ticker", "")),
                             status=st, pattern=str(r.get("reversal_pattern_name", "")), direction=str(r.get("direction", "")),
-                            dates={"touch_61": str(r.get("first_61_8_touch_date", "")), "incline_start": str(r.get("incline_start_date", "")), "incline_end": str(r.get("incline_end_date", ""))},
+                            dates={"touch_61": str(r.get("first_61_8_touch_date", "")), "pattern_date": str(r.get("reversal_pattern_date", "")), "incline_start": str(r.get("incline_start_date", "")), "incline_end": str(r.get("incline_end_date", ""))},
                             metrics={"ratio": str(r.get("incline_decline_duration_ratio", ""))},
                             chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
                             python_command=str(r.get("python_command", "")),

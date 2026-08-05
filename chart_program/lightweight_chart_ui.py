@@ -1326,6 +1326,9 @@ class LightweightChartLevelSelectorUI:
       }}
       const anchorDatesLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}}` : '-';
       const anchorValuesLine = boundary ? `${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
+      const scannerPatternDate = scannerMetaValue('__scanner_pattern_date__');
+      const scannerPatternName = scannerMetaValue('__scanner_pattern_name__');
+      const scannerPattern = scannerPatternDate && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
       const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
@@ -1333,7 +1336,7 @@ class LightweightChartLevelSelectorUI:
       lines.push(`  ${{anchorDatesLine}}`);
       lines.push(`  ${{anchorValuesLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
-      lines.push(`  61.8 pattern: ${{touch && pattern !== '-' ? `${{pattern}} (${{touch.time}})` : '-'}}`);
+      lines.push(`  61.8 pattern: ${{scannerPattern || (touch && pattern !== '-' ? `${{scannerPatternLabel(pattern)}} (${{touch.time}})` : '-')}}`);
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
@@ -2377,7 +2380,9 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function ichimokuHighlightBreakoutDate() {{
-    return scannerMetaValue('__scanner_breakout_date__') || '';
+    const scannerBreakout = scannerMetaValue('__scanner_breakout_date__');
+    if (!scannerBreakout) return '';
+    return ichimokuScannerBreakoutContext(scannerBreakout).displayDate || scannerBreakout;
   }}
 
   function scannerHighlightEvents() {{
