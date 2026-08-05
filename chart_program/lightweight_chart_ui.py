@@ -2369,8 +2369,8 @@ class LightweightChartLevelSelectorUI:
     const retestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const retestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const breakoutDate = levels.__show_ichimoku__ ? ichimokuHighlightBreakoutDate(scannerBreakoutDate, breakoutDirection) : scannerBreakoutDate;
-    if (!retestDate || !breakoutDate || String(breakoutDate) < String(retestDate)) add(breakoutDate, breakoutDirection === 'short' ? '▼ Breakout candle' : '▲ Breakout candle', '#f97316', breakoutDirection === 'short' ? 'below' : 'above', 1, 'breakout');
-    add(retestDate, `◆ Retest: ${{scannerPatternLabel(retestPattern || 'pattern')}}`, '#a855f7', 'below', scannerPatternSpan(retestPattern), 'retest-pattern');
+    add(breakoutDate, breakoutDirection === 'short' ? '▼ Breakout candle' : '▲ Breakout candle', '#f97316', breakoutDirection === 'short' ? 'below' : 'above', 1, 'breakout');
+    if (!breakoutDate || String(retestDate) > String(breakoutDate)) add(retestDate, `◆ Retest: ${{scannerPatternLabel(retestPattern || 'pattern')}}`, '#a855f7', 'below', scannerPatternSpan(retestPattern), 'retest-pattern');
     return events;
   }}
 

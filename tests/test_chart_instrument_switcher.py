@@ -64,4 +64,4 @@ def test_scanner_pattern_and_breakout_candles_are_highlighted():
     assert "ichimokuScannerBreakoutContext(scanner).displayDate || scanner" in source
     assert "side === 'inside_cloud'" in source
     assert "function ichimokuCloudSideForDate" in source
-    assert "String(breakoutDate) < String(retestDate)" in source
+    assert "String(retestDate) > String(breakoutDate)" in source
