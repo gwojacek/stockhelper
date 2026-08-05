@@ -268,15 +268,22 @@ def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
     assert "touch_idxs[:1]" not in source
     assert "first_touch_idx = all_touch_idxs[0]" in source
     assert "c = w.iloc[first_touch_idx]" in source
-    assert "c1, c2 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1]" in source
-    assert "c1, c2, c3 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1], w.iloc[first_touch_idx + 2]" in source
-    assert "A hammer on candle two is not a standalone hammer" in source
+    assert "includes_touch = any(t in {i - 1, i} for t in all_touch_idxs)" in source
+    assert "includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
+    assert "pattern_idx = i" in source
+    assert "The touching candle can therefore be the first, middle, or" in source
     assert "close above 61.8" in source
     assert "float(close.iloc[pattern_idx]) <= fib_618" in source
     assert "pattern_failed_close = True" in source
     assert "the completed 61.8 pattern failed its required closing-price confirmation" in source
     assert "first 61.8 touch produced no valid 1-, 2-, or 3-candle pattern" in source
     assert "accepting short completed cycle despite 61.8 cross without pattern" not in source
+
+
+def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "pattern_date=(r.reversal_pattern_date or r.first_61_8_touch_date)" not in source
+    assert source.count("pattern_date=r.reversal_pattern_date") >= 3
 
 
 def test_short_fibo_markets_and_chart_png_download_are_enabled():

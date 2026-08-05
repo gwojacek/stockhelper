@@ -5130,38 +5130,46 @@ def _find_fibo_setup(
         pattern_failed_close = False
         first_touch_idx = all_touch_idxs[0] if all_touch_idxs else None
         pattern_idx = first_touch_idx if first_touch_idx is not None else i_end
-        # The first candle touching 61.8 is always candle one of the pattern.
-        # A hammer on candle two is not a standalone hammer: candle one and two
-        # must instead satisfy one of the supported two-candle formations.
+        # A Fibo reversal only requires one candle in the formation to touch
+        # 61.8.  The touching candle can therefore be the first, middle, or
+        # final candle; reversal_pattern_date always identifies the confirming
+        # (final) candle so chart highlights can expand backwards correctly.
         if first_touch_idx is not None:
             c = w.iloc[first_touch_idx]
             if _is_bullish_hammer(c) and float(c["Close"]) > fib_618:
                 pattern = "hammer"
-        if pattern == "none" and first_touch_idx is not None and first_touch_idx + 1 <= i_end:
-            c1, c2 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1]
-            engulf = (
-                float(c1["Close"]) < float(c1["Open"])
-                and float(c2["Close"]) > float(c2["Open"])
-                and float(c2["Open"]) < float(c1["Close"])
-                and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
-                and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
-            )
-            if engulf and float(c2["Close"]) > fib_618:
-                pattern = "bullish_engulfing"
-            elif _is_bullish_piercing_line(c1, c2, fib_618):
-                pattern = "bullish_piercing_line"
-            elif _is_bullish_harami(c1, c2, fib_618):
-                pattern = "bullish_harami"
-            if pattern != "none":
-                pattern_idx = first_touch_idx + 1
-        if pattern == "none" and first_touch_idx is not None and first_touch_idx + 2 <= i_end:
-            c1, c2, c3 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1], w.iloc[first_touch_idx + 2]
-            if _is_morning_star(c1, c2, c3, fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
-                pattern = "morning_star"
-            elif _is_morning_star(c1, c2, c3, fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
-                pattern = "morning_doji_star"
-            if pattern != "none":
-                pattern_idx = first_touch_idx + 2
+        detect_end = min(i_end, first_touch_idx + 2) if first_touch_idx is not None else i_end
+        if pattern == "none" and first_touch_idx is not None:
+            for i in range(max(i_peak + 1, first_touch_idx), detect_end + 1):
+                c1, c2 = w.iloc[i - 1], w.iloc[i]
+                includes_touch = any(t in {i - 1, i} for t in all_touch_idxs)
+                engulf = (
+                    float(c1["Close"]) < float(c1["Open"])
+                    and float(c2["Close"]) > float(c2["Open"])
+                    and float(c2["Open"]) < float(c1["Close"])
+                    and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
+                    and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
+                )
+                if includes_touch and engulf and float(c2["Close"]) > fib_618:
+                    pattern = "bullish_engulfing"
+                elif includes_touch and _is_bullish_piercing_line(c1, c2, fib_618):
+                    pattern = "bullish_piercing_line"
+                elif includes_touch and _is_bullish_harami(c1, c2, fib_618):
+                    pattern = "bullish_harami"
+                if pattern != "none":
+                    pattern_idx = i
+                    break
+        if pattern == "none" and first_touch_idx is not None:
+            for i in range(max(i_peak + 2, first_touch_idx), detect_end + 1):
+                includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
+                c1, c2, c3 = w.iloc[i - 2], w.iloc[i - 1], w.iloc[i]
+                if includes_touch and _is_morning_star(c1, c2, c3, fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
+                    pattern = "morning_star"
+                elif includes_touch and _is_morning_star(c1, c2, c3, fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
+                    pattern = "morning_doji_star"
+                if pattern != "none":
+                    pattern_idx = i
+                    break
         # Every reversal formation is confirmed by its final candle.  Merely
         # having the right candle shapes around 61.8 is insufficient when that
         # final close remains below the level (GOOGL bullish-harami case).
@@ -6018,9 +6026,9 @@ def run_fibo_search(target: str) -> int:
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
-    rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=(r.reversal_pattern_date or r.first_61_8_touch_date), pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
-    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=(r.reversal_pattern_date or r.first_61_8_touch_date), pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
-    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=(r.reversal_pattern_date or r.first_61_8_touch_date), pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
+    rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
+    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
+    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
     _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
