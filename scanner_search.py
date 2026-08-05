@@ -595,10 +595,10 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     candle_range = float(c["High"] - c["Low"])
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
-    if body == 0:
-        # Doji hammers are valid only when the lower shadow is dominant;
-        # balanced long-legged doji candles should not be treated as hammers.
-        return candle_range > 0 and lower > 0 and lower >= 1.5 * max(upper, 1e-9)
+    if candle_range > 0 and body / candle_range <= 0.20:
+        # Doji / near-doji hammers are valid only when the lower shadow is
+        # dominant; balanced long-legged doji candles remain neutral.
+        return lower > 0 and lower >= 1.2 * max(upper, 1e-9) and lower >= candle_range * 0.35
     return lower >= 2 * body and upper <= 2 * body and lower >= 1.5 * max(upper, 1e-9)
 
 

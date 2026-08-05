@@ -1236,19 +1236,12 @@ class LightweightChartLevelSelectorUI:
   function ichimokuHighlightBreakoutDate(scannerDate, direction='') {{
     const scanner = String(scannerDate || '').slice(0, 10);
     if (!scanner) return '';
+    const resolved = (ichimokuScannerBreakoutContext(scanner).displayDate || scanner).slice(0, 10);
+    const side = ichimokuCloudSideForDate(resolved);
+    if (side === 'inside_cloud') return '';
     const want = String(direction || '').toLowerCase() === 'short' ? 'below_cloud' : (String(direction || '').toLowerCase() === 'long' ? 'above_cloud' : '');
-    const scannerSide = ichimokuCloudSideForDate(scanner);
-    const scannerIsBreakout = !!scannerSide && scannerSide !== 'inside_cloud' && (!want || scannerSide === want);
-    const transitions = ichimokuTransitions().filter(t => t && t.time && (!want || t.side === want) && t.side !== 'inside_cloud');
-    if (!transitions.length) return scannerIsBreakout ? scanner : '';
-    const onOrAfter = transitions.filter(t => String(t.time) >= scanner);
-    if (onOrAfter.length) return onOrAfter[onOrAfter.length - 1].time;
-    let near = null;
-    transitions.forEach(t => {{
-      const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
-      if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time > near.time))) near = {{...t, diff}};
-    }});
-    return near?.time || (scannerIsBreakout ? scanner : '');
+    if (side && want && side !== want) return '';
+    return resolved;
   }}
 
   function ichimokuScannerBreakoutContext(scannerDate) {{

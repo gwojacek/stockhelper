@@ -61,7 +61,7 @@ def test_scanner_pattern_and_breakout_candles_are_highlighted():
     assert "shooting[ _-]?star|hammer|doji|pin[ _-]?bar" in source
     assert "#a855f7', 'below', scannerPatternSpan(fibPattern)" in source
     assert "function ichimokuHighlightBreakoutDate" in source
-    assert "onOrAfter[onOrAfter.length - 1].time" in source
-    assert "return near?.time || (scannerIsBreakout ? scanner : '')" in source
+    assert "ichimokuScannerBreakoutContext(scanner).displayDate || scanner" in source
+    assert "side === 'inside_cloud'" in source
     assert "function ichimokuCloudSideForDate" in source
     assert "String(breakoutDate) < String(retestDate)" in source

@@ -1078,3 +1078,10 @@ def test_bullish_piercing_line_requires_second_candle_gap_under_first_body():
     fn = source[source.index("def _is_bullish_piercing_line"):source.index("def _candle_parts")]
     assert "c2_open < c1_body_low" in fn
     assert "open_at_body_low" not in fn
+
+
+def test_near_doji_hammer_detection_requires_dominant_lower_shadow():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    fn = source[source.index("def _is_bullish_hammer"):source.index("def _is_bearish_shooting_star")]
+    assert "body / candle_range <= 0.20" in fn
+    assert "lower >= candle_range * 0.35" in fn
