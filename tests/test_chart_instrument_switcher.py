@@ -62,3 +62,4 @@ def test_scanner_pattern_and_breakout_candles_are_highlighted():
     assert "#a855f7', 'below', scannerPatternSpan(fibPattern)" in source
     assert "function ichimokuHighlightBreakoutDate" in source
     assert "onOrAfter[onOrAfter.length - 1].time" in source
+    assert "return near?.time || ''" in source
