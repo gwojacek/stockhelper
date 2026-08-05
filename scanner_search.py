@@ -666,9 +666,8 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
     c1_body_low = min(c1_open, c1_close)
-    open_at_body_low = c2_open < c1_body_low or abs(c2_open - c1_body_low) <= max(abs(c1_open), abs(c1_close), 1e-9) * 0.005
     return (
-        open_at_body_low
+        c2_open < c1_body_low
         and c2_close > midpoint_c1
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level

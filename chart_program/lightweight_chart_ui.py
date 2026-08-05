@@ -2321,7 +2321,8 @@ class LightweightChartLevelSelectorUI:
 
   function scannerPatternSpan(patternName) {{
     const text = String(patternName || '').toLowerCase();
-    if (/morning|evening|three|star/.test(text)) return 3;
+    if (/shooting[ _-]?star|hammer|doji|pin[ _-]?bar/.test(text)) return 1;
+    if (/morning|evening|three/.test(text)) return 3;
     if (/engulf|harami|piercing|dark_cloud|dark cloud|tweezer/.test(text)) return 2;
     return 1;
   }}
@@ -2339,12 +2340,13 @@ class LightweightChartLevelSelectorUI:
     const fibPattern = scannerMetaValue('__scanner_pattern_name__');
     const hasFiboScannerPattern = !!String(fibPatternDate || '').trim() && String(fibPatternDate || '').trim() !== '-';
     if (hasFiboScannerPattern) {{
-      add(fibPatternDate, `◆ Fibo 61.8: ${{scannerPatternLabel(fibPattern || 'pattern')}}`, '#eab308', 'below', scannerPatternSpan(fibPattern), 'fibo-pattern');
+      add(fibPatternDate, `◆ Fibo 61.8: ${{scannerPatternLabel(fibPattern || 'pattern')}}`, '#a855f7', 'below', scannerPatternSpan(fibPattern), 'fibo-pattern');
       return events;
     }}
     const breakoutDirection = scannerMetaValue('__scanner_breakout_direction__');
     const scannerBreakoutDate = scannerMetaValue('__scanner_breakout_date__');
-    add(scannerBreakoutDate, breakoutDirection === 'short' ? '▼ Breakout candle' : '▲ Breakout candle', '#f97316', breakoutDirection === 'short' ? 'below' : 'above', 1, 'breakout');
+    const breakoutDate = levels.__show_ichimoku__ ? (ichimokuScannerBreakoutContext(scannerBreakoutDate).displayDate || scannerBreakoutDate) : scannerBreakoutDate;
+    add(breakoutDate, breakoutDirection === 'short' ? '▼ Breakout candle' : '▲ Breakout candle', '#f97316', breakoutDirection === 'short' ? 'below' : 'above', 1, 'breakout');
     const retestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     add(scannerMetaValue('__scanner_latest_retest_date__'), `◆ Retest: ${{scannerPatternLabel(retestPattern || 'pattern')}}`, '#a855f7', 'below', scannerPatternSpan(retestPattern), 'retest-pattern');
     return events;

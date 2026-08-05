@@ -1071,3 +1071,10 @@ def test_kumo_twist_uses_projected_cloud_source():
     assert "leading_span_a" in metrics_source
     assert "High\"].tail(52)" in metrics_source
     assert "span_a\"] - c[\"span_b" not in metrics_source
+
+
+def test_bullish_piercing_line_requires_second_candle_gap_under_first_body():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    fn = source[source.index("def _is_bullish_piercing_line"):source.index("def _candle_parts")]
+    assert "c2_open < c1_body_low" in fn
+    assert "open_at_body_low" not in fn
