@@ -1216,19 +1216,10 @@ class LightweightChartLevelSelectorUI:
     const transitions = ichimokuTransitions();
     const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
     const scanner = String(scannerDate).slice(0, 10);
-    let near = null;
-    transitions.forEach(t => {{
-      const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
-      if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time < near.time))) near = {{...t, diff}};
-    }});
-    let displayDate = near?.time || scanner;
+    const displayDate = scanner;
     const realCandles = ohlc.filter(c => c && c.time);
     const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
     const ageDays = daysBetween(scanner, lastDate);
-    if (displayDate === scanner && Number.isFinite(previousRespectMonths) && previousRespectMonths > 0 && ageDays !== null && ageDays >= 0 && ageDays < 122) {{
-      const previousCandle = [...realCandles].reverse().find(c => String(c.time) < scanner);
-      if (previousCandle?.time) displayDate = previousCandle.time;
-    }}
     let previous = null;
     if (ageDays !== null && ageDays >= 0 && ageDays < 122) {{
       previous = [...transitions].reverse().find(t => String(t.time) < displayDate) || null;
