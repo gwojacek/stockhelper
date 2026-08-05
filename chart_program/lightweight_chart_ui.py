@@ -1223,6 +1223,22 @@ class LightweightChartLevelSelectorUI:
     return Number.isFinite(diff) ? diff : null;
   }}
 
+  function ichimokuHighlightBreakoutDate(scannerDate, direction='') {{
+    const scanner = String(scannerDate || '').slice(0, 10);
+    if (!scanner) return '';
+    const want = String(direction || '').toLowerCase() === 'short' ? 'below_cloud' : (String(direction || '').toLowerCase() === 'long' ? 'above_cloud' : '');
+    const transitions = ichimokuTransitions().filter(t => t && t.time && (!want || t.side === want) && t.side !== 'inside_cloud');
+    if (!transitions.length) return scanner;
+    const onOrAfter = transitions.filter(t => String(t.time) >= scanner);
+    if (onOrAfter.length) return onOrAfter[onOrAfter.length - 1].time;
+    let near = null;
+    transitions.forEach(t => {{
+      const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
+      if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time > near.time))) near = {{...t, diff}};
+    }});
+    return near?.time || scanner;
+  }}
+
   function ichimokuScannerBreakoutContext(scannerDate) {{
     if (!scannerDate) return {{displayDate: '', csvStartDate: '', note: ''}};
     const transitions = ichimokuTransitions();
@@ -2345,7 +2361,7 @@ class LightweightChartLevelSelectorUI:
     }}
     const breakoutDirection = scannerMetaValue('__scanner_breakout_direction__');
     const scannerBreakoutDate = scannerMetaValue('__scanner_breakout_date__');
-    const breakoutDate = levels.__show_ichimoku__ ? (ichimokuScannerBreakoutContext(scannerBreakoutDate).displayDate || scannerBreakoutDate) : scannerBreakoutDate;
+    const breakoutDate = levels.__show_ichimoku__ ? ichimokuHighlightBreakoutDate(scannerBreakoutDate, breakoutDirection) : scannerBreakoutDate;
     add(breakoutDate, breakoutDirection === 'short' ? '▼ Breakout candle' : '▲ Breakout candle', '#f97316', breakoutDirection === 'short' ? 'below' : 'above', 1, 'breakout');
     const retestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     add(scannerMetaValue('__scanner_latest_retest_date__'), `◆ Retest: ${{scannerPatternLabel(retestPattern || 'pattern')}}`, '#a855f7', 'below', scannerPatternSpan(retestPattern), 'retest-pattern');

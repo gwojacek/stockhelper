@@ -60,3 +60,5 @@ def test_scanner_pattern_and_breakout_candles_are_highlighted():
     assert "idx - (span - 1)" in source
     assert "shooting[ _-]?star|hammer|doji|pin[ _-]?bar" in source
     assert "#a855f7', 'below', scannerPatternSpan(fibPattern)" in source
+    assert "function ichimokuHighlightBreakoutDate" in source
+    assert "onOrAfter[onOrAfter.length - 1].time" in source
