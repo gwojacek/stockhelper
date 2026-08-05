@@ -1216,7 +1216,7 @@ class LightweightChartLevelSelectorUI:
     const transitions = ichimokuTransitions();
     const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
     const scanner = String(scannerDate).slice(0, 10);
-    const displayDate = scanner;
+    const displayDate = ichimokuFirstBreakoutCloseNearScanner(scanner);
     const realCandles = ohlc.filter(c => c && c.time);
     const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
     const ageDays = daysBetween(scanner, lastDate);
@@ -2357,7 +2357,7 @@ class LightweightChartLevelSelectorUI:
     const nextX = endIdx + 1 < ohlc.length ? chart.timeScale().timeToCoordinate(ohlc[endIdx + 1].time) : null;
     const halfLeft = Number.isFinite(prevX) ? Math.max(2, (x0 - prevX) / 2) : 5;
     const halfRight = Number.isFinite(nextX) ? Math.max(2, (nextX - x1) / 2) : halfLeft;
-    return {{left: x0 - halfLeft, right: x1 + halfRight, row}};
+    return {{left: x0 - halfLeft, right: x1 + halfRight, row, startIdx, endIdx}};
   }}
 
   function ichimokuCloudSideForDate(time) {{
@@ -2368,6 +2368,38 @@ class LightweightChartLevelSelectorUI:
     if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return '';
     const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
     return Number(row.close) > top ? 'above cloud' : (Number(row.close) < bottom ? 'below cloud' : 'inside cloud');
+  }}
+
+  function scannerBreakoutSideFromMeta(scannerDate) {{
+    const direction = scannerMetaValue('__scanner_breakout_direction__').toLowerCase();
+    if (direction.includes('long') || direction.includes('above') || direction.includes('over')) return 'above_cloud';
+    if (direction.includes('short') || direction.includes('below') || direction.includes('under')) return 'below_cloud';
+    const side = ichimokuCloudSideForDate(scannerDate).replace(' ', '_');
+    return side === 'above_cloud' || side === 'below_cloud' ? side : '';
+  }}
+
+  function ichimokuFirstBreakoutCloseNearScanner(scannerDate) {{
+    const scanner = String(scannerDate || '').slice(0, 10);
+    const side = scannerBreakoutSideFromMeta(scanner);
+    if (!scanner || !side) return scanner;
+    const idx = ohlc.findIndex(row => String(row.time).slice(0, 10) === scanner);
+    if (idx < 0) return scanner;
+    const sameSide = (row) => {{
+      if (!row) return false;
+      const spanA = Number(ichiValueAt('spanA', row.time));
+      const spanB = Number(ichiValueAt('spanB', row.time));
+      if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return false;
+      const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB), close = Number(row.close);
+      return side === 'above_cloud' ? close > top : close < bottom;
+    }};
+    if (!sameSide(ohlc[idx])) return scanner;
+    let firstIdx = idx;
+    for (let i = idx - 1; i >= 0; i -= 1) {{
+      const diff = Math.abs(daysBetween(ohlc[i].time, scanner) ?? 999999);
+      if (diff > 2 || !sameSide(ohlc[i])) break;
+      firstIdx = i;
+    }}
+    return ohlc[firstIdx]?.time || scanner;
   }}
 
   function ichimokuHighlightBreakoutDate() {{
@@ -2423,20 +2455,24 @@ class LightweightChartLevelSelectorUI:
       if (hiddenLegendKeys.has(ev.key)) return;
       const band = scannerCandleBand(ev.time, ev.span);
       if (!band) return;
-      const row = band.row;
-      const yHigh = candleSeries.priceToCoordinate(Number(row.high));
-      const yLow = candleSeries.priceToCoordinate(Number(row.low));
-      if (!Number.isFinite(yHigh) || !Number.isFinite(yLow)) return;
-      const top = Math.min(yHigh, yLow) - 8, height = Math.abs(yLow - yHigh) + 16;
-      ctx.save();
-      ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(249,115,22,.16)' : 'rgba(225,29,72,.16)';
-      ctx.strokeStyle = ev.color;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
-      ctx.fillRect(band.left, top, band.right - band.left, height);
-      ctx.strokeRect(band.left + .5, top + .5, band.right - band.left - 1, height - 1);
-      ctx.restore();
-      scannerHighlightRects.push({{...ev, left:band.left, right:band.right, top, bottom:top+height}});
+      for (let idx = band.startIdx; idx <= band.endIdx; idx += 1) {{
+        const row = ohlc[idx];
+        const single = scannerCandleBand(row.time, 1);
+        if (!single) continue;
+        const yHigh = candleSeries.priceToCoordinate(Number(row.high));
+        const yLow = candleSeries.priceToCoordinate(Number(row.low));
+        if (!Number.isFinite(yHigh) || !Number.isFinite(yLow)) continue;
+        const top = Math.min(yHigh, yLow) - 8, height = Math.abs(yLow - yHigh) + 16;
+        ctx.save();
+        ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(249,115,22,.16)' : 'rgba(225,29,72,.16)';
+        ctx.strokeStyle = ev.color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.fillRect(single.left, top, single.right - single.left, height);
+        ctx.strokeRect(single.left + .5, top + .5, single.right - single.left - 1, height - 1);
+        ctx.restore();
+        scannerHighlightRects.push({{...ev, left:single.left, right:single.right, top, bottom:top+height}});
+      }}
     }});
   }}
 
