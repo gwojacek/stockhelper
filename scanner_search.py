@@ -2262,7 +2262,6 @@ def _find_latest_breakout_idx(
     df: pd.DataFrame,
     current_side: str,
     min_age_days: int = 80,
-    min_age_calendar_days: int = 120,
     debug_ticker: str | None = None,
 ) -> int | None:
     close = df["Close"]
@@ -2282,13 +2281,12 @@ def _find_latest_breakout_idx(
             continue
         if pd.isna(date_series.iloc[i]):
             continue
-        age_days = int((date_series.iloc[-1] - date_series.iloc[i]).days)
-        if age_days < min_age_calendar_days:
-            if debug_ticker:
-                _debug_log_scan(debug_ticker, f"breakout candidate {i_date} rejected: age_days={age_days} < min_age_calendar_days={min_age_calendar_days}")
-            continue
-
-        end_idx = min(n, i + min_age_days)
+        # The scanner's qualification is expressed in trading candles.  Do not
+        # reject the matching breakout because weekends/holidays make those
+        # candles span slightly fewer than an arbitrary number of calendar days.
+        # The setup must also remain valid through the latest candle, not merely
+        # through the first min_age_days bars after an older breakout.
+        end_idx = n
         if current_side == "below":
             crossed = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
             maintained = bool((close.iloc[i:end_idx] <= top.iloc[i:end_idx]).all())
@@ -2303,7 +2301,7 @@ def _find_latest_breakout_idx(
         # Primary rule: true breakout candle crossing opposite side boundary.
         if crossed and maintained:
             if debug_ticker:
-                _debug_log_scan(debug_ticker, f"breakout accepted at {i_date}: crossed and maintained for {min_age_days} bars")
+                _debug_log_scan(debug_ticker, f"breakout accepted at {i_date}: crossed and maintained through latest candle")
             return i
 
         # Fallback only for transition into target side without strict boundary cross.
@@ -2312,7 +2310,7 @@ def _find_latest_breakout_idx(
         if fallback_transition_idx is None and transitioned_into_side and maintained:
             fallback_transition_idx = i
             if debug_ticker:
-                _debug_log_scan(debug_ticker, f"fallback transition noted at {i_date}: entered target side and maintained for {min_age_days} bars")
+                _debug_log_scan(debug_ticker, f"fallback transition noted at {i_date}: entered target side and maintained through latest candle")
 
         if debug_ticker and crossed and not maintained:
             fail_rel = (close.iloc[i:end_idx] > top.iloc[i:end_idx]) if current_side == "below" else (close.iloc[i:end_idx] < bottom.iloc[i:end_idx])

@@ -285,6 +285,37 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     assert "pattern_date=(r.reversal_pattern_date or r.first_61_8_touch_date)" not in source
     assert source.count("pattern_date=r.reversal_pattern_date") >= 3
 
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="US100",
+        scanner="FIBO",
+        category="valid",
+        ticker="PLTR.US",
+        status="valid_reversal",
+        pattern="bearish_harami",
+        dates={
+            "touch_61": "2026-08-04",
+            "incline": "2025-12-22->2026-06-25",
+        },
+        python_command=(
+            "python run -c PLTR.US --ichimoku-mode off --fibo-lines 5 "
+            "--fibo-anchor-start 2025-12-22 --fibo-anchor-end 2026-06-25 "
+            "--fibo-right --scanner-pattern-date 2026-08-05 "
+            "--scanner-pattern-name bearish_harami"
+        ),
+    )
+    command = mod._chart_command_for_row(row)
+    assert "--scanner-pattern-date 2026-08-05" in command
+    assert "--scanner-pattern-date 2026-08-04" not in command
+
+
+def test_ichimoku_latest_breakout_uses_trading_candles_and_stays_valid_to_latest():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    breakout = source[source.index("def _find_latest_breakout_idx"):source.index("def _retest_meta_for_side")]
+    assert "min_age_calendar_days" not in breakout
+    assert "end_idx = n" in breakout
+    assert "maintained through latest candle" in breakout
+
 
 def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")

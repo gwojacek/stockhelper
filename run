@@ -156,7 +156,11 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         if "->" not in incline and row.dates.get("incline_start") and row.dates.get("incline_end"):
             incline = f"{row.dates.get('incline_start')}->{row.dates.get('incline_end')}"
         pattern = str(row.pattern or "").strip()
-        pattern_date = str(row.dates.get("pattern_date") or row.dates.get("touch_61") or "").strip()
+        pattern_date = str(
+            row.dates.get("pattern_date")
+            or _command_option(row.python_command, "--scanner-pattern-date")
+            or ""
+        ).strip()
         pattern_args = ""
         if pattern_date and pattern_date != "-" and pattern and pattern.lower() not in {"-", "none"}:
             pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern)}"
@@ -166,6 +170,21 @@ def _chart_command_for_row(row: ScannerRow) -> str:
                 return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
         return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5{pattern_args}"
     return f"python run -c {ticker_cmd}"
+
+
+def _command_option(command: str, option: str) -> str:
+    """Return an option value from a generated scanner command."""
+    try:
+        parts = shlex.split(str(command or ""))
+    except ValueError:
+        return ""
+    try:
+        index = parts.index(option)
+    except ValueError:
+        return ""
+    return parts[index + 1] if index + 1 < len(parts) else ""
+
+
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
