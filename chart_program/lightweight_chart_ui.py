@@ -1148,7 +1148,7 @@ class LightweightChartLevelSelectorUI:
   function isValidScannerPattern(pattern) {{
     const text = String(pattern || '').trim().replace(/_/g, ' ');
     if (!text || text === '-' || text.toLowerCase() === 'none') return false;
-    return /(hammer|engulfing|morning star|evening star|piercing|harami|doji|shooting star|pin bar)/i.test(text);
+    return /(hammer|engulfing|morning star|evening star|piercing|dark cloud cover|harami|doji|shooting star|pin bar)/i.test(text);
   }}
 
   function scannerPatternLabel(pattern) {{
