@@ -325,6 +325,20 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     assert '["Ticker","Dir","Pattern","Pattern date","Incline"' in source
 
 
+def test_legacy_oil_report_recovers_dark_cloud_confirmation_date():
+    mod = load_run_module()
+    mod.local_csv_path_for_symbol = lambda *_args, **_kwargs: Path("data/csv/commodities/CB_F.csv")
+    row = mod.ScannerRow(
+        market="COMMODITIES", scanner="FIBO", category="valid", ticker="OIL",
+        status="valid_reversal", pattern="dark_cloud_cover", direction="short",
+        dates={"touch_61": "2026-07-23", "incline": "2026-03-09->2026-07-02"},
+        python_command="python run -c OIL --fibo-lines 5",
+    )
+    command = mod._chart_command_for_row(row)
+    assert "--scanner-pattern-date 2026-07-24" in command
+    assert "--scanner-pattern-name dark_cloud_cover" in command
+
+
 def test_ichimoku_latest_breakout_uses_trading_candles_and_stays_valid_to_latest():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     breakout = source[source.index("def _find_latest_breakout_idx"):source.index("def _retest_meta_for_side")]

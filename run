@@ -133,6 +133,40 @@ def _ichimoku_breakout_direction(row: ScannerRow) -> str:
     return ""
 
 
+def _legacy_fibo_pattern_date(row: ScannerRow, ticker: str, instrument: str) -> str:
+    """Recover a completion date from old reports that only stored 61.8 touch."""
+    touch = str(row.dates.get("touch_61") or "").strip()[:10]
+    pattern = str(row.pattern or "").strip().lower().replace(" ", "_")
+    if not touch or touch == "-" or not pattern:
+        return ""
+    try:
+        path = local_csv_path_for_symbol(ticker, instrument)
+        with path.open(encoding="utf-8") as handle:
+            candles = sorted(csv.DictReader(handle), key=lambda item: str(item.get("Date", "")))
+        touch_idx = next(i for i, candle in enumerate(candles) if str(candle.get("Date", ""))[:10] == touch)
+    except (OSError, StopIteration, ValueError):
+        return ""
+
+    def _ohlc(candle: dict[str, str]) -> tuple[float, float, float, float]:
+        return tuple(float(candle[key]) for key in ("Open", "High", "Low", "Close"))
+
+    # Legacy commodity reports exposed the 61.8 touch but not the confirming
+    # date. Dark-cloud cover completes on its bearish second candle; either
+    # candle may be the one that touched 61.8.
+    if pattern == "dark_cloud_cover":
+        for end_idx in range(touch_idx, min(touch_idx + 2, len(candles))):
+            if end_idx < 1:
+                continue
+            try:
+                o1, _h1, _l1, c1 = _ohlc(candles[end_idx - 1])
+                o2, _h2, _l2, c2 = _ohlc(candles[end_idx])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if c1 > o1 and c2 < o2 and o2 >= max(o1, c1) * 0.995 and c2 < (o1 + c1) / 2:
+                return str(candles[end_idx].get("Date", ""))[:10]
+    return ""
+
+
 def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
@@ -175,6 +209,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         pattern_date = str(
             row.dates.get("pattern_date")
             or _command_option(row.python_command, "--scanner-pattern-date")
+            or _legacy_fibo_pattern_date(row, ticker_cmd, instrument)
             or ""
         ).strip()
         pattern_args = ""
