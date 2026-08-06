@@ -20,6 +20,7 @@ from typing import Callable, Sequence
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 
 from chart_program.instrument_detector import detect_instrument_type
@@ -2113,6 +2114,23 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
 
 
+def _candle_body_bounds(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Return candle body highs/lows without pandas row-wise reductions.
+
+    Some pandas/numpy combinations route ``DataFrame.max/min(axis=1)`` through
+    nanargmax/nanargmin.  A CSV row with missing OHLC data can then raise
+    ``attempt to get argmax/argmin of an empty sequence`` and skip the whole
+    symbol.  ``fmax``/``fmin`` preserve the intended skip-NaN behaviour without
+    an arg-reduction.
+    """
+    opens = pd.to_numeric(df["Open"], errors="coerce").to_numpy(dtype=float)
+    closes = pd.to_numeric(df["Close"], errors="coerce").to_numpy(dtype=float)
+    return (
+        pd.Series(np.fmax(opens, closes), index=df.index),
+        pd.Series(np.fmin(opens, closes), index=df.index),
+    )
+
+
 def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = None) -> ScanResult | None:
     if len(df) < min_days + 2:
         if debug_ticker:
@@ -2123,8 +2141,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = 
         if debug_ticker:
             _debug_log_scan(debug_ticker, msg)
 
-    body_high = df[["Open", "Close"]].max(axis=1)
-    body_low = df[["Open", "Close"]].min(axis=1)
+    body_high, body_low = _candle_body_bounds(df)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     close = df["Close"]
@@ -3069,8 +3086,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
 
-    body_high = df[["Open", "Close"]].max(axis=1)
-    body_low = df[["Open", "Close"]].min(axis=1)
+    body_high, body_low = _candle_body_bounds(df)
 
     # Respect definitions match _qualifies:
     # - trend below: body may enter cloud, but cannot break above cloud top
@@ -3181,8 +3197,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         except Exception:
             return "breakout_confirmed"
 
-    body_high = df[["Open", "Close"]].max(axis=1)
-    body_low = df[["Open", "Close"]].min(axis=1)
+    body_high, body_low = _candle_body_bounds(df)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     post = range(flip_idx + 1, len(df))

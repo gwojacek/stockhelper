@@ -30,6 +30,28 @@ def test_ichimoku_builds_cloud_without_row_wise_nan_reductions(monkeypatch):
     assert (enriched["cloud_top"] >= enriched["cloud_bottom"]).all()
 
 
+def test_candle_body_bounds_avoid_arg_reductions_and_tolerate_missing_values(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "Open": [10.0, None, 12.0, None],
+            "Close": [11.0, 9.0, None, None],
+        }
+    )
+
+    def fail_row_reduction(*args, **kwargs):
+        raise AssertionError("scanner candle bodies must not use DataFrame row reductions")
+
+    monkeypatch.setattr(pd.DataFrame, "max", fail_row_reduction)
+    monkeypatch.setattr(pd.DataFrame, "min", fail_row_reduction)
+
+    body_high, body_low = scanner_search._candle_body_bounds(df)
+
+    assert body_high.iloc[:3].tolist() == [11.0, 9.0, 12.0]
+    assert body_low.iloc[:3].tolist() == [10.0, 9.0, 12.0]
+    assert pd.isna(body_high.iloc[3])
+    assert pd.isna(body_low.iloc[3])
+
+
 def test_ndx100_members_include_spcx():
     assert "SPCX.US" in scanner_search.NDX100_SEARCH_TICKERS
 

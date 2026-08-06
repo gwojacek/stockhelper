@@ -152,10 +152,21 @@ COMMODITY_STOOQ_MAP = {
     "EU50": "fx.f",
 }
 
+# Config ``name`` fields are user-facing labels, while CSV files use broker
+# symbols.  Keep aliases which cannot be inferred from either provider map
+# explicit so a report-launched, cache-only chart resolves the same file that
+# the scanner populated.
+COMMODITY_SYMBOL_ALIASES = {
+    "S&P500": "US500",
+    "S&P 500": "US500",
+    "SP500": "US500",
+}
+
 def _canonical_commodity_symbol(symbol: str) -> str:
     cleaned = (symbol or "").strip().upper()
     if not cleaned:
         return cleaned
+    cleaned = COMMODITY_SYMBOL_ALIASES.get(cleaned, cleaned)
     if cleaned in COMMODITY_YAHOO_MAP or cleaned in COMMODITY_STOOQ_MAP:
         return cleaned
     for key, value in COMMODITY_DISPLAY_NAME.items():
