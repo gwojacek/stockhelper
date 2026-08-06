@@ -83,5 +83,6 @@
   ],
   "__scanner_breakout_date__": "2026-05-06",
   "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "5.9"
+  "__scanner_previous_respect_months__": "5.9",
+  "__scanner_breakout_direction__": "long"
 }

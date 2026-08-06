@@ -1,0 +1,85 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (82.59)",
+      "x0": "2026-07-15",
+      "x1": "2034-06-24",
+      "y0": 82.59,
+      "y1": 82.59,
+      "price": 82.59,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (90.04664)",
+      "x0": "2026-05-08",
+      "x1": "2034-06-24",
+      "y0": 90.04664,
+      "y1": 90.04664,
+      "price": 90.04664,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (92.35)",
+      "x0": "2026-04-21",
+      "x1": "2034-06-24",
+      "y0": 92.35,
+      "y1": 92.35,
+      "price": 92.35,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (94.65336)",
+      "x0": "2026-03-31",
+      "x1": "2034-06-24",
+      "y0": 94.65336,
+      "y1": 94.65336,
+      "price": 94.65336,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (102.11)",
+      "x0": "2026-01-26",
+      "x1": "2034-06-24",
+      "y0": 102.11,
+      "y1": 102.11,
+      "price": 102.11,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-01-26",
+      "x1": "2026-07-15",
+      "y0": 102.11,
+      "y1": 82.59,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}
