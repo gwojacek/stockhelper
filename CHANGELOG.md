@@ -10,14 +10,39 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.3`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.4`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
 - Allsearch now clears `debug/stooq` at startup, and the generated Playwright diagnostics are ignored by Git.
 - Commodity and forex post-scan health checks now warn on two or more Yahoo-style high-precision candles in the last 20 rows and include those CSVs in the final clean Stooq retry.
 
-Compare: [`7.3...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.3...HEAD)
+Compare: [`7.4...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.4...HEAD)
+
+## [7.4] - 2026-08-06
+
+Tag: `7.4`
+Compare: [`7.3...7.4`](https://github.com/gwojacek/stockhelper/compare/7.3...7.4)
+
+### Added
+
+- Added scanner breakout direction and Fibo pattern name/date metadata to chart CLI commands, saved chart context, generated scanner reports, and report-launched chart commands.
+- Added fixed candle-index scanner highlights with a dedicated clickable legend and hover tooltip for Ichimoku breakouts, post-breakout retest patterns, and Fibo 61.8 patterns.
+- Added pattern-length-aware highlight spans: one candle for single-candle formations, two for engulfing/harami/piercing-line/dark-cloud-cover patterns, and three for morning/evening star formations. Multi-candle formations use one undivided outer box.
+- Added legacy commodity pattern-date recovery and chart-side Fibo 61.8 dark-cloud-cover recovery, including OIL/`CB.F` metadata, Setup information, and highlights.
+
+### Changed
+
+- Fibo reversal scanning now records the final confirming candle as `Pattern date`, while allowing any candle in a connected one-, two-, or three-candle formation to provide the required 61.8 touch.
+- Ichimoku chart highlights now use scanner direction and resolve nearby scanner transition dates to the first actual close beyond the requested cloud boundary, counting trading candles across weekends and inside-cloud transitions.
+- Scanner highlights now use solid orange for breakouts and rose for patterns, stay attached to exact candles while zooming, and expose concise legend labels with detailed hover text.
+
+### Fixed
+
+- Fixed duplicated scanner legend entries during chart zoom and eliminated internal borders between candles in multi-candle pattern highlights.
+- Fixed scanner/report metadata being lost when reopening Fibo charts, including commodity symbol aliases such as `OIL` to `CB.F`.
+- Fixed late or wrong-side Ichimoku highlights observed around BRACOMP, LIN.DE, ALE.WA, ARM.US, ASML.US, and similar scanner confirmations.
+- Fixed one-candle patterns being rendered with three-candle spans and suppressed invalid retest/pattern highlights on or before the breakout candle.
 
 ## [7.3] - 2026-07-29
 
