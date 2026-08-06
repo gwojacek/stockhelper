@@ -268,15 +268,121 @@ def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
     assert "touch_idxs[:1]" not in source
     assert "first_touch_idx = all_touch_idxs[0]" in source
     assert "c = w.iloc[first_touch_idx]" in source
-    assert "c1, c2 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1]" in source
-    assert "c1, c2, c3 = w.iloc[first_touch_idx], w.iloc[first_touch_idx + 1], w.iloc[first_touch_idx + 2]" in source
-    assert "A hammer on candle two is not a standalone hammer" in source
+    assert "includes_touch = any(t in {i - 1, i} for t in all_touch_idxs)" in source
+    assert "includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
+    assert "pattern_idx = i" in source
+    assert "The touching candle can therefore be the first, middle, or" in source
     assert "close above 61.8" in source
     assert "float(close.iloc[pattern_idx]) <= fib_618" in source
     assert "pattern_failed_close = True" in source
     assert "the completed 61.8 pattern failed its required closing-price confirmation" in source
     assert "first 61.8 touch produced no valid 1-, 2-, or 3-candle pattern" in source
     assert "accepting short completed cycle despite 61.8 cross without pattern" not in source
+
+
+def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "pattern_date=(r.reversal_pattern_date or r.first_61_8_touch_date)" not in source
+    assert source.count("pattern_date=r.reversal_pattern_date") >= 3
+
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="US100",
+        scanner="FIBO",
+        category="valid",
+        ticker="PLTR.US",
+        status="valid_reversal",
+        pattern="bearish_harami",
+        dates={
+            "touch_61": "2026-08-04",
+            "incline": "2025-12-22->2026-06-25",
+        },
+        python_command=(
+            "python run -c PLTR.US --ichimoku-mode off --fibo-lines 5 "
+            "--fibo-anchor-start 2025-12-22 --fibo-anchor-end 2026-06-25 "
+            "--fibo-right --scanner-pattern-date 2026-08-05 "
+            "--scanner-pattern-name bearish_harami"
+        ),
+    )
+    command = mod._chart_command_for_row(row)
+    assert "--scanner-pattern-date 2026-08-05" in command
+    assert "--scanner-pattern-date 2026-08-04" not in command
+
+    commodity = mod.ScannerRow(
+        market="COMMODITIES", scanner="FIBO", category="valid", ticker="OIL",
+        status="valid_reversal", pattern="dark_cloud_cover", direction="short",
+        dates={
+            "pattern_date": "2026-07-24",
+            "touch_61": "2026-07-23",
+            "incline": "2026-03-09->2026-07-02",
+        },
+    )
+    commodity_command = mod._chart_command_for_row(commodity)
+    assert "python run -c CL.F" in commodity_command
+    assert "--scanner-pattern-date 2026-07-24" in commodity_command
+    assert "--scanner-pattern-name dark_cloud_cover" in commodity_command
+
+    assert '["Ticker","Dir","Pattern","Pattern date","Incline"' in source
+
+
+def test_legacy_oil_report_recovers_dark_cloud_confirmation_date():
+    mod = load_run_module()
+    mod.local_csv_path_for_symbol = lambda *_args, **_kwargs: Path("data/csv/commodities/CB_F.csv")
+    row = mod.ScannerRow(
+        market="COMMODITIES", scanner="FIBO", category="valid", ticker="OIL",
+        status="valid_reversal", pattern="dark_cloud_cover", direction="short",
+        dates={"touch_61": "2026-07-23", "incline": "2026-03-09->2026-07-02"},
+        python_command="python run -c OIL --fibo-lines 5",
+    )
+    command = mod._chart_command_for_row(row)
+    assert "--scanner-pattern-date 2026-07-24" in command
+    assert "--scanner-pattern-name dark_cloud_cover" in command
+
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "function fibo618PatternFromChart()" in ui_source
+    assert "touches618 && darkCloud" in ui_source
+    assert "piercing|dark cloud cover|harami" in ui_source
+    assert "scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time" in ui_source
+    assert "scannerPattern || recoveredPattern" in ui_source
+
+
+def test_ichimoku_latest_breakout_uses_trading_candles_and_stays_valid_to_latest():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    breakout = source[source.index("def _find_latest_breakout_idx"):source.index("def _retest_meta_for_side")]
+    assert "min_age_calendar_days" not in breakout
+    assert "end_idx = n" in breakout
+    assert "maintained through latest candle" in breakout
+
+
+def test_multi_candle_scanner_highlight_has_only_an_outer_border():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    drawing = source[source.index("function drawScannerHighlights"):source.index("function captureViewport")]
+    assert "ohlc.slice(band.startIdx, band.endIdx + 1)" in drawing
+    assert "ctx.strokeRect(band.left + .5" in drawing
+    assert "ctx.strokeRect(single.left" not in drawing
+
+
+def test_scanner_breakout_correction_counts_trading_candles_not_calendar_days():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    resolver = source[source.index("function ichimokuFirstBreakoutCloseNearScanner"):source.index("function ichimokuHighlightBreakoutDate")]
+    assert "idx - 2" in resolver
+    assert "idx + 2" in resolver
+    assert "if (sameSide(ohlc[i])) return ohlc[i].time" in resolver
+    assert "daysBetween(ohlc[i].time, scanner)" not in resolver
+
+
+def test_ichimoku_chart_command_forwards_current_scanner_direction():
+    mod = load_run_module()
+    long_row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="position", ticker="ALE.WA",
+        status="above", dates={"start_date": "2026-04-09"}, metrics={"current_side": "above"},
+    )
+    short_row = mod.ScannerRow(
+        market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="LIN.DE",
+        status="below", dates={"flip_date": "2026-07-31"}, metrics={"current_side": "below"},
+    )
+    assert "--scanner-breakout-direction long" in mod._chart_command_for_row(long_row)
+    assert "--scanner-breakout-direction short" in mod._chart_command_for_row(short_row)
 
 
 def test_short_fibo_markets_and_chart_png_download_are_enabled():

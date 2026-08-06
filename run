@@ -118,6 +118,55 @@ class ScannerRow:
     python_command: str | None = None
     priority: str = "LOW"
 
+def _ichimoku_breakout_direction(row: ScannerRow) -> str:
+    values = [
+        row.direction,
+        row.metrics.get("current_side"),
+        row.status,
+        row.metrics.get("raw_status"),
+    ]
+    text = " ".join(str(value or "").lower() for value in values)
+    if any(token in text for token in ("short", "below", "under", "↘", "↓")):
+        return "short"
+    if any(token in text for token in ("long", "above", "over", "↗", "↑")):
+        return "long"
+    return ""
+
+
+def _legacy_fibo_pattern_date(row: ScannerRow, ticker: str, instrument: str) -> str:
+    """Recover a completion date from old reports that only stored 61.8 touch."""
+    touch = str(row.dates.get("touch_61") or "").strip()[:10]
+    pattern = str(row.pattern or "").strip().lower().replace(" ", "_")
+    if not touch or touch == "-" or not pattern:
+        return ""
+    try:
+        path = local_csv_path_for_symbol(ticker, instrument)
+        with path.open(encoding="utf-8") as handle:
+            candles = sorted(csv.DictReader(handle), key=lambda item: str(item.get("Date", "")))
+        touch_idx = next(i for i, candle in enumerate(candles) if str(candle.get("Date", ""))[:10] == touch)
+    except (OSError, StopIteration, ValueError):
+        return ""
+
+    def _ohlc(candle: dict[str, str]) -> tuple[float, float, float, float]:
+        return tuple(float(candle[key]) for key in ("Open", "High", "Low", "Close"))
+
+    # Legacy commodity reports exposed the 61.8 touch but not the confirming
+    # date. Dark-cloud cover completes on its bearish second candle; either
+    # candle may be the one that touched 61.8.
+    if pattern == "dark_cloud_cover":
+        for end_idx in range(touch_idx, min(touch_idx + 2, len(candles))):
+            if end_idx < 1:
+                continue
+            try:
+                o1, _h1, _l1, c1 = _ohlc(candles[end_idx - 1])
+                o2, _h2, _l2, c2 = _ohlc(candles[end_idx])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if c1 > o1 and c2 < o2 and o2 >= max(o1, c1) * 0.995 and c2 < (o1 + c1) / 2:
+                return str(candles[end_idx].get("Date", ""))[:10]
+    return ""
+
+
 def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
@@ -139,6 +188,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     if row.scanner == "ICHIMOKU":
         cmd = f"python run -c {ticker_cmd} --ichimoku-mode on"
         cmd = _append_optional(cmd, "--scanner-breakout-date", row.dates.get("flip_date") or row.dates.get("start_date"))
+        cmd = _append_optional(cmd, "--scanner-breakout-direction", _ichimoku_breakout_direction(row))
         cmd = _append_optional(cmd, "--scanner-retest-count", row.metrics.get("retest_count") or row.metrics.get("latest_retest_count"))
         cmd = _append_optional(cmd, "--scanner-latest-retest-date", row.metrics.get("latest_retest_date"))
         cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
@@ -153,12 +203,39 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         return cmd + " --wedge-lines --wedge-right"
     if row.scanner == "FIBO":
         incline = (row.dates.get("incline", "") or "").strip()
+        if "->" not in incline and row.dates.get("incline_start") and row.dates.get("incline_end"):
+            incline = f"{row.dates.get('incline_start')}->{row.dates.get('incline_end')}"
+        pattern = str(row.pattern or "").strip()
+        pattern_date = str(
+            row.dates.get("pattern_date")
+            or _command_option(row.python_command, "--scanner-pattern-date")
+            or _legacy_fibo_pattern_date(row, ticker_cmd, instrument)
+            or ""
+        ).strip()
+        pattern_args = ""
+        if pattern_date and pattern_date != "-" and pattern and pattern.lower() not in {"-", "none"}:
+            pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern)}"
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right"
-        return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5"
+                return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
+        return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5{pattern_args}"
     return f"python run -c {ticker_cmd}"
+
+
+def _command_option(command: str, option: str) -> str:
+    """Return an option value from a generated scanner command."""
+    try:
+        parts = shlex.split(str(command or ""))
+    except ValueError:
+        return ""
+    try:
+        index = parts.index(option)
+    except ValueError:
+        return ""
+    return parts[index + 1] if index + 1 < len(parts) else ""
+
+
 def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
     label = f" {name.strip().upper()} "
     if len(label) >= width:
@@ -1163,10 +1240,10 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
             rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w1:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")), pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
+            rows.append(ScannerRow(market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")), pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
     return rows
 
 
@@ -2022,7 +2099,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal",
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
-                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)},
+                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)},
                 metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="HIGH"
             ))
@@ -2031,7 +2108,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")),
                 pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")),
-                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)},
+                dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)},
                 metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r))}, chart_url=str(r.get("Link", "")),
                 python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
@@ -2081,7 +2158,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                         rows.append(ScannerRow(
                             market=market, scanner="FIBO", category=actual_cat, ticker=str(r.get("ticker", "")),
                             status=st, pattern=str(r.get("reversal_pattern_name", "")), direction=str(r.get("direction", "")),
-                            dates={"touch_61": str(r.get("first_61_8_touch_date", "")), "incline_start": str(r.get("incline_start_date", "")), "incline_end": str(r.get("incline_end_date", ""))},
+                            dates={"touch_61": str(r.get("first_61_8_touch_date", "")), "pattern_date": str(r.get("reversal_pattern_date", "")), "incline_start": str(r.get("incline_start_date", "")), "incline_end": str(r.get("incline_end_date", ""))},
                             metrics={"ratio": str(r.get("incline_decline_duration_ratio", ""))},
                             chart_url=_stooq_chart_url(str(r.get("ticker", ""))),
                             python_command=str(r.get("python_command", "")),
@@ -3301,6 +3378,9 @@ def main()->int:
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('--debug-stooq-fetch',action='store_true',help='When used with --debug-stooq, merge fetched visible Stooq rows into the matching commodity CSV.'); parser.add_argument('-inspector','--inspector',action='store_true')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
     parser.add_argument('--scanner-breakout-date')
+    parser.add_argument('--scanner-breakout-direction')
+    parser.add_argument('--scanner-pattern-date')
+    parser.add_argument('--scanner-pattern-name')
     parser.add_argument('--scanner-retest-count')
     parser.add_argument('--scanner-latest-retest-date')
     parser.add_argument('--scanner-latest-retest-pattern')
@@ -3710,6 +3790,9 @@ def main()->int:
             cmd.extend(['--ichimoku-mode', args.ichimoku_mode])
         for flag, value in [
             ('--scanner-breakout-date', args.scanner_breakout_date),
+            ('--scanner-breakout-direction', args.scanner_breakout_direction),
+            ('--scanner-pattern-date', args.scanner_pattern_date),
+            ('--scanner-pattern-name', args.scanner_pattern_name),
             ('--scanner-retest-count', args.scanner_retest_count),
             ('--scanner-latest-retest-date', args.scanner_latest_retest_date),
             ('--scanner-latest-retest-pattern', args.scanner_latest_retest_pattern),

@@ -556,7 +556,13 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
+    .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
+    #scanner-highlight-legend {{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; min-height:20px; margin:0 0 7px 0; font-size:12px; font-weight:800; }}
+    #scanner-highlight-legend span {{ display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }}
+    #scanner-highlight-legend span.hidden {{ opacity:.38; text-decoration:line-through; }}
+    #scanner-highlight-legend i {{ width:14px; height:10px; display:inline-block; border-radius:3px; border:1px solid rgba(255,255,255,.45); }}
+    #scanner-highlight-tooltip {{ display:none; position:absolute; z-index:55; pointer-events:none; max-width:280px; padding:8px 10px; border:1px solid #475569; border-radius:8px; background:rgba(15,23,42,.94); color:#e5e7eb; font-size:12px; font-weight:800; box-shadow:0 10px 28px rgba(0,0,0,.35); }}
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
@@ -644,8 +650,8 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div id="chart-legend"></div>
-      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div></div>
+      <div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div>
+      <div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -740,6 +746,7 @@ class LightweightChartLevelSelectorUI:
   const ohlc = Array.isArray(P.ohlc) ? P.ohlc : [];
   const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
+  let scannerHighlightRects = [];
 
   const $ = id => document.getElementById(id);
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
@@ -799,7 +806,7 @@ class LightweightChartLevelSelectorUI:
     }}
     legend.appendChild(item);
   }};
-  const resetLegend = () => {{ $('chart-legend').innerHTML = ''; }};
+  const resetLegend = () => {{ $('chart-legend').innerHTML = ''; $('scanner-highlight-legend').innerHTML = ''; }};
 
   const chart = LightweightCharts.createChart($('chart'), {{
     layout: {{ background: {{ type: 'solid', color: '#111827' }}, textColor: '#e5e7eb' }},
@@ -1141,11 +1148,14 @@ class LightweightChartLevelSelectorUI:
   function isValidScannerPattern(pattern) {{
     const text = String(pattern || '').trim().replace(/_/g, ' ');
     if (!text || text === '-' || text.toLowerCase() === 'none') return false;
-    return /(hammer|engulfing|morning star|evening star|piercing|harami|doji|shooting star|pin bar)/i.test(text);
+    return /(hammer|engulfing|morning star|evening star|piercing|dark cloud cover|harami|doji|shooting star|pin bar)/i.test(text);
   }}
 
   function scannerPatternLabel(pattern) {{
-    return String(pattern || '').trim().replace(/_/g, ' ');
+    return String(pattern || '')
+      .trim()
+      .replace(/_/g, ' ')
+      .replace(/\\w\\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
   }}
 
   function detectIchimokuBreakout() {{
@@ -1206,19 +1216,10 @@ class LightweightChartLevelSelectorUI:
     const transitions = ichimokuTransitions();
     const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
     const scanner = String(scannerDate).slice(0, 10);
-    let near = null;
-    transitions.forEach(t => {{
-      const diff = Math.abs(daysBetween(t.time, scanner) ?? 999999);
-      if (diff <= 2 && (!near || diff < near.diff || (diff === near.diff && t.time < near.time))) near = {{...t, diff}};
-    }});
-    let displayDate = near?.time || scanner;
+    const displayDate = ichimokuFirstBreakoutCloseNearScanner(scanner);
     const realCandles = ohlc.filter(c => c && c.time);
     const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
     const ageDays = daysBetween(scanner, lastDate);
-    if (displayDate === scanner && Number.isFinite(previousRespectMonths) && previousRespectMonths > 0 && ageDays !== null && ageDays >= 0 && ageDays < 122) {{
-      const previousCandle = [...realCandles].reverse().find(c => String(c.time) < scanner);
-      if (previousCandle?.time) displayDate = previousCandle.time;
-    }}
     let previous = null;
     if (ageDays !== null && ageDays >= 0 && ageDays < 122) {{
       previous = [...transitions].reverse().find(t => String(t.time) < displayDate) || null;
@@ -1266,8 +1267,7 @@ class LightweightChartLevelSelectorUI:
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
     if (scannerBreakout) {{
-      const suffix = scannerContext.displayDate && scannerContext.displayDate !== scannerContext.scannerDate ? ` (scanner: ${{scannerContext.scannerDate}})` : ' (scanner)';
-      lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}${{suffix}}`);
+      lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}`);
       if (scannerContext.note) lines.push(scannerContext.note);
     }} else {{
       lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
@@ -1317,6 +1317,11 @@ class LightweightChartLevelSelectorUI:
       }}
       const anchorDatesLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}}` : '-';
       const anchorValuesLine = boundary ? `${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
+      const scannerPatternDate = scannerMetaValue('__scanner_pattern_date__');
+      const scannerPatternName = scannerMetaValue('__scanner_pattern_name__');
+      const scannerPattern = scannerPatternDate && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
+      const chartPattern = fibo618PatternFromChart();
+      const recoveredPattern = chartPattern ? `${{scannerPatternLabel(chartPattern.name)}} (${{chartPattern.time}}) [61.8]` : '';
       const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
@@ -1324,7 +1329,7 @@ class LightweightChartLevelSelectorUI:
       lines.push(`  ${{anchorDatesLine}}`);
       lines.push(`  ${{anchorValuesLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
-      lines.push(`  61.8 pattern: ${{touch && pattern !== '-' ? `${{pattern}} (${{touch.time}})` : '-'}}`);
+      lines.push(`  61.8 pattern: ${{scannerPattern || recoveredPattern || (touch && pattern !== '-' ? `${{scannerPatternLabel(pattern)}} (${{touch.time}})` : '-')}}`);
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
@@ -2310,7 +2315,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    if (!levels.__show_ichimoku__) {{ drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
+    if (!levels.__show_ichimoku__) {{ drawScannerHighlights(ctx); drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
       yA: candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(p.a) : null,
@@ -2325,11 +2330,180 @@ class LightweightChartLevelSelectorUI:
       ctx.fillStyle = p1.bull ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
       ctx.fill();
     }}
+    drawScannerHighlights(ctx);
     drawWedgeStraightLines(ctx);
     drawWedgeTouchPoints(ctx);
     drawValuePointers(ctx);
     drawLineObjectHandles(ctx);
     drawDomChartIcons();
+  }}
+
+
+
+  function scannerPatternSpan(name) {{
+    const n = String(name || '').toLowerCase().replace(/[-\\s]+/g, '_');
+    if (/engulfing|piercing_line|dark_cloud_cover|harami/.test(n)) return 2;
+    if (/morning_star|evening_star|three_|3_/.test(n)) return 3;
+    return 1;
+  }}
+
+  function fibo618PatternFromChart() {{
+    const fib618 = drawnObjects.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio) - 0.618) < 0.002)
+      || drawnObjects.find(obj => obj.type === 'fib' && String(obj.label || '').includes('61.8'));
+    const level = Number(fib618?.price ?? fib618?.y0);
+    if (!Number.isFinite(level)) return null;
+    let found = null;
+    for (let i = 1; i < ohlc.length; i += 1) {{
+      const first = ohlc[i - 1], second = ohlc[i];
+      const o1 = Number(first.open), h1 = Number(first.high), l1 = Number(first.low), c1 = Number(first.close);
+      const o2 = Number(second.open), h2 = Number(second.high), l2 = Number(second.low), c2 = Number(second.close);
+      if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
+      const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
+      const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 < level;
+      if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+    }}
+    if (!found) return null;
+    const latest = ohlc[ohlc.length - 1]?.time;
+    const age = latest ? daysBetween(found.time, latest) : null;
+    return age === null || (age >= 0 && age <= 14) ? found : null;
+  }}
+
+  function scannerCandleBand(time, span=1) {{
+    const row = ohlcByTime.get(String(time).slice(0, 10));
+    if (!row) return null;
+    const startIdx = Math.max(0, row.idx - Math.max(1, span) + 1);
+    const endIdx = row.idx;
+    const x0 = chart.timeScale().timeToCoordinate(ohlc[startIdx]?.time);
+    const x1 = chart.timeScale().timeToCoordinate(ohlc[endIdx]?.time);
+    if (!Number.isFinite(x0) || !Number.isFinite(x1)) return null;
+    const prevX = startIdx > 0 ? chart.timeScale().timeToCoordinate(ohlc[startIdx - 1].time) : null;
+    const nextX = endIdx + 1 < ohlc.length ? chart.timeScale().timeToCoordinate(ohlc[endIdx + 1].time) : null;
+    const halfLeft = Number.isFinite(prevX) ? Math.max(2, (x0 - prevX) / 2) : 5;
+    const halfRight = Number.isFinite(nextX) ? Math.max(2, (nextX - x1) / 2) : halfLeft;
+    return {{left: x0 - halfLeft, right: x1 + halfRight, row, startIdx, endIdx}};
+  }}
+
+  function ichimokuCloudSideForDate(time) {{
+    const row = ohlcByTime.get(String(time || '').slice(0, 10));
+    if (!row) return '';
+    const spanA = Number(ichiValueAt('spanA', row.time));
+    const spanB = Number(ichiValueAt('spanB', row.time));
+    if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return '';
+    const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
+    return Number(row.close) > top ? 'above cloud' : (Number(row.close) < bottom ? 'below cloud' : 'inside cloud');
+  }}
+
+  function scannerBreakoutSideFromMeta(scannerDate) {{
+    const direction = scannerMetaValue('__scanner_breakout_direction__').toLowerCase();
+    if (direction.includes('long') || direction.includes('above') || direction.includes('over')) return 'above_cloud';
+    if (direction.includes('short') || direction.includes('below') || direction.includes('under')) return 'below_cloud';
+    const side = ichimokuCloudSideForDate(scannerDate).replace(' ', '_');
+    return side === 'above_cloud' || side === 'below_cloud' ? side : '';
+  }}
+
+  function ichimokuFirstBreakoutCloseNearScanner(scannerDate) {{
+    const scanner = String(scannerDate || '').slice(0, 10);
+    const side = scannerBreakoutSideFromMeta(scanner);
+    if (!scanner || !side) return scanner;
+    const idx = ohlc.findIndex(row => String(row.time).slice(0, 10) === scanner);
+    if (idx < 0) return scanner;
+    const sameSide = (row) => {{
+      if (!row) return false;
+      const spanA = Number(ichiValueAt('spanA', row.time));
+      const spanB = Number(ichiValueAt('spanB', row.time));
+      if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return false;
+      const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB), close = Number(row.close);
+      return side === 'above_cloud' ? close > top : close < bottom;
+    }};
+    // Scanner confirmation can be displaced by cloud-edge changes or an
+    // inside-cloud candle. Search two trading candles on either side and use
+    // the first actual close beyond the requested cloud boundary. This covers
+    // BRACOMP (below, two candles earlier), LIN.DE (Friday before Monday), and
+    // ALE.WA (above, two candles after the scanner's transition date).
+    const startIdx = Math.max(0, idx - 2);
+    const endIdx = Math.min(ohlc.length - 1, idx + 2);
+    for (let i = startIdx; i <= endIdx; i += 1) {{
+      if (sameSide(ohlc[i])) return ohlc[i].time;
+    }}
+    return scanner;
+  }}
+
+  function ichimokuHighlightBreakoutDate() {{
+    const scannerBreakout = scannerMetaValue('__scanner_breakout_date__');
+    if (!scannerBreakout) return '';
+    return ichimokuScannerBreakoutContext(scannerBreakout).displayDate || scannerBreakout;
+  }}
+
+  function scannerHighlightEvents() {{
+    const events = [];
+    const breakoutDate = ichimokuHighlightBreakoutDate();
+    const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
+    const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    const chartFiboPattern = fibo618PatternFromChart();
+    const patternDate = scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time || '';
+    const patternName = scannerMetaValue('__scanner_pattern_name__') || chartFiboPattern?.name || '';
+    const hasIchimokuScannerContext = !!(breakoutDate || latestRetestDate || latestRetestPattern || scannerMetaValue('__scanner_retest_count__'));
+    const hasFiboScannerContext = !!(patternDate || patternName);
+    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && breakoutDate && ohlcByTime.has(String(breakoutDate).slice(0, 10))) {{
+      const direction = scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate);
+      events.push({{kind:'breakout', key:'scanner:breakout', label:'Ichimoku Breakout', time:String(breakoutDate).slice(0,10), span:1, color:'#f97316', detail:`Ichimoku breakout ${{direction || ''}}`.trim()}});
+    }}
+    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
+      const label = scannerPatternLabel(latestRetestPattern);
+      events.push({{kind:'retest pattern', key:`scanner:retest:${{label}}`, label, time:String(latestRetestDate).slice(0,10), span:scannerPatternSpan(latestRetestPattern), color:'#e11d48', detail:`${{label}} retest pattern`}});
+    }}
+    if (hasFiboScannerContext && patternDate && isValidScannerPattern(patternName)) {{
+      const label = scannerPatternLabel(patternName);
+      events.push({{kind:'Fibo 61.8 pattern', key:`scanner:fibo:${{label}}`, label, time:String(patternDate).slice(0,10), span:scannerPatternSpan(patternName), color:'#e11d48', detail:`${{label}} Fibo 61.8 pattern`}});
+    }}
+    return events;
+  }}
+
+  function addScannerHighlightLegend(events) {{
+    const legend = $('scanner-highlight-legend');
+    legend.innerHTML = '';
+    const seen = new Set();
+    events.forEach(ev => {{
+      if (seen.has(ev.key)) return; seen.add(ev.key);
+      const item = document.createElement('span');
+      item.dataset.key = ev.key;
+      item.classList.toggle('hidden', hiddenLegendKeys.has(ev.key));
+      item.innerHTML = `<i style="background:${{ev.color}}"></i><b>${{ev.label}}</b>`;
+      item.onclick = () => {{ hiddenLegendKeys.has(ev.key) ? hiddenLegendKeys.delete(ev.key) : hiddenLegendKeys.add(ev.key); render(); }};
+      legend.appendChild(item);
+    }});
+  }}
+
+  function drawScannerHighlights(ctx) {{
+    scannerHighlightRects = [];
+    const events = scannerHighlightEvents();
+    addScannerHighlightLegend(events);
+    events.forEach(ev => {{
+      if (hiddenLegendKeys.has(ev.key)) return;
+      const band = scannerCandleBand(ev.time, ev.span);
+      if (!band) return;
+      const patternRows = ohlc.slice(band.startIdx, band.endIdx + 1);
+      const yValues = patternRows.flatMap(row => [
+        candleSeries.priceToCoordinate(Number(row.high)),
+        candleSeries.priceToCoordinate(Number(row.low)),
+      ]).filter(Number.isFinite);
+      if (!yValues.length) return;
+      const top = Math.min(...yValues) - 8;
+      const bottom = Math.max(...yValues) + 8;
+      const width = band.right - band.left;
+      const height = bottom - top;
+      ctx.save();
+      ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(249,115,22,.16)' : 'rgba(225,29,72,.16)';
+      ctx.strokeStyle = ev.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.fillRect(band.left, top, width, height);
+      // Draw one outside border around the complete formation.  Per-candle
+      // borders created distracting inner lines on multi-candle patterns.
+      ctx.strokeRect(band.left + .5, top + .5, width - 1, height - 1);
+      ctx.restore();
+      scannerHighlightRects.push({{...ev, left:band.left, right:band.right, top, bottom}});
+    }});
   }}
 
   function captureViewport() {{
@@ -3324,6 +3498,21 @@ class LightweightChartLevelSelectorUI:
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
   const scannerWedgePreloaded = initialScannerDrawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+
+  $('chart-wrap')?.addEventListener('mousemove', (ev) => {{
+    const tip = $('scanner-highlight-tooltip');
+    if (!tip) return;
+    const rect = $('chart').getBoundingClientRect();
+    const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+    const hit = scannerHighlightRects.find(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+    if (!hit) {{ tip.style.display = 'none'; return; }}
+    tip.textContent = `${{hit.detail || hit.label}} · ${{hit.time}}`;
+    tip.style.left = `${{Math.min(rect.width - 290, Math.max(8, x + 12))}}px`;
+    tip.style.top = `${{Math.max(8, y + 12)}}px`;
+    tip.style.display = 'block';
+  }});
+  $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
+
   applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();
 }})();
   </script>

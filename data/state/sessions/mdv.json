@@ -8,5 +8,6 @@
   "__scanner_retest_count__": "1",
   "__scanner_latest_retest_date__": "2026-06-23",
   "__scanner_latest_retest_pattern__": "hammer",
-  "__scanner_previous_respect_months__": "8.6"
+  "__scanner_previous_respect_months__": "8.6",
+  "__scanner_breakout_direction__": "long"
 }

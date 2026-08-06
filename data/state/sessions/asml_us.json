@@ -8,5 +8,6 @@
   "__scanner_latest_retest_date__": "2026-07-31",
   "__scanner_latest_retest_pattern__": "bearish_engulfing",
   "__scanner_previous_respect_months__": "10.7",
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_direction__": "short"
 }

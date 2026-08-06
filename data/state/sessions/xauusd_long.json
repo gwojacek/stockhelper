@@ -1,6 +1,6 @@
 {
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Kliny",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "lot_cost": 85171.26,
   "pip_value": 361.86,
   "drawn_objects": [
@@ -107,5 +107,11 @@
   "line_cross_value": 4067.6,
   "__wedge_auto_line_cross__": true,
   "stop_loss": 4019.88,
-  "__wedge_auto_stop_loss__": true
+  "__wedge_auto_stop_loss__": true,
+  "__scanner_breakout_date__": "2026-03-19",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-05-07",
+  "__scanner_latest_retest_pattern__": "shooting_star",
+  "__scanner_previous_respect_months__": "3.8"
 }
