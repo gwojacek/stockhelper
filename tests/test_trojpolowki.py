@@ -317,6 +317,14 @@ def test_ichimoku_latest_breakout_uses_trading_candles_and_stays_valid_to_latest
     assert "maintained through latest candle" in breakout
 
 
+def test_multi_candle_scanner_highlight_has_only_an_outer_border():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    drawing = source[source.index("function drawScannerHighlights"):source.index("function captureViewport")]
+    assert "ohlc.slice(band.startIdx, band.endIdx + 1)" in drawing
+    assert "ctx.strokeRect(band.left + .5" in drawing
+    assert "ctx.strokeRect(single.left" not in drawing
+
+
 def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert 'group_name in {"DAX40", "NDX100"}' in scanner_source

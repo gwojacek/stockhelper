@@ -2455,24 +2455,27 @@ class LightweightChartLevelSelectorUI:
       if (hiddenLegendKeys.has(ev.key)) return;
       const band = scannerCandleBand(ev.time, ev.span);
       if (!band) return;
-      for (let idx = band.startIdx; idx <= band.endIdx; idx += 1) {{
-        const row = ohlc[idx];
-        const single = scannerCandleBand(row.time, 1);
-        if (!single) continue;
-        const yHigh = candleSeries.priceToCoordinate(Number(row.high));
-        const yLow = candleSeries.priceToCoordinate(Number(row.low));
-        if (!Number.isFinite(yHigh) || !Number.isFinite(yLow)) continue;
-        const top = Math.min(yHigh, yLow) - 8, height = Math.abs(yLow - yHigh) + 16;
-        ctx.save();
-        ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(249,115,22,.16)' : 'rgba(225,29,72,.16)';
-        ctx.strokeStyle = ev.color;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([]);
-        ctx.fillRect(single.left, top, single.right - single.left, height);
-        ctx.strokeRect(single.left + .5, top + .5, single.right - single.left - 1, height - 1);
-        ctx.restore();
-        scannerHighlightRects.push({{...ev, left:single.left, right:single.right, top, bottom:top+height}});
-      }}
+      const patternRows = ohlc.slice(band.startIdx, band.endIdx + 1);
+      const yValues = patternRows.flatMap(row => [
+        candleSeries.priceToCoordinate(Number(row.high)),
+        candleSeries.priceToCoordinate(Number(row.low)),
+      ]).filter(Number.isFinite);
+      if (!yValues.length) return;
+      const top = Math.min(...yValues) - 8;
+      const bottom = Math.max(...yValues) + 8;
+      const width = band.right - band.left;
+      const height = bottom - top;
+      ctx.save();
+      ctx.fillStyle = ev.kind === 'breakout' ? 'rgba(249,115,22,.16)' : 'rgba(225,29,72,.16)';
+      ctx.strokeStyle = ev.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.fillRect(band.left, top, width, height);
+      // Draw one outside border around the complete formation.  Per-candle
+      // borders created distracting inner lines on multi-candle patterns.
+      ctx.strokeRect(band.left + .5, top + .5, width - 1, height - 1);
+      ctx.restore();
+      scannerHighlightRects.push({{...ev, left:band.left, right:band.right, top, bottom}});
     }});
   }}
 
