@@ -338,6 +338,12 @@ def test_legacy_oil_report_recovers_dark_cloud_confirmation_date():
     assert "--scanner-pattern-date 2026-07-24" in command
     assert "--scanner-pattern-name dark_cloud_cover" in command
 
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "function fibo618PatternFromChart()" in ui_source
+    assert "touches618 && darkCloud" in ui_source
+    assert "scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time" in ui_source
+    assert "scannerPattern || recoveredPattern" in ui_source
+
 
 def test_ichimoku_latest_breakout_uses_trading_candles_and_stays_valid_to_latest():
     source = Path("scanner_search.py").read_text(encoding="utf-8")

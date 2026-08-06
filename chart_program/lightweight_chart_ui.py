@@ -1320,6 +1320,8 @@ class LightweightChartLevelSelectorUI:
       const scannerPatternDate = scannerMetaValue('__scanner_pattern_date__');
       const scannerPatternName = scannerMetaValue('__scanner_pattern_name__');
       const scannerPattern = scannerPatternDate && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
+      const chartPattern = fibo618PatternFromChart();
+      const recoveredPattern = chartPattern ? `${{scannerPatternLabel(chartPattern.name)}} (${{chartPattern.time}}) [61.8]` : '';
       const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
@@ -1327,7 +1329,7 @@ class LightweightChartLevelSelectorUI:
       lines.push(`  ${{anchorDatesLine}}`);
       lines.push(`  ${{anchorValuesLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
-      lines.push(`  61.8 pattern: ${{scannerPattern || (touch && pattern !== '-' ? `${{scannerPatternLabel(pattern)}} (${{touch.time}})` : '-')}}`);
+      lines.push(`  61.8 pattern: ${{scannerPattern || recoveredPattern || (touch && pattern !== '-' ? `${{scannerPatternLabel(pattern)}} (${{touch.time}})` : '-')}}`);
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
@@ -2345,6 +2347,27 @@ class LightweightChartLevelSelectorUI:
     return 1;
   }}
 
+  function fibo618PatternFromChart() {{
+    const fib618 = drawnObjects.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio) - 0.618) < 0.002)
+      || drawnObjects.find(obj => obj.type === 'fib' && String(obj.label || '').includes('61.8'));
+    const level = Number(fib618?.price ?? fib618?.y0);
+    if (!Number.isFinite(level)) return null;
+    let found = null;
+    for (let i = 1; i < ohlc.length; i += 1) {{
+      const first = ohlc[i - 1], second = ohlc[i];
+      const o1 = Number(first.open), h1 = Number(first.high), l1 = Number(first.low), c1 = Number(first.close);
+      const o2 = Number(second.open), h2 = Number(second.high), l2 = Number(second.low), c2 = Number(second.close);
+      if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
+      const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
+      const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 < level;
+      if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+    }}
+    if (!found) return null;
+    const latest = ohlc[ohlc.length - 1]?.time;
+    const age = latest ? daysBetween(found.time, latest) : null;
+    return age === null || (age >= 0 && age <= 14) ? found : null;
+  }}
+
   function scannerCandleBand(time, span=1) {{
     const row = ohlcByTime.get(String(time).slice(0, 10));
     if (!row) return null;
@@ -2416,8 +2439,9 @@ class LightweightChartLevelSelectorUI:
     const breakoutDate = ichimokuHighlightBreakoutDate();
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
-    const patternDate = scannerMetaValue('__scanner_pattern_date__');
-    const patternName = scannerMetaValue('__scanner_pattern_name__');
+    const chartFiboPattern = fibo618PatternFromChart();
+    const patternDate = scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time || '';
+    const patternName = scannerMetaValue('__scanner_pattern_name__') || chartFiboPattern?.name || '';
     const hasIchimokuScannerContext = !!(breakoutDate || latestRetestDate || latestRetestPattern || scannerMetaValue('__scanner_retest_count__'));
     const hasFiboScannerContext = !!(patternDate || patternName);
     if (levels.__show_ichimoku__ && hasIchimokuScannerContext && breakoutDate && ohlcByTime.has(String(breakoutDate).slice(0, 10))) {{
