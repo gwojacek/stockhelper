@@ -325,6 +325,27 @@ def test_multi_candle_scanner_highlight_has_only_an_outer_border():
     assert "ctx.strokeRect(single.left" not in drawing
 
 
+def test_scanner_breakout_correction_counts_trading_candles_not_calendar_days():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    resolver = source[source.index("function ichimokuFirstBreakoutCloseNearScanner"):source.index("function ichimokuHighlightBreakoutDate")]
+    assert "checked < 2" in resolver
+    assert "daysBetween(ohlc[i].time, scanner)" not in resolver
+
+
+def test_ichimoku_chart_command_forwards_current_scanner_direction():
+    mod = load_run_module()
+    long_row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="position", ticker="ALE.WA",
+        status="above", dates={"start_date": "2026-04-09"}, metrics={"current_side": "above"},
+    )
+    short_row = mod.ScannerRow(
+        market="DAX", scanner="ICHIMOKU", category="retest_breakout", ticker="LIN.DE",
+        status="below", dates={"flip_date": "2026-07-31"}, metrics={"current_side": "below"},
+    )
+    assert "--scanner-breakout-direction long" in mod._chart_command_for_row(long_row)
+    assert "--scanner-breakout-direction short" in mod._chart_command_for_row(short_row)
+
+
 def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert 'group_name in {"DAX40", "NDX100"}' in scanner_source

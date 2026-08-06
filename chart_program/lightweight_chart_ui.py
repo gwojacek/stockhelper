@@ -2394,9 +2394,11 @@ class LightweightChartLevelSelectorUI:
     }};
     if (!sameSide(ohlc[idx])) return scanner;
     let firstIdx = idx;
-    for (let i = idx - 1; i >= 0; i -= 1) {{
-      const diff = Math.abs(daysBetween(ohlc[i].time, scanner) ?? 999999);
-      if (diff > 2 || !sameSide(ohlc[i])) break;
+    // Scanner confirmation can lag the first close by up to two trading
+    // candles.  Count actual candles rather than calendar days so a Friday
+    // breakout can be resolved from a Monday scanner confirmation.
+    for (let i = idx - 1, checked = 0; i >= 0 && checked < 2; i -= 1, checked += 1) {{
+      if (!sameSide(ohlc[i])) break;
       firstIdx = i;
     }}
     return ohlc[firstIdx]?.time || scanner;

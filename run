@@ -118,6 +118,21 @@ class ScannerRow:
     python_command: str | None = None
     priority: str = "LOW"
 
+def _ichimoku_breakout_direction(row: ScannerRow) -> str:
+    values = [
+        row.direction,
+        row.metrics.get("current_side"),
+        row.status,
+        row.metrics.get("raw_status"),
+    ]
+    text = " ".join(str(value or "").lower() for value in values)
+    if any(token in text for token in ("short", "below", "under", "↘", "↓")):
+        return "short"
+    if any(token in text for token in ("long", "above", "over", "↗", "↑")):
+        return "long"
+    return ""
+
+
 def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
@@ -139,6 +154,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     if row.scanner == "ICHIMOKU":
         cmd = f"python run -c {ticker_cmd} --ichimoku-mode on"
         cmd = _append_optional(cmd, "--scanner-breakout-date", row.dates.get("flip_date") or row.dates.get("start_date"))
+        cmd = _append_optional(cmd, "--scanner-breakout-direction", _ichimoku_breakout_direction(row))
         cmd = _append_optional(cmd, "--scanner-retest-count", row.metrics.get("retest_count") or row.metrics.get("latest_retest_count"))
         cmd = _append_optional(cmd, "--scanner-latest-retest-date", row.metrics.get("latest_retest_date"))
         cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
