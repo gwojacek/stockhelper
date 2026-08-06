@@ -308,6 +308,22 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     assert "--scanner-pattern-date 2026-08-05" in command
     assert "--scanner-pattern-date 2026-08-04" not in command
 
+    commodity = mod.ScannerRow(
+        market="COMMODITIES", scanner="FIBO", category="valid", ticker="OIL",
+        status="valid_reversal", pattern="dark_cloud_cover", direction="short",
+        dates={
+            "pattern_date": "2026-07-24",
+            "touch_61": "2026-07-23",
+            "incline": "2026-03-09->2026-07-02",
+        },
+    )
+    commodity_command = mod._chart_command_for_row(commodity)
+    assert "python run -c CL.F" in commodity_command
+    assert "--scanner-pattern-date 2026-07-24" in commodity_command
+    assert "--scanner-pattern-name dark_cloud_cover" in commodity_command
+
+    assert '["Ticker","Dir","Pattern","Pattern date","Incline"' in source
+
 
 def test_ichimoku_latest_breakout_uses_trading_candles_and_stays_valid_to_latest():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
@@ -328,7 +344,9 @@ def test_multi_candle_scanner_highlight_has_only_an_outer_border():
 def test_scanner_breakout_correction_counts_trading_candles_not_calendar_days():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     resolver = source[source.index("function ichimokuFirstBreakoutCloseNearScanner"):source.index("function ichimokuHighlightBreakoutDate")]
-    assert "checked < 2" in resolver
+    assert "idx - 2" in resolver
+    assert "idx + 2" in resolver
+    assert "if (sameSide(ohlc[i])) return ohlc[i].time" in resolver
     assert "daysBetween(ohlc[i].time, scanner)" not in resolver
 
 

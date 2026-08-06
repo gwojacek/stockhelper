@@ -2392,16 +2392,17 @@ class LightweightChartLevelSelectorUI:
       const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB), close = Number(row.close);
       return side === 'above_cloud' ? close > top : close < bottom;
     }};
-    if (!sameSide(ohlc[idx])) return scanner;
-    let firstIdx = idx;
-    // Scanner confirmation can lag the first close by up to two trading
-    // candles.  Count actual candles rather than calendar days so a Friday
-    // breakout can be resolved from a Monday scanner confirmation.
-    for (let i = idx - 1, checked = 0; i >= 0 && checked < 2; i -= 1, checked += 1) {{
-      if (!sameSide(ohlc[i])) break;
-      firstIdx = i;
+    // Scanner confirmation can be displaced by cloud-edge changes or an
+    // inside-cloud candle. Search two trading candles on either side and use
+    // the first actual close beyond the requested cloud boundary. This covers
+    // BRACOMP (below, two candles earlier), LIN.DE (Friday before Monday), and
+    // ALE.WA (above, two candles after the scanner's transition date).
+    const startIdx = Math.max(0, idx - 2);
+    const endIdx = Math.min(ohlc.length - 1, idx + 2);
+    for (let i = startIdx; i <= endIdx; i += 1) {{
+      if (sameSide(ohlc[i])) return ohlc[i].time;
     }}
-    return ohlc[firstIdx]?.time || scanner;
+    return scanner;
   }}
 
   function ichimokuHighlightBreakoutDate() {{
