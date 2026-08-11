@@ -3121,10 +3121,12 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     # the cloud after many months of respect before printing the actual breakout.
     max_transition_days = 35
 
-    # Prefer latest valid flip below->above.  The breakout date is the first
-    # close beyond the far cloud edge; requiring the whole candle body outside
-    # delayed the reported date and made scanner/chart dates disagree.
-    for i in range(len(df) - 1, 0, -1):
+    # Select the first valid flip that begins the currently maintained regime.
+    # A later inside-cloud candle may be followed by another close above the
+    # far edge, but that is a re-break/retest continuation, not a new flip. ENT
+    # is the concrete case: the initial 2026-08-05 close remains the breakout
+    # even though price closes inside the cloud before moving above it again.
+    for i in range(1, len(df)):
         crossed_up = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
         if not crossed_up:
             continue
@@ -3146,9 +3148,9 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             previous_respect_run = prev_run
             break
 
-    # If not found, try latest valid flip above->below.
+    # If not found, apply the mirrored rule to an above->below regime.
     if flip_idx is None:
-        for i in range(len(df) - 1, 0, -1):
+        for i in range(1, len(df)):
             crossed_down = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
             if not crossed_down:
                 continue

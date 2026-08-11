@@ -71,10 +71,12 @@ def test_flip_date_is_first_close_outside_cloud_not_first_full_body():
     df = pd.DataFrame(
         {
             "Date": dates,
-            "Open": [8.0, 8.0, 8.0, 8.0, 9.5, 9.8, 10.5, 10.8],
-            "High": [8.5, 8.5, 8.5, 8.5, 10.0, 10.6, 11.0, 11.2],
-            "Low": [7.5, 7.5, 7.5, 7.5, 9.0, 9.4, 10.2, 10.4],
-            "Close": [8.0, 8.0, 8.0, 8.0, 9.5, 10.4, 10.8, 11.0],
+            "Open": [8.0, 8.0, 8.0, 8.0, 9.5, 9.8, 10.2, 10.8],
+            "High": [8.5, 8.5, 8.5, 8.5, 10.0, 10.6, 10.5, 11.2],
+            "Low": [7.5, 7.5, 7.5, 7.5, 9.0, 9.4, 9.4, 10.4],
+            # First close above the cloud is followed by an inside-cloud close
+            # and then a re-break. The re-break must not replace the flip date.
+            "Close": [8.0, 8.0, 8.0, 8.0, 9.5, 10.4, 9.8, 11.0],
             "cloud_top": [10.0] * 8,
             "cloud_bottom": [9.0] * 8,
         }
