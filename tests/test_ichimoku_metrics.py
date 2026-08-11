@@ -52,6 +52,20 @@ def test_candle_body_bounds_avoid_arg_reductions_and_tolerate_missing_values(mon
     assert pd.isna(body_low.iloc[3])
 
 
+def test_finite_extreme_does_not_call_pandas_reductions(monkeypatch):
+    values = pd.Series([None, 4.0, 2.0, float("nan"), 7.0])
+
+    def fail_reduction(*_args, **_kwargs):
+        raise AssertionError("scanner extremes must not use pandas min/max reductions")
+
+    monkeypatch.setattr(pd.Series, "min", fail_reduction)
+    monkeypatch.setattr(pd.Series, "max", fail_reduction)
+
+    assert scanner_search._finite_extreme(values, highest=False) == 2.0
+    assert scanner_search._finite_extreme(values, highest=True) == 7.0
+    assert scanner_search._finite_extreme(pd.Series([None, float("nan")]), highest=False) is None
+
+
 def test_flip_date_is_first_close_outside_cloud_not_first_full_body():
     dates = pd.date_range("2026-07-29", periods=8, freq="D")
     df = pd.DataFrame(

@@ -2131,6 +2131,15 @@ def _candle_body_bounds(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     )
 
 
+def _finite_extreme(values, *, highest: bool) -> float | None:
+    """Return an extreme without pandas/numpy arg-reduction internals."""
+    numeric = pd.to_numeric(values, errors="coerce")
+    finite = [float(value) for value in numeric if pd.notna(value) and math.isfinite(float(value))]
+    if not finite:
+        return None
+    return max(finite) if highest else min(finite)
+
+
 def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = None) -> ScanResult | None:
     if len(df) < min_days + 2:
         if debug_ticker:
@@ -2478,6 +2487,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             if canonical:
                 display_symbol = canonical
 
+    scan_stage = "load daily history"
     try:
         df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
         source_label = str((meta or {}).get("source", "unknown")).lower()
@@ -2485,8 +2495,11 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         expected_latest_session_date = get_expected_latest_session_date(
             instrument, group_name, current_datetime or datetime.now(UTC), fetch_symbol
         )
+        scan_stage = "calculate Ichimoku cloud"
         enriched = _ichimoku(df)
+        scan_stage = "qualify cloud-side trend"
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
+        scan_stage = "detect cloud flip and retests"
         flip = _flip_after_long_respect(enriched, allow_equal_third_close=(instrument == "forex"))
         _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
         stock_liquidity_ok = True
@@ -2498,6 +2511,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             stock_liquidity_ok = avg_10d >= threshold_10d and below_20d <= 2
             _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
+            scan_stage = "enrich continuing-trend result"
             result.ticker = ticker
             bidx = _find_latest_breakout_idx(enriched, result.side, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
             if bidx is not None:
@@ -2530,6 +2544,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
         if flip:
+            scan_stage = "enrich cloud-flip result"
             if instrument == "stock" and not stock_liquidity_ok:
                 return display_symbol, result, None, (
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
@@ -2544,7 +2559,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
-        return display_symbol, None, None, str(exc), "unknown"
+        return display_symbol, None, None, f"{scan_stage}: {exc}", "unknown"
 
 
 
@@ -2844,8 +2859,10 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
             leading_span_a = (float(c["tenkan"]) + float(c["kijun"])) / 2.0
             high52 = pd.to_numeric(df["High"].tail(52), errors="coerce")
             low52 = pd.to_numeric(df["Low"].tail(52), errors="coerce")
-            if high52.notna().any() and low52.notna().any():
-                leading_span_b = (float(high52.max()) + float(low52.min())) / 2.0
+            high52_max = _finite_extreme(high52, highest=True)
+            low52_min = _finite_extreme(low52, highest=False)
+            if high52_max is not None and low52_min is not None:
+                leading_span_b = (high52_max + low52_min) / 2.0
                 diff = leading_span_a - leading_span_b
                 kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
             else:
@@ -3365,9 +3382,15 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 span = pattern_span.get(formation, 1)
                 start_idx = max(0, pattern_idx - span + 1)
                 segment = w.iloc[start_idx:pattern_idx + 1]
-                if current_side == "above":
-                    return float(pd.to_numeric(segment["Low"], errors="coerce").min())
-                return float(pd.to_numeric(segment["High"], errors="coerce").max())
+                extreme = _finite_extreme(
+                    segment["Low" if current_side == "above" else "High"],
+                    highest=current_side != "above",
+                )
+                # Invalid/incomplete pattern candles sort last and are skipped
+                # by the guarded cycle reaction check below.
+                if extreme is None:
+                    return float("inf") if current_side == "above" else float("-inf")
+                return extreme
 
             # One cloud visit is one retest cycle. Select only the pattern at
             # that cycle's best reaction extreme: lowest for a long setup,
