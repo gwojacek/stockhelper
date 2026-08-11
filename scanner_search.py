@@ -672,6 +672,10 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
     return (
         open_at_body_low
         and c2_close > midpoint_c1
+        # A close above the first candle's open is a bullish engulfing/stronger
+        # continuation, not a piercing line. The second close must finish
+        # strictly inside the first real body.
+        and c2_close < c1_open
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level
     )
@@ -758,7 +762,14 @@ def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     if b1 / max(h1 - l1, 1e-9) < 0.30:
         return False
     mid1 = (o1 + cl1) / 2.0
-    return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
+    return (
+        cl2 < mid1
+        # Mirror the piercing-line rule: a close below the first candle's open
+        # is bearish engulfing/continuation, not dark-cloud cover.
+        and cl2 > o1
+        and (_touches_level(c1, level) or _touches_level(c2, level))
+        and cl2 < level
+    )
 
 def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)

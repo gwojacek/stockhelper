@@ -2362,7 +2362,7 @@ class LightweightChartLevelSelectorUI:
       const o2 = Number(second.open), h2 = Number(second.high), l2 = Number(second.low), c2 = Number(second.close);
       if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
       const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
-      const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 < level;
+      const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level;
       if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
     }}
     if (!found) return null;

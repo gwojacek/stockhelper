@@ -341,6 +341,7 @@ def test_legacy_oil_report_recovers_dark_cloud_confirmation_date():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function fibo618PatternFromChart()" in ui_source
     assert "touches618 && darkCloud" in ui_source
+    assert "c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level" in ui_source
     assert "piercing|dark cloud cover|harami" in ui_source
     assert "scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time" in ui_source
     assert "scannerPattern || recoveredPattern" in ui_source
