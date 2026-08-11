@@ -49,21 +49,23 @@ def candle(open_: float, high: float, low: float, close: float) -> dict[str, flo
     return {"Open": open_, "High": high, "Low": low, "Close": close}
 
 
-def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_allows_upper_shadow_up_to_twice_body():
+def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_upper_shadow_at_most_body():
     assert _is_bullish_hammer(candle(10.0, 12.0, 6.0, 11.0))
-    assert not _is_bullish_hammer(candle(10.0, 13.1, 6.0, 11.0))
+    assert not _is_bullish_hammer(candle(10.0, 12.1, 6.0, 11.0))
     assert not _is_bullish_hammer(candle(10.0, 12.0, 8.1, 11.0))
 
 
 def test_bullish_hammer_allows_doji_hammer_shape():
     assert _is_bullish_hammer(candle(10.0, 10.5, 8.0, 10.0))
+    assert not _is_bullish_hammer(candle(10.0, 11.0, 8.0, 10.0))
 
 
 def test_bearish_hammer_mirrors_shadow_rules_and_allows_doji_shape():
-    assert _is_bearish_shooting_star(candle(10.0, 14.0, 8.0, 11.0))
-    assert not _is_bearish_shooting_star(candle(10.0, 14.0, 7.9, 11.0))
+    assert _is_bearish_shooting_star(candle(10.0, 14.0, 9.0, 11.0))
+    assert not _is_bearish_shooting_star(candle(10.0, 14.0, 8.9, 11.0))
     assert not _is_bearish_shooting_star(candle(10.0, 13.0, 8.2, 10.5))
     assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.5, 10.0))
+    assert not _is_bearish_shooting_star(candle(10.0, 12.0, 9.0, 10.0))
 
 
 def test_morning_star_requires_middle_body_below_first_and_third_body():

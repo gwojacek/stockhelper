@@ -598,10 +598,11 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     if body == 0:
-        # Doji hammers are valid only when the lower shadow is dominant;
-        # balanced long-legged doji candles should not be treated as hammers.
-        return candle_range > 0 and lower > 0 and lower >= 1.5 * max(upper, 1e-9)
-    return lower >= 2 * body and upper <= 2 * body and lower >= 1.5 * max(upper, 1e-9)
+        # A doji hammer must sit clearly in the upper quarter of its range;
+        # merely having a somewhat longer lower wick is not enough (ENT).
+        body_floor = min(float(c["Open"]), float(c["Close"]))
+        return candle_range > 0 and body_floor >= float(c["Low"]) + candle_range * 0.75 and lower > upper
+    return lower >= 2 * body and upper <= body
 
 
 def _is_bearish_shooting_star(c: pd.Series) -> bool:
@@ -610,10 +611,10 @@ def _is_bearish_shooting_star(c: pd.Series) -> bool:
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     if body == 0:
-        # Doji shooting stars are valid only when the upper shadow is dominant;
-        # candles with long wicks on both sides are neutral long-legged doji.
-        return candle_range > 0 and upper > 0 and upper >= 1.5 * max(lower, 1e-9)
-    return upper >= 2 * body and lower <= 2 * body and upper >= 1.5 * max(lower, 1e-9)
+        # Mirrored doji rule: the body must sit in the lower quarter.
+        body_ceiling = max(float(c["Open"]), float(c["Close"]))
+        return candle_range > 0 and body_ceiling <= float(c["Low"]) + candle_range * 0.25 and upper > lower
+    return upper >= 2 * body and lower <= body
 
 
 def _touches_level(c: pd.Series, level: float) -> bool:
@@ -3305,7 +3306,12 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             pattern_candidates: list[tuple[int, str]] = []
             if current_side == "above":
                 for j in range(0, len(w)):
-                    if _is_bullish_hammer(w.iloc[j]):
+                    candle = w.iloc[j]
+                    # A post-breakout hammer is a retest only when that candle
+                    # actually overlaps the cloud, not merely because it occurs
+                    # near a different candle that touched it.
+                    touches_cloud = _overlaps_price_zone(candle, float(candle["cloud_bottom"]), float(candle["cloud_top"]))
+                    if touches_cloud and _is_bullish_hammer(candle):
                         pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
@@ -3330,11 +3336,13 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         pattern_candidates.append((j, "morning_doji_star"))
             else:
                 for j in range(0, len(w)):
-                    if _is_bearish_shooting_star(w.iloc[j]):
+                    candle = w.iloc[j]
+                    touches_cloud = _overlaps_price_zone(candle, float(candle["cloud_bottom"]), float(candle["cloud_top"]))
+                    if touches_cloud and _is_bearish_shooting_star(candle):
                         pattern_candidates.append((j, "shooting_star"))
                     # Accept bearish hammer-shaped rejection (same geometry as shooting star)
                     # under explicit "hammer" naming used by some users.
-                    if _is_bearish_shooting_star(w.iloc[j]):
+                    if touches_cloud and _is_bearish_shooting_star(candle):
                         pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
