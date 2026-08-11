@@ -362,13 +362,11 @@ def test_multi_candle_scanner_highlight_has_only_an_outer_border():
     assert "ctx.strokeRect(single.left" not in drawing
 
 
-def test_scanner_breakout_correction_counts_trading_candles_not_calendar_days():
+def test_chart_uses_exact_scanner_breakout_date_without_nearby_candle_correction():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
-    resolver = source[source.index("function ichimokuFirstBreakoutCloseNearScanner"):source.index("function ichimokuHighlightBreakoutDate")]
-    assert "idx - 2" in resolver
-    assert "idx + 2" in resolver
-    assert "if (sameSide(ohlc[i])) return ohlc[i].time" in resolver
-    assert "daysBetween(ohlc[i].time, scanner)" not in resolver
+    context = source[source.index("function ichimokuScannerBreakoutContext"):source.index("function ichimokuRetestsSince")]
+    assert "const displayDate = scanner;" in context
+    assert "ichimokuFirstBreakoutCloseNearScanner(scanner)" not in context
 
 
 def test_ichimoku_chart_command_forwards_current_scanner_direction():

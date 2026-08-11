@@ -3104,9 +3104,11 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     # the cloud after many months of respect before printing the actual breakout.
     max_transition_days = 35
 
-    # Prefer latest valid flip below->above.
+    # Prefer latest valid flip below->above.  The breakout date is the first
+    # close beyond the far cloud edge; requiring the whole candle body outside
+    # delayed the reported date and made scanner/chart dates disagree.
     for i in range(len(df) - 1, 0, -1):
-        crossed_up = body_low.iloc[i] > top.iloc[i] and body_low.iloc[i - 1] <= top.iloc[i - 1]
+        crossed_up = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
         if not crossed_up:
             continue
         if not bool(above_respected.iloc[i:].all()):
@@ -3130,7 +3132,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     # If not found, try latest valid flip above->below.
     if flip_idx is None:
         for i in range(len(df) - 1, 0, -1):
-            crossed_down = body_high.iloc[i] < bottom.iloc[i] and body_high.iloc[i - 1] >= bottom.iloc[i - 1]
+            crossed_down = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
             if not crossed_down:
                 continue
             if not bool(below_respected.iloc[i:].all()):
@@ -3381,7 +3383,25 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             )
             for pattern_idx, formation in ordered_candidates:
                 pattern_abs = w_start + pattern_idx
-                local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
+                # ``w`` contains up to two lead-in candles for multi-candle
+                # recognition. A signal ending on a lead-in candle is not a
+                # retest pattern. Previously this also passed an empty slice to
+                # idxmin/idxmax, producing the reported argmin/argmax failure.
+                if pattern_abs < cycle_start:
+                    continue
+                reaction = pd.to_numeric(
+                    df["Low" if current_side == "above" else "High"].iloc[cycle_start:pattern_abs + 1],
+                    errors="coerce",
+                )
+                valid_reaction = [(offset, float(value)) for offset, value in enumerate(reaction) if pd.notna(value)]
+                if not valid_reaction:
+                    continue
+                local_offset, _local_value = (
+                    min(valid_reaction, key=lambda item: item[1])
+                    if current_side == "above"
+                    else max(valid_reaction, key=lambda item: item[1])
+                )
+                local_reaction_abs = cycle_start + local_offset
                 if pattern_abs - local_reaction_abs >= 2:
                     found_too_late = True
                     continue

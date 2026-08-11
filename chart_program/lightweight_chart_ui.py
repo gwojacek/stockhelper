@@ -1216,7 +1216,10 @@ class LightweightChartLevelSelectorUI:
     const transitions = ichimokuTransitions();
     const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
     const scanner = String(scannerDate).slice(0, 10);
-    const displayDate = ichimokuFirstBreakoutCloseNearScanner(scanner);
+    // The scanner supplies the canonical first close beyond the cloud. Do not
+    // move it to a nearby candle: report text, debug output and the orange
+    // chart highlight must all identify the same breakout day.
+    const displayDate = scanner;
     const realCandles = ohlc.filter(c => c && c.time);
     const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
     const ageDays = daysBetween(scanner, lastDate);
@@ -2391,41 +2394,6 @@ class LightweightChartLevelSelectorUI:
     if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return '';
     const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
     return Number(row.close) > top ? 'above cloud' : (Number(row.close) < bottom ? 'below cloud' : 'inside cloud');
-  }}
-
-  function scannerBreakoutSideFromMeta(scannerDate) {{
-    const direction = scannerMetaValue('__scanner_breakout_direction__').toLowerCase();
-    if (direction.includes('long') || direction.includes('above') || direction.includes('over')) return 'above_cloud';
-    if (direction.includes('short') || direction.includes('below') || direction.includes('under')) return 'below_cloud';
-    const side = ichimokuCloudSideForDate(scannerDate).replace(' ', '_');
-    return side === 'above_cloud' || side === 'below_cloud' ? side : '';
-  }}
-
-  function ichimokuFirstBreakoutCloseNearScanner(scannerDate) {{
-    const scanner = String(scannerDate || '').slice(0, 10);
-    const side = scannerBreakoutSideFromMeta(scanner);
-    if (!scanner || !side) return scanner;
-    const idx = ohlc.findIndex(row => String(row.time).slice(0, 10) === scanner);
-    if (idx < 0) return scanner;
-    const sameSide = (row) => {{
-      if (!row) return false;
-      const spanA = Number(ichiValueAt('spanA', row.time));
-      const spanB = Number(ichiValueAt('spanB', row.time));
-      if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return false;
-      const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB), close = Number(row.close);
-      return side === 'above_cloud' ? close > top : close < bottom;
-    }};
-    // Scanner confirmation can be displaced by cloud-edge changes or an
-    // inside-cloud candle. Search two trading candles on either side and use
-    // the first actual close beyond the requested cloud boundary. This covers
-    // BRACOMP (below, two candles earlier), LIN.DE (Friday before Monday), and
-    // ALE.WA (above, two candles after the scanner's transition date).
-    const startIdx = Math.max(0, idx - 2);
-    const endIdx = Math.min(ohlc.length - 1, idx + 2);
-    for (let i = startIdx; i <= endIdx; i += 1) {{
-      if (sameSide(ohlc[i])) return ohlc[i].time;
-    }}
-    return scanner;
   }}
 
   function ichimokuHighlightBreakoutDate() {{

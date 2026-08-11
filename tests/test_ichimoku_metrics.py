@@ -52,6 +52,59 @@ def test_candle_body_bounds_avoid_arg_reductions_and_tolerate_missing_values(mon
     assert pd.isna(body_low.iloc[3])
 
 
+def test_flip_date_is_first_close_outside_cloud_not_first_full_body():
+    dates = pd.date_range("2026-07-29", periods=8, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [8.0, 8.0, 8.0, 8.0, 9.5, 9.8, 10.5, 10.8],
+            "High": [8.5, 8.5, 8.5, 8.5, 10.0, 10.6, 11.0, 11.2],
+            "Low": [7.5, 7.5, 7.5, 7.5, 9.0, 9.4, 10.2, 10.4],
+            "Close": [8.0, 8.0, 8.0, 8.0, 9.5, 10.4, 10.8, 11.0],
+            "cloud_top": [10.0] * 8,
+            "cloud_bottom": [9.0] * 8,
+        }
+    )
+
+    flip = scanner_search._flip_after_long_respect(df, min_days=3)
+
+    assert flip is not None
+    assert flip.flip_date == "2026-08-03"
+
+
+def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
+    dates = pd.date_range("2026-08-01", periods=7, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [8.0, 10.5, 10.6, 10.7, 10.8, 10.7, 10.8],
+            "High": [8.5, 11.0, 11.1, 11.2, 11.3, 11.1, 11.2],
+            "Low": [7.5, 10.2, 10.3, 10.4, 9.8, 10.2, 10.4],
+            "Close": [8.0, 10.6, 10.7, 10.8, 10.5, 10.8, 11.0],
+            "cloud_top": [10.0] * 7,
+            "cloud_bottom": [9.0] * 7,
+        }
+    )
+    lead_in_date = dates[2]
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_hammer",
+        lambda row: pd.Timestamp(row["Date"]) == lead_in_date,
+    )
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "returned_to_cloud_waiting_for_pattern"
+    assert count == 0
+    assert events == []
+
+
 def test_ndx100_members_include_spcx():
     assert "SPCX.US" in scanner_search.NDX100_SEARCH_TICKERS
 
