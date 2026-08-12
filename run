@@ -3237,8 +3237,19 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
         return 1
 
     # Phase 2: run all Fibo scans after all Ichimoku scans are complete.
+    # Ichimoku has already refreshed and persisted every scope in this same
+    # allsearch process.  Freeze that data snapshot for Fibo so both scanners
+    # calculate from identical candles and Yahoo is not queried a second time.
     print(f"\n\033[1;33m---------------------------------------------- FIBO ----------------------------------------------\033[0m")
-    code_f = _run_batch_search("fibo", scopes, ask_open_links=False, force_cache_only=force_cache_only, strict_cache_only=force_cache_only, force_remote_refresh=force_remote_refresh)
+    print("[allsearch] FIBO reuses the Ichimoku market-data snapshot; cache-only mode ON.")
+    code_f = _run_batch_search(
+        "fibo",
+        scopes,
+        ask_open_links=False,
+        force_cache_only=True,
+        strict_cache_only=True,
+        force_remote_refresh=False,
+    )
     if code_f != 0:
         print("[allsearch] FIBO phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1

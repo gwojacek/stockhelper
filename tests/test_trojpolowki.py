@@ -54,6 +54,18 @@ def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
     assert "cleared old Stooq debug artifacts" in capsys.readouterr().out
 
 
+def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
+    source = Path("run").read_text(encoding="utf-8")
+    combo = source[source.index("def _run_allsearch_combo"):source.index("def _run_batch_search")]
+    fibo_call = combo[combo.index('code_f = _run_batch_search('):]
+
+    assert '"fibo"' in fibo_call
+    assert "force_cache_only=True" in fibo_call
+    assert "strict_cache_only=True" in fibo_call
+    assert "force_remote_refresh=False" in fibo_call
+    assert "FIBO reuses the Ichimoku market-data snapshot" in combo
+
+
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [
