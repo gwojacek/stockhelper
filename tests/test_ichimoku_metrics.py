@@ -88,6 +88,31 @@ def test_flip_date_is_first_close_outside_cloud_not_first_full_body():
     assert flip.flip_date == "2026-08-03"
 
 
+def test_gpp_cloud_entry_is_not_reported_as_breakout():
+    # GPP's 15-Apr candle entered the cloud. The first actual far-edge close is
+    # 21-Apr and must be the date shared by scanner reports and chart metadata.
+    dates = pd.to_datetime(
+        ["2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22"]
+    )
+    prefix = 80
+    df = pd.DataFrame(
+        {
+            "Date": list(pd.date_range("2025-12-01", periods=prefix, freq="D")) + list(dates),
+            "Open": [35.0] * prefix + [39.19, 40.36, 40.97, 42.10, 42.29, 43.23, 43.84, 44.17],
+            "High": [36.0] * prefix + [39.61, 40.88, 41.53, 42.57, 43.55, 43.65, 44.17, 44.17],
+            "Low": [34.0] * prefix + [38.53, 39.47, 40.69, 41.91, 41.68, 42.62, 43.41, 42.85],
+            "Close": [35.0] * prefix + [39.28, 40.55, 41.53, 42.38, 43.23, 43.23, 43.70, 43.32],
+            "cloud_top": [44.0] * prefix + [44.26, 44.26, 44.12, 43.34, 43.34, 43.34, 43.34, 43.25],
+            "cloud_bottom": [40.0] * prefix + [40.97, 40.90, 40.60, 39.67, 39.63, 39.23, 38.72, 38.43],
+        }
+    )
+
+    flip = scanner_search._flip_after_long_respect(df, min_days=70)
+
+    assert flip is not None
+    assert flip.flip_date == "2026-04-21"
+
+
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
     dates = pd.date_range("2026-08-01", periods=7, freq="D")
     df = pd.DataFrame(

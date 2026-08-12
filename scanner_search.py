@@ -3191,6 +3191,26 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     if flip_idx is None or previous_side is None or current_side is None:
         return None
 
+    # A cloud-entry/transition candle is not the breakout. Canonicalize the
+    # stored date to the first close beyond the *far* cloud boundary. This is a
+    # final invariant even if candidate-selection rules evolve: GPP enters the
+    # cloud on 2026-04-15 but does not close above its top until 2026-04-21.
+    strict_flip_idx = next(
+        (
+            idx
+            for idx in range(flip_idx, len(df))
+            if (
+                float(close.iloc[idx]) > float(top.iloc[idx])
+                if current_side == "above"
+                else float(close.iloc[idx]) < float(bottom.iloc[idx])
+            )
+        ),
+        None,
+    )
+    if strict_flip_idx is None:
+        return None
+    flip_idx = strict_flip_idx
+
     flip_ts = pd.to_datetime(df.iloc[flip_idx]["Date"])
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - flip_ts).days + 1) / 30.44
