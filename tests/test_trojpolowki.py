@@ -384,6 +384,33 @@ def test_ichimoku_chart_command_forwards_current_scanner_direction():
     assert "--scanner-breakout-direction short" in mod._chart_command_for_row(short_row)
 
 
+def test_zero_retest_count_drops_stale_pattern_from_chart_command():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG",
+        scanner="ICHIMOKU",
+        category="retest_breakout",
+        ticker="ENT",
+        status="breakout_confirmed",
+        dates={"flip_date": "2026-08-05"},
+        metrics={
+            "retest_count": "0",
+            "latest_retest_date": "2026-08-10",
+            "latest_retest_pattern": "hammer",
+        },
+    )
+
+    command = mod._chart_command_for_row(row)
+
+    assert "--scanner-retest-count 0" in command
+    assert "--scanner-latest-retest-date" not in command
+    assert "--scanner-latest-retest-pattern" not in command
+
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "wanted > 0 && latestRetestDate" in ui_source
+    assert "validRetestCount > 0 && latestRetestDate" in ui_source
+
+
 def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert 'group_name in {"DAX40", "NDX100"}' in scanner_source

@@ -1265,6 +1265,7 @@ class LightweightChartLevelSelectorUI:
     const breakout = scannerBreakout ? null : detectIchimokuBreakout();
     const startDate = scannerContext.csvStartDate || breakout?.time || (ohlc[0]?.time || null);
     const retestCount = scannerMetaValue('__scanner_retest_count__');
+    const validRetestCount = Math.max(0, parseInt(retestCount || '0', 10) || 0);
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
@@ -1280,8 +1281,8 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push('Retests / patterns since breakout:');
     if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
-      const wanted = Math.max(0, parseInt(retestCount || '0', 10) || 0);
-      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
+      const wanted = validRetestCount;
+      if (wanted > 0 && latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
         lines.push(`  ${{latestRetestDate}}: pattern=${{scannerPatternLabel(latestRetestPattern)}} (scanner latest)`);
         if (wanted > 1) lines.push(`  scanner reported ${{wanted}} valid retests total; older retest event details are not available in this chart command`);
       }} else {{
@@ -2407,6 +2408,7 @@ class LightweightChartLevelSelectorUI:
     const breakoutDate = ichimokuHighlightBreakoutDate();
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    const validRetestCount = Math.max(0, parseInt(scannerMetaValue('__scanner_retest_count__') || '0', 10) || 0);
     const chartFiboPattern = fibo618PatternFromChart();
     const patternDate = scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time || '';
     const patternName = scannerMetaValue('__scanner_pattern_name__') || chartFiboPattern?.name || '';
@@ -2416,7 +2418,7 @@ class LightweightChartLevelSelectorUI:
       const direction = scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate);
       events.push({{kind:'breakout', key:'scanner:breakout', label:'Ichimoku Breakout', time:String(breakoutDate).slice(0,10), span:1, color:'#f97316', detail:`Ichimoku breakout ${{direction || ''}}`.trim()}});
     }}
-    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
+    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && validRetestCount > 0 && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
       const label = scannerPatternLabel(latestRetestPattern);
       events.push({{kind:'retest pattern', key:`scanner:retest:${{label}}`, label, time:String(latestRetestDate).slice(0,10), span:scannerPatternSpan(latestRetestPattern), color:'#e11d48', detail:`${{label}} retest pattern`}});
     }}
