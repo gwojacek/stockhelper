@@ -56,15 +56,16 @@ def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_upper_shad
 
 
 def test_bullish_hammer_allows_doji_hammer_shape():
-    assert _is_bullish_hammer(candle(10.0, 10.5, 8.0, 10.0))
+    assert _is_bullish_hammer(candle(10.0, 10.2, 8.0, 10.0))
     assert not _is_bullish_hammer(candle(10.0, 11.0, 8.0, 10.0))
+    assert not _is_bullish_hammer(candle(56.8, 57.7, 55.0, 56.8))
 
 
 def test_bearish_hammer_mirrors_shadow_rules_and_allows_doji_shape():
     assert _is_bearish_shooting_star(candle(10.0, 14.0, 9.0, 11.0))
     assert not _is_bearish_shooting_star(candle(10.0, 14.0, 8.9, 11.0))
     assert not _is_bearish_shooting_star(candle(10.0, 13.0, 8.2, 10.5))
-    assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.5, 10.0))
+    assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.8, 10.0))
     assert not _is_bearish_shooting_star(candle(10.0, 12.0, 9.0, 10.0))
 
 

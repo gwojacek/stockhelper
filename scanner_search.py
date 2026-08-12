@@ -597,11 +597,14 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     candle_range = float(c["High"] - c["Low"])
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
-    if body == 0:
-        # A doji hammer must sit clearly in the upper quarter of its range;
-        # merely having a somewhat longer lower wick is not enough (ENT).
+    doji_like = candle_range > 0 and body <= candle_range * 0.10
+    if doji_like:
+        # Provider merges can turn an apparent doji into a tiny non-zero body,
+        # so classify by body/range rather than exact equality. A doji hammer's
+        # entire body must sit in the top 10% of the candle (ENT 2026-08-10 is
+        # around two-thirds up and must not qualify).
         body_floor = min(float(c["Open"]), float(c["Close"]))
-        return candle_range > 0 and body_floor >= float(c["Low"]) + candle_range * 0.75 and lower > upper
+        return body_floor >= float(c["Low"]) + candle_range * 0.90 and lower > upper
     return lower >= 2 * body and upper <= body
 
 
@@ -610,10 +613,11 @@ def _is_bearish_shooting_star(c: pd.Series) -> bool:
     candle_range = float(c["High"] - c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
-    if body == 0:
-        # Mirrored doji rule: the body must sit in the lower quarter.
+    doji_like = candle_range > 0 and body <= candle_range * 0.10
+    if doji_like:
+        # Mirrored doji rule: the entire body must sit in the bottom 10%.
         body_ceiling = max(float(c["Open"]), float(c["Close"]))
-        return candle_range > 0 and body_ceiling <= float(c["Low"]) + candle_range * 0.25 and upper > lower
+        return body_ceiling <= float(c["Low"]) + candle_range * 0.10 and upper > lower
     return upper >= 2 * body and lower <= body
 
 
