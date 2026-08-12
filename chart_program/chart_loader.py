@@ -1194,7 +1194,10 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                     return yahoo_merged[:5]
                 return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
         lookback = older_days if fetch_older_data else 548
-        attempts = 2
+        # The downloader already tries the exact q/d/l URL, resolves a new
+        # browser's consent/CAPTCHA (up to three OCR codes), retries q/d/l once,
+        # and then uses the form UI. Do not repeat that entire browser workflow.
+        attempts = 1
         primary_error: Exception | None = None
         for attempt in range(1, attempts + 1):
             try:

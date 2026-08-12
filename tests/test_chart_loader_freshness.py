@@ -55,7 +55,7 @@ def test_forex_retries_filtered_ui_csv_and_merges_yahoo_newest_candle(monkeypatc
     assert df["Date"].max() == pd.Timestamp("2026-06-10")
 
 
-def test_forex_falls_back_to_table_ui_after_two_fresh_browser_csv_attempts(monkeypatch, tmp_path, capsys):
+def test_forex_falls_back_to_table_ui_after_one_direct_first_browser_workflow(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "EURCHF.csv"
     attempts = []
 
@@ -72,15 +72,15 @@ def test_forex_falls_back_to_table_ui_after_two_fresh_browser_csv_attempts(monke
         symbol="EURCHF", instrument_type="forex", api_key=None, data_source="auto"
     )
 
-    assert len(attempts) == 2
+    assert len(attempts) == 1
     assert source == "stooq_web"
     assert source_symbol == "EURCHF"
-    assert "filtered UI CSV failed after 2 attempts" in reason
-    assert "previous browser session closed; retrying once with a new browser session" in capsys.readouterr().out
+    assert "filtered UI CSV failed after 1 attempts" in reason
+    assert "retrying once with a new browser session" not in capsys.readouterr().out
     assert df["Date"].min() == pd.Timestamp("2025-01-20")
 
 
-def test_forex_download_endpoint_denial_gets_one_fresh_browser_retry(monkeypatch, tmp_path):
+def test_forex_download_endpoint_denial_falls_back_without_new_browser_retry(monkeypatch, tmp_path):
     csv_path = tmp_path / "USDPLN.csv"
     attempts = []
 
@@ -97,7 +97,7 @@ def test_forex_download_endpoint_denial_gets_one_fresh_browser_retry(monkeypatch
         symbol="USDPLN", instrument_type="forex", api_key=None, data_source="auto"
     )
 
-    assert len(attempts) == 2
+    assert len(attempts) == 1
     assert source == "stooq_web"
     assert "q/d/l returned Odmowa" in reason
 
