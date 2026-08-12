@@ -1216,7 +1216,10 @@ class LightweightChartLevelSelectorUI:
     const transitions = ichimokuTransitions();
     const previousRespectMonths = Number(scannerMetaValue('__scanner_previous_respect_months__').replace(',', '.'));
     const scanner = String(scannerDate).slice(0, 10);
-    const displayDate = ichimokuFirstBreakoutCloseNearScanner(scanner);
+    // The scanner supplies the canonical first close beyond the cloud. Do not
+    // move it to a nearby candle: report text, debug output and the orange
+    // chart highlight must all identify the same breakout day.
+    const displayDate = scanner;
     const realCandles = ohlc.filter(c => c && c.time);
     const lastDate = realCandles[realCandles.length - 1]?.time || scanner;
     const ageDays = daysBetween(scanner, lastDate);
@@ -1262,6 +1265,7 @@ class LightweightChartLevelSelectorUI:
     const breakout = scannerBreakout ? null : detectIchimokuBreakout();
     const startDate = scannerContext.csvStartDate || breakout?.time || (ohlc[0]?.time || null);
     const retestCount = scannerMetaValue('__scanner_retest_count__');
+    const validRetestCount = Math.max(0, parseInt(retestCount || '0', 10) || 0);
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
@@ -1277,8 +1281,8 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push('Retests / patterns since breakout:');
     if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{
-      const wanted = Math.max(0, parseInt(retestCount || '0', 10) || 0);
-      if (latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
+      const wanted = validRetestCount;
+      if (wanted > 0 && latestRetestDate && isValidScannerPattern(latestRetestPattern)) {{
         lines.push(`  ${{latestRetestDate}}: pattern=${{scannerPatternLabel(latestRetestPattern)}} (scanner latest)`);
         if (wanted > 1) lines.push(`  scanner reported ${{wanted}} valid retests total; older retest event details are not available in this chart command`);
       }} else {{
@@ -2359,7 +2363,7 @@ class LightweightChartLevelSelectorUI:
       const o2 = Number(second.open), h2 = Number(second.high), l2 = Number(second.low), c2 = Number(second.close);
       if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
       const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
-      const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 < level;
+      const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level;
       if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
     }}
     if (!found) return null;
@@ -2393,41 +2397,6 @@ class LightweightChartLevelSelectorUI:
     return Number(row.close) > top ? 'above cloud' : (Number(row.close) < bottom ? 'below cloud' : 'inside cloud');
   }}
 
-  function scannerBreakoutSideFromMeta(scannerDate) {{
-    const direction = scannerMetaValue('__scanner_breakout_direction__').toLowerCase();
-    if (direction.includes('long') || direction.includes('above') || direction.includes('over')) return 'above_cloud';
-    if (direction.includes('short') || direction.includes('below') || direction.includes('under')) return 'below_cloud';
-    const side = ichimokuCloudSideForDate(scannerDate).replace(' ', '_');
-    return side === 'above_cloud' || side === 'below_cloud' ? side : '';
-  }}
-
-  function ichimokuFirstBreakoutCloseNearScanner(scannerDate) {{
-    const scanner = String(scannerDate || '').slice(0, 10);
-    const side = scannerBreakoutSideFromMeta(scanner);
-    if (!scanner || !side) return scanner;
-    const idx = ohlc.findIndex(row => String(row.time).slice(0, 10) === scanner);
-    if (idx < 0) return scanner;
-    const sameSide = (row) => {{
-      if (!row) return false;
-      const spanA = Number(ichiValueAt('spanA', row.time));
-      const spanB = Number(ichiValueAt('spanB', row.time));
-      if (!Number.isFinite(spanA) || !Number.isFinite(spanB)) return false;
-      const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB), close = Number(row.close);
-      return side === 'above_cloud' ? close > top : close < bottom;
-    }};
-    // Scanner confirmation can be displaced by cloud-edge changes or an
-    // inside-cloud candle. Search two trading candles on either side and use
-    // the first actual close beyond the requested cloud boundary. This covers
-    // BRACOMP (below, two candles earlier), LIN.DE (Friday before Monday), and
-    // ALE.WA (above, two candles after the scanner's transition date).
-    const startIdx = Math.max(0, idx - 2);
-    const endIdx = Math.min(ohlc.length - 1, idx + 2);
-    for (let i = startIdx; i <= endIdx; i += 1) {{
-      if (sameSide(ohlc[i])) return ohlc[i].time;
-    }}
-    return scanner;
-  }}
-
   function ichimokuHighlightBreakoutDate() {{
     const scannerBreakout = scannerMetaValue('__scanner_breakout_date__');
     if (!scannerBreakout) return '';
@@ -2439,6 +2408,7 @@ class LightweightChartLevelSelectorUI:
     const breakoutDate = ichimokuHighlightBreakoutDate();
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    const validRetestCount = Math.max(0, parseInt(scannerMetaValue('__scanner_retest_count__') || '0', 10) || 0);
     const chartFiboPattern = fibo618PatternFromChart();
     const patternDate = scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time || '';
     const patternName = scannerMetaValue('__scanner_pattern_name__') || chartFiboPattern?.name || '';
@@ -2448,7 +2418,7 @@ class LightweightChartLevelSelectorUI:
       const direction = scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate);
       events.push({{kind:'breakout', key:'scanner:breakout', label:'Ichimoku Breakout', time:String(breakoutDate).slice(0,10), span:1, color:'#f97316', detail:`Ichimoku breakout ${{direction || ''}}`.trim()}});
     }}
-    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
+    if (levels.__show_ichimoku__ && hasIchimokuScannerContext && validRetestCount > 0 && latestRetestDate && isValidScannerPattern(latestRetestPattern) && (!breakoutDate || compareTime(latestRetestDate, breakoutDate) > 0)) {{
       const label = scannerPatternLabel(latestRetestPattern);
       events.push({{kind:'retest pattern', key:`scanner:retest:${{label}}`, label, time:String(latestRetestDate).slice(0,10), span:scannerPatternSpan(latestRetestPattern), color:'#e11d48', detail:`${{label}} retest pattern`}});
     }}

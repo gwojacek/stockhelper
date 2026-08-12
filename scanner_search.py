@@ -20,6 +20,7 @@ from typing import Callable, Sequence
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 
 from chart_program.instrument_detector import detect_instrument_type
@@ -596,11 +597,15 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     candle_range = float(c["High"] - c["Low"])
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
-    if body == 0:
-        # Doji hammers are valid only when the lower shadow is dominant;
-        # balanced long-legged doji candles should not be treated as hammers.
-        return candle_range > 0 and lower > 0 and lower >= 1.5 * max(upper, 1e-9)
-    return lower >= 2 * body and upper <= 2 * body and lower >= 1.5 * max(upper, 1e-9)
+    doji_like = candle_range > 0 and body <= candle_range * 0.10
+    if doji_like:
+        # Provider merges can turn an apparent doji into a tiny non-zero body,
+        # so classify by body/range rather than exact equality. A doji hammer's
+        # entire body must sit in the top 10% of the candle (ENT 2026-08-10 is
+        # around two-thirds up and must not qualify).
+        body_floor = min(float(c["Open"]), float(c["Close"]))
+        return body_floor >= float(c["Low"]) + candle_range * 0.90 and lower > upper
+    return lower >= 2 * body and upper <= body
 
 
 def _is_bearish_shooting_star(c: pd.Series) -> bool:
@@ -608,11 +613,12 @@ def _is_bearish_shooting_star(c: pd.Series) -> bool:
     candle_range = float(c["High"] - c["Low"])
     upper = float(c["High"]) - max(float(c["Open"]), float(c["Close"]))
     lower = min(float(c["Open"]), float(c["Close"])) - float(c["Low"])
-    if body == 0:
-        # Doji shooting stars are valid only when the upper shadow is dominant;
-        # candles with long wicks on both sides are neutral long-legged doji.
-        return candle_range > 0 and upper > 0 and upper >= 1.5 * max(lower, 1e-9)
-    return upper >= 2 * body and lower <= 2 * body and upper >= 1.5 * max(lower, 1e-9)
+    doji_like = candle_range > 0 and body <= candle_range * 0.10
+    if doji_like:
+        # Mirrored doji rule: the entire body must sit in the bottom 10%.
+        body_ceiling = max(float(c["Open"]), float(c["Close"]))
+        return body_ceiling <= float(c["Low"]) + candle_range * 0.10 and upper > lower
+    return upper >= 2 * body and lower <= body
 
 
 def _touches_level(c: pd.Series, level: float) -> bool:
@@ -671,6 +677,10 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
     return (
         open_at_body_low
         and c2_close > midpoint_c1
+        # A close above the first candle's open is a bullish engulfing/stronger
+        # continuation, not a piercing line. The second close must finish
+        # strictly inside the first real body.
+        and c2_close < c1_open
         and (_touches_level(c1, level) or _touches_level(c2, level))
         and c2_close > level
     )
@@ -757,7 +767,14 @@ def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
     if b1 / max(h1 - l1, 1e-9) < 0.30:
         return False
     mid1 = (o1 + cl1) / 2.0
-    return cl2 < mid1 and (_touches_level(c1, level) or _touches_level(c2, level)) and cl2 < level
+    return (
+        cl2 < mid1
+        # Mirror the piercing-line rule: a close below the first candle's open
+        # is bearish engulfing/continuation, not dark-cloud cover.
+        and cl2 > o1
+        and (_touches_level(c1, level) or _touches_level(c2, level))
+        and cl2 < level
+    )
 
 def _is_evening_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
@@ -2113,6 +2130,32 @@ def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["cloud_top", "cloud_bottom"])
 
 
+def _candle_body_bounds(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Return candle body highs/lows without pandas row-wise reductions.
+
+    Some pandas/numpy combinations route ``DataFrame.max/min(axis=1)`` through
+    nanargmax/nanargmin.  A CSV row with missing OHLC data can then raise
+    ``attempt to get argmax/argmin of an empty sequence`` and skip the whole
+    symbol.  ``fmax``/``fmin`` preserve the intended skip-NaN behaviour without
+    an arg-reduction.
+    """
+    opens = pd.to_numeric(df["Open"], errors="coerce").to_numpy(dtype=float)
+    closes = pd.to_numeric(df["Close"], errors="coerce").to_numpy(dtype=float)
+    return (
+        pd.Series(np.fmax(opens, closes), index=df.index),
+        pd.Series(np.fmin(opens, closes), index=df.index),
+    )
+
+
+def _finite_extreme(values, *, highest: bool) -> float | None:
+    """Return an extreme without pandas/numpy arg-reduction internals."""
+    numeric = pd.to_numeric(values, errors="coerce")
+    finite = [float(value) for value in numeric if pd.notna(value) and math.isfinite(float(value))]
+    if not finite:
+        return None
+    return max(finite) if highest else min(finite)
+
+
 def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = None) -> ScanResult | None:
     if len(df) < min_days + 2:
         if debug_ticker:
@@ -2123,8 +2166,7 @@ def _qualifies(df: pd.DataFrame, min_days: int = 80, debug_ticker: str | None = 
         if debug_ticker:
             _debug_log_scan(debug_ticker, msg)
 
-    body_high = df[["Open", "Close"]].max(axis=1)
-    body_low = df[["Open", "Close"]].min(axis=1)
+    body_high, body_low = _candle_body_bounds(df)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     close = df["Close"]
@@ -2461,6 +2503,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             if canonical:
                 display_symbol = canonical
 
+    scan_stage = "load daily history"
     try:
         df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
         source_label = str((meta or {}).get("source", "unknown")).lower()
@@ -2468,8 +2511,11 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         expected_latest_session_date = get_expected_latest_session_date(
             instrument, group_name, current_datetime or datetime.now(UTC), fetch_symbol
         )
+        scan_stage = "calculate Ichimoku cloud"
         enriched = _ichimoku(df)
+        scan_stage = "qualify cloud-side trend"
         result = _qualifies(enriched, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
+        scan_stage = "detect cloud flip and retests"
         flip = _flip_after_long_respect(enriched, allow_equal_third_close=(instrument == "forex"))
         _debug_log_scan(ticker, f"result_side={(result.side if result else None)}, respect_days={(result.respect_days if result else 0)}, flip_side={(flip.current_side if flip else None)}, flip_status={(flip.retest_status if flip else None)}")
         stock_liquidity_ok = True
@@ -2481,6 +2527,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             stock_liquidity_ok = avg_10d >= threshold_10d and below_20d <= 2
             _debug_log_scan(ticker, f"liquidity avg10={avg_10d:.0f} threshold10={threshold_10d:.0f} below20d={below_20d} threshold20={threshold_20d:.0f} ok={stock_liquidity_ok}")
         if result:
+            scan_stage = "enrich continuing-trend result"
             result.ticker = ticker
             bidx = _find_latest_breakout_idx(enriched, result.side, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
             if bidx is not None:
@@ -2513,6 +2560,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
                         f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
                     ), source_label
         if flip:
+            scan_stage = "enrich cloud-flip result"
             if instrument == "stock" and not stock_liquidity_ok:
                 return display_symbol, result, None, (
                     f"liquidity filter failed (avg10={avg_10d:.0f} < {threshold_10d:.0f} or below20d={below_20d} > 2)"
@@ -2527,7 +2575,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         _debug_log_scan(ticker, f"final include_result={bool(result)} include_flip={bool(flip)} source={source_label}")
         return display_symbol, result, flip, None, source_label
     except Exception as exc:
-        return display_symbol, None, None, str(exc), "unknown"
+        return display_symbol, None, None, f"{scan_stage}: {exc}", "unknown"
 
 
 
@@ -2827,8 +2875,10 @@ def _ichimoku_extra_metrics(df: pd.DataFrame, side: str, context_status: str = "
             leading_span_a = (float(c["tenkan"]) + float(c["kijun"])) / 2.0
             high52 = pd.to_numeric(df["High"].tail(52), errors="coerce")
             low52 = pd.to_numeric(df["Low"].tail(52), errors="coerce")
-            if high52.notna().any() and low52.notna().any():
-                leading_span_b = (float(high52.max()) + float(low52.min())) / 2.0
+            high52_max = _finite_extreme(high52, highest=True)
+            low52_min = _finite_extreme(low52, highest=False)
+            if high52_max is not None and low52_min is not None:
+                leading_span_b = (high52_max + low52_min) / 2.0
                 diff = leading_span_a - leading_span_b
                 kumo_twist = "green" if diff > 0 else ("red" if diff < 0 else "neutral")
             else:
@@ -3069,8 +3119,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
 
-    body_high = df[["Open", "Close"]].max(axis=1)
-    body_low = df[["Open", "Close"]].min(axis=1)
+    body_high, body_low = _candle_body_bounds(df)
 
     # Respect definitions match _qualifies:
     # - trend below: body may enter cloud, but cannot break above cloud top
@@ -3088,9 +3137,13 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     # the cloud after many months of respect before printing the actual breakout.
     max_transition_days = 35
 
-    # Prefer latest valid flip below->above.
-    for i in range(len(df) - 1, 0, -1):
-        crossed_up = body_low.iloc[i] > top.iloc[i] and body_low.iloc[i - 1] <= top.iloc[i - 1]
+    # Select the first valid flip that begins the currently maintained regime.
+    # A later inside-cloud candle may be followed by another close above the
+    # far edge, but that is a re-break/retest continuation, not a new flip. ENT
+    # is the concrete case: the initial 2026-08-05 close remains the breakout
+    # even though price closes inside the cloud before moving above it again.
+    for i in range(1, len(df)):
+        crossed_up = close.iloc[i] > top.iloc[i] and close.iloc[i - 1] <= top.iloc[i - 1]
         if not crossed_up:
             continue
         if not bool(above_respected.iloc[i:].all()):
@@ -3111,10 +3164,10 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             previous_respect_run = prev_run
             break
 
-    # If not found, try latest valid flip above->below.
+    # If not found, apply the mirrored rule to an above->below regime.
     if flip_idx is None:
-        for i in range(len(df) - 1, 0, -1):
-            crossed_down = body_high.iloc[i] < bottom.iloc[i] and body_high.iloc[i - 1] >= bottom.iloc[i - 1]
+        for i in range(1, len(df)):
+            crossed_down = close.iloc[i] < bottom.iloc[i] and close.iloc[i - 1] >= bottom.iloc[i - 1]
             if not crossed_down:
                 continue
             if not bool(below_respected.iloc[i:].all()):
@@ -3137,6 +3190,26 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
 
     if flip_idx is None or previous_side is None or current_side is None:
         return None
+
+    # A cloud-entry/transition candle is not the breakout. Canonicalize the
+    # stored date to the first close beyond the *far* cloud boundary. This is a
+    # final invariant even if candidate-selection rules evolve: GPP enters the
+    # cloud on 2026-04-15 but does not close above its top until 2026-04-21.
+    strict_flip_idx = next(
+        (
+            idx
+            for idx in range(flip_idx, len(df))
+            if (
+                float(close.iloc[idx]) > float(top.iloc[idx])
+                if current_side == "above"
+                else float(close.iloc[idx]) < float(bottom.iloc[idx])
+            )
+        ),
+        None,
+    )
+    if strict_flip_idx is None:
+        return None
+    flip_idx = strict_flip_idx
 
     flip_ts = pd.to_datetime(df.iloc[flip_idx]["Date"])
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
@@ -3181,8 +3254,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         except Exception:
             return "breakout_confirmed"
 
-    body_high = df[["Open", "Close"]].max(axis=1)
-    body_low = df[["Open", "Close"]].min(axis=1)
+    body_high, body_low = _candle_body_bounds(df)
     top = df["cloud_top"]
     bottom = df["cloud_bottom"]
     post = range(flip_idx + 1, len(df))
@@ -3258,7 +3330,12 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             pattern_candidates: list[tuple[int, str]] = []
             if current_side == "above":
                 for j in range(0, len(w)):
-                    if _is_bullish_hammer(w.iloc[j]):
+                    candle = w.iloc[j]
+                    # A post-breakout hammer is a retest only when that candle
+                    # actually overlaps the cloud, not merely because it occurs
+                    # near a different candle that touched it.
+                    touches_cloud = _overlaps_price_zone(candle, float(candle["cloud_bottom"]), float(candle["cloud_top"]))
+                    if touches_cloud and _is_bullish_hammer(candle):
                         pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])
@@ -3283,11 +3360,13 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         pattern_candidates.append((j, "morning_doji_star"))
             else:
                 for j in range(0, len(w)):
-                    if _is_bearish_shooting_star(w.iloc[j]):
+                    candle = w.iloc[j]
+                    touches_cloud = _overlaps_price_zone(candle, float(candle["cloud_bottom"]), float(candle["cloud_top"]))
+                    if touches_cloud and _is_bearish_shooting_star(candle):
                         pattern_candidates.append((j, "shooting_star"))
                     # Accept bearish hammer-shaped rejection (same geometry as shooting star)
                     # under explicit "hammer" naming used by some users.
-                    if _is_bearish_shooting_star(w.iloc[j]):
+                    if touches_cloud and _is_bearish_shooting_star(candle):
                         pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
@@ -3348,9 +3427,15 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 span = pattern_span.get(formation, 1)
                 start_idx = max(0, pattern_idx - span + 1)
                 segment = w.iloc[start_idx:pattern_idx + 1]
-                if current_side == "above":
-                    return float(pd.to_numeric(segment["Low"], errors="coerce").min())
-                return float(pd.to_numeric(segment["High"], errors="coerce").max())
+                extreme = _finite_extreme(
+                    segment["Low" if current_side == "above" else "High"],
+                    highest=current_side != "above",
+                )
+                # Invalid/incomplete pattern candles sort last and are skipped
+                # by the guarded cycle reaction check below.
+                if extreme is None:
+                    return float("inf") if current_side == "above" else float("-inf")
+                return extreme
 
             # One cloud visit is one retest cycle. Select only the pattern at
             # that cycle's best reaction extreme: lowest for a long setup,
@@ -3366,7 +3451,25 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             )
             for pattern_idx, formation in ordered_candidates:
                 pattern_abs = w_start + pattern_idx
-                local_reaction_abs = int(df["Low"].iloc[cycle_start:pattern_abs + 1].idxmin()) if current_side == "above" else int(df["High"].iloc[cycle_start:pattern_abs + 1].idxmax())
+                # ``w`` contains up to two lead-in candles for multi-candle
+                # recognition. A signal ending on a lead-in candle is not a
+                # retest pattern. Previously this also passed an empty slice to
+                # idxmin/idxmax, producing the reported argmin/argmax failure.
+                if pattern_abs < cycle_start:
+                    continue
+                reaction = pd.to_numeric(
+                    df["Low" if current_side == "above" else "High"].iloc[cycle_start:pattern_abs + 1],
+                    errors="coerce",
+                )
+                valid_reaction = [(offset, float(value)) for offset, value in enumerate(reaction) if pd.notna(value)]
+                if not valid_reaction:
+                    continue
+                local_offset, _local_value = (
+                    min(valid_reaction, key=lambda item: item[1])
+                    if current_side == "above"
+                    else max(valid_reaction, key=lambda item: item[1])
+                )
+                local_reaction_abs = cycle_start + local_offset
                 if pattern_abs - local_reaction_abs >= 2:
                     found_too_late = True
                     continue

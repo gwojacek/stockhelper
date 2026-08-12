@@ -30,6 +30,155 @@ def test_ichimoku_builds_cloud_without_row_wise_nan_reductions(monkeypatch):
     assert (enriched["cloud_top"] >= enriched["cloud_bottom"]).all()
 
 
+def test_candle_body_bounds_avoid_arg_reductions_and_tolerate_missing_values(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "Open": [10.0, None, 12.0, None],
+            "Close": [11.0, 9.0, None, None],
+        }
+    )
+
+    def fail_row_reduction(*args, **kwargs):
+        raise AssertionError("scanner candle bodies must not use DataFrame row reductions")
+
+    monkeypatch.setattr(pd.DataFrame, "max", fail_row_reduction)
+    monkeypatch.setattr(pd.DataFrame, "min", fail_row_reduction)
+
+    body_high, body_low = scanner_search._candle_body_bounds(df)
+
+    assert body_high.iloc[:3].tolist() == [11.0, 9.0, 12.0]
+    assert body_low.iloc[:3].tolist() == [10.0, 9.0, 12.0]
+    assert pd.isna(body_high.iloc[3])
+    assert pd.isna(body_low.iloc[3])
+
+
+def test_finite_extreme_does_not_call_pandas_reductions(monkeypatch):
+    values = pd.Series([None, 4.0, 2.0, float("nan"), 7.0])
+
+    def fail_reduction(*_args, **_kwargs):
+        raise AssertionError("scanner extremes must not use pandas min/max reductions")
+
+    monkeypatch.setattr(pd.Series, "min", fail_reduction)
+    monkeypatch.setattr(pd.Series, "max", fail_reduction)
+
+    assert scanner_search._finite_extreme(values, highest=False) == 2.0
+    assert scanner_search._finite_extreme(values, highest=True) == 7.0
+    assert scanner_search._finite_extreme(pd.Series([None, float("nan")]), highest=False) is None
+
+
+def test_flip_date_is_first_close_outside_cloud_not_first_full_body():
+    dates = pd.date_range("2026-07-29", periods=8, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [8.0, 8.0, 8.0, 8.0, 9.5, 9.8, 10.2, 10.8],
+            "High": [8.5, 8.5, 8.5, 8.5, 10.0, 10.6, 10.5, 11.2],
+            "Low": [7.5, 7.5, 7.5, 7.5, 9.0, 9.4, 9.4, 10.4],
+            # First close above the cloud is followed by an inside-cloud close
+            # and then a re-break. The re-break must not replace the flip date.
+            "Close": [8.0, 8.0, 8.0, 8.0, 9.5, 10.4, 9.8, 11.0],
+            "cloud_top": [10.0] * 8,
+            "cloud_bottom": [9.0] * 8,
+        }
+    )
+
+    flip = scanner_search._flip_after_long_respect(df, min_days=3)
+
+    assert flip is not None
+    assert flip.flip_date == "2026-08-03"
+
+
+def test_gpp_cloud_entry_is_not_reported_as_breakout():
+    # GPP's 15-Apr candle entered the cloud. The first actual far-edge close is
+    # 21-Apr and must be the date shared by scanner reports and chart metadata.
+    dates = pd.to_datetime(
+        ["2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22"]
+    )
+    prefix = 80
+    df = pd.DataFrame(
+        {
+            "Date": list(pd.date_range("2025-12-01", periods=prefix, freq="D")) + list(dates),
+            "Open": [35.0] * prefix + [39.19, 40.36, 40.97, 42.10, 42.29, 43.23, 43.84, 44.17],
+            "High": [36.0] * prefix + [39.61, 40.88, 41.53, 42.57, 43.55, 43.65, 44.17, 44.17],
+            "Low": [34.0] * prefix + [38.53, 39.47, 40.69, 41.91, 41.68, 42.62, 43.41, 42.85],
+            "Close": [35.0] * prefix + [39.28, 40.55, 41.53, 42.38, 43.23, 43.23, 43.70, 43.32],
+            "cloud_top": [44.0] * prefix + [44.26, 44.26, 44.12, 43.34, 43.34, 43.34, 43.34, 43.25],
+            "cloud_bottom": [40.0] * prefix + [40.97, 40.90, 40.60, 39.67, 39.63, 39.23, 38.72, 38.43],
+        }
+    )
+
+    flip = scanner_search._flip_after_long_respect(df, min_days=70)
+
+    assert flip is not None
+    assert flip.flip_date == "2026-04-21"
+
+
+def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
+    dates = pd.date_range("2026-08-01", periods=7, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [8.0, 10.5, 10.6, 10.7, 10.8, 10.7, 10.8],
+            "High": [8.5, 11.0, 11.1, 11.2, 11.3, 11.1, 11.2],
+            "Low": [7.5, 10.2, 10.3, 10.4, 9.8, 10.2, 10.4],
+            "Close": [8.0, 10.6, 10.7, 10.8, 10.5, 10.8, 11.0],
+            "cloud_top": [10.0] * 7,
+            "cloud_bottom": [9.0] * 7,
+        }
+    )
+    lead_in_date = dates[2]
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_hammer",
+        lambda row: pd.Timestamp(row["Date"]) == lead_in_date,
+    )
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "returned_to_cloud_waiting_for_pattern"
+    assert count == 0
+    assert events == []
+
+
+def test_hammer_after_breakout_is_valid_retest_only_when_hammer_touches_cloud(monkeypatch):
+    dates = pd.date_range("2026-08-01", periods=7, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [8.0, 10.5, 10.6, 10.7, 10.8, 10.7, 10.8],
+            "High": [8.5, 11.0, 11.1, 11.2, 11.3, 11.1, 11.2],
+            "Low": [7.5, 10.2, 10.3, 10.4, 9.8, 10.2, 10.4],
+            "Close": [8.0, 10.6, 10.7, 10.8, 10.5, 10.8, 11.0],
+            "cloud_top": [10.0] * 7,
+            "cloud_bottom": [9.0] * 7,
+        }
+    )
+    outside_confirmation_date = dates[5]
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_hammer",
+        lambda row: pd.Timestamp(row["Date"]) == outside_confirmation_date,
+    )
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "returned_to_cloud_waiting_for_pattern"
+    assert count == 0
+    assert events == []
+
+
 def test_ndx100_members_include_spcx():
     assert "SPCX.US" in scanner_search.NDX100_SEARCH_TICKERS
 

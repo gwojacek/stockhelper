@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+sys.modules.setdefault("numpy", types.SimpleNamespace())
 sys.modules.setdefault("pandas", types.SimpleNamespace(Series=dict, DataFrame=object))
 
 chart_program = types.ModuleType("chart_program")
@@ -21,6 +22,8 @@ chart_loader.has_new_remote_data = lambda *args, **kwargs: False
 chart_loader.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
 chart_loader._yahoo_download = lambda *args, **kwargs: None
 chart_loader._yahoo_download_window = lambda *args, **kwargs: None
+chart_loader._recent_high_precision_candle_count = lambda *args, **kwargs: 0
+chart_loader.YAHOO_RECENT_CANDLE_REBASE_THRESHOLD = 2
 yahoo_finance = types.ModuleType("utilities.yahoo_finance")
 yahoo_finance.get_fx_to_pln_rate_yahoo = lambda *args, **kwargs: 1.0
 output_silence = types.ModuleType("utilities.output_silence")
@@ -46,21 +49,24 @@ def candle(open_: float, high: float, low: float, close: float) -> dict[str, flo
     return {"Open": open_, "High": high, "Low": low, "Close": close}
 
 
-def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_allows_upper_shadow_up_to_twice_body():
+def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_upper_shadow_at_most_body():
     assert _is_bullish_hammer(candle(10.0, 12.0, 6.0, 11.0))
-    assert not _is_bullish_hammer(candle(10.0, 13.1, 6.0, 11.0))
+    assert not _is_bullish_hammer(candle(10.0, 12.1, 6.0, 11.0))
     assert not _is_bullish_hammer(candle(10.0, 12.0, 8.1, 11.0))
 
 
 def test_bullish_hammer_allows_doji_hammer_shape():
-    assert _is_bullish_hammer(candle(10.0, 10.5, 8.0, 10.0))
+    assert _is_bullish_hammer(candle(10.0, 10.2, 8.0, 10.0))
+    assert not _is_bullish_hammer(candle(10.0, 11.0, 8.0, 10.0))
+    assert not _is_bullish_hammer(candle(56.8, 57.7, 55.0, 56.8))
 
 
 def test_bearish_hammer_mirrors_shadow_rules_and_allows_doji_shape():
-    assert _is_bearish_shooting_star(candle(10.0, 14.0, 8.0, 11.0))
-    assert not _is_bearish_shooting_star(candle(10.0, 14.0, 7.9, 11.0))
+    assert _is_bearish_shooting_star(candle(10.0, 14.0, 9.0, 11.0))
+    assert not _is_bearish_shooting_star(candle(10.0, 14.0, 8.9, 11.0))
     assert not _is_bearish_shooting_star(candle(10.0, 13.0, 8.2, 10.5))
-    assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.5, 10.0))
+    assert _is_bearish_shooting_star(candle(10.0, 12.0, 9.8, 10.0))
+    assert not _is_bearish_shooting_star(candle(10.0, 12.0, 9.0, 10.0))
 
 
 def test_morning_star_requires_middle_body_below_first_and_third_body():
@@ -91,6 +97,24 @@ def test_oil_two_candle_reversal_allows_tiny_futures_open_difference():
     mirrored_first = candle(axis - first["Open"], axis - first["Low"], axis - first["High"], axis - first["Close"])
     mirrored_second = candle(axis - second["Open"], axis - second["Low"], axis - second["High"], axis - second["Close"])
     assert _is_bullish_piercing_line(mirrored_first, mirrored_second, axis - 98.05)
+
+
+def test_piercing_line_close_must_remain_inside_first_real_body():
+    first = candle(10.0, 10.2, 7.8, 8.0)
+    valid = candle(7.9, 9.8, 7.7, 9.2)
+    closes_above_first_open = candle(7.9, 10.8, 7.7, 10.5)
+
+    assert _is_bullish_piercing_line(first, valid, 8.5)
+    assert not _is_bullish_piercing_line(first, closes_above_first_open, 8.5)
+
+
+def test_dark_cloud_close_must_remain_inside_first_real_body():
+    first = candle(8.0, 10.2, 7.8, 10.0)
+    valid = candle(10.0, 10.3, 8.2, 8.8)
+    closes_below_first_open = candle(10.0, 10.3, 7.2, 7.5)
+
+    assert _is_dark_cloud_cover(first, valid, 9.5)
+    assert not _is_dark_cloud_cover(first, closes_below_first_open, 9.5)
 
 
 def test_opl_tiny_bullish_body_is_not_dark_cloud_and_later_harami_is_valid():

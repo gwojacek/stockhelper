@@ -911,3 +911,42 @@ def test_yahoo_only_download_keeps_about_18_months(monkeypatch):
     assert df["Date"].min() == pd.Timestamp("2025-05-30")
     assert df["Date"].max() == pd.Timestamp("2026-12-01")
     assert len(df) == 551
+
+
+def test_sp500_display_name_uses_us500_index_cache(monkeypatch, tmp_path):
+    index_dir = tmp_path / "indexes"
+    index_dir.mkdir()
+    csv_path = index_dir / "US500.csv"
+    _df("2025-01-02", "2026-08-06").to_csv(csv_path, index=False)
+    monkeypatch.setitem(loader.DATA_DIR_BY_INSTRUMENT, "index", index_dir)
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+
+    loaded, resolved_path, info = loader.load_or_update_daily_data(
+        symbol="S&P500",
+        instrument_type="commodity",
+        fetch_older_data=True,
+    )
+
+    assert resolved_path == csv_path
+    assert list(loaded["Date"].dt.strftime("%Y-%m-%d")) == ["2025-01-02", "2026-08-06"]
+    assert info["source"] == "cache"
+
+
+def test_sp500_display_aliases_resolve_to_us500_csv():
+    for alias in ("S&P500", "S&P 500", "SP500"):
+        assert loader.local_csv_path_for_symbol(alias, "commodity").name == "US500.csv"
+
+
+def test_chart_canonicalizes_gpp_cloud_entry_to_far_edge_breakout():
+    from chart_program.level_selector import _canonical_scanner_breakout_date
+
+    rows = 90
+    df = _df(*(pd.date_range("2025-12-01", periods=rows, freq="D").strftime("%Y-%m-%d")))
+    # Make the shifted cloud deterministic for the final transition candles.
+    df.loc[:, ["Open", "High", "Low", "Close"]] = [40.0, 44.0, 38.0, 40.0]
+    df.loc[84:, "Date"] = pd.to_datetime(["2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22"])
+    df.loc[84:, "Close"] = [40.2, 40.4, 40.8, 41.0, 42.0, 42.2]
+
+    corrected = _canonical_scanner_breakout_date(df, "2026-04-15", "long")
+
+    assert corrected == "2026-04-21"

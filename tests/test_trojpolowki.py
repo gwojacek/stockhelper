@@ -341,6 +341,7 @@ def test_legacy_oil_report_recovers_dark_cloud_confirmation_date():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function fibo618PatternFromChart()" in ui_source
     assert "touches618 && darkCloud" in ui_source
+    assert "c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level" in ui_source
     assert "piercing|dark cloud cover|harami" in ui_source
     assert "scannerMetaValue('__scanner_pattern_date__') || chartFiboPattern?.time" in ui_source
     assert "scannerPattern || recoveredPattern" in ui_source
@@ -362,13 +363,11 @@ def test_multi_candle_scanner_highlight_has_only_an_outer_border():
     assert "ctx.strokeRect(single.left" not in drawing
 
 
-def test_scanner_breakout_correction_counts_trading_candles_not_calendar_days():
+def test_chart_uses_exact_scanner_breakout_date_without_nearby_candle_correction():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
-    resolver = source[source.index("function ichimokuFirstBreakoutCloseNearScanner"):source.index("function ichimokuHighlightBreakoutDate")]
-    assert "idx - 2" in resolver
-    assert "idx + 2" in resolver
-    assert "if (sameSide(ohlc[i])) return ohlc[i].time" in resolver
-    assert "daysBetween(ohlc[i].time, scanner)" not in resolver
+    context = source[source.index("function ichimokuScannerBreakoutContext"):source.index("function ichimokuRetestsSince")]
+    assert "const displayDate = scanner;" in context
+    assert "ichimokuFirstBreakoutCloseNearScanner(scanner)" not in context
 
 
 def test_ichimoku_chart_command_forwards_current_scanner_direction():
@@ -383,6 +382,33 @@ def test_ichimoku_chart_command_forwards_current_scanner_direction():
     )
     assert "--scanner-breakout-direction long" in mod._chart_command_for_row(long_row)
     assert "--scanner-breakout-direction short" in mod._chart_command_for_row(short_row)
+
+
+def test_zero_retest_count_drops_stale_pattern_from_chart_command():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG",
+        scanner="ICHIMOKU",
+        category="retest_breakout",
+        ticker="ENT",
+        status="breakout_confirmed",
+        dates={"flip_date": "2026-08-05"},
+        metrics={
+            "retest_count": "0",
+            "latest_retest_date": "2026-08-10",
+            "latest_retest_pattern": "hammer",
+        },
+    )
+
+    command = mod._chart_command_for_row(row)
+
+    assert "--scanner-retest-count 0" in command
+    assert "--scanner-latest-retest-date" not in command
+    assert "--scanner-latest-retest-pattern" not in command
+
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "wanted > 0 && latestRetestDate" in ui_source
+    assert "validRetestCount > 0 && latestRetestDate" in ui_source
 
 
 def test_short_fibo_markets_and_chart_png_download_are_enabled():

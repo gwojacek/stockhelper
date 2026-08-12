@@ -189,9 +189,18 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         cmd = f"python run -c {ticker_cmd} --ichimoku-mode on"
         cmd = _append_optional(cmd, "--scanner-breakout-date", row.dates.get("flip_date") or row.dates.get("start_date"))
         cmd = _append_optional(cmd, "--scanner-breakout-direction", _ichimoku_breakout_direction(row))
-        cmd = _append_optional(cmd, "--scanner-retest-count", row.metrics.get("retest_count") or row.metrics.get("latest_retest_count"))
-        cmd = _append_optional(cmd, "--scanner-latest-retest-date", row.metrics.get("latest_retest_date"))
-        cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
+        retest_count = str(row.metrics.get("retest_count") or row.metrics.get("latest_retest_count") or "").strip()
+        cmd = _append_optional(cmd, "--scanner-retest-count", retest_count)
+        # A valid latest retest cannot coexist with count=0. Treat such report
+        # fields as stale/inconsistent scanner metadata instead of forwarding a
+        # phantom highlight to the chart (ENT 2026-08-10).
+        try:
+            has_valid_retest = int(float(retest_count.replace(",", "."))) > 0
+        except ValueError:
+            has_valid_retest = False
+        if has_valid_retest:
+            cmd = _append_optional(cmd, "--scanner-latest-retest-date", row.metrics.get("latest_retest_date"))
+            cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
         cmd = _append_optional(cmd, "--scanner-previous-respect-months", row.metrics.get("previous_respect_months"))
         return cmd
     if row.scanner == "WEDGE":
