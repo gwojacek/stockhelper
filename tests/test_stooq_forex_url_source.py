@@ -10,8 +10,8 @@ def test_forex_ui_download_compacts_slash_pair_in_every_history_url():
     assert 'symbol.strip().lower()' not in source
 
 
-def test_chart_loader_compacts_forex_before_both_browser_downloaders():
+def test_chart_loader_compacts_forex_before_table_ui_downloader():
     source = Path("chart_program/chart_loader.py").read_text(encoding="utf-8")
     assert 'stooq_forex_symbol = symbol.replace("/", "")' in source
-    assert "symbol=stooq_forex_symbol," in source
     assert "symbol=stooq_forex_symbol.lower()," in source
+    assert "update_stooq_history_from_ui_csv" not in source

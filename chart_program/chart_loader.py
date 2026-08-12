@@ -14,9 +14,7 @@ import os
 import pandas as pd
 
 from utilities.stooq_playwright import (
-    StooqUIDownloadDenied,
     _drop_local_tail_covered_by_remote,
-    update_stooq_history_from_ui_csv,
     update_stooq_history_with_playwright,
 )
 from utilities.output_silence import call_silenced
@@ -1194,61 +1192,8 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                     return yahoo_merged[:5]
                 return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
         lookback = older_days if fetch_older_data else 548
-        # The downloader already tries the exact q/d/l URL, resolves a new
-        # browser's consent/CAPTCHA (up to three OCR codes), retries q/d/l once,
-        # and then uses the form UI. Do not repeat that entire browser workflow.
-        attempts = 1
-        primary_error: Exception | None = None
-        for attempt in range(1, attempts + 1):
-            try:
-                df = update_stooq_history_from_ui_csv(
-                    symbol=stooq_forex_symbol,
-                    csv_path=csv_path_ref,
-                    lookback_days=lookback,
-                    end_date=older_anchor if fetch_older_data else None,
-                    verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                )
-                reason = f"Stooq filtered UI CSV download succeeded for forex on attempt {attempt}/{attempts}."
-                if not fetch_older_data:
-                    yahoo_merged = _try_yahoo_fresh_candle_merge(
-                        df,
-                        symbol,
-                        "forex",
-                        source="stooq_web_csv",
-                        source_symbol=symbol.upper(),
-                        source_name=None,
-                        reason=reason + " Yahoo is used only for newer candle(s).",
-                        trim_to_last_year=False,
-                    )
-                    if yahoo_merged is not None:
-                        merged_df, merged_source, merged_symbol, merged_name, merged_reason, _count = yahoo_merged
-                        return merged_df, merged_source, merged_symbol, merged_name, merged_reason
-                return df, "stooq_web_csv", symbol.upper(), None, reason
-            except Exception as exc:
-                primary_error = exc
-                print(f"[forex-download] {symbol}: Stooq UI CSV attempt {attempt}/{attempts} failed: {exc}", flush=True)
-                if isinstance(exc, StooqUIDownloadDenied):
-                    if attempt >= attempts:
-                        print(
-                            f"[forex-download] {symbol}: the visible history table is valid but q/d/l denied "
-                            "both fresh browser sessions; switching to paginated UI table fetching.",
-                            flush=True,
-                        )
-                        break
-                    print(
-                        f"[forex-download] {symbol}: q/d/l denied the first browser session; "
-                        "trying one fresh browser session before table fallback.",
-                        flush=True,
-                    )
-                if attempt < attempts:
-                    print(
-                        f"[forex-download] {symbol}: previous browser session closed; "
-                        "retrying once with a new browser session.",
-                        flush=True,
-                    )
-
-        # The filtered UI CSV can deny or time out. Fall back to the same
-        # paginated Stooq UI table scraper used for literal commodities.
+        # Forex follows the same simple paginated history-table workflow as
+        # literal commodities. Avoid Stooq's CSV download endpoint entirely.
         df = update_stooq_history_with_playwright(
             symbol=stooq_forex_symbol.lower(),
             csv_path=csv_path_ref,
@@ -1257,7 +1202,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
             verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
             interactive_captcha=True,
         )
-        reason = f"Stooq filtered UI CSV failed after {attempts} attempts; used paginated Stooq UI fallback: {primary_error}"
+        reason = "Used paginated Stooq UI table fetching for forex."
         if not fetch_older_data:
             yahoo_merged = _try_yahoo_fresh_candle_merge(
                 df,

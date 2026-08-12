@@ -648,7 +648,7 @@ def _refresh_bulk_page_after_captcha(page, download_dir: Path | None = None) -> 
 
 def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_dir: Path | None = None) -> bool | Path:
     """Solve the simple Stooq download captcha, saving artifacts for every attempt."""
-    max_attempts = min(3, max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "3"))))
+    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
     print(f"[stooq-bulk] resolving download captcha (max attempts={max_attempts})...", flush=True)
     for attempt in range(1, max_attempts + 1):
         try:
@@ -1447,37 +1447,6 @@ def _resolve_stooq_ui_consent_and_captcha(page, url: str, symbol: str) -> None:
     raise ValueError(f"Stooq CAPTCHA/rate limit remained after automatic commodity-style retries for {symbol}")
 
 
-def _download_stooq_direct_csv(page, url: str) -> tuple[bytes, dict]:
-    """Open Stooq's instrument CSV URL and return the browser download.
-
-    This deliberately uses the browser rather than an HTTP client so the Tor
-    proxy, consent cookie, and any rate-limit authorization all belong to the
-    same browser context.
-    """
-    response_meta: dict = {"download_url": url}
-
-    def _record_response(response) -> None:
-        if "q/d/l/" in response.url:
-            response_meta.update({"download_response_url": response.url, "download_response_status": response.status})
-
-    page.on("response", _record_response)
-    try:
-        with page.expect_download(timeout=30000) as download_info:
-            page.evaluate("url => { window.location.href = url; }", url)
-        download = download_info.value
-        payload = Path(download.path()).read_bytes()
-        response_meta.update({
-            "download_suggested_filename": download.suggested_filename,
-            "download_bytes": len(payload),
-        })
-        return payload, response_meta
-    finally:
-        try:
-            page.remove_listener("response", _record_response)
-        except Exception:
-            pass
-
-
 def update_stooq_history_from_ui_csv(
     symbol: str,
     csv_path: Path,
@@ -1486,13 +1455,11 @@ def update_stooq_history_from_ui_csv(
     verbose: bool = False,
     interactive: bool = False,
 ) -> pd.DataFrame:
-    """Download a forex CSV directly, falling back to the history-page UI once."""
+    """Set the Stooq UI start date and download its filtered daily CSV."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     anchor = end_date.date() if isinstance(end_date, datetime) else datetime.now(UTC).date()
     start = anchor - timedelta(days=max(1, lookback_days))
-    compact_symbol = _stooq_query_symbol(symbol)
-    url = f"https://stooq.pl/q/d/?s={compact_symbol}"
-    direct_url = f"https://stooq.pl/q/d/l/?s={compact_symbol}&i=d"
+    url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}"
     with sync_playwright() as playwright:
         proxy_index = _stooq_proxy_pool_initial_index(symbol)
         browser, page = _open_page(
@@ -1510,103 +1477,56 @@ def update_stooq_history_from_ui_csv(
                 f"proxy={(proxy or {}).get('server', 'direct')}",
                 flush=True,
             )
-            direct_errors: list[str] = []
-            payload = None
-            download_meta: dict = {}
-            # Fast path: opening the exact instrument download link is normally
-            # sufficient and avoids form submission and paginated-table retries.
             try:
-                candidate_payload, candidate_meta = _download_stooq_direct_csv(page, direct_url)
-                candidate_frame = _parse_stooq_ui_csv(candidate_payload)
-                if candidate_frame.empty:
-                    raise ValueError("direct CSV was empty")
-                payload, download_meta, remote = candidate_payload, candidate_meta, candidate_frame
+                page.goto(url, wait_until="domcontentloaded")
+                _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
             except Exception as exc:
-                direct_errors.append(str(exc))
-
-            if payload is None:
-                # A new browser can first encounter consent or a rate-limit
-                # challenge. Resolve it in this context, then retry the exact
-                # direct URL once before doing any UI table work.
-                try:
-                    page.goto(url, wait_until="domcontentloaded")
-                    _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
-                    candidate_payload, candidate_meta = _download_stooq_direct_csv(page, direct_url)
-                    candidate_frame = _parse_stooq_ui_csv(candidate_payload)
-                    if candidate_frame.empty:
-                        raise ValueError("direct CSV was empty after consent/rate-limit resolution")
-                    payload, download_meta, remote = candidate_payload, candidate_meta, candidate_frame
-                except Exception as exc:
-                    direct_errors.append(str(exc))
-
-            if payload is not None:
-                if verbose:
-                    print(f"[stooq-web] direct forex CSV succeeded for {symbol}: bytes={len(payload)}", flush=True)
-            else:
-                print(
-                    f"[stooq-web] direct forex CSV failed for {symbol}; falling back to history-page UI once: "
-                    f"{' | '.join(direct_errors)}",
-                    flush=True,
-                )
-                try:
-                    page.goto(url, wait_until="domcontentloaded")
-                    _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
-                except Exception as exc:
-                    details = _capture_stooq_ui_failure(symbol, page, "goto", exc, extra={"direct_url": direct_url})
-                    raise ValueError(f"Stooq UI navigation failed for {symbol}: {exc}; details={details}") from exc
+                details = _capture_stooq_ui_failure(symbol, page, "goto", exc)
+                raise ValueError(f"Stooq UI navigation failed for {symbol}: {exc}; details={details}") from exc
             try:
-                if payload is None:
-                    page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
-                else:
-                    # The direct download is already valid; skip every form/UI
-                    # action and proceed to the common validation/write path.
-                    pass
-                if payload is not None:
-                    download_href = direct_url
-                    download_url = direct_url
-                else:
-                    if interactive:
-                        print(
-                            f"[stooq-web] Inspector ready for {symbol}. Click Resume; StockHelper will set "
-                            f"{start.day} {_POLISH_MONTHS_BY_NUMBER[start.month]} {start.year}, submit, and download CSV.",
-                            flush=True,
-                        )
-                        page.pause()
-                    page.locator('input[name="d7"]').fill(str(start.day))
-                    page.locator('select[name="d5"]').select_option(label=_POLISH_MONTHS_BY_NUMBER[start.month])
-                    page.locator('input[name="d3"]').fill(str(start.year))
-                    submit = page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first
-                    # Stooq sometimes leaves #drk_scr above the form. A DOM click runs
-                    # the same onclick handler without pointer-event interception.
-                    with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
-                        submit.evaluate("button => button.click()")
-                    _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
-                    download_link = page.locator('a[href*="q/d/l/"]').first
-                    download_href = download_link.get_attribute("href") or ""
-                    download_url = page.evaluate("href => new URL(href, document.baseURI).href", download_href)
-                    response_meta: dict = {}
+                page.locator('input[name="d7"]').wait_for(state="visible", timeout=30000)
+                if interactive:
+                    print(
+                        f"[stooq-web] Inspector ready for {symbol}. Click Resume; StockHelper will set "
+                        f"{start.day} {_POLISH_MONTHS_BY_NUMBER[start.month]} {start.year}, submit, and download CSV.",
+                        flush=True,
+                    )
+                    page.pause()
+                page.locator('input[name="d7"]').fill(str(start.day))
+                page.locator('select[name="d5"]').select_option(label=_POLISH_MONTHS_BY_NUMBER[start.month])
+                page.locator('input[name="d3"]').fill(str(start.year))
+                submit = page.locator('input[type="submit"][value="Pokaż"], input[type="submit"][onclick*="f_d"]').first
+                # Stooq sometimes leaves #drk_scr above the form. A DOM click runs
+                # the same onclick handler without pointer-event interception.
+                with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
+                    submit.evaluate("button => button.click()")
+                _resolve_stooq_ui_consent_and_captcha(page, url, symbol)
+                download_link = page.locator('a[href*="q/d/l/"]').first
+                download_href = download_link.get_attribute("href") or ""
+                download_url = page.evaluate("href => new URL(href, document.baseURI).href", download_href)
+                response_meta: dict = {}
 
-                    def _record_download_response(response) -> None:
-                        if "q/d/l/" not in response.url:
-                            return
-                        response_meta.update({"download_response_url": response.url, "download_response_status": response.status})
+                def _record_download_response(response) -> None:
+                    if "q/d/l/" not in response.url:
+                        return
+                    response_meta.update({"download_response_url": response.url, "download_response_status": response.status})
 
-                    page.on("response", _record_download_response)
-                    with page.expect_download(timeout=30000) as download_info:
-                        download_link.evaluate("link => link.click()")
-                    download = download_info.value
-                    payload = Path(download.path()).read_bytes()
-                    download_meta = {
-                        "download_link_href": download_href,
-                        "download_url": download_url,
-                        "download_suggested_filename": download.suggested_filename,
-                        "download_bytes": len(payload),
-                        **response_meta,
-                    }
+                page.on("response", _record_download_response)
+                with page.expect_download(timeout=30000) as download_info:
+                    download_link.evaluate("link => link.click()")
+                download = download_info.value
+                payload = Path(download.path()).read_bytes()
+                download_meta = {
+                    "download_link_href": download_href,
+                    "download_url": download_url,
+                    "download_suggested_filename": download.suggested_filename,
+                    "download_bytes": len(payload),
+                    **response_meta,
+                }
             except Exception as exc:
                 details = _capture_stooq_ui_failure(symbol, page, "form_or_download", exc)
                 raise ValueError(f"Stooq UI form/download failed for {symbol}: {exc}; details={details}") from exc
-            if verbose and payload is not None:
+            if verbose:
                 print(f"[stooq-web] downloaded filtered UI CSV for {symbol}: start={start} bytes={len(payload)}", flush=True)
             denial_text = _stooq_ui_payload_preview(payload).lower().replace("ę", "e")
             if "odmowa,dostepu" in denial_text or "odmowa dostepu" in denial_text:
@@ -2586,7 +2506,7 @@ def _try_solve_stooq_captcha(page, symbol: str) -> bool:
     and confirmation submit #f13. If cv2/EasyOCR/pytesseract are unavailable
     or OCR is uncertain, return False and let the headed inspector fallback handle it.
     """
-    max_attempts = min(3, max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "3"))))
+    max_attempts = max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "5")))
     log_key = (symbol or "-").strip().lower()
     with _CAPTCHA_OCR_LOCK:
         first_solver_log = log_key not in _CAPTCHA_SOLVER_LOGGED_SYMBOLS
