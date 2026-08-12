@@ -935,3 +935,18 @@ def test_sp500_display_name_uses_us500_index_cache(monkeypatch, tmp_path):
 def test_sp500_display_aliases_resolve_to_us500_csv():
     for alias in ("S&P500", "S&P 500", "SP500"):
         assert loader.local_csv_path_for_symbol(alias, "commodity").name == "US500.csv"
+
+
+def test_chart_canonicalizes_gpp_cloud_entry_to_far_edge_breakout():
+    from chart_program.level_selector import _canonical_scanner_breakout_date
+
+    rows = 90
+    df = _df(*(pd.date_range("2025-12-01", periods=rows, freq="D").strftime("%Y-%m-%d")))
+    # Make the shifted cloud deterministic for the final transition candles.
+    df.loc[:, ["Open", "High", "Low", "Close"]] = [40.0, 44.0, 38.0, 40.0]
+    df.loc[84:, "Date"] = pd.to_datetime(["2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22"])
+    df.loc[84:, "Close"] = [40.2, 40.4, 40.8, 41.0, 42.0, 42.2]
+
+    corrected = _canonical_scanner_breakout_date(df, "2026-04-15", "long")
+
+    assert corrected == "2026-04-21"

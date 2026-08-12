@@ -31,6 +31,40 @@ def _trim_chart_window(df: pd.DataFrame, max_days: int = 548) -> pd.DataFrame:
     cutoff = latest - pd.Timedelta(days=max_days)
     trimmed = out[out["Date"] >= cutoff].reset_index(drop=True)
     return trimmed if not trimmed.empty else out.tail(min(len(out), 400)).reset_index(drop=True)
+
+
+def _canonical_scanner_breakout_date(df: pd.DataFrame, supplied_date: str, direction: str) -> str:
+    """Advance a stale cloud-entry date to the first far-edge close."""
+    raw_date = str(supplied_date or "").strip()[:10]
+    side = str(direction or "").strip().lower()
+    if not raw_date or side not in {"long", "short", "above", "below"} or df is None or df.empty:
+        return raw_date
+    work = df.copy()
+    dates = pd.to_datetime(work["Date"], errors="coerce")
+    highs = pd.to_numeric(work["High"], errors="coerce")
+    lows = pd.to_numeric(work["Low"], errors="coerce")
+    closes = pd.to_numeric(work["Close"], errors="coerce")
+    tenkan = (highs.rolling(9).max() + lows.rolling(9).min()) / 2
+    kijun = (highs.rolling(26).max() + lows.rolling(26).min()) / 2
+    span_a = ((tenkan + kijun) / 2).shift(26)
+    span_b = ((highs.rolling(52).max() + lows.rolling(52).min()) / 2).shift(26)
+    span_distance = (span_a - span_b).abs()
+    top = (span_a + span_b + span_distance) / 2
+    bottom = (span_a + span_b - span_distance) / 2
+    supplied = pd.to_datetime(raw_date, errors="coerce")
+    if pd.isna(supplied):
+        return raw_date
+    candidates = work.index[dates >= supplied]
+    long_side = side in {"long", "above"}
+    for idx in candidates:
+        boundary = top.iloc[idx] if long_side else bottom.iloc[idx]
+        if pd.isna(boundary) or pd.isna(closes.iloc[idx]):
+            continue
+        if (long_side and closes.iloc[idx] > boundary) or (not long_side and closes.iloc[idx] < boundary):
+            return dates.iloc[idx].strftime("%Y-%m-%d")
+    return raw_date
+
+
 def _load_existing_config_values(config_path: Path) -> dict:
     if not config_path.exists():
         return {}
@@ -546,8 +580,13 @@ def run_level_selector(raw_args=None):
         else:
             os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
     existing["__show_ichimoku__"] = bool(args.ichimoku_mode == "on")
+    scanner_breakout_date = _canonical_scanner_breakout_date(
+        df,
+        args.scanner_breakout_date,
+        args.scanner_breakout_direction,
+    )
     for key, value in [
-        ("__scanner_breakout_date__", args.scanner_breakout_date),
+        ("__scanner_breakout_date__", scanner_breakout_date),
         ("__scanner_breakout_direction__", args.scanner_breakout_direction),
         ("__scanner_pattern_date__", args.scanner_pattern_date),
         ("__scanner_pattern_name__", args.scanner_pattern_name),
