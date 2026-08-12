@@ -92,7 +92,21 @@ def test_filtered_ui_csv_reuses_commodity_consent_and_captcha_flow():
     assert "_accept_consent_if_present" in resolver_source
     assert "_try_solve_stooq_captcha" in resolver_source
     assert "_retry_blocked_page_before_inspector" in resolver_source
-    assert download_source.count("_resolve_stooq_ui_consent_and_captcha") == 2
+    assert download_source.count("_resolve_stooq_ui_consent_and_captcha") == 3
+
+
+def test_forex_browser_uses_exact_download_url_before_ui_fallback():
+    from utilities.stooq_playwright import update_stooq_history_from_ui_csv
+
+    source = inspect.getsource(update_stooq_history_from_ui_csv)
+    assert 'direct_url = f"https://stooq.pl/q/d/l/?s={compact_symbol}&i=d"' in source
+    assert source.index("_download_stooq_direct_csv(page, direct_url)") < source.index("input[name=\"d7\"]")
+    assert "direct CSV was empty" in source
+
+
+def test_rate_limit_ocr_is_capped_at_three_attempts():
+    source = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
+    assert 'min(3, max(1, int(os.getenv("STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS", "3"))))' in source
 
 
 def test_stooq_playwright_uses_conditions_not_fixed_timeouts():

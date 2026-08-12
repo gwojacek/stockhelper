@@ -75,9 +75,12 @@ def test_allsearch_top_choice_actions_are_scoped_to_their_category():
     assert "function copyClosestSheetsCells(btn)" in RUN_SOURCE
 
 
-def test_forex_uses_two_fresh_csv_sessions_and_reports_fetch_paths():
-    assert "attempts = 2" in LOADER_SOURCE
-    assert "previous browser session closed" in LOADER_SOURCE
+def test_forex_uses_table_ui_only_and_reports_fetch_paths():
+    forex_branch = LOADER_SOURCE[LOADER_SOURCE.index('if instrument_type == "forex":'):]
+    forex_branch = forex_branch[:forex_branch.index('if instrument_type == "commodity" and _is_index_like_commodity')]
+    assert "update_stooq_history_with_playwright" in forex_branch
+    assert "update_stooq_history_from_ui_csv" not in forex_branch
+    assert "attempts = 2" not in forex_branch
     assert 'return "downloaded_csv"' in SCANNER_SOURCE
     assert 'return "table_ui"' in SCANNER_SOURCE
     assert '_print_forex_source_summary("search", members, data_source_by_ticker)' in SCANNER_SOURCE
