@@ -35,6 +35,7 @@ sys.modules.setdefault("utilities.yahoo_finance", yahoo_finance)
 sys.modules.setdefault("utilities.output_silence", output_silence)
 
 from scanner_search import (
+    _is_bullish_harami,
     _is_bullish_piercing_line,
     _is_bearish_harami,
     _is_bearish_shooting_star,
@@ -106,6 +107,14 @@ def test_piercing_line_close_must_remain_inside_first_real_body():
 
     assert _is_bullish_piercing_line(first, valid, 8.5)
     assert not _is_bullish_piercing_line(first, closes_above_first_open, 8.5)
+
+
+def test_usdpln_contained_bullish_body_is_harami_not_piercing_line():
+    august_7 = candle(3.734, 3.736, 3.707, 3.717)
+    august_10 = candle(3.718, 3.729, 3.716, 3.727)
+
+    assert _is_bullish_harami(august_7, august_10, 3.710)
+    assert not _is_bullish_piercing_line(august_7, august_10, 3.710)
 
 
 def test_dark_cloud_close_must_remain_inside_first_real_body():

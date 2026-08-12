@@ -673,6 +673,20 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         return False
     midpoint_c1 = (c1_open + c1_close) / 2.0
     c1_body_low = min(c1_open, c1_close)
+    c1_body_high = max(c1_open, c1_close)
+    c2_body_low = min(c2_open, c2_close)
+    c2_body_high = max(c2_open, c2_close)
+    # A bullish second body fully contained by the first bearish body is a
+    # bullish harami, even when its close crosses the first body's midpoint.
+    # Keep the two predicates mutually exclusive so detector ordering cannot
+    # relabel a valid harami as a piercing line (USDPLN 2026-08-07/10).
+    contained_small_body = (
+        c1_body_low <= c2_body_low
+        and c2_body_high <= c1_body_high
+        and abs(c2_close - c2_open) <= abs(c1_close - c1_open) * 0.60
+    )
+    if contained_small_body:
+        return False
     open_at_body_low = c2_open < c1_body_low or abs(c2_open - c1_body_low) <= max(abs(c1_open), abs(c1_close), 1e-9) * 0.005
     return (
         open_at_body_low
