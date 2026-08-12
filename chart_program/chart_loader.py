@@ -1378,13 +1378,11 @@ def load_or_update_daily_data(
 
     # If this symbol was already refreshed in this process and file exists, reuse local CSV
     # to avoid repeated API/web fetches (especially Stooq web + captcha flows).
-    stock_after_close_refresh = (
-        instrument_type == "stock"
-        and _is_stock_like_wig_symbol(symbol)
-        and not fetch_older_data
-        and _is_after_warsaw_market_close()
-    )
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and not stock_after_close_refresh and not _force_remote_refresh_enabled():
+    # Stock candles can change throughout their exchange session.  Never let
+    # the process-level cache suppress Yahoo's latest-candle check: a second
+    # scan/chart load must be able to replace today's still-forming OHLCV row.
+    # The session guard remains useful for slower Stooq-backed instruments.
+    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and instrument_type != "stock" and not _force_remote_refresh_enabled():
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",
