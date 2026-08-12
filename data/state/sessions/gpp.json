@@ -2,36 +2,36 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2025-08-19",
-        "2026-06-17",
-        "2028-02-10"
+        "2025-09-25",
+        "2026-07-29",
+        "2028-03-15"
       ],
       "y": [
-        68.3161,
-        48.1126,
-        5.63597
+        62.302,
+        53.6,
+        35.81947
       ],
-      "x0": "2025-08-19",
-      "x1": "2028-02-10",
-      "y0": 68.3161,
-      "y1": 5.63597,
+      "x0": "2025-09-25",
+      "x1": "2028-03-15",
+      "y0": 62.302,
+      "y1": 35.81947,
       "anchor_x": [
-        "2025-08-19",
-        "2026-06-17"
+        "2025-09-25",
+        "2026-07-29"
       ],
       "anchor_y": [
-        68.3161,
-        48.1126
+        62.302,
+        53.6
       ],
-      "price": 5.63597,
+      "price": 35.81947,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -41,26 +41,28 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-05-18",
-        "2026-08-26"
+        "2026-06-10",
+        "2026-07-09",
+        "2027-01-13"
       ],
       "y": [
-        39.56,
-        46.56
+        42.2864,
+        43.2,
+        49.02964
       ],
       "x0": "2026-06-10",
-      "x1": "2026-11-05",
+      "x1": "2027-01-13",
       "y0": 42.2864,
-      "y1": 46.8979,
+      "y1": 49.02964,
       "anchor_x": [
-        "2026-05-18",
+        "2026-06-10",
         "2026-07-09"
       ],
       "anchor_y": [
-        39.56,
+        42.2864,
         43.2
       ],
-      "price": 46.8979,
+      "price": 49.02964,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -111,9 +113,9 @@
     }
   },
   "__scanner_breakout_date__": "2026-04-21",
-  "__scanner_retest_count__": "3",
+  "__scanner_retest_count__": "1",
   "__scanner_latest_retest_date__": "2026-05-21",
-  "__scanner_latest_retest_pattern__": "bullish_piercing_line",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
   "__scanner_previous_respect_months__": "6.8",
   "__scanner_breakout_direction__": "long"
 }

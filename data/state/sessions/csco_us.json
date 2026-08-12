@@ -4,8 +4,9 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
   "__scanner_breakout_date__": "2026-04-07",
-  "__scanner_retest_count__": "3",
+  "__scanner_retest_count__": "4",
   "__journal_source_technique__": "Ichimoku",
-  "__scanner_latest_retest_date__": "2026-08-05",
-  "__scanner_latest_retest_pattern__": "hammer"
+  "__scanner_latest_retest_date__": "2026-08-07",
+  "__scanner_latest_retest_pattern__": "hammer",
+  "__scanner_breakout_direction__": "long"
 }

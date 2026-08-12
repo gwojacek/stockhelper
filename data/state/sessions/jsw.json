@@ -666,7 +666,9 @@
       "group_id": "auto-wedge"
     }
   ],
-  "__scanner_breakout_date__": "2026-04-15",
+  "__scanner_breakout_date__": "2026-08-11",
   "__scanner_retest_count__": "0",
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_previous_respect_months__": "3.8"
 }

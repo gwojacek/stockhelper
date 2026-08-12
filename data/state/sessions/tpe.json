@@ -2,7 +2,7 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -914,5 +914,11 @@
       "color": "#2563eb",
       "group_id": "auto-wedge"
     }
-  ]
+  ],
+  "__scanner_breakout_date__": "2026-04-16",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "12",
+  "__scanner_latest_retest_date__": "2026-08-12",
+  "__scanner_latest_retest_pattern__": "dark_cloud_cover",
+  "__journal_source_technique__": "Ichimoku"
 }

@@ -8,5 +8,85 @@
   "lot_cost": 144260.73,
   "pip_value": 108.56,
   "spread": 1906.21,
-  "name": "Copper"
+  "name": "Copper",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (669.95)",
+      "x0": "2026-08-11",
+      "x1": "2034-06-30",
+      "y0": 669.95,
+      "y1": 669.95,
+      "price": 669.95,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (665.4233)",
+      "x0": "2026-07-08",
+      "x1": "2034-06-30",
+      "y0": 665.4233,
+      "y1": 665.4233,
+      "price": 665.4233,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (664.025)",
+      "x0": "2026-06-26",
+      "x1": "2034-06-30",
+      "y0": 664.025,
+      "y1": 664.025,
+      "price": 664.025,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (662.6267)",
+      "x0": "2026-06-16",
+      "x1": "2034-06-30",
+      "y0": 662.6267,
+      "y1": 662.6267,
+      "price": 662.6267,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (658.1)",
+      "x0": "2026-05-13",
+      "x1": "2034-06-30",
+      "y0": 658.1,
+      "y1": 658.1,
+      "price": 658.1,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-13",
+      "x1": "2026-08-11",
+      "y0": 658.1,
+      "y1": 669.95,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
 }

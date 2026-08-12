@@ -1,10 +1,112 @@
 {
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "__scanner_breakout_date__": "2026-06-24",
   "__scanner_retest_count__": "0",
   "__scanner_previous_respect_months__": "7.6",
-  "__journal_source_technique__": "Ichimoku",
-  "lot_cost": 127231.59,
+  "__journal_source_technique__": "Kliny",
+  "lot_cost": 129775.87,
   "pip_value": 3.73,
-  "__scanner_breakout_direction__": "short"
+  "__scanner_breakout_direction__": "short",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-06-22",
+        "2026-08-28"
+      ],
+      "y": [
+        3620.5,
+        3351.71
+      ],
+      "x0": "2026-07-17",
+      "x1": "2026-10-31",
+      "y0": 3513.75,
+      "y1": 3070.52,
+      "anchor_x": [
+        "2026-06-22",
+        "2026-08-03"
+      ],
+      "anchor_y": [
+        3620.5,
+        3464
+      ],
+      "price": 3070.52,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": true
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-07-02",
+        "2026-10-28"
+      ],
+      "y": [
+        3202,
+        3772.82
+      ],
+      "x0": "2026-07-17",
+      "x1": "2026-10-31",
+      "y0": 3344,
+      "y1": 3512,
+      "anchor_x": [
+        "2026-07-02",
+        "2026-07-28"
+      ],
+      "anchor_y": [
+        3202,
+        3356
+      ],
+      "price": 3512,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true
+    }
+  ],
+  "high": 3620.5,
+  "__wedge_auto_high__": true,
+  "low": 3202,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 3423.92,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "long",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 3407.29,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 317000,
+  "calculation_currency": "PLN",
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 3620.5,
+      "plot_price": 3620.5,
+      "date": "2026-06-22",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 3202,
+      "plot_price": 3202,
+      "date": "2026-07-02",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 3423.92,
+      "plot_price": 3423.92,
+      "date": "2026-08-10",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 3407.29,
+      "plot_price": 3407.29,
+      "date": "2026-08-10",
+      "auto_wedge": true
+    }
+  }
 }

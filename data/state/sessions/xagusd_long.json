@@ -1,5 +1,5 @@
 {
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "__journal_source_technique__": "Ichimoku",
   "lot_cost": 137626.31,
   "pip_value": 18100.75,
@@ -65,7 +65,7 @@
       "free_extension": true
     }
   ],
-  "__scanner_breakout_date__": "2026-03-06",
+  "__scanner_breakout_date__": "2026-03-12",
   "__scanner_retest_count__": "5",
   "__scanner_latest_retest_date__": "2026-06-03",
   "__scanner_latest_retest_pattern__": "bearish_engulfing",
@@ -111,5 +111,6 @@
       "date": "2026-07-30",
       "auto_wedge": true
     }
-  }
+  },
+  "__scanner_breakout_direction__": "short"
 }

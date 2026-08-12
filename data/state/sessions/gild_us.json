@@ -2,5 +2,12 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false
+  "__show_ichimoku__": true,
+  "__scanner_breakout_date__": "2026-07-17",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-08-07",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
+  "__scanner_previous_respect_months__": "3.8",
+  "__journal_source_technique__": "Ichimoku"
 }

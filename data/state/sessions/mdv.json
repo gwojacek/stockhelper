@@ -4,10 +4,10 @@
   "__currency_fee_eligible__": false,
   "__show_ichimoku__": true,
   "__journal_source_technique__": "Ichimoku",
-  "__scanner_breakout_date__": "2026-06-19",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-06-23",
-  "__scanner_latest_retest_pattern__": "hammer",
-  "__scanner_previous_respect_months__": "8.6",
+  "__scanner_breakout_date__": "2026-06-18",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-08-10",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
+  "__scanner_previous_respect_months__": "8.7",
   "__scanner_breakout_direction__": "long"
 }

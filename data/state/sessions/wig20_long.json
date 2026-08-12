@@ -11,5 +11,10 @@
   "name": "WIG20",
   "__show_ichimoku__": true,
   "spread_multiplier": 2.7,
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_date__": "2026-04-01",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "4",
+  "__scanner_latest_retest_date__": "2026-07-08",
+  "__scanner_latest_retest_pattern__": "hammer"
 }

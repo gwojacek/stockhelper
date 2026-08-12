@@ -1,0 +1,13 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": true,
+  "__scanner_breakout_date__": "2026-08-03",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-08-10",
+  "__scanner_latest_retest_pattern__": "bearish_engulfing",
+  "__scanner_previous_respect_months__": "3.8",
+  "__journal_source_technique__": "Ichimoku"
+}
