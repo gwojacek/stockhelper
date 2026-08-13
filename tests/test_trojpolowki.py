@@ -54,6 +54,18 @@ def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
     assert "cleared old Stooq debug artifacts" in capsys.readouterr().out
 
 
+def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
+    source = Path("run").read_text(encoding="utf-8")
+    combo = source[source.index("def _run_allsearch_combo"):source.index("def _run_batch_search")]
+    fibo_call = combo[combo.index('code_f = _run_batch_search('):]
+
+    assert '"fibo"' in fibo_call
+    assert "force_cache_only=True" in fibo_call
+    assert "strict_cache_only=True" in fibo_call
+    assert "force_remote_refresh=False" in fibo_call
+    assert "FIBO reuses the Ichimoku market-data snapshot" in combo
+
+
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [
@@ -695,6 +707,28 @@ def test_current_3p_match_survives_historical_offset_deduplication():
     assert 'str(r.status) == "3p_steep_incline"' in limiter
     assert "Historical regular" in limiter
     assert 'regular.status in {"returned_before_61_8", "reached_23_6_waiting_for_61_8"}' in dedupe
+
+
+def test_fibo_board_limits_long_and_short_formations_independently():
+    source = Path("run").read_text(encoding="utf-8")
+    limiter = source[
+        source.index("def _limit_fibo_display_per_ticker"):
+        source.index("fibo = _limit_fibo_display_per_ticker")
+    ]
+
+    assert 'key = (str(row.ticker or "").upper(), str(row.direction or "").lower())' in limiter
+    assert "grouped.setdefault(key, []).append(row)" in limiter
+
+
+def test_short_3p_independent_bottom_uses_full_impulse_horizon():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[
+        source.index("def _find_fibo_3p_steep_setup"):
+        source.index("def _find_fibo_setup")
+    ]
+
+    assert "independent_lookback = 260 if _mirrored_short else 80" in steep
+    assert "i_peak - independent_lookback" in steep
 
 
 def test_valid_61_8_pattern_gets_slightly_longer_correction_ratio_window():

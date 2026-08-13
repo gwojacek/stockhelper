@@ -869,6 +869,30 @@ def test_single_stock_refresh_probe_uses_yahoo_missing_candle_count(monkeypatch)
     assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
+def test_repeated_stock_load_refreshes_same_day_yahoo_candle(monkeypatch, tmp_path):
+    csv_path = tmp_path / "CSGP.US.csv"
+    first = _df("2026-08-11", "2026-08-12")
+    first.to_csv(csv_path, index=False)
+    refreshed = first.copy()
+    refreshed.loc[refreshed.index[-1], ["High", "Close", "Volume"]] = [32.0, 31.5, 9000]
+    calls = []
+
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download",
+        lambda *_args, **_kwargs: (calls.append(True) or refreshed.copy(), "CSGP", "CoStar Group"),
+    )
+    loader._SESSION_REFRESHED_KEYS.add(("stock", "CSGP.US", False))
+
+    loaded, _, info = loader.load_or_update_daily_data("CSGP.US", "stock")
+
+    assert len(calls) == 1
+    assert info["source"] == "yahoo"
+    assert float(loaded.iloc[-1]["Close"]) == 31.5
+    assert float(pd.read_csv(csv_path).iloc[-1]["Volume"]) == 9000
+
+
 def test_yahoo_only_download_keeps_about_18_months(monkeypatch):
     dates = pd.date_range("2025-01-01", periods=700, freq="D")
     full = _df(*(d.strftime("%Y-%m-%d") for d in dates))

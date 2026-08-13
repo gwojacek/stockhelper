@@ -34,6 +34,7 @@ from chart_program.chart_loader import (
     local_csv_path_for_symbol,
     _yahoo_download,
     _yahoo_download_window,
+    _merge_yahoo_fresh_candle,
     _recent_high_precision_candle_count,
     YAHOO_RECENT_CANDLE_REBASE_THRESHOLD,
 )
@@ -1496,20 +1497,34 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
     retry_tickers = _print_summary(checked)
 
     if retry_tickers and os.getenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "1") != "0":
-        print(f"[commodity-check] replacing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
+        print(f"[commodity-check] repairing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        old_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
         try:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
-                _raw, csv_path, _rows, _latest, _yahoo_like, _exc = _health_row(raw)
+                _raw, csv_path, rows, _latest, yahoo_like, health_exc = _health_row(raw)
                 backup = csv_path.read_bytes() if csv_path.exists() else None
                 try:
-                    # A forced merge can leave a short CSV short. Remove it first so
-                    # the retry performs a clean full-history download/replacement.
-                    csv_path.unlink(missing_ok=True)
+                    contaminated_tail = health_exc is None and rows >= min_rows and yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+                    if contaminated_tail:
+                        # The historical Stooq body is healthy. Fetch only page 1
+                        # (~40 newest rows), replace its overlapping cached tail,
+                        # then let the normal loader append Yahoo's freshest row.
+                        os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+                        print(
+                            f"[commodity-check] {raw}: healthy {rows}-row history; "
+                            "refreshing only newest Stooq page before Yahoo latest-candle merge"
+                        )
+                    else:
+                        # Missing/short/unreadable caches still require a clean
+                        # full-window replacement rather than a tail repair.
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        print(f"[commodity-check] {raw}: incomplete/unreadable history; performing full replacement")
+                        csv_path.unlink(missing_ok=True)
                     load_or_update_daily_data(symbol=raw, instrument_type="commodity", persist=True, fetch_older_data=False)
                     if not csv_path.exists():
-                        raise FileNotFoundError(f"replacement did not create {csv_path}")
+                        raise FileNotFoundError(f"repair did not create {csv_path}")
                 except Exception as exc:
                     print(f"[commodity-check] retry failed for {raw}: {_retry_error_brief(exc)}")
                     if backup is not None:
@@ -1520,6 +1535,10 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
+            if old_tail_refresh is None:
+                os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = old_tail_refresh
         print("[commodity-check] post-retry CSV row-count check")
         _print_summary([_health_row(ticker) for ticker in members])
 
@@ -1621,13 +1640,61 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     except ValueError:
         retry_rounds = 4
     def _replace(raw: str) -> str:
-        _raw, csv_path, _rows, _oldest, _latest, _span, _yahoo_like, _exc = _health_row(raw)
+        _raw, csv_path, _rows, oldest, latest, _span, yahoo_like, health_exc = _health_row(raw)
         backup = csv_path.read_bytes() if csv_path.exists() else None
         try:
-            csv_path.unlink(missing_ok=True)
-            _df, _path, meta = load_or_update_daily_data(
-                symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
+            missing = _missing_candles(latest)
+            history_complete = (
+                health_exc is None
+                and oldest != "-"
+                and date.fromisoformat(oldest) <= oldest_tolerance
             )
+            if history_complete and missing == 1 and yahoo_like < YAHOO_RECENT_CANDLE_REBASE_THRESHOLD:
+                # Stooq's daily table commonly ends at yesterday.  When the
+                # rolling history is already complete and only today's session
+                # is absent, fetching ten Stooq pages cannot repair anything.
+                # Append Yahoo's single freshest row directly instead.
+                local = pd.read_csv(csv_path)
+                merged, _candidate, _name, added = _merge_yahoo_fresh_candle(
+                    local, raw, "forex", trim_to_last_year=False
+                )
+                if added <= 0:
+                    raise ValueError("Yahoo did not provide the missing latest FX candle")
+                merged.to_csv(csv_path, index=False)
+                print(f"[forex-check] {raw}: appended Yahoo newest candle; skipped Stooq history retry")
+                return "cache+yahoo"
+            contaminated_tail = (
+                history_complete
+                and missing == 0
+                and yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+            )
+            # Environment refresh flags are process-global. Serialize this
+            # short mode selection so parallel health workers cannot turn a
+            # full replacement into a tail repair (or vice versa).
+            with MARKET_REFRESH_LOCK:
+                previous_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
+                try:
+                    if contaminated_tail:
+                        # The 1.5-year Stooq body and today's Yahoo candle are
+                        # already present. Replace only the overlapping newest
+                        # ~40 rows from Stooq page 1; the loader then adds back
+                        # Yahoo's single freshest candle.
+                        os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+                        print(
+                            f"[forex-check] {raw}: healthy history with {yahoo_like} Yahoo-like tail rows; "
+                            "refreshing only newest Stooq page before Yahoo latest-candle merge"
+                        )
+                    else:
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        csv_path.unlink(missing_ok=True)
+                    _df, _path, meta = load_or_update_daily_data(
+                        symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
+                    )
+                finally:
+                    if previous_tail_refresh is None:
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                    else:
+                        os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = previous_tail_refresh
             if not csv_path.exists():
                 raise FileNotFoundError(f"replacement did not create {csv_path}")
             return str((meta or {}).get("source", "unknown"))
@@ -1647,7 +1714,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
         for retry_round in range(1, retry_rounds + 1):
             retry_workers = min(retry_workers_setting, len(retry_tickers))
             print(
-                f"[forex-check] retry round {retry_round}/{retry_rounds}: replacing and retrying "
+                f"[forex-check] retry round {retry_round}/{retry_rounds}: repairing "
                 f"{len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}"
             )
             with ThreadPoolExecutor(max_workers=retry_workers) as executor:
@@ -2328,8 +2395,12 @@ def _find_latest_breakout_idx(
     # and then does NOT close back to the opposite side for at least 4 months.
     date_series = pd.to_datetime(df["Date"], errors="coerce")
     fallback_transition_idx: int | None = None
-    # Search from newest to oldest: we need the LAST valid breakout candle.
-    for i in range(n - 1, 0, -1):
+    # Search chronologically.  A later far-edge cross can be the exit from a
+    # cloud retest of the still-valid trend, not a new breakout.  Because every
+    # candidate must remain valid through the latest candle, an actually
+    # invalidated older breakout is rejected naturally and the next genuine
+    # breakout is still selected.
+    for i in range(1, n):
         i_date = pd.to_datetime(df.iloc[i]["Date"]).strftime("%Y-%m-%d") if not pd.isna(date_series.iloc[i]) else "-"
         if (n - i) < min_age_days:
             if debug_ticker:
@@ -4904,7 +4975,13 @@ def _find_fibo_3p_steep_setup(
     independent_recent_peak = False
     if global_high > 0 and peak_high < global_high * 0.94:
         independent_base_right = i_peak - min_incline_days
-        independent_base_left = max(0, i_peak - 80)
+        # A short trend can decline for most of the 260-session scan window.
+        # In mirrored data, inspect that complete impulse horizon when deciding
+        # whether the recent bottom is an independent dominant move.  The old
+        # 80-bar slice excluded PAH3.DE's January top and incorrectly rejected
+        # its July bottom as merely a non-dominant recent extreme.
+        independent_lookback = 260 if _mirrored_short else 80
+        independent_base_left = max(0, i_peak - independent_lookback)
         if independent_base_right >= independent_base_left:
             independent_base = float(low.iloc[independent_base_left:independent_base_right + 1].min())
             independent_gain = (peak_high - independent_base) / max(abs(independent_base), 1e-9)

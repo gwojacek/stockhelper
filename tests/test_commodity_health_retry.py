@@ -29,7 +29,7 @@ def test_health_check_prints_summary_then_replaces_warned_csv(monkeypatch, tmp_p
 
     output = capsys.readouterr().out
     first_summary = output.index("summary: ok=0, warn=1, total=1")
-    retry = output.index("replacing and retrying 1 warned commodity CSV(s) once")
+    retry = output.index("repairing and retrying 1 warned commodity CSV(s) once")
     final_summary = output.index("summary: ok=1, warn=0, total=1")
     assert first_summary < retry < final_summary
     assert len(replacement_calls) == 1
@@ -66,6 +66,8 @@ def test_health_check_warns_and_retries_yahoo_contaminated_tail(monkeypatch, tmp
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
 
     def replace_csv(**_kwargs):
+        assert csv_path.exists(), "healthy history must remain for a tail-only repair"
+        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"
         clean = frame.copy()
         clean["Open"] = clean["Open"].round(3)
         clean.to_csv(csv_path, index=False)
@@ -77,4 +79,23 @@ def test_health_check_warns_and_retries_yahoo_contaminated_tail(monkeypatch, tmp
     output = capsys.readouterr().out
     assert "WARN PALLADIUM" in output
     assert "yahoo_like_last20=2" in output
+    assert "healthy 260-row history; refreshing only newest Stooq page" in output
     assert output.rfind("summary: ok=1, warn=0, total=1") > output.index("WARN PALLADIUM")
+    assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
+
+
+def test_short_commodity_cache_still_uses_full_replacement(monkeypatch, tmp_path):
+    csv_path = tmp_path / "SOYOIL.csv"
+    pd.DataFrame({"Date": pd.date_range("2026-01-01", periods=80)}).to_csv(csv_path, index=False)
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    def replace_csv(**_kwargs):
+        assert not csv_path.exists()
+        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
+        pd.DataFrame({"Date": pd.date_range("2025-01-01", periods=260)}).to_csv(csv_path, index=False)
+        return pd.DataFrame(), csv_path, {}
+
+    monkeypatch.setattr(scanner, "load_or_update_daily_data", replace_csv)
+    scanner._commodity_csv_health_check(["SOYOIL"])
+
+    assert len(pd.read_csv(csv_path)) == 260

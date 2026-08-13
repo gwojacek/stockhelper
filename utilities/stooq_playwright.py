@@ -2007,15 +2007,18 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
         return
 
     selectors = [
+        'button.fc-button.fc-cta-consent.fc-primary-button',
         'button:has-text("Zgadzam się")',
         'button:has-text("Zgadzam sie")',
-        'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Zgadzam się"]',
         '.fc-dialog-container button:has-text("Zgadzam się")',
         'text=Zgadzam się',
     ]
 
-    for _ in range(4):
+    # Stooq can mount a second Funding Choices dialog immediately after the
+    # first consent disappears.  Always perform at least two detection passes;
+    # later passes are fallbacks for a dialog that is re-mounted again.
+    for consent_pass in range(4):
         try:
             contexts = [page] + list(page.frames)
         except Exception:
@@ -2025,9 +2028,14 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             for sel in selectors:
                 try:
                     loc = ctx.locator(sel).first
-                    if loc.count() == 0:
-                        continue
-                    loc.wait_for(state='visible', timeout=1500)
+                    # On the second pass, wait for a newly mounted dialog rather
+                    # than relying on an instantaneous count() check.
+                    if consent_pass == 1 and sel == selectors[0]:
+                        loc.wait_for(state='visible', timeout=3000)
+                    else:
+                        if loc.count() == 0:
+                            continue
+                        loc.wait_for(state='visible', timeout=1500)
                     loc.click(timeout=3000, force=True)
                     print(f"[stooq-web] consent click attempted with selector: {sel}", flush=True)
                     clicked = True
@@ -2044,10 +2052,19 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                 pass
             if not _consent_overlay_visible(page):
                 print("[stooq-web] consent overlay cleared.", flush=True)
-                return
+                if consent_pass >= 1:
+                    return
+                print("[stooq-web] checking once more for follow-up consent dialog.", flush=True)
+                continue
             print("[stooq-web] consent overlay still visible after click.", flush=True)
         else:
-            break
+            # The first pass may find no dialog just before Funding Choices
+            # mounts it.  The mandatory second pass waits for that case.
+            if consent_pass >= 1:
+                break
+
+    if _consent_overlay_visible(page):
+        raise ValueError("Stooq consent overlay remained visible after repeated acceptance")
 
 def _consent_overlay_visible(page) -> bool:
     probes = [
@@ -2655,7 +2672,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             page_num = start_page
             empty_pages = 0
             interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
-            max_page = max(30, start_page + 30)
+            # Health repair of a full-size cache needs only Stooq's newest page:
+            # its ~40 authoritative rows replace the possibly Yahoo-derived tail.
+            # Normal refresh/backfill behavior remains unchanged.
+            tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1" and end_date is None and not local.empty
+            max_page = 1 if tail_refresh else max(30, start_page + 30)
             while page_num <= max_page:
                 now_mono = time.monotonic()
                 if (now_mono - last_progress_at) > max_runtime_s:
@@ -2691,6 +2712,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_p{page_num}")
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
                 if page_num == 1:
+                    # This paginated path is shared by literal commodities and
+                    # Forex.  The helper performs the mandatory second consent
+                    # pass, so commodity table extraction cannot begin while a
+                    # follow-up Funding Choices dialog is still mounted.
                     _accept_consent_if_present(page, first_page=True)
                     _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                     if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):

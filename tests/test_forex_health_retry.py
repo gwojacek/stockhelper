@@ -44,7 +44,7 @@ def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp
     output = capsys.readouterr().out
     assert "rolling 1.5-year coverage check" in output
     assert "summary: ok=0, warn=1, total=1" in output
-    assert "retry round 1/4: replacing and retrying 1 incomplete CSV(s)" in output
+    assert "retry round 1/4: repairing 1 incomplete CSV(s)" in output
     assert "post-retry round 1 rolling coverage check" in output
     assert "all forex CSVs complete after retry round 1" in output
     assert len(calls) == 1
@@ -163,6 +163,42 @@ def test_forex_health_warns_on_yahoo_contaminated_tail(monkeypatch, tmp_path, ca
     assert "yahoo_like_last20=2" in output
 
 
+def test_forex_health_repairs_contaminated_tail_from_one_stooq_page(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    expected = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
+    dates = pd.date_range(expected - timedelta(days=548), expected)
+    frame = pd.DataFrame({
+        "Date": dates,
+        "Open": [150.0] * (len(dates) - 2) + [150.10000610351562, 150.1999969482422],
+        "High": 151.0,
+        "Low": 149.0,
+        "Close": 150.5,
+    })
+    frame.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    def repair_tail(**_kwargs):
+        assert csv_path.exists(), "complete Forex history must not be deleted"
+        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"
+        clean = frame.copy()
+        clean["Open"] = clean["Open"].round(3)
+        # Normal loader behavior keeps one newest Yahoo row after the Stooq
+        # overlap has been repaired.
+        clean.loc[clean.index[-1], "Open"] = 150.1999969482422
+        clean.to_csv(csv_path, index=False)
+        return clean, csv_path, {"source": "stooq_web+yahoo"}
+
+    monkeypatch.setattr(scanner, "load_or_update_daily_data", repair_tail)
+    scanner._forex_csv_health_check(["USDJPY"], {"USDJPY": "table_ui"})
+
+    output = capsys.readouterr().out
+    assert "healthy history with 2 Yahoo-like tail rows" in output
+    assert "refreshing only newest Stooq page" in output
+    assert "all forex CSVs complete after retry round 1" in output
+    assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
+
+
 def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "USDJPY.csv"
     today = datetime.now(UTC).date()
@@ -183,6 +219,45 @@ def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path,
     assert "missing_candles=2" in output
     assert f"expected_latest={expected_latest}" in output
     assert "summary: ok=0, warn=1, total=1" in output
+
+
+def test_forex_health_uses_yahoo_only_when_just_latest_candle_is_missing(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "EURJPY.csv"
+    expected = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
+    previous = expected - timedelta(days=1)
+    while previous.weekday() >= 5:
+        previous -= timedelta(days=1)
+    frame = pd.DataFrame({
+        "Date": pd.date_range(expected - timedelta(days=548), previous),
+        "Open": 160.0,
+        "High": 161.0,
+        "Low": 159.0,
+        "Close": 160.5,
+    })
+    frame.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        scanner,
+        "load_or_update_daily_data",
+        lambda **_kwargs: pytest.fail("one missing latest FX candle must not trigger Stooq"),
+    )
+
+    def yahoo_merge(local, symbol, instrument, **_kwargs):
+        assert symbol == "EURJPY"
+        assert instrument == "forex"
+        newest = local.iloc[-1:].copy()
+        newest["Date"] = pd.Timestamp(expected)
+        return pd.concat([local, newest], ignore_index=True), "EURJPY=X", None, 1
+
+    monkeypatch.setattr(scanner, "_merge_yahoo_fresh_candle", yahoo_merge)
+
+    scanner._forex_csv_health_check(["EURJPY"], {"EURJPY": "table_ui"})
+
+    output = capsys.readouterr().out
+    assert "appended Yahoo newest candle; skipped Stooq history retry" in output
+    assert "all forex CSVs complete after retry round 1" in output
+    assert pd.to_datetime(pd.read_csv(csv_path)["Date"]).max().date() == expected
 
 
 def test_fibo_forex_reports_per_ticker_sources_and_health_summary():

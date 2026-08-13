@@ -113,6 +113,28 @@ def test_gpp_cloud_entry_is_not_reported_as_breakout():
     assert flip.flip_date == "2026-04-21"
 
 
+def test_cloud_retest_exit_does_not_replace_original_breakout_date():
+    dates = pd.date_range("2025-09-22", periods=100, freq="B")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Close": [12.0, 11.0] + [8.0] * 98,
+            "cloud_top": [11.0] * 100,
+            "cloud_bottom": [9.0] * 100,
+        }
+    )
+    # The trend began with the 24-Sep close below the far edge.  Much later it
+    # enters the cloud for a retest and exits below again; that exit is not a
+    # second breakout.
+    df.loc[40, "Close"] = 10.0
+    df.loc[41, "Close"] = 8.0
+
+    breakout_idx = scanner_search._find_latest_breakout_idx(df, "below", min_age_days=20)
+
+    assert breakout_idx == 2
+    assert df.loc[breakout_idx, "Date"].strftime("%Y-%m-%d") == "2025-09-24"
+
+
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
     dates = pd.date_range("2026-08-01", periods=7, freq="D")
     df = pd.DataFrame(

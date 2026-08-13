@@ -95,6 +95,30 @@ def test_filtered_ui_csv_reuses_commodity_consent_and_captcha_flow():
     assert download_source.count("_resolve_stooq_ui_consent_and_captcha") == 3
 
 
+def test_stooq_consent_is_checked_twice_before_table_fetching():
+    from utilities.stooq_playwright import _accept_consent_if_present
+
+    source = inspect.getsource(_accept_consent_if_present)
+    assert "for consent_pass in range(4)" in source
+    assert "consent_pass == 1 and sel == selectors[0]" in source
+    assert "loc.wait_for(state='visible', timeout=3000)" in source
+    assert "checking once more for follow-up consent dialog" in source
+    assert "consent_pass >= 1" in source
+    assert "consent overlay remained visible after repeated acceptance" in source
+
+
+def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
+    from utilities.stooq_playwright import update_stooq_history_with_playwright
+
+    source = inspect.getsource(update_stooq_history_with_playwright)
+    consent = source.index("_accept_consent_if_present(page, first_page=True)")
+    extraction = source.index("_extract_rows_from_frame(page)")
+
+    assert consent < extraction
+    assert "shared by literal commodities and" in source
+    assert "mandatory second consent" in source
+
+
 def test_forex_browser_uses_exact_download_url_before_ui_fallback():
     from utilities.stooq_playwright import update_stooq_history_from_ui_csv
 
@@ -112,6 +136,12 @@ def test_rate_limit_ocr_is_capped_at_three_attempts():
 def test_stooq_playwright_uses_conditions_not_fixed_timeouts():
     source = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
     assert "wait_for_timeout(" not in source
+
+
+def test_commodity_tail_repair_limits_stooq_scrape_to_first_page():
+    source = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
+    assert 'tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"' in source
+    assert "max_page = 1 if tail_refresh" in source
 
 
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):
