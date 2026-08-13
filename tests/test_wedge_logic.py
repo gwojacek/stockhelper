@@ -30,6 +30,19 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
     assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
 
 
+def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    # The ALUMINIUM chart title/config is AL.F, whose session stem is AL.
+    (sessions / "AL.json").write_text(json.dumps({
+        "drawn_objects": [{"type": "wedge", "group_id": "auto-wedge"}]
+    }), encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == sessions / "AL.json"
+    assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
+
+
 def test_manual_wedge_breakout_is_checked_only_after_all_saved_anchors(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"

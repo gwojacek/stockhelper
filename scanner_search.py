@@ -4010,9 +4010,27 @@ def _clustered_contact_indices(indices: list[int], max_gap: int = 1) -> list[int
     return reps
 
 
+def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
+    """Return possible session paths for a scanner/display ticker.
+
+    Commodity scans use canonical display names (for example ``ALUMINIUM``),
+    while the chart is saved under its provider symbol (``AL.F`` -> ``AL``).
+    Resolve both forms so AllSearch reads the same state that the chart saved.
+    """
+    raw = str(ticker).strip()
+    stems = [re.sub(r"\.(WA|PL)$", "", raw, flags=re.IGNORECASE)]
+    provider_symbol = COMMODITY_STOOQ_MAP.get(raw.upper())
+    if provider_symbol:
+        provider_stem = str(provider_symbol).split(".", 1)[0]
+        stems.extend((provider_stem.upper(), provider_stem.lower()))
+    unique_stems = tuple(dict.fromkeys(stem.strip() for stem in stems if stem.strip()))
+    return tuple(STATE_DATA_DIR / "sessions" / f"{stem}.json" for stem in unique_stems)
+
+
 def _scanner_session_path_for_ticker(ticker: str) -> Path:
-    stem = re.sub(r"\.(WA|PL)$", "", str(ticker), flags=re.IGNORECASE).strip()
-    return STATE_DATA_DIR / "sessions" / f"{stem}.json"
+    """Return an existing session path, or the canonical fallback path."""
+    paths = _scanner_session_paths_for_ticker(ticker)
+    return next((path for path in paths if path.exists()), paths[0])
 
 
 def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
