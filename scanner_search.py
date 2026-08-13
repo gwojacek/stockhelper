@@ -34,6 +34,7 @@ from chart_program.chart_loader import (
     local_csv_path_for_symbol,
     _yahoo_download,
     _yahoo_download_window,
+    _merge_yahoo_fresh_candle,
     _recent_high_precision_candle_count,
     YAHOO_RECENT_CANDLE_REBASE_THRESHOLD,
 )
@@ -1639,9 +1640,29 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     except ValueError:
         retry_rounds = 4
     def _replace(raw: str) -> str:
-        _raw, csv_path, _rows, _oldest, _latest, _span, _yahoo_like, _exc = _health_row(raw)
+        _raw, csv_path, _rows, oldest, latest, _span, yahoo_like, health_exc = _health_row(raw)
         backup = csv_path.read_bytes() if csv_path.exists() else None
         try:
+            missing = _missing_candles(latest)
+            history_complete = (
+                health_exc is None
+                and oldest != "-"
+                and date.fromisoformat(oldest) <= oldest_tolerance
+            )
+            if history_complete and missing == 1 and yahoo_like < YAHOO_RECENT_CANDLE_REBASE_THRESHOLD:
+                # Stooq's daily table commonly ends at yesterday.  When the
+                # rolling history is already complete and only today's session
+                # is absent, fetching ten Stooq pages cannot repair anything.
+                # Append Yahoo's single freshest row directly instead.
+                local = pd.read_csv(csv_path)
+                merged, _candidate, _name, added = _merge_yahoo_fresh_candle(
+                    local, raw, "forex", trim_to_last_year=False
+                )
+                if added <= 0:
+                    raise ValueError("Yahoo did not provide the missing latest FX candle")
+                merged.to_csv(csv_path, index=False)
+                print(f"[forex-check] {raw}: appended Yahoo newest candle; skipped Stooq history retry")
+                return "cache+yahoo"
             csv_path.unlink(missing_ok=True)
             _df, _path, meta = load_or_update_daily_data(
                 symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
@@ -1665,7 +1686,7 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
         for retry_round in range(1, retry_rounds + 1):
             retry_workers = min(retry_workers_setting, len(retry_tickers))
             print(
-                f"[forex-check] retry round {retry_round}/{retry_rounds}: replacing and retrying "
+                f"[forex-check] retry round {retry_round}/{retry_rounds}: repairing "
                 f"{len(retry_tickers)} incomplete CSV(s) with {retry_workers} worker(s): {', '.join(retry_tickers)}"
             )
             with ThreadPoolExecutor(max_workers=retry_workers) as executor:
