@@ -21,6 +21,46 @@ def test_forced_commodity_refresh_ignores_daily_refresh_state(monkeypatch, capsy
     assert "audited last 20 candles" in capsys.readouterr().out
 
 
+def test_forced_forex_audit_repairs_only_first_stooq_page(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    cached = pd.DataFrame(
+        {
+            "Date": pd.date_range("2025-02-11", periods=390, freq="B"),
+            "Open": [140.123456789] * 390,
+            "High": [141.123456789] * 390,
+            "Low": [139.123456789] * 390,
+            "Close": [140.623456789] * 390,
+        }
+    )
+    cached.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+    monkeypatch.setenv("STOCKHELPER_MARKET_REFRESH_AUDITED", "1")
+    monkeypatch.setenv("STOCKHELPER_MARKET_REFRESH_SYMBOLS", "USDJPY")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    def load_tail(**_kwargs):
+        assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"
+        return cached, csv_path, {"source": "table_ui"}
+
+    monkeypatch.setattr(scanner, "_load_daily_data_with_retries", load_tail)
+    yahoo_latest = cached.copy()
+    yahoo_latest.loc[len(yahoo_latest)] = yahoo_latest.iloc[-1]
+    yahoo_latest.loc[len(yahoo_latest) - 1, "Date"] = cached["Date"].max() + pd.Timedelta(days=1)
+    monkeypatch.setattr(
+        scanner,
+        "_merge_yahoo_fresh_candle",
+        lambda df, *_args, **_kwargs: (yahoo_latest, "USDJPY=X", "USD/JPY", 1),
+    )
+    _loaded, _path, meta = scanner._load_full_cached_history_for_scan("USDJPY", "forex")
+
+    assert meta["source"] == "table_ui+yahoo"
+    persisted = pd.read_csv(csv_path)
+    assert pd.to_datetime(persisted["Date"]).max() == yahoo_latest["Date"].max()
+    assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
+    assert "refreshing only newest Stooq page" in capsys.readouterr().out
+
+
 def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "AUDUSD.csv"
     today = datetime.now(UTC).date()

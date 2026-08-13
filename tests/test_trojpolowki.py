@@ -65,6 +65,10 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
     assert "force_remote_refresh=False" in fibo_call
     assert "FIBO reuses the Ichimoku market-data snapshot" in combo
 
+    batch = source[source.index("def _run_batch_search"):source.index("def main")]
+    assert 'os.environ["STOCKHELPER_SNAPSHOT_CACHE_ONLY"] = "1"' in batch
+    assert "if code == 0 and not strict_cache_only:" in batch
+
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()

@@ -61,14 +61,15 @@ class MarketDataRule:
     timezone: str
     availability_time: dt_time
     trading_weekdays: tuple[int, ...]
+    market_open_time: dt_time = dt_time(0, 0)
     weekend_fallback_weekday: int = 4
     holidays: frozenset[date] = frozenset()
 
 
 MARKET_DATA_RULES: dict[str, MarketDataRule] = {
-    "stock_market_pl": MarketDataRule("stock_market_pl", "Europe/Warsaw", dt_time(17, 30), (0, 1, 2, 3, 4)),
-    "stock_market_de": MarketDataRule("stock_market_de", "Europe/Berlin", dt_time(18, 30), (0, 1, 2, 3, 4)),
-    "stock_market_us": MarketDataRule("stock_market_us", "America/New_York", dt_time(18, 0), (0, 1, 2, 3, 4)),
+    "stock_market_pl": MarketDataRule("stock_market_pl", "Europe/Warsaw", dt_time(17, 30), (0, 1, 2, 3, 4), dt_time(9, 0)),
+    "stock_market_de": MarketDataRule("stock_market_de", "Europe/Berlin", dt_time(18, 30), (0, 1, 2, 3, 4), dt_time(9, 0)),
+    "stock_market_us": MarketDataRule("stock_market_us", "America/New_York", dt_time(18, 0), (0, 1, 2, 3, 4), dt_time(9, 30)),
     "stock_market_generic": MarketDataRule("stock_market_generic", "UTC", dt_time(22, 0), (0, 1, 2, 3, 4)),
     # Commodity data is intentionally separate from stock-market rules.  Many
     # contracts trade across Sunday-Friday sessions, but daily scanner data is
@@ -136,6 +137,20 @@ def get_expected_latest_session_date(instrument: str, group: str, current_dateti
     if candidate == local_now.date() and local_now.time() < rule.availability_time:
         candidate = _previous_session_day(candidate - timedelta(days=1), rule)
     return candidate
+
+
+def _is_market_session_open(instrument: str, group: str, symbol: str | None = None, *, now: datetime | None = None) -> bool:
+    """Return whether the current session can still change its newest candle."""
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    rule = MARKET_DATA_RULES[_market_rule_name_for_instrument(instrument, group, symbol)]
+    local_now = current.astimezone(ZoneInfo(rule.timezone))
+    return (
+        local_now.weekday() in rule.trading_weekdays
+        and local_now.date() not in rule.holidays
+        and rule.market_open_time <= local_now.time() < rule.availability_time
+    )
 
 
 def has_latest_expected_data(latest_candle_date: date | None, expected_latest_session_date: date | None) -> bool:
@@ -2057,6 +2072,14 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                     os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     return True
+                if _is_market_session_open(instrument, group_name, fetch_symbol):
+                    print(
+                        f"[refresh-check] {ticker}: {group_name} market session is open; "
+                        "refresh mode ON so today's Yahoo candle is updated"
+                    )
+                    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+                    return True
                 continue
             if instrument == "forex":
                 csv_path = local_csv_path_for_symbol(fetch_symbol, "forex")
@@ -2474,7 +2497,8 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     """
     # Auto cache-only mode is useful for avoiding full group refreshes, but it
     # must not prevent the scanner from merging the newest Yahoo candle for the
-    # actual calculation.  Only the explicit --onlycache mode should skip this.
+    # actual calculation. Explicit --onlycache and allsearch's Fibo snapshot
+    # must skip this override.
     old_auto_cache = os.environ.get("STOCKHELPER_CACHE_ONLY")
     refresh_symbols = {
         item.strip().upper()
@@ -2483,16 +2507,37 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     }
     refresh_audited = os.environ.get("STOCKHELPER_MARKET_REFRESH_AUDITED") == "1"
     targeted_refresh = symbol.upper() in refresh_symbols
-    user_onlycache = os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
-    unlock_cache = old_auto_cache == "1" and not user_onlycache and (not refresh_audited or targeted_refresh)
+    tail_refresh = False
+    if targeted_refresh and refresh_audited and instrument_type in {"forex", "commodity"}:
+        try:
+            existing_path = local_csv_path_for_symbol(symbol, instrument_type)
+            existing = pd.read_csv(existing_path) if existing_path.exists() else pd.DataFrame()
+            tail_refresh = (
+                not existing.empty
+                and _recent_high_precision_candle_count(existing) >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+            )
+        except Exception:
+            tail_refresh = False
+    explicit_cache_only = (
+        os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
+        or os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1"
+    )
+    unlock_cache = old_auto_cache == "1" and not explicit_cache_only and (not refresh_audited or targeted_refresh)
     # Environment variables are process-global, so serialize the short scoped
     # override instead of letting parallel workers leak forced mode to peers.
     with MARKET_REFRESH_LOCK:
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        old_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
         if unlock_cache:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         if targeted_refresh:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        if tail_refresh:
+            os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+            print(
+                f"[refresh-check] {symbol}: healthy cached history has multiple Yahoo-like tail candles; "
+                "refreshing only newest Stooq page before Yahoo latest-candle merge"
+            )
         try:
             _runtime_df, csv_path, meta = _load_daily_data_with_retries(
                 symbol=symbol,
@@ -2500,6 +2545,22 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
                 persist=True,
                 fetch_older_data=False,
             )
+            if tail_refresh:
+                # Page 1 replaces the Yahoo-contaminated overlap with Stooq,
+                # but Stooq normally ends at yesterday. Re-attach Yahoo's
+                # newest candle now, before either Ichimoku result set is
+                # calculated (rather than waiting for the post-scan health
+                # check to repair it).
+                refreshed = pd.read_csv(csv_path)
+                refreshed, _candidate, _name, _added = _merge_yahoo_fresh_candle(
+                    refreshed,
+                    symbol,
+                    instrument_type,
+                    trim_to_last_year=False,
+                )
+                refreshed.to_csv(csv_path, index=False)
+                meta = dict(meta or {})
+                meta["source"] = f"{meta.get('source', 'table_ui')}+yahoo"
         finally:
             if old_auto_cache == "1":
                 os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache
@@ -2507,6 +2568,10 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
+            if old_tail_refresh is None:
+                os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = old_tail_refresh
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")

@@ -869,6 +869,37 @@ def test_single_stock_refresh_probe_uses_yahoo_missing_candle_count(monkeypatch)
     assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
+def test_stock_group_refreshes_same_day_candle_while_market_is_open(monkeypatch, capsys):
+    import os
+    import scanner_search as scanner
+
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, group, suffix: (ticker, "stock"))
+    monkeypatch.setattr(
+        scanner,
+        "_stock_yahoo_freshness_probe",
+        lambda fetch_symbol: (0, "2026-08-13", "2026-08-13", fetch_symbol),
+    )
+    monkeypatch.setattr(scanner, "_is_market_session_open", lambda *args, **kwargs: True)
+
+    assert scanner._should_refresh_group_data("DAX40", ["BNR.DE"], ".DE") is True
+    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+    assert "today's Yahoo candle is updated" in capsys.readouterr().out
+
+
+def test_market_session_open_uses_local_market_hours():
+    from datetime import UTC, datetime
+    import scanner_search as scanner
+
+    assert scanner._is_market_session_open(
+        "stock", "DAX40", "BNR.DE", now=datetime(2026, 8, 13, 10, 0, tzinfo=UTC)
+    )
+    assert not scanner._is_market_session_open(
+        "stock", "DAX40", "BNR.DE", now=datetime(2026, 8, 13, 5, 0, tzinfo=UTC)
+    )
+
+
 def test_repeated_stock_load_refreshes_same_day_yahoo_candle(monkeypatch, tmp_path):
     csv_path = tmp_path / "CSGP.US.csv"
     first = _df("2026-08-11", "2026-08-12")
@@ -891,6 +922,29 @@ def test_repeated_stock_load_refreshes_same_day_yahoo_candle(monkeypatch, tmp_pa
     assert info["source"] == "yahoo"
     assert float(loaded.iloc[-1]["Close"]) == 31.5
     assert float(pd.read_csv(csv_path).iloc[-1]["Volume"]) == 9000
+
+
+def test_allsearch_fibo_snapshot_does_not_refresh_same_day_candle(monkeypatch, tmp_path):
+    import scanner_search as scanner
+
+    csv_path = tmp_path / "BNR.DE.csv"
+    cached = _df("2026-08-12", "2026-08-13")
+    cached.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+    monkeypatch.setenv("STOCKHELPER_SNAPSHOT_CACHE_ONLY", "1")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    # The scanner still invokes its loader wrapper, but strict snapshot mode
+    # must remain cache-only all the way through that call.
+    def cached_loader(**kwargs):
+        assert os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+        return cached, csv_path, {"source": "cache"}
+
+    monkeypatch.setattr(scanner, "_load_daily_data_with_retries", cached_loader)
+    loaded, _, meta = scanner._load_full_cached_history_for_scan("BNR.DE", "stock")
+
+    assert meta["source"] == "cache"
+    assert list(loaded["Date"].dt.strftime("%Y-%m-%d")) == ["2026-08-12", "2026-08-13"]
 
 
 def test_yahoo_only_download_keeps_about_18_months(monkeypatch):

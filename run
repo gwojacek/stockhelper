@@ -3323,6 +3323,10 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
             if strict_cache_only or _scope_has_complete_cache(scope):
                 os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                if strict_cache_only:
+                    os.environ["STOCKHELPER_SNAPSHOT_CACHE_ONLY"] = "1"
+                else:
+                    os.environ.pop("STOCKHELPER_SNAPSHOT_CACHE_ONLY", None)
                 label = "strict cache-only" if strict_cache_only else "cache-only"
                 print(f"[cache-rule] {scope}: {label} mode ON for {mode} phase.")
             else:
@@ -3335,12 +3339,13 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
         else:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+            os.environ.pop("STOCKHELPER_SNAPSHOT_CACHE_ONLY", None)
             print(f"[cache-rule] {scope}: standalone scope probe will decide refresh/cache mode.")
         csv_dir = ICHIMOKU_SEARCH_OUTPUT_DIR if mode=="ichimoku" else FIBO_SEARCH_OUTPUT_DIR
         before_mtime = {p.name: p.stat().st_mtime for p in csv_dir.glob("*.csv")}
         try: code=int(runner(scope))
         except Exception as exc: print(f"[batch] {mode} search failed for {scope}: {exc}"); code=1
-        if code == 0:
+        if code == 0 and not strict_cache_only:
             # Missing CSVs should be visible, but they should not abort allsearch.
             # Individual scanners already report per-instrument failures; continuing
             # allows the Fibo phase and final HTML report to be produced from the
@@ -3380,6 +3385,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     os.environ.pop('STOCKHELPER_BATCH_MODE',None); os.environ.pop('STOCKHELPER_DEFER_OPEN_LINKS',None)
     os.environ.pop('STOCKHELPER_CACHE_ONLY',None)
     os.environ.pop('STOCKHELPER_FORCE_REMOTE_REFRESH',None)
+    os.environ.pop('STOCKHELPER_SNAPSHOT_CACHE_ONLY',None)
     return 1 if failures else 0
 
 def main()->int:

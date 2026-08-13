@@ -12,5 +12,10 @@
       "date": "2026-04-10 00:00:00"
     }
   },
-  "__journal_source_technique__": "Ichimoku"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_date__": "2025-07-07",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "9",
+  "__scanner_latest_retest_date__": "2026-08-13",
+  "__scanner_latest_retest_pattern__": "bullish_harami"
 }

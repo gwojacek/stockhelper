@@ -4,8 +4,8 @@
   "__scanner_retest_count__": "0",
   "__scanner_previous_respect_months__": "7.6",
   "__journal_source_technique__": "Kliny",
-  "lot_cost": 129775.87,
-  "pip_value": 3.73,
+  "lot_cost": 128161.08,
+  "pip_value": 3.74,
   "__scanner_breakout_direction__": "short",
   "drawn_objects": [
     {
@@ -13,26 +13,26 @@
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-06-22",
-        "2026-08-28"
+        "2026-06-05",
+        "2026-12-07"
       ],
       "y": [
-        3620.5,
-        3351.71
+        3793.5,
+        3092.8
       ],
-      "x0": "2026-07-17",
-      "x1": "2026-10-31",
-      "y0": 3513.75,
-      "y1": 3070.52,
+      "x0": "2026-06-05",
+      "x1": "2027-05-09",
+      "y0": 3793.5,
+      "y1": 1226,
       "anchor_x": [
-        "2026-06-22",
-        "2026-08-03"
+        "2026-06-05",
+        "2026-08-06"
       ],
       "anchor_y": [
-        3620.5,
-        3464
+        3793.5,
+        3452.25
       ],
-      "price": 3070.52,
+      "price": 1226,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": true
@@ -42,71 +42,54 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-07-02",
-        "2026-10-28"
+        "2026-02-02",
+        "2026-09-29"
       ],
       "y": [
-        3202,
-        3772.82
+        2856.5,
+        3449.05
       ],
-      "x0": "2026-07-17",
-      "x1": "2026-10-31",
-      "y0": 3344,
-      "y1": 3512,
+      "x0": "2025-08-20",
+      "x1": "2027-05-09",
+      "y0": 2470,
+      "y1": 4266.43,
       "anchor_x": [
-        "2026-07-02",
-        "2026-07-28"
+        "2026-02-02",
+        "2026-06-25"
       ],
       "anchor_y": [
-        3202,
-        3356
+        2856.5,
+        3209.5
       ],
-      "price": 3512,
+      "price": 4266.43,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": true
     }
   ],
-  "high": 3620.5,
+  "high": 3793.5,
   "__wedge_auto_high__": true,
-  "low": 3202,
+  "low": 2856.5,
   "__wedge_auto_low__": true,
-  "line_cross_value": 3423.92,
-  "__wedge_auto_line_cross__": true,
-  "position_type": "long",
-  "__wedge_auto_position_type__": true,
-  "stop_loss": 3407.29,
-  "__wedge_auto_stop_loss__": true,
   "__half_points__": [],
-  "capital": 317000,
+  "capital": 325000,
   "calculation_currency": "PLN",
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
   "level_points": {
     "high": {
-      "price": 3620.5,
-      "plot_price": 3620.5,
-      "date": "2026-06-22",
+      "price": 3793.5,
+      "plot_price": 3793.5,
+      "date": "2026-06-05",
       "auto_wedge": true
     },
     "low": {
-      "price": 3202,
-      "plot_price": 3202,
-      "date": "2026-07-02",
-      "auto_wedge": true
-    },
-    "line_cross_value": {
-      "price": 3423.92,
-      "plot_price": 3423.92,
-      "date": "2026-08-10",
-      "auto_wedge": true
-    },
-    "stop_loss": {
-      "price": 3407.29,
-      "plot_price": 3407.29,
-      "date": "2026-08-10",
+      "price": 2856.5,
+      "plot_price": 2856.5,
+      "date": "2026-02-02",
       "auto_wedge": true
     }
-  }
+  },
+  "position_type": "short"
 }
