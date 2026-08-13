@@ -2712,6 +2712,10 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_p{page_num}")
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
                 if page_num == 1:
+                    # This paginated path is shared by literal commodities and
+                    # Forex.  The helper performs the mandatory second consent
+                    # pass, so commodity table extraction cannot begin while a
+                    # follow-up Funding Choices dialog is still mounted.
                     _accept_consent_if_present(page, first_page=True)
                     _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                     if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):

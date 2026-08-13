@@ -107,6 +107,18 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     assert "consent overlay remained visible after repeated acceptance" in source
 
 
+def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
+    from utilities.stooq_playwright import update_stooq_history_with_playwright
+
+    source = inspect.getsource(update_stooq_history_with_playwright)
+    consent = source.index("_accept_consent_if_present(page, first_page=True)")
+    extraction = source.index("_extract_rows_from_frame(page)")
+
+    assert consent < extraction
+    assert "shared by literal commodities and" in source
+    assert "mandatory second consent" in source
+
+
 def test_forex_browser_uses_exact_download_url_before_ui_fallback():
     from utilities.stooq_playwright import update_stooq_history_from_ui_csv
 
