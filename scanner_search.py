@@ -4115,6 +4115,23 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     return kinds
 
 
+def _saved_wedge_breakout_for_ticker(ticker: str) -> tuple[str, str] | None:
+    """Return the breakout state calculated by the chart when it was saved."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    saved = state.get("__saved_wedge_breakout__") if isinstance(state, dict) else None
+    if not isinstance(saved, dict):
+        return None
+    direction = str(saved.get("direction") or "-")
+    breakout_date = str(saved.get("date") or "-")
+    return breakout_date, direction
+
+
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
     # Wedge x/y endpoints are display extensions and commonly end months after
     # the last OHLC candle.  The chart's own debug/breakout calculation derives
@@ -6002,6 +6019,9 @@ def run_fibo_search(target: str) -> int:
             saved_drawing_kinds = _saved_drawing_kinds_for_ticker(ticker)
             # Evaluate the saved geometry before asking the automatic detector.
             manual_wedge = _find_manual_unbroken_wedge_setup(df, ticker) if "wedge" in saved_drawing_kinds else None
+            saved_wedge_breakout = _saved_wedge_breakout_for_ticker(ticker)
+            if manual_wedge is not None and saved_wedge_breakout is not None:
+                manual_wedge.breakout_date, manual_wedge.breakout_direction = saved_wedge_breakout
             if "wedge" in saved_drawing_kinds:
                 saved_path = _scanner_session_path_for_ticker(ticker)
                 saved_status = (

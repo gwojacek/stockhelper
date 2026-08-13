@@ -1444,6 +1444,23 @@ class LightweightChartLevelSelectorUI:
     return lines.join('\\n');
   }}
 
+  function savedWedgeBreakoutState() {{
+    const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+    const upper = wedges.find(obj => wedgeSide(obj) === 'upper') || null;
+    const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
+    if (!upper || !lower) return null;
+    const touches = [...wedgeTouchPoints(upper), ...wedgeTouchPoints(lower)];
+    const lastAnchorIdx = Math.max(...touches.filter(pt => pt.anchor).map(pt => Number(pt.idx)).filter(Number.isFinite));
+    let breakout = null;
+    ohlc.forEach((row, idx) => {{
+      if (breakout || (Number.isFinite(lastAnchorIdx) && idx <= lastAnchorIdx)) return;
+      const up = lineValueForDate(upper, row.time), lo = lineValueForDate(lower, row.time);
+      if (Number.isFinite(up) && Number(row.close) > up) breakout = {{date:String(row.time).slice(0,10), direction:'long'}};
+      else if (Number.isFinite(lo) && Number(row.close) < lo) breakout = {{date:String(row.time).slice(0,10), direction:'short'}};
+    }});
+    return breakout || {{date:'-', direction:'-'}};
+  }}
+
   function updateSetupDebugPanel(message = '') {{
     const panel = $('wedge-debug-panel');
     if (!panel || !panel.classList.contains('open')) return;
@@ -3259,6 +3276,7 @@ class LightweightChartLevelSelectorUI:
       spread:Number((stockCfdMode ? spreadMult : spreadMult*pipValue).toFixed(4)),
       spread_pips: stockCfdMode ? Number((spreadMult/0.01).toFixed(2)) : null,
       drawn_objects:drawnObjects,
+      __saved_wedge_breakout__:savedWedgeBreakoutState(),
       level_points:levelPoints,
       __finished__:!!finished}};
   }}

@@ -50,6 +50,17 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
     assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
 
 
+def test_saved_chart_breakout_state_is_authoritative(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "KLIN.json").write_text(json.dumps({
+        "__saved_wedge_breakout__": {"date": "-", "direction": "-"}
+    }), encoding="utf-8")
+
+    assert scanner._saved_wedge_breakout_for_ticker("KLIN") == ("-", "-")
+
+
 def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
