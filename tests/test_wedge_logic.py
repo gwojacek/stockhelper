@@ -69,6 +69,24 @@ def test_commodity_session_resolution_uses_newest_directional_chart_save(tmp_pat
     assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
 
 
+def test_commodity_session_resolution_finds_report_launched_provider_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    # AllSearch opens `python run -c AL.F`; resolve_config_path converts the
+    # resulting al.f_long target into al_f_long.py / al_f_long.json.
+    saved = sessions / "al_f_long.json"
+    saved.write_text(json.dumps({
+        "drawn_objects": [
+            {"type": "wedge", "label": "upper"},
+            {"type": "wedge", "label": "lower"},
+        ]
+    }), encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == saved
+    assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
+
+
 def test_manual_wedge_breakout_is_checked_only_after_all_saved_anchors(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"

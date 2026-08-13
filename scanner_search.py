@@ -4032,8 +4032,14 @@ def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
         # fallback for older sessions.
         provider_name = str(provider_symbol)
         provider_stem = provider_name.split(".", 1)[0]
+        # Report chart commands use the provider ticker (``AL.F``).  The level
+        # selector then passes ``al.f_long`` to resolve_config_path(), which
+        # replaces the dot and saves the actual state as ``al_f_long.json``.
+        provider_config_stem = provider_name.lower().replace("/", "").replace(".", "_")
         stems.extend(
             (
+                f"{provider_config_stem}_long",
+                f"{provider_config_stem}_short",
                 provider_name.upper(),
                 provider_name.lower(),
                 provider_stem.upper(),
