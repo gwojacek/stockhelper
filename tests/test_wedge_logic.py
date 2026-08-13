@@ -17,7 +17,7 @@ scanner = pytest.importorskip("scanner_search")
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
 
 
-def test_manual_wedge_anchor_prefers_user_saved_rendered_geometry():
+def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extension():
     obj = {
         "x": ["2026-06-05", "2026-08-11", "2026-12-01"],
         "y": [3793.5, 3539.73, 3100.0],
@@ -32,7 +32,7 @@ def test_manual_wedge_anchor_prefers_user_saved_rendered_geometry():
 
     assert scanner._manual_wedge_anchor(obj) == (
         ("2026-06-05", 3793.5),
-        ("2026-08-11", 3539.73),
+        ("2026-08-11", 3548.25),
     )
 
 

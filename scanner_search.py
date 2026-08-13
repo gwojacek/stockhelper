@@ -4116,25 +4116,11 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
 
 
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
-    # The chart updates its rendered ``x``/``y`` geometry when a user drags a
-    # wedge.  ``anchor_x``/``anchor_y`` describe the scanner's original candle
-    # anchors and can intentionally remain unchanged (the debug panel then
-    # shows e.g. anchor=3548.25 but rendered line=3539.73).  Scanner status must
-    # be calculated from the visible line that the user actually saved.
-    line_x = obj.get("x")
-    line_y = obj.get("y")
-    if isinstance(line_x, list) and isinstance(line_y, list) and len(line_x) >= 2 and len(line_y) >= 2:
-        try:
-            # The final point may be a future right-side extension outside the
-            # OHLC dataframe. The first two rendered points define the same
-            # straight line and remain resolvable to real candles.
-            return (str(line_x[0]), float(line_y[0])), (str(line_x[1]), float(line_y[1]))
-        except Exception:
-            return None
-    try:
-        return (str(obj["x0"]), float(obj["y0"])), (str(obj["x1"]), float(obj["y1"]))
-    except Exception:
-        pass
+    # Wedge x/y endpoints are display extensions and commonly end months after
+    # the last OHLC candle.  The chart's own debug/breakout calculation derives
+    # the line from anchor_x/anchor_y and only uses x/y for rendering.  Use the
+    # same real-candle anchors here; otherwise the future endpoint cannot be
+    # resolved and the manual setup is discarded in favor of an auto breakout.
     anchor_x = obj.get("anchor_x")
     anchor_y = obj.get("anchor_y")
     if isinstance(anchor_x, list) and isinstance(anchor_y, list) and len(anchor_x) >= 2 and len(anchor_y) >= 2:
@@ -4142,7 +4128,10 @@ def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float
             return (str(anchor_x[0]), float(anchor_y[0])), (str(anchor_x[1]), float(anchor_y[1]))
         except Exception:
             return None
-    return None
+    try:
+        return (str(obj["x0"]), float(obj["y0"])), (str(obj["x1"]), float(obj["y1"]))
+    except Exception:
+        return None
 
 
 def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeScanResult | None:
@@ -6013,6 +6002,14 @@ def run_fibo_search(target: str) -> int:
             saved_drawing_kinds = _saved_drawing_kinds_for_ticker(ticker)
             # Evaluate the saved geometry before asking the automatic detector.
             manual_wedge = _find_manual_unbroken_wedge_setup(df, ticker) if "wedge" in saved_drawing_kinds else None
+            if "wedge" in saved_drawing_kinds:
+                saved_path = _scanner_session_path_for_ticker(ticker)
+                saved_status = (
+                    f"{manual_wedge.breakout_direction}@{manual_wedge.breakout_date}"
+                    if manual_wedge and manual_wedge.breakout_direction in {"long", "short"}
+                    else ("unbroken" if manual_wedge else "invalid -> automatic fallback")
+                )
+                print(f"[fibo-saved-wedge] {ticker}: {saved_status}; session={saved_path.name}", flush=True)
             # A valid saved wedge owns the result. Once that saved geometry is
             # no longer a valid active/recent wedge, resume automatic discovery.
             wedge = manual_wedge or _find_falling_wedge_setup(df)
