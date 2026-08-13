@@ -4115,6 +4115,35 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     return kinds
 
 
+def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
+    """Return saved Fibo (direction, start date, end date) groups."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return []
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return []
+    groups: dict[str, list[dict]] = {}
+    for obj in objects:
+        if isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"}:
+            groups.setdefault(str(obj.get("group_id") or obj.get("id") or "manual"), []).append(obj)
+    anchors: list[tuple[str, str, str]] = []
+    for items in groups.values():
+        boundary = next((obj for obj in items if obj.get("type") == "fib-boundary"), None)
+        if boundary is None:
+            continue
+        direction = str(next((obj.get("direction") for obj in items if obj.get("direction")), "long")).lower()
+        start = str(boundary.get("x0") or "")[:10]
+        end = str(boundary.get("x1") or "")[:10]
+        if start and end and direction in {"long", "short"}:
+            anchors.append((direction, start, end))
+    return anchors
+
+
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
     # Wedge x/y endpoints are display extensions and commonly end months after
     # the last OHLC candle.  The chart's own debug/breakout calculation derives
@@ -5338,6 +5367,7 @@ def _find_fibo_setup(
     allow_equal_third_close: bool = False,
     _mirrored_short: bool = False,
     _mirrored_short_axis: float | None = None,
+    forced_anchor_dates: tuple[str, str] | None = None,
 ) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
@@ -5354,6 +5384,7 @@ def _find_fibo_setup(
             allow_equal_third_close=allow_equal_third_close,
             _mirrored_short=True,
             _mirrored_short_axis=axis,
+            forced_anchor_dates=forced_anchor_dates,
         )
         if explain is not None and mirrored_explain is not None:
             explain.extend(
@@ -5379,30 +5410,38 @@ def _find_fibo_setup(
     if direction == "long":
         min_incline_days = 10  # ~2 weeks
         min_correction_days = 2
-        i_peak_sel = _select_peak_long(
-            w,
-            min_incline_days,
-            min_tail_bars=min_correction_days,
-            mirrored_short_axis=_mirrored_short_axis,
-        )
+        if forced_anchor_dates:
+            dates = pd.to_datetime(w["Date"], errors="coerce")
+            start_ts, end_ts = (pd.to_datetime(value, errors="coerce") for value in forced_anchor_dates)
+            if pd.isna(start_ts) or pd.isna(end_ts):
+                return None
+            i_start_forced = int((dates - start_ts).abs().idxmin())
+            i_peak_sel = int((dates - end_ts).abs().idxmin())
+        else:
+            i_start_forced = None
+            i_peak_sel = _select_peak_long(
+                w,
+                min_incline_days,
+                min_tail_bars=min_correction_days,
+                mirrored_short_axis=_mirrored_short_axis,
+            )
         if i_peak_sel is None:
             _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
-        base = _select_fibo_long_impulse_base(
-            w,
-            i_peak,
-            min_incline_days,
-            _log,
-            stale_cycle_mode=stale_cycle_mode,
-            reset_after_sideways=True,
-            sideways_band_pct=0.02 if _mirrored_short else 0.08,
-            preserve_deeper_short_continuation=_mirrored_short,
+        base = (
+            (i_start_forced, float(low.iloc[i_start_forced]), float(high.iloc[i_peak]))
+            if i_start_forced is not None and i_start_forced < i_peak
+            else _select_fibo_long_impulse_base(
+                w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode,
+                reset_after_sideways=True, sideways_band_pct=0.02 if _mirrored_short else 0.08,
+                preserve_deeper_short_continuation=_mirrored_short,
+            )
         )
         if base is None:
             return None
         i_start, fib_start, fib_end = base
-        newer_low_slice = low.iloc[i_start + 1:i_peak + 1]
+        newer_low_slice = low.iloc[i_start + 1:i_peak + 1] if not forced_anchor_dates else pd.Series(dtype=float)
         if not newer_low_slice.empty:
             newer_low_idx = int(newer_low_slice.idxmin())
             newer_low = float(low.iloc[newer_low_idx])
@@ -5439,7 +5478,7 @@ def _find_fibo_setup(
         i_end = len(w) - 1
         later_high_slice = pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce") if i_peak + 1 <= i_end else pd.Series(dtype=float)
         later_high = float(later_high_slice.max()) if not later_high_slice.empty else float("nan")
-        if pd.notna(later_high) and later_high > fib_end * 1.005:
+        if not forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:
             previous_peak = fib_end
             i_peak = int(later_high_slice.idxmax())
             fib_end = float(high.iloc[i_peak])
@@ -6086,10 +6125,27 @@ def run_fibo_search(target: str) -> int:
                 if pd.notna(latest_close):
                     wedge.current_close = latest_close
                 out_rows.append(wedge)
-            # Fibo drawings follow the same authority rule.  Automatic Fibo
-            # rows describe the detector's anchors, not the user's saved ones,
-            # so suppress those stale rows once a manual Fibo override exists.
-            manual_fibo = "fibo" in saved_drawing_kinds
+            saved_fibo_anchors = _saved_fibo_anchors_for_ticker(ticker)
+            saved_fibo_rows: list[FiboScanResult] = []
+            for direction, anchor_start, anchor_end in saved_fibo_anchors:
+                cand = _find_fibo_setup(
+                    df, direction, allow_equal_third_close=(instrument == "forex"),
+                    forced_anchor_dates=(anchor_start, anchor_end),
+                )
+                if cand and not _is_waiting_candidate_stale(df, cand) and not _is_valid_reversal_invalidated(df, cand):
+                    cand.ticker = ticker
+                    cand.current_close = latest_close if pd.notna(latest_close) else cand.current_close
+                    cand.latest_candle_date = latest_candle_date
+                    cand.expected_latest_session_date = expected_latest_session_date
+                    saved_fibo_rows.append(cand)
+                    out_rows.append(cand)
+            # A valid saved Fibo owns the ticker and is reclassified from its
+            # edited anchors on every scan. If it becomes invalid, automatic
+            # discovery resumes instead of keeping a dead manual formation.
+            manual_fibo = bool(saved_fibo_rows)
+            if saved_fibo_anchors:
+                status = ", ".join(f"{r.direction}:{r.status}" for r in saved_fibo_rows) or "invalid -> automatic fallback"
+                print(f"[fibo-saved-anchors] {ticker}: {status}", flush=True)
             steep_3p = None if manual_fibo else _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker

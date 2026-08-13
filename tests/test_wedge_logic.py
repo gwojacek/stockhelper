@@ -55,6 +55,21 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
     assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
 
 
+def test_saved_fibo_anchors_are_read_from_boundary_group(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    objects = [
+        {"type": "fib", "group_id": "edited", "direction": "long", "ratio": 0.618},
+        {"type": "fib-boundary", "group_id": "edited", "x0": "2026-02-02", "x1": "2026-06-05"},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+
+    assert scanner._saved_fibo_anchors_for_ticker("KLIN") == [
+        ("long", "2026-02-02", "2026-06-05")
+    ]
+
+
 def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
