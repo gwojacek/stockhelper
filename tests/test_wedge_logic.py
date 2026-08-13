@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import json
+import os
 from io import StringIO
 from pathlib import Path
 
@@ -34,12 +35,37 @@ def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monke
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
     sessions.mkdir()
-    # The ALUMINIUM chart title/config is AL.F, whose session stem is AL.
-    (sessions / "AL.json").write_text(json.dumps({
+    # Path.stem removes only the final .py from AL.F.py, so the chart saves
+    # the session as AL.F.json and not AL.json.
+    (sessions / "AL.F.json").write_text(json.dumps({
         "drawn_objects": [{"type": "wedge", "group_id": "auto-wedge"}]
     }), encoding="utf-8")
 
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == sessions / "AL.F.json"
+    assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
+
+
+def test_commodity_session_resolution_keeps_legacy_short_stem_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "AL.json").write_text("{}", encoding="utf-8")
+
     assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == sessions / "AL.json"
+
+
+def test_commodity_session_resolution_uses_newest_directional_chart_save(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    old = sessions / "AL.F.json"
+    old.write_text("{}", encoding="utf-8")
+    new = sessions / "aluminium_long.json"
+    new.write_text(json.dumps({"drawn_objects": [{"type": "wedge"}]}), encoding="utf-8")
+    os.utime(old, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(new, ns=(2_000_000_000, 2_000_000_000))
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == new
     assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
 
 

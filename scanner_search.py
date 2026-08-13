@@ -4018,19 +4018,42 @@ def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
     Resolve both forms so AllSearch reads the same state that the chart saved.
     """
     raw = str(ticker).strip()
-    stems = [re.sub(r"\.(WA|PL)$", "", raw, flags=re.IGNORECASE)]
+    canonical = re.sub(r"\.(WA|PL)$", "", raw, flags=re.IGNORECASE)
+    stems = [canonical]
+    # Level selector configs for commodities/forex are direction-qualified
+    # (``aluminium_long.py`` / ``aluminium_short.py``), and session state uses
+    # that config stem even though scanner rows only contain ``ALUMINIUM``.
+    stems.extend((f"{canonical.lower()}_long", f"{canonical.lower()}_short"))
     provider_symbol = COMMODITY_STOOQ_MAP.get(raw.upper())
     if provider_symbol:
-        provider_stem = str(provider_symbol).split(".", 1)[0]
-        stems.extend((provider_stem.upper(), provider_stem.lower()))
+        # Session names come from ``config_path.stem``.  A config such as
+        # ``AL.F.py`` therefore saves ``AL.F.json`` (not ``AL.json``).  Keep
+        # the complete provider symbol and retain the legacy short stem as a
+        # fallback for older sessions.
+        provider_name = str(provider_symbol)
+        provider_stem = provider_name.split(".", 1)[0]
+        stems.extend(
+            (
+                provider_name.upper(),
+                provider_name.lower(),
+                provider_stem.upper(),
+                provider_stem.lower(),
+            )
+        )
     unique_stems = tuple(dict.fromkeys(stem.strip() for stem in stems if stem.strip()))
     return tuple(STATE_DATA_DIR / "sessions" / f"{stem}.json" for stem in unique_stems)
 
 
 def _scanner_session_path_for_ticker(ticker: str) -> Path:
-    """Return an existing session path, or the canonical fallback path."""
+    """Return the newest matching session, or the canonical fallback path.
+
+    A chart can accumulate canonical, provider-symbol, long and short session
+    names over time.  The newest save is the user's current edit and must win
+    over an older file that merely appears earlier in the alias list.
+    """
     paths = _scanner_session_paths_for_ticker(ticker)
-    return next((path for path in paths if path.exists()), paths[0])
+    existing = [path for path in paths if path.exists()]
+    return max(existing, key=lambda path: path.stat().st_mtime_ns) if existing else paths[0]
 
 
 def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
