@@ -4134,13 +4134,38 @@ def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float
         return None
 
 
+def _manual_wedge_line_geometry(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
+    """Return the visible saved line, including its display extension.
+
+    ``anchor_*`` identifies scanner-generated candle contacts, but dragging an
+    endpoint sets ``free_extension`` and changes x/y without rewriting those
+    original contacts.  Breakout calculations must use the visible x/y line.
+    Unlike contact anchors, its second point may be in the future, which is
+    perfectly valid for calendar-time interpolation.
+    """
+    xs = obj.get("x")
+    ys = obj.get("y")
+    if isinstance(xs, list) and isinstance(ys, list) and len(xs) >= 2 and len(ys) >= 2:
+        try:
+            last = min(len(xs), len(ys)) - 1
+            return (str(xs[0]), float(ys[0])), (str(xs[last]), float(ys[last]))
+        except Exception:
+            return None
+    try:
+        return (str(obj["x0"]), float(obj["y0"])), (str(obj["x1"]), float(obj["y1"]))
+    except Exception:
+        return _manual_wedge_anchor(obj)
+
+
 def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeScanResult | None:
     pair = _manual_wedge_objects_for_ticker(ticker)
     if pair is None:
         return None
     upper_raw = _manual_wedge_anchor(pair[0])
     lower_raw = _manual_wedge_anchor(pair[1])
-    if upper_raw is None or lower_raw is None:
+    upper_line_raw = _manual_wedge_line_geometry(pair[0])
+    lower_line_raw = _manual_wedge_line_geometry(pair[1])
+    if upper_raw is None or lower_raw is None or upper_line_raw is None or lower_line_raw is None:
         return None
     required = {"Date", "Open", "High", "Low", "Close"}
     if df is None or df.empty or not required.issubset(df.columns):
@@ -4177,8 +4202,8 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
         ts = pd.to_datetime(raw[0], errors="raise")
         return float((ts - pd.Timestamp("1970-01-01")).total_seconds() / 86400.0), float(raw[1])
 
-    upper_calendar_a, upper_calendar_b = _calendar_anchor(upper_raw[0]), _calendar_anchor(upper_raw[1])
-    lower_calendar_a, lower_calendar_b = _calendar_anchor(lower_raw[0]), _calendar_anchor(lower_raw[1])
+    upper_calendar_a, upper_calendar_b = _calendar_anchor(upper_line_raw[0]), _calendar_anchor(upper_line_raw[1])
+    lower_calendar_a, lower_calendar_b = _calendar_anchor(lower_line_raw[0]), _calendar_anchor(lower_line_raw[1])
 
     def _line_at(i: int, a: tuple[float, float], b: tuple[float, float]) -> float:
         return _wedge_line_value(float(day_coordinates[i]), a, b)
@@ -4247,8 +4272,12 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     width_start = _line_at(first_validation, upper_calendar_a, upper_calendar_b) - _line_at(first_validation, lower_calendar_a, lower_calendar_b)
     width_end = _line_at(end, upper_calendar_a, upper_calendar_b) - _line_at(end, lower_calendar_a, lower_calendar_b)
     last_close = float(closes[end])
-    upper_start, upper_end = sorted([upper_a, upper_b], key=lambda x: x[0])
-    lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
+    upper_reps = _clustered_contact_indices(upper_contacts)
+    lower_reps = _clustered_contact_indices(lower_contacts)
+    upper_start = (upper_reps[0], float(highs[upper_reps[0]]))
+    upper_end = (upper_reps[-1], float(highs[upper_reps[-1]]))
+    lower_start = (lower_reps[0], float(lows[lower_reps[0]]))
+    lower_end = (lower_reps[-1], float(lows[lower_reps[-1]]))
     def _fmt(i: int) -> str: return str(pd.to_datetime(w["Date"].iloc[i]).date())
     return WedgeScanResult(
         ticker=ticker, start_date=_fmt(first_validation), end_date=_fmt(end), duration_days=end - first_validation + 1,

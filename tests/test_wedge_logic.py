@@ -35,6 +35,10 @@ def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extensi
         ("2026-06-05", 3793.5),
         ("2026-08-11", 3548.25),
     )
+    assert scanner._manual_wedge_line_geometry(obj) == (
+        ("2026-06-05", 3793.5),
+        ("2026-12-01", 3100.0),
+    )
 
 
 def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monkeypatch):
@@ -162,8 +166,16 @@ def test_aluminium_saved_wedge_uses_calendar_time_and_remains_unbroken(tmp_path,
     sessions = tmp_path / "sessions"
     sessions.mkdir()
     objects = [
-        {"type": "wedge", "label": "upper", "anchor_x": ["2026-06-05", "2026-08-06"], "anchor_y": [3793.5, 3452.25]},
-        {"type": "wedge", "label": "lower", "anchor_x": ["2026-02-02", "2026-06-25"], "anchor_y": [2856.5, 3209.5]},
+        {
+            "type": "wedge", "label": "upper",
+            "anchor_x": ["2026-06-05", "2026-08-06"], "anchor_y": [3793.5, 3452.25],
+            "x": ["2026-06-05", "2026-08-11"], "y": [3793.5, 3539.73], "free_extension": True,
+        },
+        {
+            "type": "wedge", "label": "lower",
+            "anchor_x": ["2026-02-02", "2026-06-25"], "anchor_y": [2856.5, 3209.5],
+            "x": ["2026-02-02", "2026-07-01"], "y": [2856.5, 3225.91], "free_extension": True,
+        },
     ]
     (sessions / "ALUMINIUM.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
     df = pd.read_csv(COMMODITY_DATA_DIR / "AL_F.csv")
