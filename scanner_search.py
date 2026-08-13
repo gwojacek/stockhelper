@@ -1663,10 +1663,38 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                 merged.to_csv(csv_path, index=False)
                 print(f"[forex-check] {raw}: appended Yahoo newest candle; skipped Stooq history retry")
                 return "cache+yahoo"
-            csv_path.unlink(missing_ok=True)
-            _df, _path, meta = load_or_update_daily_data(
-                symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
+            contaminated_tail = (
+                history_complete
+                and missing == 0
+                and yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
             )
+            # Environment refresh flags are process-global. Serialize this
+            # short mode selection so parallel health workers cannot turn a
+            # full replacement into a tail repair (or vice versa).
+            with MARKET_REFRESH_LOCK:
+                previous_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
+                try:
+                    if contaminated_tail:
+                        # The 1.5-year Stooq body and today's Yahoo candle are
+                        # already present. Replace only the overlapping newest
+                        # ~40 rows from Stooq page 1; the loader then adds back
+                        # Yahoo's single freshest candle.
+                        os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+                        print(
+                            f"[forex-check] {raw}: healthy history with {yahoo_like} Yahoo-like tail rows; "
+                            "refreshing only newest Stooq page before Yahoo latest-candle merge"
+                        )
+                    else:
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        csv_path.unlink(missing_ok=True)
+                    _df, _path, meta = load_or_update_daily_data(
+                        symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
+                    )
+                finally:
+                    if previous_tail_refresh is None:
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                    else:
+                        os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = previous_tail_refresh
             if not csv_path.exists():
                 raise FileNotFoundError(f"replacement did not create {csv_path}")
             return str((meta or {}).get("source", "unknown"))

@@ -163,6 +163,42 @@ def test_forex_health_warns_on_yahoo_contaminated_tail(monkeypatch, tmp_path, ca
     assert "yahoo_like_last20=2" in output
 
 
+def test_forex_health_repairs_contaminated_tail_from_one_stooq_page(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "USDJPY.csv"
+    expected = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
+    dates = pd.date_range(expected - timedelta(days=548), expected)
+    frame = pd.DataFrame({
+        "Date": dates,
+        "Open": [150.0] * (len(dates) - 2) + [150.10000610351562, 150.1999969482422],
+        "High": 151.0,
+        "Low": 149.0,
+        "Close": 150.5,
+    })
+    frame.to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    def repair_tail(**_kwargs):
+        assert csv_path.exists(), "complete Forex history must not be deleted"
+        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"
+        clean = frame.copy()
+        clean["Open"] = clean["Open"].round(3)
+        # Normal loader behavior keeps one newest Yahoo row after the Stooq
+        # overlap has been repaired.
+        clean.loc[clean.index[-1], "Open"] = 150.1999969482422
+        clean.to_csv(csv_path, index=False)
+        return clean, csv_path, {"source": "stooq_web+yahoo"}
+
+    monkeypatch.setattr(scanner, "load_or_update_daily_data", repair_tail)
+    scanner._forex_csv_health_check(["USDJPY"], {"USDJPY": "table_ui"})
+
+    output = capsys.readouterr().out
+    assert "healthy history with 2 Yahoo-like tail rows" in output
+    assert "refreshing only newest Stooq page" in output
+    assert "all forex CSVs complete after retry round 1" in output
+    assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
+
+
 def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "USDJPY.csv"
     today = datetime.now(UTC).date()
