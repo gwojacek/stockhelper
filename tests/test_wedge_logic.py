@@ -17,6 +17,25 @@ scanner = pytest.importorskip("scanner_search")
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
 
 
+def test_manual_wedge_anchor_prefers_user_saved_rendered_geometry():
+    obj = {
+        "x": ["2026-06-05", "2026-08-11", "2026-12-01"],
+        "y": [3793.5, 3539.73, 3100.0],
+        "x0": "2026-06-05",
+        "y0": 3793.5,
+        "x1": "2026-12-01",
+        "y1": 3100.0,
+        # Original automatic anchors are deliberately stale after the edit.
+        "anchor_x": ["2026-06-05", "2026-08-11"],
+        "anchor_y": [3793.5, 3548.25],
+    }
+
+    assert scanner._manual_wedge_anchor(obj) == (
+        ("2026-06-05", 3793.5),
+        ("2026-08-11", 3539.73),
+    )
+
+
 def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
