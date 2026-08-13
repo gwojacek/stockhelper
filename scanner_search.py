@@ -4115,23 +4115,6 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     return kinds
 
 
-def _saved_wedge_breakout_for_ticker(ticker: str) -> tuple[str, str] | None:
-    """Return the breakout state calculated by the chart when it was saved."""
-    path = _scanner_session_path_for_ticker(ticker)
-    if not path.exists():
-        return None
-    try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    saved = state.get("__saved_wedge_breakout__") if isinstance(state, dict) else None
-    if not isinstance(saved, dict):
-        return None
-    direction = str(saved.get("direction") or "-")
-    breakout_date = str(saved.get("date") or "-")
-    return breakout_date, direction
-
-
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
     # Wedge x/y endpoints are display extensions and commonly end months after
     # the last OHLC candle.  The chart's own debug/breakout calculation derives
@@ -4184,6 +4167,22 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     upper_a, upper_b = up0, up1
     lower_a, lower_b = lo0, lo1
     highs = w["High"].astype(float).to_numpy(); lows = w["Low"].astype(float).to_numpy(); closes = w["Close"].astype(float).to_numpy()
+    # Lightweight Charts projects trend lines by elapsed calendar time, not by
+    # the count of trading candles.  Using dataframe indices makes every
+    # weekend/holiday change the slope and caused ALUMINIUM's 2026-08-10 close
+    # to appear above a different line than the one shown in WEDGE DEBUG.
+    day_coordinates = (w["Date"] - pd.Timestamp("1970-01-01")).dt.total_seconds().to_numpy() / 86400.0
+
+    def _calendar_anchor(raw: tuple[str, float]) -> tuple[float, float]:
+        ts = pd.to_datetime(raw[0], errors="raise")
+        return float((ts - pd.Timestamp("1970-01-01")).total_seconds() / 86400.0), float(raw[1])
+
+    upper_calendar_a, upper_calendar_b = _calendar_anchor(upper_raw[0]), _calendar_anchor(upper_raw[1])
+    lower_calendar_a, lower_calendar_b = _calendar_anchor(lower_raw[0]), _calendar_anchor(lower_raw[1])
+
+    def _line_at(i: int, a: tuple[float, float], b: tuple[float, float]) -> float:
+        return _wedge_line_value(float(day_coordinates[i]), a, b)
+
     end = len(w) - 1
     first_validation = max(min(up0[0], up1[0]), min(lo0[0], lo1[0]))
     # Breakout state starts only once both manually selected trend lines are
@@ -4201,7 +4200,7 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     upper_broken = False
     lower_broken = False
     for i in range(first_validation, end + 1):
-        up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
+        up = _line_at(i, upper_calendar_a, upper_calendar_b); lo = _line_at(i, lower_calendar_a, lower_calendar_b)
         if lo >= up:
             return None
         upper_broken = upper_broken or closes[i] > up + close_eps
@@ -4218,7 +4217,7 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     )
     breakout_idx = None; breakout_direction = "-"
     for i in range(effective_anchor_idx + 1, end + 1):
-        up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
+        up = _line_at(i, upper_calendar_a, upper_calendar_b); lo = _line_at(i, lower_calendar_a, lower_calendar_b)
         if closes[i] > up + close_eps or closes[i] < lo - close_eps:
             direction = "long" if closes[i] > up + close_eps else "short"
             if i < end - 5:
@@ -4229,7 +4228,14 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
             if direction != breakout_direction:
                 return None
         if breakout_idx is not None:
-            if _wedge_probable_stop_touched_after_breakout(i, breakout_idx, breakout_direction, upper_a, upper_b, lower_a, lower_b, highs, lows, close_eps):
+            breakout_upper = _line_at(breakout_idx, upper_calendar_a, upper_calendar_b)
+            breakout_lower = _line_at(breakout_idx, lower_calendar_a, lower_calendar_b)
+            probable_stop = (breakout_upper + breakout_lower) / 2.0
+            stop_touched = (
+                (breakout_direction == "long" and float(lows[i]) <= probable_stop + close_eps)
+                or (breakout_direction == "short" and float(highs[i]) >= probable_stop - close_eps)
+            )
+            if i > breakout_idx and stop_touched:
                 return None
             continue
     up_count = _clustered_contact_count(upper_contacts); lo_count = _clustered_contact_count(lower_contacts)
@@ -4238,8 +4244,8 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     # was touched inside that period.
     if up_count < 2 or lo_count < 2:
         return None
-    width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
-    width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
+    width_start = _line_at(first_validation, upper_calendar_a, upper_calendar_b) - _line_at(first_validation, lower_calendar_a, lower_calendar_b)
+    width_end = _line_at(end, upper_calendar_a, upper_calendar_b) - _line_at(end, lower_calendar_a, lower_calendar_b)
     last_close = float(closes[end])
     upper_start, upper_end = sorted([upper_a, upper_b], key=lambda x: x[0])
     lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
@@ -4249,7 +4255,7 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
         upper_start_date=_fmt(upper_start[0]), upper_start_price=round(float(upper_start[1]), 5), upper_end_date=_fmt(upper_end[0]), upper_end_price=round(float(upper_end[1]), 5),
         lower_start_date=_fmt(lower_start[0]), lower_start_price=round(float(lower_start[1]), 5), lower_end_date=_fmt(lower_end[0]), lower_end_price=round(float(lower_end[1]), 5),
         upper_touches=up_count, lower_touches=lo_count, width_start_pct=round(width_start / max(abs(last_close), 1e-9) * 100, 2), width_end_pct=round(width_end / max(abs(last_close), 1e-9) * 100, 2),
-        slope_pct_per_day=round(abs(((upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])) - ((lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0]))) / max(abs(last_close), 1e-9) * 100, 4),
+        slope_pct_per_day=round(abs(((upper_calendar_b[1] - upper_calendar_a[1]) / (upper_calendar_b[0] - upper_calendar_a[0])) - ((lower_calendar_b[1] - lower_calendar_a[1]) / (lower_calendar_b[0] - lower_calendar_a[0]))) / max(abs(last_close), 1e-9) * 100, 4),
         slope_strength="manual", fit_quality=100.0, recent_proximity_pct=100.0, compression_pct=round(max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0)), 1), score=1000000.0, current_close=last_close,
         breakout_date=_fmt(breakout_idx) if breakout_idx is not None else "-", breakout_direction=breakout_direction,
     )
@@ -6033,9 +6039,6 @@ def run_fibo_search(target: str) -> int:
             saved_drawing_kinds = _saved_drawing_kinds_for_ticker(ticker)
             # Evaluate the saved geometry before asking the automatic detector.
             manual_wedge = _find_manual_unbroken_wedge_setup(df, ticker) if "wedge" in saved_drawing_kinds else None
-            saved_wedge_breakout = _saved_wedge_breakout_for_ticker(ticker)
-            if manual_wedge is not None and saved_wedge_breakout is not None:
-                manual_wedge.breakout_date, manual_wedge.breakout_direction = saved_wedge_breakout
             if "wedge" in saved_drawing_kinds:
                 saved_path = _scanner_session_path_for_ticker(ticker)
                 saved_status = (

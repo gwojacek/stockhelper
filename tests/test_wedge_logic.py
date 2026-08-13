@@ -15,6 +15,7 @@ scanner = pytest.importorskip("scanner_search")
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
+COMMODITY_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "commodities"
 
 
 def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extension():
@@ -48,17 +49,6 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
     }), encoding="utf-8")
 
     assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
-
-
-def test_saved_chart_breakout_state_is_authoritative(tmp_path, monkeypatch):
-    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
-    sessions = tmp_path / "sessions"
-    sessions.mkdir()
-    (sessions / "KLIN.json").write_text(json.dumps({
-        "__saved_wedge_breakout__": {"date": "-", "direction": "-"}
-    }), encoding="utf-8")
-
-    assert scanner._saved_wedge_breakout_for_ticker("KLIN") == ("-", "-")
 
 
 def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):
@@ -165,6 +155,26 @@ def test_manual_wedge_later_touch_supersedes_earlier_apparent_breakout(tmp_path,
 
     assert result is not None
     assert result.breakout_direction == "-"
+
+
+def test_aluminium_saved_wedge_uses_calendar_time_and_remains_unbroken(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    objects = [
+        {"type": "wedge", "label": "upper", "anchor_x": ["2026-06-05", "2026-08-06"], "anchor_y": [3793.5, 3452.25]},
+        {"type": "wedge", "label": "lower", "anchor_x": ["2026-02-02", "2026-06-25"], "anchor_y": [2856.5, 3209.5]},
+    ]
+    (sessions / "ALUMINIUM.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+    df = pd.read_csv(COMMODITY_DATA_DIR / "AL_F.csv")
+
+    result = scanner._find_manual_unbroken_wedge_setup(df, "ALUMINIUM")
+
+    assert result is not None
+    assert result.breakout_date == "-"
+    assert result.breakout_direction == "-"
+    assert result.upper_touches >= 2
+    assert result.lower_touches >= 3
 
 
 def test_price_only_markets_are_not_rejected_for_unusable_turnover():
