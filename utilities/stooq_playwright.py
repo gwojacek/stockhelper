@@ -2007,15 +2007,18 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
         return
 
     selectors = [
+        'button.fc-button.fc-cta-consent.fc-primary-button',
         'button:has-text("Zgadzam się")',
         'button:has-text("Zgadzam sie")',
-        'button.fc-button.fc-cta-consent.fc-primary-button',
         'button[aria-label="Zgadzam się"]',
         '.fc-dialog-container button:has-text("Zgadzam się")',
         'text=Zgadzam się',
     ]
 
-    for _ in range(4):
+    # Stooq can mount a second Funding Choices dialog immediately after the
+    # first consent disappears.  Always perform at least two detection passes;
+    # later passes are fallbacks for a dialog that is re-mounted again.
+    for consent_pass in range(4):
         try:
             contexts = [page] + list(page.frames)
         except Exception:
@@ -2025,9 +2028,14 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             for sel in selectors:
                 try:
                     loc = ctx.locator(sel).first
-                    if loc.count() == 0:
-                        continue
-                    loc.wait_for(state='visible', timeout=1500)
+                    # On the second pass, wait for a newly mounted dialog rather
+                    # than relying on an instantaneous count() check.
+                    if consent_pass == 1 and sel == selectors[0]:
+                        loc.wait_for(state='visible', timeout=3000)
+                    else:
+                        if loc.count() == 0:
+                            continue
+                        loc.wait_for(state='visible', timeout=1500)
                     loc.click(timeout=3000, force=True)
                     print(f"[stooq-web] consent click attempted with selector: {sel}", flush=True)
                     clicked = True
@@ -2044,10 +2052,19 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                 pass
             if not _consent_overlay_visible(page):
                 print("[stooq-web] consent overlay cleared.", flush=True)
-                return
+                if consent_pass >= 1:
+                    return
+                print("[stooq-web] checking once more for follow-up consent dialog.", flush=True)
+                continue
             print("[stooq-web] consent overlay still visible after click.", flush=True)
         else:
-            break
+            # The first pass may find no dialog just before Funding Choices
+            # mounts it.  The mandatory second pass waits for that case.
+            if consent_pass >= 1:
+                break
+
+    if _consent_overlay_visible(page):
+        raise ValueError("Stooq consent overlay remained visible after repeated acceptance")
 
 def _consent_overlay_visible(page) -> bool:
     probes = [

@@ -95,6 +95,18 @@ def test_filtered_ui_csv_reuses_commodity_consent_and_captcha_flow():
     assert download_source.count("_resolve_stooq_ui_consent_and_captcha") == 3
 
 
+def test_stooq_consent_is_checked_twice_before_table_fetching():
+    from utilities.stooq_playwright import _accept_consent_if_present
+
+    source = inspect.getsource(_accept_consent_if_present)
+    assert "for consent_pass in range(4)" in source
+    assert "consent_pass == 1 and sel == selectors[0]" in source
+    assert "loc.wait_for(state='visible', timeout=3000)" in source
+    assert "checking once more for follow-up consent dialog" in source
+    assert "consent_pass >= 1" in source
+    assert "consent overlay remained visible after repeated acceptance" in source
+
+
 def test_forex_browser_uses_exact_download_url_before_ui_fallback():
     from utilities.stooq_playwright import update_stooq_history_from_ui_csv
 
