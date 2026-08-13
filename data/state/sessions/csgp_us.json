@@ -591,9 +591,9 @@
       "group_id": "auto-wedge"
     }
   ],
-  "__scanner_breakout_date__": "2026-01-28",
+  "__scanner_breakout_date__": "2025-09-24",
   "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "1",
+  "__scanner_retest_count__": "3",
   "__scanner_latest_retest_date__": "2026-08-07",
   "__scanner_latest_retest_pattern__": "bearish_hammer",
   "__journal_source_technique__": "Ichimoku"

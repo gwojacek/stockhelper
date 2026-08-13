@@ -4,8 +4,8 @@ WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/belo
 
 | Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Retest count | Latest Retest date | Latest Retest pattern | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PLATINUM | 🔴 below | 118 | 5.4 | 2026-03-11 | 1802.6000 | - | Inside the cloud | 3 | 2026-08-06 | bearish_engulfing | - | bullish TK cross | slow | thick | ↑ over | red | no | yes | [📈](https://stooq.pl/q/a2/?s=pl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c PLATINUM --ichimoku-mode on | ✅ | 2026-08-12 | 2026-08-12 |
-| SILVER | 🔴 below | 117 | 5.4 | 2026-03-12 | 66.5050 | - | Inside the cloud | 5 | 2026-06-03 | bearish_engulfing | - | bullish TK cross | mild | thick | ↑ over | red | no | no | [📈](https://stooq.pl/q/a2/?s=xagusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SILVER --ichimoku-mode on | ✅ | 2026-08-12 | 2026-08-12 |
+| PLATINUM | 🔴 below | 118 | 5.4 | 2026-03-03 | 1805.1000 | - | Inside the cloud | 5 | 2026-08-06 | bearish_engulfing | - | bullish TK cross | slow | thick | ↑ over | red | no | yes | [📈](https://stooq.pl/q/a2/?s=pl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c PLATINUM --ichimoku-mode on | ✅ | 2026-08-12 | 2026-08-12 |
+| SILVER | 🔴 below | 117 | 5.4 | 2026-03-03 | 66.4400 | - | Inside the cloud | 6 | 2026-06-03 | bearish_engulfing | - | bullish TK cross | mild | thick | ↑ over | red | no | no | [📈](https://stooq.pl/q/a2/?s=xagusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SILVER --ichimoku-mode on | ✅ | 2026-08-12 | 2026-08-12 |
 ## WYNIKI 2
 
 WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.

@@ -83,6 +83,9 @@
     }
   ],
   "__scanner_breakout_date__": "2026-07-28",
-  "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "3.9"
+  "__scanner_retest_count__": "4",
+  "__scanner_previous_respect_months__": "3.9",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_latest_retest_date__": "2026-08-11",
+  "__scanner_latest_retest_pattern__": "shooting_star"
 }
