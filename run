@@ -1381,9 +1381,14 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
         return picked
     fibo = _dedupe_nearby_same_scale_display(_dedupe_same_fibo_start(fibo))
     def _limit_fibo_display_per_ticker(items: list[ScannerRow], max_per_ticker: int = 2) -> list[ScannerRow]:
-        grouped: dict[str, list[ScannerRow]] = {}
+        # Long and short formations are separate trades.  Limiting only by
+        # ticker let two candidates in one direction hide a valid candidate in
+        # the other direction after the scanner had already accepted it (for
+        # example USDCAD long and MBG.DE short).
+        grouped: dict[tuple[str, str], list[ScannerRow]] = {}
         for row in items:
-            grouped.setdefault(str(row.ticker or "").upper(), []).append(row)
+            key = (str(row.ticker or "").upper(), str(row.direction or "").lower())
+            grouped.setdefault(key, []).append(row)
         kept: list[ScannerRow] = []
         def priority(row: ScannerRow) -> tuple[int, float, float, str]:
             category_rank = {"valid": 0, "waiting": 1, "steep": 2}.get(row.category, 9)

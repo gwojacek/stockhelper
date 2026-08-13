@@ -4908,7 +4908,13 @@ def _find_fibo_3p_steep_setup(
     independent_recent_peak = False
     if global_high > 0 and peak_high < global_high * 0.94:
         independent_base_right = i_peak - min_incline_days
-        independent_base_left = max(0, i_peak - 80)
+        # A short trend can decline for most of the 260-session scan window.
+        # In mirrored data, inspect that complete impulse horizon when deciding
+        # whether the recent bottom is an independent dominant move.  The old
+        # 80-bar slice excluded PAH3.DE's January top and incorrectly rejected
+        # its July bottom as merely a non-dominant recent extreme.
+        independent_lookback = 260 if _mirrored_short else 80
+        independent_base_left = max(0, i_peak - independent_lookback)
         if independent_base_right >= independent_base_left:
             independent_base = float(low.iloc[independent_base_left:independent_base_right + 1].min())
             independent_gain = (peak_high - independent_base) / max(abs(independent_base), 1e-9)
