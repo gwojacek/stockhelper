@@ -144,6 +144,29 @@ def test_manual_wedge_breakout_is_checked_only_after_all_saved_anchors(tmp_path,
     assert result.breakout_date == "-"
 
 
+def test_manual_wedge_later_touch_supersedes_earlier_apparent_breakout(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    dates = pd.date_range("2026-08-01", periods=6, freq="D")
+    df = pd.DataFrame({
+        "Date": dates, "Open": [9.0] * 6,
+        "High": [10.0, 9.8, 9.6, 10.5, 9.2, 9.0],
+        "Low": [6.0, 6.1, 6.2, 6.3, 6.4, 6.5],
+        "Close": [8.0, 8.0, 8.0, 9.3, 8.5, 8.4],
+    })
+    objects = [
+        {"type": "wedge", "label": "upper", "anchor_x": ["2026-08-01", "2026-08-03"], "anchor_y": [10.0, 9.6]},
+        {"type": "wedge", "label": "lower", "anchor_x": ["2026-08-01", "2026-08-03"], "anchor_y": [6.0, 6.2]},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+
+    result = scanner._find_manual_unbroken_wedge_setup(df, "KLIN")
+
+    assert result is not None
+    assert result.breakout_direction == "-"
+
+
 def test_price_only_markets_are_not_rejected_for_unusable_turnover():
     assert scanner._passes_scanner_liquidity(0.0, "commodity", 500_000.0)
     assert scanner._passes_scanner_liquidity(None, "commodity", 500_000.0)

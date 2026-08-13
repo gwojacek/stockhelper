@@ -4194,13 +4194,31 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     tol = max(float(pd.Series(highs[first_validation:end + 1] - lows[first_validation:end + 1]).tail(30).mean()) * 0.18, abs(float(closes[end])) * 0.004)
     close_eps = max(tol * 0.02, abs(float(closes[end])) * 1e-6)
     upper_contacts = [up0[0], up1[0]]; lower_contacts = [lo0[0], lo1[0]]
-    breakout_idx = None; breakout_direction = "-"
+    # First discover every saved-line touch using the same principle as the
+    # chart debug panel.  A later touch can become the effective second anchor;
+    # checking breakouts in the same pass would incorrectly stop at an earlier
+    # close (ALUMINIUM 2026-08-10) before discovering its 2026-08-11 touch.
+    upper_broken = False
+    lower_broken = False
     for i in range(first_validation, end + 1):
         up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
         if lo >= up:
             return None
-        if i < breakout_validation:
-            continue
+        upper_broken = upper_broken or closes[i] > up + close_eps
+        lower_broken = lower_broken or closes[i] < lo - close_eps
+        if not upper_broken and closes[i] <= up + close_eps and highs[i] >= up - min(tol, _post_anchor_touch_tolerance_static(up)):
+            upper_contacts.append(i)
+        if not lower_broken and closes[i] >= lo - close_eps and lows[i] <= lo + min(tol, _post_anchor_touch_tolerance_static(lo)):
+            lower_contacts.append(i)
+
+    effective_anchor_idx = max(
+        breakout_validation,
+        max(_clustered_contact_indices(upper_contacts)),
+        max(_clustered_contact_indices(lower_contacts)),
+    )
+    breakout_idx = None; breakout_direction = "-"
+    for i in range(effective_anchor_idx + 1, end + 1):
+        up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
         if closes[i] > up + close_eps or closes[i] < lo - close_eps:
             direction = "long" if closes[i] > up + close_eps else "short"
             if i < end - 5:
@@ -4214,10 +4232,6 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
             if _wedge_probable_stop_touched_after_breakout(i, breakout_idx, breakout_direction, upper_a, upper_b, lower_a, lower_b, highs, lows, close_eps):
                 return None
             continue
-        if closes[i] <= up + close_eps and highs[i] >= up - min(tol, _post_anchor_touch_tolerance_static(up)):
-            upper_contacts.append(i)
-        if closes[i] >= lo - close_eps and lows[i] <= lo + min(tol, _post_anchor_touch_tolerance_static(lo)):
-            lower_contacts.append(i)
     up_count = _clustered_contact_count(upper_contacts); lo_count = _clustered_contact_count(lower_contacts)
     # Manual saved wedges remain authoritative while unbroken, and after a
     # breakout/breakdown for up to five candles unless the probable midpoint SL
