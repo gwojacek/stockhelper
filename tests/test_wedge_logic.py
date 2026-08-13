@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import json
 from io import StringIO
 from pathlib import Path
 
@@ -13,6 +14,47 @@ scanner = pytest.importorskip("scanner_search")
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
+
+
+def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "KLIN.json").write_text(json.dumps({
+        "drawn_objects": [
+            {"type": "wedge", "group_id": "auto-wedge"},
+            {"type": "fib", "group_id": "edited-fibo"},
+        ]
+    }), encoding="utf-8")
+
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
+
+
+def test_manual_wedge_breakout_is_checked_only_after_all_saved_anchors(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    dates = pd.date_range("2026-01-01", periods=8, freq="D")
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [9.0] * 8,
+        "High": [10.0, 9.8, 9.6, 9.4, 9.2, 9.0, 8.8, 8.6],
+        "Low": [6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7],
+        # The early closes are outside the eventual saved lower line. They are
+        # not breakdowns because that line's second anchor is candle five.
+        "Close": [5.0, 5.5, 6.2, 6.4, 6.6, 7.0, 7.1, 7.2],
+    })
+    objects = [
+        {"type": "wedge", "label": "upper", "x0": "2026-01-01", "y0": 10.0, "x1": "2026-01-05", "y1": 9.2},
+        {"type": "wedge", "label": "lower", "x0": "2026-01-01", "y0": 6.0, "x1": "2026-01-05", "y1": 6.4},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+
+    result = scanner._find_manual_unbroken_wedge_setup(df, "KLIN")
+
+    assert result is not None
+    assert result.breakout_direction == "-"
+    assert result.breakout_date == "-"
 
 
 def test_price_only_markets_are_not_rejected_for_unusable_turnover():

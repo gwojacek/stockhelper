@@ -4038,6 +4038,36 @@ def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
     return upper, lower
 
 
+def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
+    """Return scanner drawing kinds explicitly saved by the user.
+
+    A saved drawing is authoritative even when its edited geometry no longer
+    passes an automatic detector.  In that case the scanner must not silently
+    resurrect the old automatically detected formation as a fallback.
+    """
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return set()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return set()
+    kinds: set[str] = set()
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        obj_type = str(obj.get("type", ""))
+        group_id = str(obj.get("group_id", ""))
+        if obj_type == "wedge" or group_id == "auto-wedge":
+            kinds.add("wedge")
+        if obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo":
+            kinds.add("fibo")
+    return kinds
+
+
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
     anchor_x = obj.get("anchor_x")
     anchor_y = obj.get("anchor_y")
@@ -4087,6 +4117,11 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     highs = w["High"].astype(float).to_numpy(); lows = w["Low"].astype(float).to_numpy(); closes = w["Close"].astype(float).to_numpy()
     end = len(w) - 1
     first_validation = max(min(up0[0], up1[0]), min(lo0[0], lo1[0]))
+    # Breakout state starts only once both manually selected trend lines are
+    # established.  Candles between first and second anchors helped the user
+    # define the wedge; treating them as breakouts can restore stale breakout
+    # information after the user moves and saves the lines.
+    breakout_validation = max(up0[0], up1[0], lo0[0], lo1[0])
     tol = max(float(pd.Series(highs[first_validation:end + 1] - lows[first_validation:end + 1]).tail(30).mean()) * 0.18, abs(float(closes[end])) * 0.004)
     close_eps = max(tol * 0.02, abs(float(closes[end])) * 1e-6)
     upper_contacts = [up0[0], up1[0]]; lower_contacts = [lo0[0], lo1[0]]
@@ -4095,6 +4130,8 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
         up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
         if lo >= up:
             return None
+        if i < breakout_validation:
+            continue
         if closes[i] > up + close_eps or closes[i] < lo - close_eps:
             direction = "long" if closes[i] > up + close_eps else "short"
             if i < end - 5:
@@ -5910,7 +5947,15 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
-            wedge = _find_manual_unbroken_wedge_setup(df, ticker) or _find_falling_wedge_setup(df)
+            saved_drawing_kinds = _saved_drawing_kinds_for_ticker(ticker)
+            # Do not use ``manual or automatic`` here: a saved manual edit is
+            # an explicit override, including when the edit invalidates the old
+            # scanner setup altogether.
+            wedge = (
+                _find_manual_unbroken_wedge_setup(df, ticker)
+                if "wedge" in saved_drawing_kinds
+                else _find_falling_wedge_setup(df)
+            )
             if wedge:
                 wedge.ticker = ticker
                 wedge.latest_candle_date = latest_candle_date
@@ -5918,7 +5963,11 @@ def run_fibo_search(target: str) -> int:
                 if pd.notna(latest_close):
                     wedge.current_close = latest_close
                 out_rows.append(wedge)
-            steep_3p = _find_fibo_3p_steep_setup(df, "long")
+            # Fibo drawings follow the same authority rule.  Automatic Fibo
+            # rows describe the detector's anchors, not the user's saved ones,
+            # so suppress those stale rows once a manual Fibo override exists.
+            manual_fibo = "fibo" in saved_drawing_kinds
+            steep_3p = None if manual_fibo else _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
                 if pd.notna(latest_close):
@@ -5927,7 +5976,7 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
             short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "NDX100"}
-            if short_fibo_enabled:
+            if short_fibo_enabled and not manual_fibo:
                 steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
                 if steep_3p_short:
                     steep_3p_short.ticker = ticker
@@ -5939,6 +5988,8 @@ def run_fibo_search(target: str) -> int:
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
+                if manual_fibo:
+                    break
                 cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                 if cand:
                     long_candidates.append(cand)
@@ -5985,7 +6036,7 @@ def run_fibo_search(target: str) -> int:
                     c.latest_candle_date = latest_candle_date
                     c.expected_latest_session_date = expected_latest_session_date
                     out_rows.append(c)
-            if short_fibo_enabled:
+            if short_fibo_enabled and not manual_fibo:
                 short_candidates: list[FiboScanResult] = []
                 short_offset0 = _find_fibo_setup(df, "short", end_offset=0, allow_equal_third_close=(instrument == "forex"))
                 for off in [0, 5, 10, 15, 20, 30, 40]:
