@@ -2497,7 +2497,8 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     """
     # Auto cache-only mode is useful for avoiding full group refreshes, but it
     # must not prevent the scanner from merging the newest Yahoo candle for the
-    # actual calculation.  Only the explicit --onlycache mode should skip this.
+    # actual calculation. Explicit --onlycache and allsearch's Fibo snapshot
+    # must skip this override.
     old_auto_cache = os.environ.get("STOCKHELPER_CACHE_ONLY")
     refresh_symbols = {
         item.strip().upper()
@@ -2506,6 +2507,17 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     }
     refresh_audited = os.environ.get("STOCKHELPER_MARKET_REFRESH_AUDITED") == "1"
     targeted_refresh = symbol.upper() in refresh_symbols
+    tail_refresh = False
+    if targeted_refresh and refresh_audited and instrument_type in {"forex", "commodity"}:
+        try:
+            existing_path = local_csv_path_for_symbol(symbol, instrument_type)
+            existing = pd.read_csv(existing_path) if existing_path.exists() else pd.DataFrame()
+            tail_refresh = (
+                not existing.empty
+                and _recent_high_precision_candle_count(existing) >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+            )
+        except Exception:
+            tail_refresh = False
     explicit_cache_only = (
         os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
         or os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1"
@@ -2515,10 +2527,17 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     # override instead of letting parallel workers leak forced mode to peers.
     with MARKET_REFRESH_LOCK:
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        old_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
         if unlock_cache:
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         if targeted_refresh:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        if tail_refresh:
+            os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+            print(
+                f"[refresh-check] {symbol}: healthy cached history has multiple Yahoo-like tail candles; "
+                "refreshing only newest Stooq page before Yahoo latest-candle merge"
+            )
         try:
             _runtime_df, csv_path, meta = _load_daily_data_with_retries(
                 symbol=symbol,
@@ -2533,6 +2552,10 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
+            if old_tail_refresh is None:
+                os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = old_tail_refresh
     df = pd.read_csv(csv_path)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
