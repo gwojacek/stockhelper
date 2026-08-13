@@ -2655,7 +2655,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             page_num = start_page
             empty_pages = 0
             interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
-            max_page = max(30, start_page + 30)
+            # Health repair of a full-size cache needs only Stooq's newest page:
+            # its ~40 authoritative rows replace the possibly Yahoo-derived tail.
+            # Normal refresh/backfill behavior remains unchanged.
+            tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1" and end_date is None and not local.empty
+            max_page = 1 if tail_refresh else max(30, start_page + 30)
             while page_num <= max_page:
                 now_mono = time.monotonic()
                 if (now_mono - last_progress_at) > max_runtime_s:

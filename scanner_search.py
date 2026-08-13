@@ -1496,20 +1496,34 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
     retry_tickers = _print_summary(checked)
 
     if retry_tickers and os.getenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "1") != "0":
-        print(f"[commodity-check] replacing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
+        print(f"[commodity-check] repairing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+        old_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
         try:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
-                _raw, csv_path, _rows, _latest, _yahoo_like, _exc = _health_row(raw)
+                _raw, csv_path, rows, _latest, yahoo_like, health_exc = _health_row(raw)
                 backup = csv_path.read_bytes() if csv_path.exists() else None
                 try:
-                    # A forced merge can leave a short CSV short. Remove it first so
-                    # the retry performs a clean full-history download/replacement.
-                    csv_path.unlink(missing_ok=True)
+                    contaminated_tail = health_exc is None and rows >= min_rows and yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+                    if contaminated_tail:
+                        # The historical Stooq body is healthy. Fetch only page 1
+                        # (~40 newest rows), replace its overlapping cached tail,
+                        # then let the normal loader append Yahoo's freshest row.
+                        os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+                        print(
+                            f"[commodity-check] {raw}: healthy {rows}-row history; "
+                            "refreshing only newest Stooq page before Yahoo latest-candle merge"
+                        )
+                    else:
+                        # Missing/short/unreadable caches still require a clean
+                        # full-window replacement rather than a tail repair.
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        print(f"[commodity-check] {raw}: incomplete/unreadable history; performing full replacement")
+                        csv_path.unlink(missing_ok=True)
                     load_or_update_daily_data(symbol=raw, instrument_type="commodity", persist=True, fetch_older_data=False)
                     if not csv_path.exists():
-                        raise FileNotFoundError(f"replacement did not create {csv_path}")
+                        raise FileNotFoundError(f"repair did not create {csv_path}")
                 except Exception as exc:
                     print(f"[commodity-check] retry failed for {raw}: {_retry_error_brief(exc)}")
                     if backup is not None:
@@ -1520,6 +1534,10 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force
+            if old_tail_refresh is None:
+                os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+            else:
+                os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = old_tail_refresh
         print("[commodity-check] post-retry CSV row-count check")
         _print_summary([_health_row(ticker) for ticker in members])
 

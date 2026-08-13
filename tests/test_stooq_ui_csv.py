@@ -114,6 +114,12 @@ def test_stooq_playwright_uses_conditions_not_fixed_timeouts():
     assert "wait_for_timeout(" not in source
 
 
+def test_commodity_tail_repair_limits_stooq_scrape_to_first_page():
+    source = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
+    assert 'tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"' in source
+    assert "max_page = 1 if tail_refresh" in source
+
+
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):
     class FakePage:
         url = "https://stooq.pl/q/d/?s=usdjpy"
