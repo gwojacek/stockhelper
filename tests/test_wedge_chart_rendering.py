@@ -4,6 +4,14 @@ from pathlib import Path
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
 
 
+def test_fibo_boundary_is_draggable_and_resynchronizes_group():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "obj.type === 'fib-boundary' || isWedgeLineObject(obj)" in source
+    assert "function syncFibGroupFromBoundary(boundary)" in source
+    assert "syncFibGroupFromBoundary(draggedObject);" in source
+
+
 def test_scanner_wedges_use_anchor_geometry_and_not_a_native_series_fallback():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

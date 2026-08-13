@@ -1719,13 +1719,37 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function isEditableLineObject(obj) {{
-    if (!obj || obj.type === 'fib' || obj.type === 'fib-boundary') return false;
-    return obj.type === 'line' || isWedgeLineObject(obj);
+    if (!obj || obj.type === 'fib') return false;
+    return obj.type === 'line' || obj.type === 'fib-boundary' || isWedgeLineObject(obj);
   }}
 
   function editableObjectLegendKey(obj) {{
     if (isWedgeLineObject(obj)) return `wedge:${{obj.id || obj.label || ''}}`;
+    if (obj?.type === 'fib-boundary') return `fib-group:${{obj.group_id || obj.id}}`;
     return `obj:${{obj.id || obj.label || ''}}`;
+  }}
+
+  function syncFibGroupFromBoundary(boundary) {{
+    if (!boundary || boundary.type !== 'fib-boundary') return;
+    const first = nearest(boundary.x0), second = nearest(boundary.x1);
+    if (!first || !second || first.idx === second.idx) return;
+    const existingDirection = drawnObjects.find(obj => obj.group_id === boundary.group_id && obj.type === 'fib' && obj.direction)?.direction;
+    const isShort = existingDirection ? existingDirection === 'short' : ((second.low + second.high) / 2 < (first.low + first.high) / 2);
+    const low = isShort ? Number(second.low) : Number(first.low);
+    const high = isShort ? Number(first.high) : Number(second.high);
+    boundary.x0 = first.time;
+    boundary.x1 = second.time;
+    boundary.y0 = roundPrice(isShort ? high : low);
+    boundary.y1 = roundPrice(isShort ? low : high);
+    drawnObjects.filter(obj => obj.group_id === boundary.group_id && obj.type === 'fib').forEach(obj => {{
+      const ratio = fibRatioValue(obj);
+      const value = roundPrice(fibPrice(low, high, ratio, isShort));
+      obj.direction = isShort ? 'short' : 'long';
+      obj.y0 = value; obj.y1 = value; obj.price = value;
+      obj.x0 = fibStartDate(first, second, ratio);
+      const pct = `${{(ratio * 100).toFixed(1)}}%`.replace('.0%', '%');
+      obj.label = `FIB ${{pct}} (${{fmt(value)}})`;
+    }});
   }}
 
   function dateRatio(x0, x1, x) {{
@@ -1764,6 +1788,10 @@ class LightweightChartLevelSelectorUI:
         obj.anchor_x = [x0, x1];
         obj.anchor_y = [candleExtremeForDate(x0, side, y0), candleExtremeForDate(x1, side, y1)];
       }}
+    }}
+    if (obj?.type === 'fib-boundary') {{
+      if (mode === 'start') {{ x0 = nearest(x0).time; y0 = Number(nearest(x0).close); }}
+      else if (mode === 'end') {{ x1 = nearest(x1).time; y1 = Number(nearest(x1).close); }}
     }}
     if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return;
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
@@ -1973,6 +2001,7 @@ class LightweightChartLevelSelectorUI:
     $('chart-wrap').releasePointerCapture?.(ev.pointerId);
     $('chart-wrap').classList.remove('drawing-object');
     if (lineDragFrame) {{ cancelAnimationFrame(lineDragFrame); lineDragFrame = null; }}
+    const draggedObject = lineObjectDrag.obj;
     updateDraggedObjectSeries();
     lineObjectDrag = null;
     suppressChartClickUntil = Date.now() + 300;
@@ -1981,6 +2010,10 @@ class LightweightChartLevelSelectorUI:
     ev.stopPropagation();
     ev.stopImmediatePropagation?.();
     applyWedgeDerivedLevels();
+    if (draggedObject?.type === 'fib-boundary') {{
+      syncFibGroupFromBoundary(draggedObject);
+      render();
+    }}
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     updatePanel();
     requestAnimationFrame(drawCloud);
