@@ -2545,6 +2545,22 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
                 persist=True,
                 fetch_older_data=False,
             )
+            if tail_refresh:
+                # Page 1 replaces the Yahoo-contaminated overlap with Stooq,
+                # but Stooq normally ends at yesterday. Re-attach Yahoo's
+                # newest candle now, before either Ichimoku result set is
+                # calculated (rather than waiting for the post-scan health
+                # check to repair it).
+                refreshed = pd.read_csv(csv_path)
+                refreshed, _candidate, _name, _added = _merge_yahoo_fresh_candle(
+                    refreshed,
+                    symbol,
+                    instrument_type,
+                    trim_to_last_year=False,
+                )
+                refreshed.to_csv(csv_path, index=False)
+                meta = dict(meta or {})
+                meta["source"] = f"{meta.get('source', 'table_ui')}+yahoo"
         finally:
             if old_auto_cache == "1":
                 os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache

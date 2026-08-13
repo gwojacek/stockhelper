@@ -44,9 +44,19 @@ def test_forced_forex_audit_repairs_only_first_stooq_page(monkeypatch, tmp_path,
         return cached, csv_path, {"source": "table_ui"}
 
     monkeypatch.setattr(scanner, "_load_daily_data_with_retries", load_tail)
+    yahoo_latest = cached.copy()
+    yahoo_latest.loc[len(yahoo_latest)] = yahoo_latest.iloc[-1]
+    yahoo_latest.loc[len(yahoo_latest) - 1, "Date"] = cached["Date"].max() + pd.Timedelta(days=1)
+    monkeypatch.setattr(
+        scanner,
+        "_merge_yahoo_fresh_candle",
+        lambda df, *_args, **_kwargs: (yahoo_latest, "USDJPY=X", "USD/JPY", 1),
+    )
     _loaded, _path, meta = scanner._load_full_cached_history_for_scan("USDJPY", "forex")
 
-    assert meta["source"] == "table_ui"
+    assert meta["source"] == "table_ui+yahoo"
+    persisted = pd.read_csv(csv_path)
+    assert pd.to_datetime(persisted["Date"]).max() == yahoo_latest["Date"].max()
     assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
     assert "refreshing only newest Stooq page" in capsys.readouterr().out
 
