@@ -61,14 +61,15 @@ class MarketDataRule:
     timezone: str
     availability_time: dt_time
     trading_weekdays: tuple[int, ...]
+    market_open_time: dt_time = dt_time(0, 0)
     weekend_fallback_weekday: int = 4
     holidays: frozenset[date] = frozenset()
 
 
 MARKET_DATA_RULES: dict[str, MarketDataRule] = {
-    "stock_market_pl": MarketDataRule("stock_market_pl", "Europe/Warsaw", dt_time(17, 30), (0, 1, 2, 3, 4)),
-    "stock_market_de": MarketDataRule("stock_market_de", "Europe/Berlin", dt_time(18, 30), (0, 1, 2, 3, 4)),
-    "stock_market_us": MarketDataRule("stock_market_us", "America/New_York", dt_time(18, 0), (0, 1, 2, 3, 4)),
+    "stock_market_pl": MarketDataRule("stock_market_pl", "Europe/Warsaw", dt_time(17, 30), (0, 1, 2, 3, 4), dt_time(9, 0)),
+    "stock_market_de": MarketDataRule("stock_market_de", "Europe/Berlin", dt_time(18, 30), (0, 1, 2, 3, 4), dt_time(9, 0)),
+    "stock_market_us": MarketDataRule("stock_market_us", "America/New_York", dt_time(18, 0), (0, 1, 2, 3, 4), dt_time(9, 30)),
     "stock_market_generic": MarketDataRule("stock_market_generic", "UTC", dt_time(22, 0), (0, 1, 2, 3, 4)),
     # Commodity data is intentionally separate from stock-market rules.  Many
     # contracts trade across Sunday-Friday sessions, but daily scanner data is
@@ -136,6 +137,20 @@ def get_expected_latest_session_date(instrument: str, group: str, current_dateti
     if candidate == local_now.date() and local_now.time() < rule.availability_time:
         candidate = _previous_session_day(candidate - timedelta(days=1), rule)
     return candidate
+
+
+def _is_market_session_open(instrument: str, group: str, symbol: str | None = None, *, now: datetime | None = None) -> bool:
+    """Return whether the current session can still change its newest candle."""
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    rule = MARKET_DATA_RULES[_market_rule_name_for_instrument(instrument, group, symbol)]
+    local_now = current.astimezone(ZoneInfo(rule.timezone))
+    return (
+        local_now.weekday() in rule.trading_weekdays
+        and local_now.date() not in rule.holidays
+        and rule.market_open_time <= local_now.time() < rule.availability_time
+    )
 
 
 def has_latest_expected_data(latest_candle_date: date | None, expected_latest_session_date: date | None) -> bool:
@@ -2057,6 +2072,14 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
                     os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     return True
+                if _is_market_session_open(instrument, group_name, fetch_symbol):
+                    print(
+                        f"[refresh-check] {ticker}: {group_name} market session is open; "
+                        "refresh mode ON so today's Yahoo candle is updated"
+                    )
+                    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+                    return True
                 continue
             if instrument == "forex":
                 csv_path = local_csv_path_for_symbol(fetch_symbol, "forex")
@@ -2483,8 +2506,11 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     }
     refresh_audited = os.environ.get("STOCKHELPER_MARKET_REFRESH_AUDITED") == "1"
     targeted_refresh = symbol.upper() in refresh_symbols
-    user_onlycache = os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
-    unlock_cache = old_auto_cache == "1" and not user_onlycache and (not refresh_audited or targeted_refresh)
+    explicit_cache_only = (
+        os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
+        or os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1"
+    )
+    unlock_cache = old_auto_cache == "1" and not explicit_cache_only and (not refresh_audited or targeted_refresh)
     # Environment variables are process-global, so serialize the short scoped
     # override instead of letting parallel workers leak forced mode to peers.
     with MARKET_REFRESH_LOCK:
