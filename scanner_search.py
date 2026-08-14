@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -4010,9 +4011,56 @@ def _clustered_contact_indices(indices: list[int], max_gap: int = 1) -> list[int
     return reps
 
 
+def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
+    """Return possible session paths for a scanner/display ticker.
+
+    Commodity scans use canonical display names (for example ``ALUMINIUM``),
+    while the chart is saved under its provider symbol (``AL.F`` -> ``AL``).
+    Resolve both forms so AllSearch reads the same state that the chart saved.
+    """
+    raw = str(ticker).strip()
+    canonical = re.sub(r"\.(WA|PL)$", "", raw, flags=re.IGNORECASE)
+    stems = [canonical]
+    # Level selector configs for commodities/forex are direction-qualified
+    # (``aluminium_long.py`` / ``aluminium_short.py``), and session state uses
+    # that config stem even though scanner rows only contain ``ALUMINIUM``.
+    stems.extend((f"{canonical.lower()}_long", f"{canonical.lower()}_short"))
+    provider_symbol = COMMODITY_STOOQ_MAP.get(raw.upper())
+    if provider_symbol:
+        # Session names come from ``config_path.stem``.  A config such as
+        # ``AL.F.py`` therefore saves ``AL.F.json`` (not ``AL.json``).  Keep
+        # the complete provider symbol and retain the legacy short stem as a
+        # fallback for older sessions.
+        provider_name = str(provider_symbol)
+        provider_stem = provider_name.split(".", 1)[0]
+        # Report chart commands use the provider ticker (``AL.F``).  The level
+        # selector then passes ``al.f_long`` to resolve_config_path(), which
+        # replaces the dot and saves the actual state as ``al_f_long.json``.
+        provider_config_stem = provider_name.lower().replace("/", "").replace(".", "_")
+        stems.extend(
+            (
+                f"{provider_config_stem}_long",
+                f"{provider_config_stem}_short",
+                provider_name.upper(),
+                provider_name.lower(),
+                provider_stem.upper(),
+                provider_stem.lower(),
+            )
+        )
+    unique_stems = tuple(dict.fromkeys(stem.strip() for stem in stems if stem.strip()))
+    return tuple(STATE_DATA_DIR / "sessions" / f"{stem}.json" for stem in unique_stems)
+
+
 def _scanner_session_path_for_ticker(ticker: str) -> Path:
-    stem = re.sub(r"\.(WA|PL)$", "", str(ticker), flags=re.IGNORECASE).strip()
-    return STATE_DATA_DIR / "sessions" / f"{stem}.json"
+    """Return the newest matching session, or the canonical fallback path.
+
+    A chart can accumulate canonical, provider-symbol, long and short session
+    names over time.  The newest save is the user's current edit and must win
+    over an older file that merely appears earlier in the alias list.
+    """
+    paths = _scanner_session_paths_for_ticker(ticker)
+    existing = [path for path in paths if path.exists()]
+    return max(existing, key=lambda path: path.stat().st_mtime_ns) if existing else paths[0]
 
 
 def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
@@ -4038,7 +4086,111 @@ def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
     return upper, lower
 
 
+def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
+    """Return scanner drawing kinds explicitly saved by the user.
+
+    A saved drawing is authoritative even when its edited geometry no longer
+    passes an automatic detector.  In that case the scanner must not silently
+    resurrect the old automatically detected formation as a fallback.
+    """
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return set()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return set()
+    kinds: set[str] = set()
+    for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        obj_type = str(obj.get("type", ""))
+        group_id = str(obj.get("group_id", ""))
+        if obj_type == "wedge" or group_id == "auto-wedge":
+            kinds.add("wedge")
+        if obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo":
+            kinds.add("fibo")
+    return kinds
+
+
+def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
+    """Return saved Fibo (direction, start date, end date) groups."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return []
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return []
+    groups: dict[str, list[dict]] = {}
+    for obj in objects:
+        if isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"}:
+            groups.setdefault(str(obj.get("group_id") or obj.get("id") or "manual"), []).append(obj)
+    anchors: list[tuple[str, str, str]] = []
+    for items in groups.values():
+        boundary = next((obj for obj in items if obj.get("type") == "fib-boundary"), None)
+        if boundary is None:
+            continue
+        direction = str(next((obj.get("direction") for obj in items if obj.get("direction")), "long")).lower()
+        start = str(boundary.get("x0") or "")[:10]
+        end = str(boundary.get("x1") or "")[:10]
+        if start and end and direction in {"long", "short"}:
+            anchors.append((direction, start, end))
+    return anchors
+
+
+def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
+    """Track invalid saved Fibos and delete them after a 14-day grace period."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return None
+    fib_objects = [obj for obj in objects if isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"}]
+    if not fib_objects:
+        state.pop("__saved_fibo_invalid__", None)
+        return None
+    fingerprint = hashlib.sha256(json.dumps(fib_objects, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    if valid:
+        if state.pop("__saved_fibo_invalid__", None) is not None:
+            path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return None
+    marker = state.get("__saved_fibo_invalid__")
+    if not isinstance(marker, dict) or marker.get("fingerprint") != fingerprint:
+        marker = {"since": as_of.isoformat(), "fingerprint": fingerprint}
+        state["__saved_fibo_invalid__"] = marker
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return "invalid -> automatic fallback (day 0/14)"
+    try:
+        invalid_since = date.fromisoformat(str(marker.get("since")))
+    except ValueError:
+        invalid_since = as_of
+    age = max(0, (as_of - invalid_since).days)
+    if age < 14:
+        return f"invalid -> automatic fallback (day {age}/14)"
+    state["drawn_objects"] = [obj for obj in objects if not (isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"})]
+    state.pop("__saved_fibo_invalid__", None)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return "invalid saved Fibo deleted after 14 days -> automatic fallback"
+
+
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
+    # Wedge x/y endpoints are display extensions and commonly end months after
+    # the last OHLC candle.  The chart's own debug/breakout calculation derives
+    # the line from anchor_x/anchor_y and only uses x/y for rendering.  Use the
+    # same real-candle anchors here; otherwise the future endpoint cannot be
+    # resolved and the manual setup is discarded in favor of an auto breakout.
     anchor_x = obj.get("anchor_x")
     anchor_y = obj.get("anchor_y")
     if isinstance(anchor_x, list) and isinstance(anchor_y, list) and len(anchor_x) >= 2 and len(anchor_y) >= 2:
@@ -4052,13 +4204,38 @@ def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float
         return None
 
 
+def _manual_wedge_line_geometry(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
+    """Return the visible saved line, including its display extension.
+
+    ``anchor_*`` identifies scanner-generated candle contacts, but dragging an
+    endpoint sets ``free_extension`` and changes x/y without rewriting those
+    original contacts.  Breakout calculations must use the visible x/y line.
+    Unlike contact anchors, its second point may be in the future, which is
+    perfectly valid for calendar-time interpolation.
+    """
+    xs = obj.get("x")
+    ys = obj.get("y")
+    if isinstance(xs, list) and isinstance(ys, list) and len(xs) >= 2 and len(ys) >= 2:
+        try:
+            last = min(len(xs), len(ys)) - 1
+            return (str(xs[0]), float(ys[0])), (str(xs[last]), float(ys[last]))
+        except Exception:
+            return None
+    try:
+        return (str(obj["x0"]), float(obj["y0"])), (str(obj["x1"]), float(obj["y1"]))
+    except Exception:
+        return _manual_wedge_anchor(obj)
+
+
 def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeScanResult | None:
     pair = _manual_wedge_objects_for_ticker(ticker)
     if pair is None:
         return None
     upper_raw = _manual_wedge_anchor(pair[0])
     lower_raw = _manual_wedge_anchor(pair[1])
-    if upper_raw is None or lower_raw is None:
+    upper_line_raw = _manual_wedge_line_geometry(pair[0])
+    lower_line_raw = _manual_wedge_line_geometry(pair[1])
+    if upper_raw is None or lower_raw is None or upper_line_raw is None or lower_line_raw is None:
         return None
     required = {"Date", "Open", "High", "Low", "Close"}
     if df is None or df.empty or not required.issubset(df.columns):
@@ -4085,16 +4262,57 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     upper_a, upper_b = up0, up1
     lower_a, lower_b = lo0, lo1
     highs = w["High"].astype(float).to_numpy(); lows = w["Low"].astype(float).to_numpy(); closes = w["Close"].astype(float).to_numpy()
+    # Lightweight Charts projects trend lines by elapsed calendar time, not by
+    # the count of trading candles.  Using dataframe indices makes every
+    # weekend/holiday change the slope and caused ALUMINIUM's 2026-08-10 close
+    # to appear above a different line than the one shown in WEDGE DEBUG.
+    day_coordinates = (w["Date"] - pd.Timestamp("1970-01-01")).dt.total_seconds().to_numpy() / 86400.0
+
+    def _calendar_anchor(raw: tuple[str, float]) -> tuple[float, float]:
+        ts = pd.to_datetime(raw[0], errors="raise")
+        return float((ts - pd.Timestamp("1970-01-01")).total_seconds() / 86400.0), float(raw[1])
+
+    upper_calendar_a, upper_calendar_b = _calendar_anchor(upper_line_raw[0]), _calendar_anchor(upper_line_raw[1])
+    lower_calendar_a, lower_calendar_b = _calendar_anchor(lower_line_raw[0]), _calendar_anchor(lower_line_raw[1])
+
+    def _line_at(i: int, a: tuple[float, float], b: tuple[float, float]) -> float:
+        return _wedge_line_value(float(day_coordinates[i]), a, b)
+
     end = len(w) - 1
     first_validation = max(min(up0[0], up1[0]), min(lo0[0], lo1[0]))
+    # Breakout state starts only once both manually selected trend lines are
+    # established.  Candles between first and second anchors helped the user
+    # define the wedge; treating them as breakouts can restore stale breakout
+    # information after the user moves and saves the lines.
+    breakout_validation = max(up0[0], up1[0], lo0[0], lo1[0])
     tol = max(float(pd.Series(highs[first_validation:end + 1] - lows[first_validation:end + 1]).tail(30).mean()) * 0.18, abs(float(closes[end])) * 0.004)
     close_eps = max(tol * 0.02, abs(float(closes[end])) * 1e-6)
     upper_contacts = [up0[0], up1[0]]; lower_contacts = [lo0[0], lo1[0]]
-    breakout_idx = None; breakout_direction = "-"
+    # First discover every saved-line touch using the same principle as the
+    # chart debug panel.  A later touch can become the effective second anchor;
+    # checking breakouts in the same pass would incorrectly stop at an earlier
+    # close (ALUMINIUM 2026-08-10) before discovering its 2026-08-11 touch.
+    upper_broken = False
+    lower_broken = False
     for i in range(first_validation, end + 1):
-        up = _wedge_line_value(i, upper_a, upper_b); lo = _wedge_line_value(i, lower_a, lower_b)
+        up = _line_at(i, upper_calendar_a, upper_calendar_b); lo = _line_at(i, lower_calendar_a, lower_calendar_b)
         if lo >= up:
             return None
+        upper_broken = upper_broken or closes[i] > up + close_eps
+        lower_broken = lower_broken or closes[i] < lo - close_eps
+        if not upper_broken and closes[i] <= up + close_eps and highs[i] >= up - min(tol, _post_anchor_touch_tolerance_static(up)):
+            upper_contacts.append(i)
+        if not lower_broken and closes[i] >= lo - close_eps and lows[i] <= lo + min(tol, _post_anchor_touch_tolerance_static(lo)):
+            lower_contacts.append(i)
+
+    effective_anchor_idx = max(
+        breakout_validation,
+        max(_clustered_contact_indices(upper_contacts)),
+        max(_clustered_contact_indices(lower_contacts)),
+    )
+    breakout_idx = None; breakout_direction = "-"
+    for i in range(effective_anchor_idx + 1, end + 1):
+        up = _line_at(i, upper_calendar_a, upper_calendar_b); lo = _line_at(i, lower_calendar_a, lower_calendar_b)
         if closes[i] > up + close_eps or closes[i] < lo - close_eps:
             direction = "long" if closes[i] > up + close_eps else "short"
             if i < end - 5:
@@ -4105,31 +4323,38 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
             if direction != breakout_direction:
                 return None
         if breakout_idx is not None:
-            if _wedge_probable_stop_touched_after_breakout(i, breakout_idx, breakout_direction, upper_a, upper_b, lower_a, lower_b, highs, lows, close_eps):
+            breakout_upper = _line_at(breakout_idx, upper_calendar_a, upper_calendar_b)
+            breakout_lower = _line_at(breakout_idx, lower_calendar_a, lower_calendar_b)
+            probable_stop = (breakout_upper + breakout_lower) / 2.0
+            stop_touched = (
+                (breakout_direction == "long" and float(lows[i]) <= probable_stop + close_eps)
+                or (breakout_direction == "short" and float(highs[i]) >= probable_stop - close_eps)
+            )
+            if i > breakout_idx and stop_touched:
                 return None
             continue
-        if closes[i] <= up + close_eps and highs[i] >= up - min(tol, _post_anchor_touch_tolerance_static(up)):
-            upper_contacts.append(i)
-        if closes[i] >= lo - close_eps and lows[i] <= lo + min(tol, _post_anchor_touch_tolerance_static(lo)):
-            lower_contacts.append(i)
     up_count = _clustered_contact_count(upper_contacts); lo_count = _clustered_contact_count(lower_contacts)
     # Manual saved wedges remain authoritative while unbroken, and after a
     # breakout/breakdown for up to five candles unless the probable midpoint SL
     # was touched inside that period.
     if up_count < 2 or lo_count < 2:
         return None
-    width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
-    width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
+    width_start = _line_at(first_validation, upper_calendar_a, upper_calendar_b) - _line_at(first_validation, lower_calendar_a, lower_calendar_b)
+    width_end = _line_at(end, upper_calendar_a, upper_calendar_b) - _line_at(end, lower_calendar_a, lower_calendar_b)
     last_close = float(closes[end])
-    upper_start, upper_end = sorted([upper_a, upper_b], key=lambda x: x[0])
-    lower_start, lower_end = sorted([lower_a, lower_b], key=lambda x: x[0])
+    upper_reps = _clustered_contact_indices(upper_contacts)
+    lower_reps = _clustered_contact_indices(lower_contacts)
+    upper_start = (upper_reps[0], float(highs[upper_reps[0]]))
+    upper_end = (upper_reps[-1], float(highs[upper_reps[-1]]))
+    lower_start = (lower_reps[0], float(lows[lower_reps[0]]))
+    lower_end = (lower_reps[-1], float(lows[lower_reps[-1]]))
     def _fmt(i: int) -> str: return str(pd.to_datetime(w["Date"].iloc[i]).date())
     return WedgeScanResult(
         ticker=ticker, start_date=_fmt(first_validation), end_date=_fmt(end), duration_days=end - first_validation + 1,
         upper_start_date=_fmt(upper_start[0]), upper_start_price=round(float(upper_start[1]), 5), upper_end_date=_fmt(upper_end[0]), upper_end_price=round(float(upper_end[1]), 5),
         lower_start_date=_fmt(lower_start[0]), lower_start_price=round(float(lower_start[1]), 5), lower_end_date=_fmt(lower_end[0]), lower_end_price=round(float(lower_end[1]), 5),
         upper_touches=up_count, lower_touches=lo_count, width_start_pct=round(width_start / max(abs(last_close), 1e-9) * 100, 2), width_end_pct=round(width_end / max(abs(last_close), 1e-9) * 100, 2),
-        slope_pct_per_day=round(abs(((upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])) - ((lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0]))) / max(abs(last_close), 1e-9) * 100, 4),
+        slope_pct_per_day=round(abs(((upper_calendar_b[1] - upper_calendar_a[1]) / (upper_calendar_b[0] - upper_calendar_a[0])) - ((lower_calendar_b[1] - lower_calendar_a[1]) / (lower_calendar_b[0] - lower_calendar_a[0]))) / max(abs(last_close), 1e-9) * 100, 4),
         slope_strength="manual", fit_quality=100.0, recent_proximity_pct=100.0, compression_pct=round(max(0.0, min(100.0, (1.0 - width_end / max(width_start, 1e-9)) * 100.0)), 1), score=1000000.0, current_close=last_close,
         breakout_date=_fmt(breakout_idx) if breakout_idx is not None else "-", breakout_direction=breakout_direction,
     )
@@ -5183,6 +5408,7 @@ def _find_fibo_setup(
     allow_equal_third_close: bool = False,
     _mirrored_short: bool = False,
     _mirrored_short_axis: float | None = None,
+    forced_anchor_dates: tuple[str, str] | None = None,
 ) -> FiboScanResult | None:
     def _log(msg: str) -> None:
         if explain is not None:
@@ -5199,6 +5425,7 @@ def _find_fibo_setup(
             allow_equal_third_close=allow_equal_third_close,
             _mirrored_short=True,
             _mirrored_short_axis=axis,
+            forced_anchor_dates=forced_anchor_dates,
         )
         if explain is not None and mirrored_explain is not None:
             explain.extend(
@@ -5224,30 +5451,38 @@ def _find_fibo_setup(
     if direction == "long":
         min_incline_days = 10  # ~2 weeks
         min_correction_days = 2
-        i_peak_sel = _select_peak_long(
-            w,
-            min_incline_days,
-            min_tail_bars=min_correction_days,
-            mirrored_short_axis=_mirrored_short_axis,
-        )
+        if forced_anchor_dates:
+            dates = pd.to_datetime(w["Date"], errors="coerce")
+            start_ts, end_ts = (pd.to_datetime(value, errors="coerce") for value in forced_anchor_dates)
+            if pd.isna(start_ts) or pd.isna(end_ts):
+                return None
+            i_start_forced = int((dates - start_ts).abs().idxmin())
+            i_peak_sel = int((dates - end_ts).abs().idxmin())
+        else:
+            i_start_forced = None
+            i_peak_sel = _select_peak_long(
+                w,
+                min_incline_days,
+                min_tail_bars=min_correction_days,
+                mirrored_short_axis=_mirrored_short_axis,
+            )
         if i_peak_sel is None:
             _log("Rejected long: no valid peak selected.")
             return None
         i_peak = int(i_peak_sel)
-        base = _select_fibo_long_impulse_base(
-            w,
-            i_peak,
-            min_incline_days,
-            _log,
-            stale_cycle_mode=stale_cycle_mode,
-            reset_after_sideways=True,
-            sideways_band_pct=0.02 if _mirrored_short else 0.08,
-            preserve_deeper_short_continuation=_mirrored_short,
+        base = (
+            (i_start_forced, float(low.iloc[i_start_forced]), float(high.iloc[i_peak]))
+            if i_start_forced is not None and i_start_forced < i_peak
+            else _select_fibo_long_impulse_base(
+                w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode,
+                reset_after_sideways=True, sideways_band_pct=0.02 if _mirrored_short else 0.08,
+                preserve_deeper_short_continuation=_mirrored_short,
+            )
         )
         if base is None:
             return None
         i_start, fib_start, fib_end = base
-        newer_low_slice = low.iloc[i_start + 1:i_peak + 1]
+        newer_low_slice = low.iloc[i_start + 1:i_peak + 1] if not forced_anchor_dates else pd.Series(dtype=float)
         if not newer_low_slice.empty:
             newer_low_idx = int(newer_low_slice.idxmin())
             newer_low = float(low.iloc[newer_low_idx])
@@ -5284,7 +5519,7 @@ def _find_fibo_setup(
         i_end = len(w) - 1
         later_high_slice = pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce") if i_peak + 1 <= i_end else pd.Series(dtype=float)
         later_high = float(later_high_slice.max()) if not later_high_slice.empty else float("nan")
-        if pd.notna(later_high) and later_high > fib_end * 1.005:
+        if not forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:
             previous_peak = fib_end
             i_peak = int(later_high_slice.idxmax())
             fib_end = float(high.iloc[i_peak])
@@ -5910,7 +6145,20 @@ def run_fibo_search(target: str) -> int:
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
-            wedge = _find_manual_unbroken_wedge_setup(df, ticker) or _find_falling_wedge_setup(df)
+            saved_drawing_kinds = _saved_drawing_kinds_for_ticker(ticker)
+            # Evaluate the saved geometry before asking the automatic detector.
+            manual_wedge = _find_manual_unbroken_wedge_setup(df, ticker) if "wedge" in saved_drawing_kinds else None
+            if "wedge" in saved_drawing_kinds:
+                saved_path = _scanner_session_path_for_ticker(ticker)
+                saved_status = (
+                    f"{manual_wedge.breakout_direction}@{manual_wedge.breakout_date}"
+                    if manual_wedge and manual_wedge.breakout_direction in {"long", "short"}
+                    else ("unbroken" if manual_wedge else "invalid -> automatic fallback")
+                )
+                print(f"[fibo-saved-wedge] {ticker}: {saved_status}; session={saved_path.name}", flush=True)
+            # A valid saved wedge owns the result. Once that saved geometry is
+            # no longer a valid active/recent wedge, resume automatic discovery.
+            wedge = manual_wedge or _find_falling_wedge_setup(df)
             if wedge:
                 wedge.ticker = ticker
                 wedge.latest_candle_date = latest_candle_date
@@ -5918,7 +6166,33 @@ def run_fibo_search(target: str) -> int:
                 if pd.notna(latest_close):
                     wedge.current_close = latest_close
                 out_rows.append(wedge)
-            steep_3p = _find_fibo_3p_steep_setup(df, "long")
+            saved_fibo_anchors = _saved_fibo_anchors_for_ticker(ticker)
+            saved_fibo_rows: list[FiboScanResult] = []
+            for direction, anchor_start, anchor_end in saved_fibo_anchors:
+                cand = _find_fibo_setup(
+                    df, direction, allow_equal_third_close=(instrument == "forex"),
+                    forced_anchor_dates=(anchor_start, anchor_end),
+                )
+                if cand and not _is_waiting_candidate_stale(df, cand) and not _is_valid_reversal_invalidated(df, cand):
+                    cand.ticker = ticker
+                    cand.current_close = latest_close if pd.notna(latest_close) else cand.current_close
+                    cand.latest_candle_date = latest_candle_date
+                    cand.expected_latest_session_date = expected_latest_session_date
+                    saved_fibo_rows.append(cand)
+                    out_rows.append(cand)
+            # A valid saved Fibo owns the ticker and is reclassified from its
+            # edited anchors on every scan. If it becomes invalid, automatic
+            # discovery resumes instead of keeping a dead manual formation.
+            manual_fibo = bool(saved_fibo_rows)
+            if saved_fibo_anchors:
+                lifecycle_status = _update_saved_fibo_lifecycle(
+                    ticker,
+                    valid=manual_fibo,
+                    as_of=current_datetime.date(),
+                )
+                status = ", ".join(f"{r.direction}:{r.status}" for r in saved_fibo_rows) or lifecycle_status or "invalid -> automatic fallback"
+                print(f"[fibo-saved-anchors] {ticker}: {status}", flush=True)
+            steep_3p = None if manual_fibo else _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
                 if pd.notna(latest_close):
@@ -5927,7 +6201,7 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
             short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "NDX100"}
-            if short_fibo_enabled:
+            if short_fibo_enabled and not manual_fibo:
                 steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
                 if steep_3p_short:
                     steep_3p_short.ticker = ticker
@@ -5939,6 +6213,8 @@ def run_fibo_search(target: str) -> int:
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
+                if manual_fibo:
+                    break
                 cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                 if cand:
                     long_candidates.append(cand)
@@ -5985,7 +6261,7 @@ def run_fibo_search(target: str) -> int:
                     c.latest_candle_date = latest_candle_date
                     c.expected_latest_session_date = expected_latest_session_date
                     out_rows.append(c)
-            if short_fibo_enabled:
+            if short_fibo_enabled and not manual_fibo:
                 short_candidates: list[FiboScanResult] = []
                 short_offset0 = _find_fibo_setup(df, "short", end_offset=0, allow_equal_third_close=(instrument == "forex"))
                 for off in [0, 5, 10, 15, 20, 30, 40]:

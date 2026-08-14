@@ -88,5 +88,9 @@
   "__scanner_previous_respect_months__": "8.6",
   "__scanner_latest_retest_date__": "2026-08-05",
   "__scanner_latest_retest_pattern__": "bearish_hammer",
-  "__scanner_breakout_direction__": "short"
+  "__scanner_breakout_direction__": "short",
+  "__saved_fibo_invalid__": {
+    "since": "2026-08-14",
+    "fingerprint": "951b5a001a0c75566960a8635ce39bf459d086e62f304c6793938abcf1b3899c"
+  }
 }

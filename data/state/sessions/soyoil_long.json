@@ -1,0 +1,91 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (79.69)",
+      "x0": "2026-06-01",
+      "x1": "2034-07-02",
+      "y0": 79.69,
+      "y1": 79.69,
+      "price": 79.69,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (67.68)",
+      "x0": "2026-04-06",
+      "x1": "2034-07-02",
+      "y0": 67.68,
+      "y1": 67.68,
+      "price": 67.68,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (63.97)",
+      "x0": "2026-03-19",
+      "x1": "2034-07-02",
+      "y0": 63.97,
+      "y1": 63.97,
+      "price": 63.97,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (60.27)",
+      "x0": "2026-03-02",
+      "x1": "2034-07-02",
+      "y0": 60.27,
+      "y1": 60.27,
+      "price": 60.27,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (48.26)",
+      "x0": "2026-01-02",
+      "x1": "2034-07-02",
+      "y0": 48.26,
+      "y1": 48.26,
+      "price": 48.26,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-01-02",
+      "x1": "2026-06-01",
+      "y0": 48.26,
+      "y1": 79.69,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 15439.26,
+  "pip_value": 2171.73,
+  "capital": 325000,
+  "calculation_currency": "PLN",
+  "position_type": "long",
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {}
+}

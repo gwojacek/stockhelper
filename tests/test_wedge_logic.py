@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sys
+import json
+import os
+from datetime import date
 from io import StringIO
 from pathlib import Path
 
@@ -13,6 +16,224 @@ scanner = pytest.importorskip("scanner_search")
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "stocks"
+COMMODITY_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "csv" / "commodities"
+
+
+def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extension():
+    obj = {
+        "x": ["2026-06-05", "2026-08-11", "2026-12-01"],
+        "y": [3793.5, 3539.73, 3100.0],
+        "x0": "2026-06-05",
+        "y0": 3793.5,
+        "x1": "2026-12-01",
+        "y1": 3100.0,
+        # Original automatic anchors are deliberately stale after the edit.
+        "anchor_x": ["2026-06-05", "2026-08-11"],
+        "anchor_y": [3793.5, 3548.25],
+    }
+
+    assert scanner._manual_wedge_anchor(obj) == (
+        ("2026-06-05", 3793.5),
+        ("2026-08-11", 3548.25),
+    )
+    assert scanner._manual_wedge_line_geometry(obj) == (
+        ("2026-06-05", 3793.5),
+        ("2026-12-01", 3100.0),
+    )
+
+
+def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "KLIN.json").write_text(json.dumps({
+        "drawn_objects": [
+            {"type": "wedge", "group_id": "auto-wedge"},
+            {"type": "fib", "group_id": "edited-fibo"},
+        ]
+    }), encoding="utf-8")
+
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
+
+
+def test_saved_fibo_anchors_are_read_from_boundary_group(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    objects = [
+        {"type": "fib", "group_id": "edited", "direction": "long", "ratio": 0.618},
+        {"type": "fib-boundary", "group_id": "edited", "x0": "2026-02-02", "x1": "2026-06-05"},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+
+    assert scanner._saved_fibo_anchors_for_ticker("KLIN") == [
+        ("long", "2026-02-02", "2026-06-05")
+    ]
+
+
+def test_invalid_saved_fibo_is_deleted_after_two_weeks(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "KLIN.json"
+    fib = {"type": "fib-boundary", "group_id": "edited", "x0": "2026-02-02", "x1": "2026-06-05"}
+    path.write_text(json.dumps({"drawn_objects": [fib, {"type": "line"}]}), encoding="utf-8")
+
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1)) == "invalid -> automatic fallback (day 0/14)"
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 14)) == "invalid -> automatic fallback (day 13/14)"
+    assert "deleted after 14 days" in scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 15))
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["drawn_objects"] == [{"type": "line"}]
+    assert "__saved_fibo_invalid__" not in saved
+
+
+def test_editing_invalid_saved_fibo_restarts_grace_period(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "KLIN.json"
+    fib = {"type": "fib-boundary", "x0": "2026-02-02", "x1": "2026-06-05"}
+    path.write_text(json.dumps({"drawn_objects": [fib]}), encoding="utf-8")
+    scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1))
+    state = json.loads(path.read_text(encoding="utf-8"))
+    state["drawn_objects"][0]["x0"] = "2026-02-03"
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 20)) == "invalid -> automatic fallback (day 0/14)"
+
+
+def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    # Path.stem removes only the final .py from AL.F.py, so the chart saves
+    # the session as AL.F.json and not AL.json.
+    (sessions / "AL.F.json").write_text(json.dumps({
+        "drawn_objects": [{"type": "wedge", "group_id": "auto-wedge"}]
+    }), encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == sessions / "AL.F.json"
+    assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
+
+
+def test_commodity_session_resolution_keeps_legacy_short_stem_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "AL.json").write_text("{}", encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == sessions / "AL.json"
+
+
+def test_commodity_session_resolution_uses_newest_directional_chart_save(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    old = sessions / "AL.F.json"
+    old.write_text("{}", encoding="utf-8")
+    new = sessions / "aluminium_long.json"
+    new.write_text(json.dumps({"drawn_objects": [{"type": "wedge"}]}), encoding="utf-8")
+    os.utime(old, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(new, ns=(2_000_000_000, 2_000_000_000))
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == new
+    assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
+
+
+def test_commodity_session_resolution_finds_report_launched_provider_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    # AllSearch opens `python run -c AL.F`; resolve_config_path converts the
+    # resulting al.f_long target into al_f_long.py / al_f_long.json.
+    saved = sessions / "al_f_long.json"
+    saved.write_text(json.dumps({
+        "drawn_objects": [
+            {"type": "wedge", "label": "upper"},
+            {"type": "wedge", "label": "lower"},
+        ]
+    }), encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("ALUMINIUM") == saved
+    assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
+
+
+def test_manual_wedge_breakout_is_checked_only_after_all_saved_anchors(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    dates = pd.date_range("2026-01-01", periods=8, freq="D")
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [9.0] * 8,
+        "High": [10.0, 9.8, 9.6, 9.4, 9.2, 9.0, 8.8, 8.6],
+        "Low": [6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7],
+        # The early closes are outside the eventual saved lower line. They are
+        # not breakdowns because that line's second anchor is candle five.
+        "Close": [5.0, 5.5, 6.2, 6.4, 6.6, 7.0, 7.1, 7.2],
+    })
+    objects = [
+        {"type": "wedge", "label": "upper", "x0": "2026-01-01", "y0": 10.0, "x1": "2026-01-05", "y1": 9.2},
+        {"type": "wedge", "label": "lower", "x0": "2026-01-01", "y0": 6.0, "x1": "2026-01-05", "y1": 6.4},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+
+    result = scanner._find_manual_unbroken_wedge_setup(df, "KLIN")
+
+    assert result is not None
+    assert result.breakout_direction == "-"
+    assert result.breakout_date == "-"
+
+
+def test_manual_wedge_later_touch_supersedes_earlier_apparent_breakout(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    dates = pd.date_range("2026-08-01", periods=6, freq="D")
+    df = pd.DataFrame({
+        "Date": dates, "Open": [9.0] * 6,
+        "High": [10.0, 9.8, 9.6, 10.5, 9.2, 9.0],
+        "Low": [6.0, 6.1, 6.2, 6.3, 6.4, 6.5],
+        "Close": [8.0, 8.0, 8.0, 9.3, 8.5, 8.4],
+    })
+    objects = [
+        {"type": "wedge", "label": "upper", "anchor_x": ["2026-08-01", "2026-08-03"], "anchor_y": [10.0, 9.6]},
+        {"type": "wedge", "label": "lower", "anchor_x": ["2026-08-01", "2026-08-03"], "anchor_y": [6.0, 6.2]},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+
+    result = scanner._find_manual_unbroken_wedge_setup(df, "KLIN")
+
+    assert result is not None
+    assert result.breakout_direction == "-"
+
+
+def test_aluminium_saved_wedge_uses_calendar_time_and_remains_unbroken(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    objects = [
+        {
+            "type": "wedge", "label": "upper",
+            "anchor_x": ["2026-06-05", "2026-08-06"], "anchor_y": [3793.5, 3452.25],
+            "x": ["2026-06-05", "2026-08-11"], "y": [3793.5, 3539.73], "free_extension": True,
+        },
+        {
+            "type": "wedge", "label": "lower",
+            "anchor_x": ["2026-02-02", "2026-06-25"], "anchor_y": [2856.5, 3209.5],
+            "x": ["2026-02-02", "2026-07-01"], "y": [2856.5, 3225.91], "free_extension": True,
+        },
+    ]
+    (sessions / "ALUMINIUM.json").write_text(json.dumps({"drawn_objects": objects}), encoding="utf-8")
+    df = pd.read_csv(COMMODITY_DATA_DIR / "AL_F.csv")
+
+    result = scanner._find_manual_unbroken_wedge_setup(df, "ALUMINIUM")
+
+    assert result is not None
+    assert result.breakout_date == "-"
+    assert result.breakout_direction == "-"
+    assert result.upper_touches >= 2
+    assert result.lower_touches >= 3
 
 
 def test_price_only_markets_are_not_rejected_for_unusable_turnover():
