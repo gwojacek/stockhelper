@@ -1,23 +1,42 @@
 # Changelog
 
-- Prevented the chart-loader cache merge from restoring Yahoo-only rows after a downloader had already completed an authoritative Stooq-tail rebase.
-
-- Made forced Stooq rebases authoritative for the downloaded tail, removing Yahoo-only dates that an overlapping date merge could not replace.
-
-- Changed commodity and forex `--force-refresh` into a last-20-candle audit that refreshes only CSVs containing at least two Yahoo-precision candles (or missing CSVs), avoiding duplicate full-market downloads in both allsearch phases.
-
-- Rebased commodity and forex caches from Stooq when at least two of the last 20 candles match Yahoo, including Yahoo's long binary-float values already stored in CSV files, and limited Yahoo freshness data to the single newest candle.
-
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.4`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `7.5`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
-- Allsearch now clears `debug/stooq` at startup, and the generated Playwright diagnostics are ignored by Git.
-- Commodity and forex post-scan health checks now warn on two or more Yahoo-style high-precision candles in the last 20 rows and include those CSVs in the final clean Stooq retry.
+- No changes yet.
 
-Compare: [`7.4...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.4...HEAD)
+Compare: [`7.5...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.5...HEAD)
+
+## [7.5] - 2026-08-14
+
+Tag: `7.5`
+Compare: [`7.4...7.5`](https://github.com/gwojacek/stockhelper/compare/7.4...7.5)
+
+### Added
+
+- Added scanner support for user-saved Fibonacci and wedge drawings from the latest provider-qualified chart session, including directional commodity aliases.
+- Added persisted chart-calculated wedge breakout state and calendar-time matching for saved wedge lines.
+- Added draggable saved Fibonacci anchors whose scanner results are recalculated from the edited drawing.
+
+### Changed
+
+- Made saved wedge anchors and their visible projected boundaries take precedence over automatic scanner fallbacks, so touch and breakout evaluation matches the structure shown in the chart.
+- Reused the Ichimoku candle snapshot for the Fibonacci phase of allsearch and merged a single missing Yahoo candle before Ichimoku scans, reducing redundant downloads while keeping the active candle current.
+- Changed commodity and forex `--force-refresh` into a last-20-candle audit that refreshes only missing CSVs or caches containing at least two Yahoo-precision candles.
+- Rebased contaminated commodity and forex cache tails from Stooq, including long binary-float Yahoo values already stored in CSVs, while limiting Yahoo freshness data to the newest candle.
+- Expanded Stooq history-table and direct-CSV download paths for forex data and added consecutive consent-dialog handling for commodity scraping.
+
+### Fixed
+
+- Expired invalid saved Fibonacci drawings after two weeks so obsolete manual anchors no longer suppress automatic detection indefinitely.
+- Preserved valid long and short Fibonacci impulses while refreshing shared allsearch data.
+- Corrected Ichimoku breakout dates, far-cloud-edge validation, maintained breakout selection, retest counts, and stale retest-pattern suppression.
+- Tightened hammer, harami, piercing-line, and cloud-contact validation to reject off-center or incomplete formations while accepting contained bullish harami candles.
+- Prevented the chart-loader cache merge from restoring Yahoo-only rows after an authoritative Stooq-tail rebase and removed overlapping Yahoo-only dates during forced repairs.
+- Limited audited forex repairs to the affected Stooq tail and handled repeated Stooq consent dialogs during browser downloads.
 
 ## [7.4] - 2026-08-06
 
