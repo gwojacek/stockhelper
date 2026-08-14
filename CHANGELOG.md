@@ -10,7 +10,7 @@ The project currently documents release tags `1.0` through `7.5`, plus unrelease
 
 Compare: [`7.5...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.5...HEAD)
 
-## [7.5] - 2026-08-14
+## [7.4] - 2026-08-14
 
 Tag: `7.5`
 Compare: [`7.4...7.5`](https://github.com/gwojacek/stockhelper/compare/7.4...7.5)
@@ -37,11 +37,6 @@ Compare: [`7.4...7.5`](https://github.com/gwojacek/stockhelper/compare/7.4...7.5
 - Tightened hammer, harami, piercing-line, and cloud-contact validation to reject off-center or incomplete formations while accepting contained bullish harami candles.
 - Prevented the chart-loader cache merge from restoring Yahoo-only rows after an authoritative Stooq-tail rebase and removed overlapping Yahoo-only dates during forced repairs.
 - Limited audited forex repairs to the affected Stooq tail and handled repeated Stooq consent dialogs during browser downloads.
-
-## [7.4] - 2026-08-06
-
-Tag: `7.4`
-Compare: [`7.3...7.4`](https://github.com/gwojacek/stockhelper/compare/7.3...7.4)
 
 ### Added
 
