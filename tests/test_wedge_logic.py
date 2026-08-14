@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import json
 import os
+from datetime import date
 from io import StringIO
 from pathlib import Path
 
@@ -68,6 +69,37 @@ def test_saved_fibo_anchors_are_read_from_boundary_group(tmp_path, monkeypatch):
     assert scanner._saved_fibo_anchors_for_ticker("KLIN") == [
         ("long", "2026-02-02", "2026-06-05")
     ]
+
+
+def test_invalid_saved_fibo_is_deleted_after_two_weeks(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "KLIN.json"
+    fib = {"type": "fib-boundary", "group_id": "edited", "x0": "2026-02-02", "x1": "2026-06-05"}
+    path.write_text(json.dumps({"drawn_objects": [fib, {"type": "line"}]}), encoding="utf-8")
+
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1)) == "invalid -> automatic fallback (day 0/14)"
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 14)) == "invalid -> automatic fallback (day 13/14)"
+    assert "deleted after 14 days" in scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 15))
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["drawn_objects"] == [{"type": "line"}]
+    assert "__saved_fibo_invalid__" not in saved
+
+
+def test_editing_invalid_saved_fibo_restarts_grace_period(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "KLIN.json"
+    fib = {"type": "fib-boundary", "x0": "2026-02-02", "x1": "2026-06-05"}
+    path.write_text(json.dumps({"drawn_objects": [fib]}), encoding="utf-8")
+    scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1))
+    state = json.loads(path.read_text(encoding="utf-8"))
+    state["drawn_objects"][0]["x0"] = "2026-02-03"
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 20)) == "invalid -> automatic fallback (day 0/14)"
 
 
 def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):

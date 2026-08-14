@@ -4144,6 +4144,46 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
     return anchors
 
 
+def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
+    """Track invalid saved Fibos and delete them after a 14-day grace period."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    if not isinstance(objects, list):
+        return None
+    fib_objects = [obj for obj in objects if isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"}]
+    if not fib_objects:
+        state.pop("__saved_fibo_invalid__", None)
+        return None
+    fingerprint = hashlib.sha256(json.dumps(fib_objects, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    if valid:
+        if state.pop("__saved_fibo_invalid__", None) is not None:
+            path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return None
+    marker = state.get("__saved_fibo_invalid__")
+    if not isinstance(marker, dict) or marker.get("fingerprint") != fingerprint:
+        marker = {"since": as_of.isoformat(), "fingerprint": fingerprint}
+        state["__saved_fibo_invalid__"] = marker
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return "invalid -> automatic fallback (day 0/14)"
+    try:
+        invalid_since = date.fromisoformat(str(marker.get("since")))
+    except ValueError:
+        invalid_since = as_of
+    age = max(0, (as_of - invalid_since).days)
+    if age < 14:
+        return f"invalid -> automatic fallback (day {age}/14)"
+    state["drawn_objects"] = [obj for obj in objects if not (isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"})]
+    state.pop("__saved_fibo_invalid__", None)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return "invalid saved Fibo deleted after 14 days -> automatic fallback"
+
+
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
     # Wedge x/y endpoints are display extensions and commonly end months after
     # the last OHLC candle.  The chart's own debug/breakout calculation derives
@@ -6144,7 +6184,12 @@ def run_fibo_search(target: str) -> int:
             # discovery resumes instead of keeping a dead manual formation.
             manual_fibo = bool(saved_fibo_rows)
             if saved_fibo_anchors:
-                status = ", ".join(f"{r.direction}:{r.status}" for r in saved_fibo_rows) or "invalid -> automatic fallback"
+                lifecycle_status = _update_saved_fibo_lifecycle(
+                    ticker,
+                    valid=manual_fibo,
+                    as_of=current_datetime.date(),
+                )
+                status = ", ".join(f"{r.direction}:{r.status}" for r in saved_fibo_rows) or lifecycle_status or "invalid -> automatic fallback"
                 print(f"[fibo-saved-anchors] {ticker}: {status}", flush=True)
             steep_3p = None if manual_fibo else _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
