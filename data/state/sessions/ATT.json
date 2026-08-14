@@ -88,5 +88,9 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__journal_source_technique__": "Fibo"
+  "__journal_source_technique__": "Fibo",
+  "__saved_fibo_invalid__": {
+    "since": "2026-08-14",
+    "fingerprint": "9a354095879b7d7d898bedcd2de71ac5646b5cc8a6a34e048b9403fca2fcaa4d"
+  }
 }

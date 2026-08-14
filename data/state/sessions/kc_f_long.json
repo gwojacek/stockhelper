@@ -84,5 +84,9 @@
   "__scanner_breakout_date__": "2026-07-01",
   "__scanner_retest_count__": "0",
   "__scanner_previous_respect_months__": "7.2",
-  "__scanner_breakout_direction__": "long"
+  "__scanner_breakout_direction__": "long",
+  "__saved_fibo_invalid__": {
+    "since": "2026-08-14",
+    "fingerprint": "4fc41cd214a9290d3be467e5bfc377319a4f74b0439b176fb3af4e0d22ef0441"
+  }
 }

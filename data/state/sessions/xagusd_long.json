@@ -65,10 +65,10 @@
       "free_extension": true
     }
   ],
-  "__scanner_breakout_date__": "2026-03-12",
-  "__scanner_retest_count__": "5",
-  "__scanner_latest_retest_date__": "2026-06-03",
-  "__scanner_latest_retest_pattern__": "bearish_engulfing",
+  "__scanner_breakout_date__": "2026-03-03",
+  "__scanner_retest_count__": "7",
+  "__scanner_latest_retest_date__": "2026-08-12",
+  "__scanner_latest_retest_pattern__": "bearish_hammer",
   "__scanner_previous_respect_months__": "3.8",
   "high": 89.35,
   "__wedge_auto_high__": true,

@@ -7,28 +7,28 @@
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-04-07",
+        "2026-03-09",
         "2026-07-29",
-        "2027-03-23"
+        "2027-02-28"
       ],
       "y": [
-        28.0,
+        35.3,
         20.88,
-        5.6486
+        -9.71
       ],
-      "x0": "2026-04-07",
-      "x1": "2027-03-23",
-      "y0": 28.0,
-      "y1": 5.6486,
+      "x0": "2026-03-09",
+      "x1": "2027-02-28",
+      "y0": 35.3,
+      "y1": -9.71,
       "anchor_x": [
-        "2026-04-07",
+        "2026-03-09",
         "2026-07-29"
       ],
       "anchor_y": [
-        28.0,
+        35.3,
         20.88
       ],
-      "price": 5.6486,
+      "price": -9.71,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -40,17 +40,17 @@
       "x": [
         "2026-05-29",
         "2026-07-10",
-        "2026-12-03"
+        "2027-02-28"
       ],
       "y": [
         15.22,
         14.96,
-        13.99428
+        12.89
       ],
       "x0": "2026-05-29",
-      "x1": "2026-12-03",
+      "x1": "2027-02-28",
       "y0": 15.22,
-      "y1": 13.99428,
+      "y1": 12.89,
       "anchor_x": [
         "2026-05-29",
         "2026-07-10"
@@ -59,7 +59,7 @@
         15.22,
         14.96
       ],
-      "price": 13.99428,
+      "price": 12.89,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -68,5 +68,45 @@
   "lot_cost": 58874.96,
   "pip_value": 14565.4,
   "spread_multiplier": 0.2,
-  "spread": 2913.08
+  "spread": 2913.08,
+  "high": 35.3,
+  "__wedge_auto_high__": true,
+  "low": 14.77,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 14.76,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "short",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 17.11,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 325000,
+  "calculation_currency": "PLN",
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 35.3,
+      "plot_price": 35.3,
+      "date": "2026-03-09",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 14.77,
+      "plot_price": 14.77,
+      "date": "2026-08-07",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 14.76,
+      "plot_price": 14.76,
+      "date": "2026-08-12",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 17.11,
+      "plot_price": 17.11,
+      "date": "2026-08-12",
+      "auto_wedge": true
+    }
+  }
 }
