@@ -1090,7 +1090,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🚀 breakout" in text
     assert ".today-signal td{background:#14532d!important}" in text
     assert ".troj-cell-card.today-signal{background:#14532d!important" in text
-    assert "data-scanner='WEDGE' data-status='🚀 breakout' class='today-signal'" in text
+    assert "data-scanner='WEDGE' data-status='🚀 breakout' data-troj-direction='long' class='today-signal'" in text
+    assert "class='market direction-filter-section' id='wedge-report'" in text
+    assert "setTrojDirection('wedge-report','long',this)" in text
+    assert "setTrojDirection('wedge-report','short',this)" in text
+    assert "const okDirection=directionFilter==='all'||r.dataset.trojDirection===directionFilter" in text
     assert "falling_wedge_breakout" not in text
     assert "wybicie long 2026-05-30" not in text
     assert "<th>Fit</th>" not in text
