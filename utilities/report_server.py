@@ -445,6 +445,8 @@ def main() -> int:
                 qs = parse_qs(parsed.query)
                 ticker = (qs.get("ticker", [""])[0] or "").strip().upper()
                 context = (qs.get("context", [""])[0] or "").strip()
+                scanner = (qs.get("scanner", ["fibo"])[0] or "fibo").strip().lower()
+                if scanner not in {"fibo", "ichimoku", "wedge"}: scanner = "fibo"
                 if not re.fullmatch(r"[A-Z0-9._-]{1,25}", ticker):
                     payload = {"ok": False, "error": "invalid ticker"}
                     self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
@@ -452,6 +454,7 @@ def main() -> int:
                 env = os.environ.copy()
                 env["STOCKHELPER_IN_DOCKER"] = "1"
                 env["STOCKHELPER_CACHE_ONLY"] = "1"
+                env["STOCKHELPER_DEBUG_SYMBOL"] = ticker
                 try:
                     completed = subprocess.run(
                         command, cwd=str(project_root), env=env, stdin=subprocess.DEVNULL,
@@ -459,12 +462,12 @@ def main() -> int:
                     )
                     analysis = (completed.stdout + ("\n" + completed.stderr if completed.stderr else "")).strip()
                     codex_text = (
-                        f"Analyze and fix this StockHelper Fibo dropout if the scanner rejected a valid formation.\n"
+                        f"Analyze and fix this StockHelper {scanner.title()} dropout if the scanner rejected a valid formation.\n"
                         f"Instrument: {ticker}\nPrevious dropout card: {context or '-'}\n"
                         f"Reproduction: {' '.join(command)}\nExit code: {completed.returncode}\n\n"
                         f"FULL SCANNER REJECTION TRACE\n{'=' * 36}\n{analysis}"
                     )
-                    payload = {"ok": completed.returncode == 0, "ticker": ticker, "analysis": analysis, "codex_text": codex_text, "exit_code": completed.returncode}
+                    payload = {"ok": completed.returncode == 0, "ticker": ticker, "scanner": scanner, "analysis": analysis, "codex_text": codex_text, "exit_code": completed.returncode}
                     # A non-zero scanner exit is itself useful diagnostic output;
                     # return the trace to the sidebar instead of hiding it behind
                     # an HTTP error response.

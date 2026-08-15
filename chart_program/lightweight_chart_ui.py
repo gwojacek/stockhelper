@@ -1145,6 +1145,17 @@ class LightweightChartLevelSelectorUI:
     return text && text !== '-' && text.toLowerCase() !== 'none' ? text : '';
   }}
 
+  function scannerMetadataDebugLines() {{
+    const entries = Object.entries(levels || {{}})
+      .filter(([key, value]) => key.startsWith('__scanner_') && value !== null && value !== undefined && String(value) !== '')
+      .sort(([a], [b]) => a.localeCompare(b));
+    const lines = [`Scanner metadata (${{entries.length}} fields):`];
+    if (!entries.length) lines.push('  -');
+    entries.forEach(([key, value]) => lines.push(`  ${{key}}=${{typeof value === 'object' ? JSON.stringify(value) : String(value)}}`));
+    lines.push(`Chart data: candles=${{ohlc.length}}, first=${{ohlc[0]?.time || '-'}}, last=${{ohlc[ohlc.length - 1]?.time || '-'}}`);
+    return lines;
+  }}
+
   function isValidScannerPattern(pattern) {{
     const text = String(pattern || '').trim().replace(/_/g, ' ');
     if (!text || text === '-' || text.toLowerCase() === 'none') return false;
@@ -1270,6 +1281,7 @@ class LightweightChartLevelSelectorUI:
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
+    lines.push(...scannerMetadataDebugLines(), '');
     if (scannerBreakout) {{
       lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}`);
       if (scannerContext.note) lines.push(scannerContext.note);
@@ -1296,7 +1308,7 @@ class LightweightChartLevelSelectorUI:
     }}
     lines.push('');
     lines.push(`CSV candles since breakout/check start (${{startDate || '-'}}):`);
-    lines.push(scannerCandlesCsv(500, startDate));
+    lines.push(scannerCandlesCsv(ohlc.length, startDate));
     return lines.join('\\n');
   }}
 
@@ -1304,6 +1316,7 @@ class LightweightChartLevelSelectorUI:
     const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
     const lines = [];
     lines.push(`FIBO DEBUG: ${{P.symbol || ''}}`);
+    lines.push(...scannerMetadataDebugLines(), '');
     if (!fibs.length) lines.push('No Fibonacci lines on chart.');
     const groups = new Map();
     fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
@@ -1337,7 +1350,7 @@ class LightweightChartLevelSelectorUI:
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
-    lines.push(scannerCandlesCsv(500, earliestAnchor));
+    lines.push(scannerCandlesCsv(ohlc.length, earliestAnchor));
     return lines.join('\\n');
   }}
 
@@ -1351,6 +1364,7 @@ class LightweightChartLevelSelectorUI:
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
     lines.push(`WEDGE DEBUG: ${{P.symbol || ''}}`);
+    lines.push(...scannerMetadataDebugLines(), '');
     if (!wedges.length) {{
       lines.push('No wedge lines on chart.');
       return lines.join('\\n');
