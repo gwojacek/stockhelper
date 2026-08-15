@@ -12,6 +12,17 @@ def test_fibo_boundary_is_draggable_and_resynchronizes_group():
     assert "syncFibGroupFromBoundary(draggedObject);" in source
 
 
+def test_fibo_anchor_drag_snaps_to_directional_candle_extremes():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    start = source.index("if (obj?.type === 'fib-boundary')")
+    fib_drag = source[start:source.index("if (!x0 || !x1", start)]
+
+    assert "const isShort = fibBoundaryIsShort(obj);" in fib_drag
+    assert "y0 = Number(isShort ? candle.high : candle.low);" in fib_drag
+    assert "y1 = Number(isShort ? candle.low : candle.high);" in fib_drag
+    assert "candle.close" not in fib_drag
+
+
 def test_scanner_wedges_use_anchor_geometry_and_not_a_native_series_fallback():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

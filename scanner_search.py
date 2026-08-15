@@ -945,6 +945,42 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
 
 
+def _has_extended_sideways(
+    df_slice: pd.DataFrame,
+    window_days: int = 22,
+    band_pct: float = 0.12,
+    min_covered_days: int = 44,
+    min_coverage_ratio: float = 0.40,
+) -> bool:
+    """Return whether flat rolling windows dominate a formation leg.
+
+    One ordinary monthly pause is allowed in an otherwise active Fibo move.
+    A chain of overlapping flat windows covering several months is different:
+    it is a side trend, not a live impulse/correction.  Counting the union of
+    covered candles prevents a long cluster of overlapping windows from being
+    mistaken for many independent signals.
+    """
+    if len(df_slice) < max(window_days, min_covered_days):
+        return False
+    highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
+    lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
+    closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
+    covered: set[int] = set()
+    for start in range(0, len(df_slice) - window_days + 1):
+        end = start + window_days
+        if _sideways_window_stats(
+            highs.iloc[start:end].reset_index(drop=True),
+            lows.iloc[start:end].reset_index(drop=True),
+            closes.iloc[start:end].reset_index(drop=True),
+            band_pct,
+            0.05,
+            2,
+        ) is not None:
+            covered.update(range(start, end))
+    required = max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))
+    return len(covered) >= required
+
+
 def _sideways_correction_near_active_extreme(df_slice: pd.DataFrame, direction: str) -> bool:
     """Return whether a sideways correction is still pressing its recovery edge."""
     if df_slice.empty:
@@ -5333,6 +5369,11 @@ def _find_fibo_3p_steep_setup(
     has_monthly_sideways = _has_long_sideways(
         w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.12, max_progress_pct=0.05
     )
+    if _mirrored_short and _has_extended_sideways(
+        w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+    ):
+        _log("Rejected short 3P steep: decline is dominated by an extended side trend.")
+        return None
     if has_monthly_sideways:
         _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
 
@@ -6067,6 +6108,8 @@ def run_fibo_search(target: str) -> int:
         if cand.direction == "short" and _has_long_sideways(
             after.reset_index(drop=True), max_days=22, band_pct=0.12
         ):
+            if _has_extended_sideways(after.reset_index(drop=True)):
+                return True
             if not _sideways_correction_near_active_extreme(after.reset_index(drop=True), "short"):
                 return True
         # These anchors get exactly one reversal opportunity: the first 61.8

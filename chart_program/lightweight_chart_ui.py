@@ -1729,12 +1729,20 @@ class LightweightChartLevelSelectorUI:
     return `obj:${{obj.id || obj.label || ''}}`;
   }}
 
+  function fibBoundaryIsShort(boundary) {{
+    const direction = drawnObjects.find(
+      obj => obj.group_id === boundary?.group_id && obj.type === 'fib' && obj.direction
+    )?.direction;
+    if (direction) return direction === 'short';
+    const first = nearest(boundary?.x0), second = nearest(boundary?.x1);
+    return !!first && !!second && (second.low + second.high) / 2 < (first.low + first.high) / 2;
+  }}
+
   function syncFibGroupFromBoundary(boundary) {{
     if (!boundary || boundary.type !== 'fib-boundary') return;
     const first = nearest(boundary.x0), second = nearest(boundary.x1);
     if (!first || !second || first.idx === second.idx) return;
-    const existingDirection = drawnObjects.find(obj => obj.group_id === boundary.group_id && obj.type === 'fib' && obj.direction)?.direction;
-    const isShort = existingDirection ? existingDirection === 'short' : ((second.low + second.high) / 2 < (first.low + first.high) / 2);
+    const isShort = fibBoundaryIsShort(boundary);
     const low = isShort ? Number(second.low) : Number(first.low);
     const high = isShort ? Number(first.high) : Number(second.high);
     boundary.x0 = first.time;
@@ -1790,8 +1798,16 @@ class LightweightChartLevelSelectorUI:
       }}
     }}
     if (obj?.type === 'fib-boundary') {{
-      if (mode === 'start') {{ x0 = nearest(x0).time; y0 = Number(nearest(x0).close); }}
-      else if (mode === 'end') {{ x1 = nearest(x1).time; y1 = Number(nearest(x1).close); }}
+      const isShort = fibBoundaryIsShort(obj);
+      if (mode === 'start') {{
+        const candle = nearest(x0);
+        x0 = candle.time;
+        y0 = Number(isShort ? candle.high : candle.low);
+      }} else if (mode === 'end') {{
+        const candle = nearest(x1);
+        x1 = candle.time;
+        y1 = Number(isShort ? candle.low : candle.high);
+      }}
     }}
     if (!x0 || !x1 || !Number.isFinite(y0) || !Number.isFinite(y1)) return;
     if (Array.isArray(obj.x) && Array.isArray(obj.y)) {{
