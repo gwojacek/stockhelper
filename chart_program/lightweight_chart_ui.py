@@ -566,10 +566,14 @@ class LightweightChartLevelSelectorUI:
     #chart-legend span {{ display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }}
     #chart-legend span.hidden {{ opacity: 0.38; text-decoration: line-through; }}
     #chart-legend button {{ padding: 0 5px; line-height: 16px; font-size: 11px; border-radius: 4px; background: #334155; color: #e5e7eb; }}
-    .side-action-btn {{ margin-top:9px;width:100%;padding:12px 14px;color:white;border:none;border-radius:16px;font-size:16px;font-weight:900;letter-spacing:-.01em;line-height:1.15;text-align:center;box-shadow:0 10px 28px rgba(0,0,0,.22);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px; }} .side-action-btn .btn-icon {{ width:36px;height:36px;border-radius:12px;display:inline-grid;place-items:center;background:rgba(255,255,255,.13);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 18px rgba(0,0,0,.18);font-size:20px; }}
-    .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }} .action-grid.no-wedge {{ grid-template-columns:1fr; }} .action-grid.no-wedge #journal-toggle-btn {{ min-height:58px; }}
-    .action-grid .side-action-btn {{ min-height:52px; }}
-    #calculate-btn {{ min-height:58px; background:linear-gradient(135deg,#0f766e,#22c55e) !important; border:1px solid rgba(134,239,172,.80); box-shadow:0 16px 34px rgba(34,197,94,.24), inset 0 1px 0 rgba(255,255,255,.14); }}
+    .side-action-btn {{ position:relative;margin-top:9px;width:100%;padding:13px 12px;color:white;border:1px solid rgba(148,163,184,.32);border-radius:16px;font-size:14px;font-weight:900;letter-spacing:-.01em;line-height:1.15;text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 12px 28px rgba(0,0,0,.25);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden; }}
+    .side-action-btn::before {{ content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0,rgba(255,255,255,.14),transparent 55%);pointer-events:none; }}
+    .side-action-btn .btn-icon {{ width:38px;height:38px;border-radius:13px;display:inline-grid;place-items:center;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 18px rgba(0,0,0,.20);font-size:20px; }}
+    .side-action-btn .action-copy {{ position:relative;display:flex;flex-direction:column;gap:3px; }} .side-action-btn .action-copy small {{ color:#b9c6da;font-size:10px;font-weight:600;line-height:1.25;letter-spacing:0; }}
+    .side-action-btn .action-arrow {{ position:relative;display:grid;place-items:center;width:25px;height:25px;margin-top:2px;border:1px solid rgba(255,255,255,.15);border-radius:50%;background:rgba(255,255,255,.07);font-size:18px; }}
+    .action-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }} .action-grid.no-wedge {{ grid-template-columns:1fr 1fr; }}
+    .action-grid .side-action-btn {{ min-height:126px; }} .action-grid #journal-toggle-btn {{ grid-column:1 / -1;min-height:92px;flex-direction:row;gap:12px; }}
+    #calculate-btn {{ min-height:94px;flex-direction:row;gap:12px;background:linear-gradient(135deg,rgba(6,78,87,.95),rgba(5,150,105,.84)) !important; border:1px solid rgba(110,231,183,.72); box-shadow:0 16px 34px rgba(16,185,129,.20), inset 0 1px 0 rgba(255,255,255,.14); }}
     #calculate-btn .btn-icon {{ background:rgba(220,252,231,.18); color:#dcfce7; }}
     #calculate-btn::after {{ content:none; }}
     #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
@@ -577,7 +581,7 @@ class LightweightChartLevelSelectorUI:
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
     .save-actions {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:9px; }}
-    .save-actions .side-action-btn {{ margin-top:0; min-height:66px; }}
+    .save-actions .side-action-btn {{ margin-top:0; min-height:108px; }}
     #save-btn {{ background:linear-gradient(135deg,#047857,#0d9488) !important; border:1px solid #5eead4; box-shadow:0 18px 38px rgba(13,148,136,.22), inset 0 1px 0 rgba(255,255,255,.14); }}
     #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
     #save-btn .btn-icon,#finish-btn .btn-icon {{ background:rgba(219,234,254,.18); color:#dbeafe; }}
@@ -697,15 +701,15 @@ class LightweightChartLevelSelectorUI:
         <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
         <select id="object-picker" style="display:none"><option value="">-- select --</option></select>
         <button id="delete-object" style="display:none">Delete selected object</button>
-        <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span>Calculate position</span></button>
+        <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span class="action-copy"><span>Calculate position</span><small>Update position and portfolio metrics.</small></span><span class="action-arrow">›</span></button>
         <div class="action-grid">
-          <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Setup information</span></button>
-          <button id="scanner-analysis-btn" class="side-action-btn"><span class="btn-icon">🧪</span><span>Debug analysis</span></button>
-          <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
+          <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span class="action-copy"><span>Setup information</span><small>Review configuration and reference data.</small></span><span class="action-arrow">›</span></button>
+          <button id="scanner-analysis-btn" class="side-action-btn"><span class="btn-icon">🔎</span><span class="action-copy"><span>Debug analysis</span><small>Investigate scanner calculation issues.</small></span><span class="action-arrow">›</span></button>
+          <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span class="action-copy"><span>Add journal entry</span><small>Record a new transaction or adjustment.</small></span><span class="action-arrow">›</span></button>
         </div>
         <div class="save-actions">
-          <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save</span></button>
-          <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span>Save &amp; Close</span></button>
+          <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span class="action-copy"><span>Save</span><small>Save your changes.</small></span><span class="action-arrow">›</span></button>
+          <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span class="action-copy"><span>Save &amp; Close</span><small>Save and close this chart.</small></span><span class="action-arrow">›</span></button>
         </div>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
@@ -1491,7 +1495,7 @@ class LightweightChartLevelSelectorUI:
     const panel = $('wedge-debug-panel');
     if (panel) {{ panel.classList.add('open'); panel.textContent = 'Running complete cached scanner analysis…'; }}
     if (!P.reportServer) {{
-      if (panel) panel.textContent = 'Debug analysis requires a chart opened from the StockHelper report server.\n\n' + setupDebugSnapshot();
+      if (panel) panel.textContent = 'Debug analysis requires a chart opened from the StockHelper report server.\\n\\n' + setupDebugSnapshot();
       return;
     }}
     const technique = selectedJournalTechnique();
@@ -1502,13 +1506,13 @@ class LightweightChartLevelSelectorUI:
       url.searchParams.set('scanner', scanner);
       // The server appends the complete cached OHLCV file. Keep the query small
       // while preserving all calculated anchors, patterns, touches and metadata.
-      url.searchParams.set('context', setupDebugSnapshot().split('\nCSV candles since')[0]);
+      url.searchParams.set('context', setupDebugSnapshot().split('\\nCSV candles since')[0]);
       const response = await fetch(url);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || String(response.status));
       if (panel) panel.textContent = data.codex_text || data.analysis || 'No analysis returned.';
     }} catch (err) {{
-      if (panel) panel.textContent = `Debug analysis failed: ${{err.message}}\n\n${{setupDebugSnapshot()}}`;
+      if (panel) panel.textContent = `Debug analysis failed: ${{err.message}}\\n\\n${{setupDebugSnapshot()}}`;
     }}
   }}
 
