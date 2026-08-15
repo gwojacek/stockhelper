@@ -573,6 +573,7 @@ class LightweightChartLevelSelectorUI:
     #calculate-btn .btn-icon {{ background:rgba(220,252,231,.18); color:#dcfce7; }}
     #calculate-btn::after {{ content:none; }}
     #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
+    #scanner-analysis-btn {{ background:linear-gradient(135deg,rgba(127,29,29,.82),rgba(124,45,18,.86)) !important; border:1px solid #fb923c; }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
     .save-actions {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:9px; }}
@@ -699,6 +700,7 @@ class LightweightChartLevelSelectorUI:
         <button id="calculate-btn" class="side-action-btn"><span class="btn-icon">🧮</span><span>Calculate position</span></button>
         <div class="action-grid">
           <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Setup information</span></button>
+          <button id="scanner-analysis-btn" class="side-action-btn"><span class="btn-icon">🧪</span><span>Debug analysis</span></button>
           <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
         </div>
         <div class="save-actions">
@@ -1482,6 +1484,31 @@ class LightweightChartLevelSelectorUI:
       updateSetupDebugPanel('Copied setup debug to clipboard.');
     }} catch (err) {{
       updateSetupDebugPanel('Clipboard copy failed. Select and copy the debug text below.');
+    }}
+  }}
+
+  async function runScannerDebugAnalysis() {{
+    const panel = $('wedge-debug-panel');
+    if (panel) {{ panel.classList.add('open'); panel.textContent = 'Running complete cached scanner analysis…'; }}
+    if (!P.reportServer) {{
+      if (panel) panel.textContent = 'Debug analysis requires a chart opened from the StockHelper report server.\n\n' + setupDebugSnapshot();
+      return;
+    }}
+    const technique = selectedJournalTechnique();
+    const scanner = technique === 'Kliny' ? 'wedge' : technique.toLowerCase();
+    try {{
+      const url = new URL('/fibo-dropout-analysis', P.reportServer);
+      url.searchParams.set('ticker', P.symbol || '');
+      url.searchParams.set('scanner', scanner);
+      // The server appends the complete cached OHLCV file. Keep the query small
+      // while preserving all calculated anchors, patterns, touches and metadata.
+      url.searchParams.set('context', setupDebugSnapshot().split('\nCSV candles since')[0]);
+      const response = await fetch(url);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || String(response.status));
+      if (panel) panel.textContent = data.codex_text || data.analysis || 'No analysis returned.';
+    }} catch (err) {{
+      if (panel) panel.textContent = `Debug analysis failed: ${{err.message}}\n\n${{setupDebugSnapshot()}}`;
     }}
   }}
 
@@ -2876,6 +2903,7 @@ class LightweightChartLevelSelectorUI:
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('setup-debug-btn').onclick = () => copySetupDebug();
+  $('scanner-analysis-btn').onclick = () => runScannerDebugAnalysis();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
   $('find-new-lower-wedge').onclick = () => findNewWedge('lower');

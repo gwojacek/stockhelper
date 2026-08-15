@@ -461,13 +461,33 @@ def main() -> int:
                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
                     )
                     analysis = (completed.stdout + ("\n" + completed.stderr if completed.stderr else "")).strip()
+                    symbol_variants = {
+                        ticker.lower(),
+                        ticker.lower().replace(".", "_"),
+                        ticker.lower().replace(".wa", "").replace(".us", "_us").replace(".de", "_de"),
+                    }
+                    csv_candidates = []
+                    csv_root = project_root / "data" / "csv"
+                    if csv_root.exists():
+                        csv_candidates = [
+                            path for path in csv_root.rglob("*.csv")
+                            if path.stem.lower() in symbol_variants
+                            or path.stem.lower().replace("_", ".") == ticker.lower()
+                        ]
+                    csv_path = max(csv_candidates, key=lambda path: path.stat().st_mtime, default=None)
+                    try:
+                        ohlc_csv = csv_path.read_text(encoding="utf-8", errors="replace") if csv_path else "CSV cache file not found."
+                    except OSError as exc:
+                        ohlc_csv = f"CSV cache could not be read: {exc}"
                     codex_text = (
                         f"Analyze and fix this StockHelper {scanner.title()} dropout if the scanner rejected a valid formation.\n"
                         f"Instrument: {ticker}\nPrevious dropout card: {context or '-'}\n"
                         f"Reproduction: {' '.join(command)}\nExit code: {completed.returncode}\n\n"
-                        f"FULL SCANNER REJECTION TRACE\n{'=' * 36}\n{analysis}"
+                        f"FULL SCANNER REJECTION TRACE\n{'=' * 36}\n{analysis}\n\n"
+                        f"SETUP INFORMATION / SAVED REPORT DATA\n{'=' * 37}\n{context or '-'}\n\n"
+                        f"FULL CACHED OHLCV DATA ({csv_path.relative_to(project_root) if csv_path else '-'})\n{'=' * 36}\n{ohlc_csv}"
                     )
-                    payload = {"ok": completed.returncode == 0, "ticker": ticker, "scanner": scanner, "analysis": analysis, "codex_text": codex_text, "exit_code": completed.returncode}
+                    payload = {"ok": completed.returncode == 0, "ticker": ticker, "scanner": scanner, "analysis": analysis, "codex_text": codex_text, "csv_path": str(csv_path or ""), "exit_code": completed.returncode}
                     # A non-zero scanner exit is itself useful diagnostic output;
                     # return the trace to the sidebar instead of hiding it behind
                     # an HTTP error response.
