@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
 import base64
-import os
+import html
 import json
+import os
 import socket
 import threading
 import time
 import webbrowser
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 import numpy as np
@@ -463,12 +464,15 @@ class LightweightChartLevelSelectorUI:
     def _html(self) -> str:
         payload = json.dumps(self._payload(), ensure_ascii=False)
         fallback_script = self._fallback_lightweight_charts_script()
+        chart_identity = self.source_name or self.symbol
+        if self.source_ticker:
+            chart_identity = f"{chart_identity} ({self.source_ticker})"
         return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>StockHelper Lightweight Chart - {self.symbol}</title>
+  <title>StockHelper Lightweight Chart - {html.escape(chart_identity)}</title>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   {fallback_script}
   <style>

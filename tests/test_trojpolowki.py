@@ -46,6 +46,14 @@ def test_scanner_report_instrument_labels_include_full_names_and_tickers():
     assert mod._report_instrument_label("COMMODITIES", "GOLD", {"GOLD": "ignored"}) == "GOLD"
     assert mod._report_instrument_label("US100", "UNKNOWN.US", {}) == "UNKNOWN.US"
 
+    row = mod.ScannerRow(
+        market="US100", scanner="FIBO", category="waiting", ticker="AAPL.US", status="waiting",
+        direction="long", dates={"start": "2026-01-02", "incline": "2026-01-02->2026-02-03"},
+    )
+    cell = mod._fibo_item(row)
+    assert "Apple (AAPL.US)" in cell
+    assert mod._fibo_board_cell_key(cell) == ("AAPL.US", "long", "2026-01-02")
+
 
 def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
     source = ast.parse(Path("scanner_search.py").read_text(encoding="utf-8"))
@@ -187,16 +195,16 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
     assert "✅ Pattern ≤14d / SL intact" in text
-    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
-    assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
-    assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
+    assert "**🇵🇱 TAURONPE (TPE) ↗️ (2026-03-23)**" in text
+    assert "**🇵🇱 ORANGEPL (OPL) ↗️ (2026-01-15)**" in text
+    assert "**🇵🇱 CYFRPLSAT (CPS) ↗️ (2026-03-23) 0.0%**" in text
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
-    assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
-    assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
-    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
-    assert text.count("**🇵🇱 TRN ↗️") == 1
-    assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
-    assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
+    assert text.count("**🇵🇱 GPW (GPW) ↗️ (2026-03-27) 14.5%**") == 1
+    assert text.index("**🇵🇱 ORANGEPL (OPL) ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
+    assert "**🇺🇸 American Electric Power (AEP.US) ↗️ (2026-01-05) 62.5%**" in text
+    assert text.count("**🇵🇱 TRANSPOL (TRN) ↗️") == 1
+    assert "**🇵🇱 TRANSPOL (TRN) ↗️ (2026-01-30) 92.7%**" in text
+    assert "**🇵🇱 TRANSPOL (TRN) ↗️ (2025-12-29) 91.6%**" not in text
     assert "CROSSED" not in text
     assert text.count("**🛢️ BRACOMP") == 2
     assert "**🛢️ BRACOMP ↘️ (2026-02-25) 45.3%**" in text
@@ -204,8 +212,8 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🛢️ BRACOMP ↘️ (2026-04-14) 22.5%**" not in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
-    assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)
-    assert not any("**🇵🇱 CPS" in cells[0] for cells in split_rows)
+    assert any("**🇵🇱 CYFRPLSAT (CPS)" in cells[1] for cells in split_rows)
+    assert not any("**🇵🇱 CYFRPLSAT (CPS)" in cells[0] for cells in split_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/trn)" in text
     assert "<!--fibo-end:2026-03-30-->" in text
@@ -859,8 +867,8 @@ def test_third_fibo_column_keeps_crossed_61_8_row_during_pattern_window(tmp_path
         ),
     ]
     text = mod._write_trojpolowki_fibo(rows, tmp_path, datetime(2026, 7, 24, 9, 0, 0)).read_text(encoding="utf-8")
-    assert "JSW ↗️" in text
-    assert "TTWO.US ↗️" in text
+    assert "JSW (JSW) ↗️" in text
+    assert "Take-Two Interactive (TTWO.US) ↗️" in text
 
 
 def test_fibo_scan_avoids_duplicate_and_reduces_broad_offset_work():
@@ -918,13 +926,13 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
-    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>Kijun: under" in text
+    assert "**🇵🇱 CREOTECH (CRI) ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇩🇪 HelloFresh (HFG.DE) 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>Kijun: under" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
-    assert "**🇺🇸 MSFT.US (2.0m)**" in text
+    assert "**🇺🇸 Microsoft (MSFT.US) (2.0m)**" in text
     assert "🏷️ touched cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
-    assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
+    assert "**🇩🇪 RWE (RWE.DE) 🔁 retest (4.0m)**" in text
     assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
     assert "**🇩🇪 BEAR.DE (0.0m)**" in text
     assert "🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
@@ -934,12 +942,12 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     lines = text.splitlines()
     data_rows = [line for line in lines if line.startswith("| ") and not line.startswith("|---")][1:]
     assert "**🇩🇪 BEAR.DE" in data_rows[0]
-    assert any("**🇩🇪 RWE.DE" in row for row in data_rows)
-    assert "**🇺🇸 MSFT.US" in text
-    assert "**🇵🇱 CRI" in data_rows[0]
+    assert any("**🇩🇪 RWE (RWE.DE)" in row for row in data_rows)
+    assert "**🇺🇸 Microsoft (MSFT.US)" in text
+    assert "**🇵🇱 CREOTECH (CRI)" in data_rows[0]
     assert "**🇵🇱 ABC" in text
     assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
-    assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇺🇸 Amgen (AMGN.US) ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
     assert "**🇺🇸 LONG.US (8.0m)**<br>🏷️ inside cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
     assert text.count("**🛢️ GOLD") == 1
     assert "**🛢️ GOLD ↘️ short (7.0m)**<br>🏷️ below cloud<br>Kijun: touched" in text
@@ -1090,9 +1098,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'>" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
-    assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 LIN\.US", text)
+    assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 Linde \(LIN\.US\)", text)
     assert "data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long' class='today-signal'" in text
-    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE.DE" in text
+    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE (RWE.DE)" in text
     assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'><strong>🇺🇸 VAL.US" in text
     assert "data-scanner='FIBO' data-troj-direction='long' class='today-signal'" in text
     assert "AEP.US" in text and "bullish_hammer" in text
