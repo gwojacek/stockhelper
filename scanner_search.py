@@ -211,7 +211,7 @@ ETFS_MARKET = [
     ("Listed Index Fund TOPIX", "1308.JP"), ("Invesco S&P 500 Equal Weight", "RSP.US"), ("iFreeETF TOPIX", "1305.JP"),
     ("iShares Core S&P Total U.S. Market", "ITOT.US"), ("iShares Russell 1000 Value", "IWD.US"), ("Vanguard High Dividend Yield", "VYM.US"),
     ("Vanguard Small-Cap ETF", "VB.US"), ("Vanguard Total International Bond", "BNDX.US"), ("iShares Russell 2000", "IWM.US"),
-    ("Vanguard Total World Stock", "VT.US"), ("iShares MSCI EAFE", "EFA.US"), ("iShares S&P 500 Growth", "IVW.US"),
+    ("Vanguard Total World Stock", "VT.US"), ("iShares MSCI EAFE ETF", "EFA.US"), ("iShares S&P 500 Growth", "IVW.US"),
     ("Schwab U.S. Large-Cap", "SCHX.US"), ("Yuanta Taiwan Top 50", "0050.TW"), ("VanEck Semiconductor ETF", "SMH.US"),
     ("Vanguard FTSE All-World ex-US", "VEU.US"), ("Schwab International Equity", "SCHF.US"), ("Vanguard Intermediate Corporate Bond", "VCIT.US"),
     ("iShares Gold Trust", "IAU.US"), ("Schwab U.S. Large-Cap Growth", "SCHG.US"),

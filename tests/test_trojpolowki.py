@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ast
+import csv
 import importlib.machinery
 import importlib.util
-import csv
 import itertools
+import json
 import re
 import statistics
 import sys
@@ -22,6 +24,7 @@ def load_run_module():
     loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
+    scanner.ETFS_MARKET = [("iShares MSCI EAFE ETF", "EFA.US")]
     sys.modules["chart_program.instrument_detector"] = detector
     sys.modules["chart_program.chart_loader"] = loader_mod
     sys.modules["scanner_search"] = scanner
@@ -32,6 +35,41 @@ def load_run_module():
     sys.modules[loader.name] = module
     loader.exec_module(module)
     return module
+
+
+def test_scanner_report_instrument_labels_include_full_names_and_tickers():
+    mod = load_run_module()
+
+    assert mod._report_instrument_label("WIG", "KGH", {"KGH.WA": "KGHM"}) == "KGHM (KGH)"
+    assert mod._report_instrument_label("ETFS", "EFA.US", {"EFA.US": "iShares MSCI EAFE ETF"}) == "iShares MSCI EAFE ETF (EFA.US)"
+    assert mod._report_instrument_label("FOREX", "EURUSD", {"EURUSD": "ignored"}) == "EURUSD"
+    assert mod._report_instrument_label("COMMODITIES", "GOLD", {"GOLD": "ignored"}) == "GOLD"
+    assert mod._report_instrument_label("US100", "UNKNOWN.US", {}) == "UNKNOWN.US"
+
+
+def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
+    source = ast.parse(Path("scanner_search.py").read_text(encoding="utf-8"))
+    universes = {}
+    for node in source.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in {
+                "WIG_SEARCH_TICKERS", "DAX40_SEARCH_TICKERS", "NDX100_SEARCH_TICKERS", "ETFS_MARKET"
+            }:
+                universes[target.id] = ast.literal_eval(node.value)
+
+    registry = json.loads(Path("data/instrument_names.json").read_text(encoding="utf-8"))
+    etf_names = {ticker.upper(): name for name, ticker in universes["ETFS_MARKET"]}
+    registry.update(etf_names)
+    expected = {
+        *(f"{ticker}.WA" for ticker in universes["WIG_SEARCH_TICKERS"]),
+        *universes["DAX40_SEARCH_TICKERS"],
+        *universes["NDX100_SEARCH_TICKERS"],
+        *(ticker for _name, ticker in universes["ETFS_MARKET"]),
+    }
+
+    assert expected <= registry.keys()
 
 
 def test_report_launcher_protocol_matches_report_server():
@@ -1030,15 +1068,15 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th>" in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 3
-    assert "<b>SBUX.US</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text
+    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text
     fibo_one_start = text.index("WYNIKI FIBO #1 (Waiting")
     fibo_one_end = text.index("</table>", fibo_one_start)
     fibo_one_html = text[fibo_one_start:fibo_one_end]
-    assert fibo_one_html.index("<b>AEP.US</b>") < fibo_one_html.index("<b>RWE.DE</b>") < fibo_one_html.index("<b>EARLY.DE</b>")
+    assert fibo_one_html.index("<b>American Electric Power (AEP.US)</b>") < fibo_one_html.index("<b>RWE (RWE.DE)</b>") < fibo_one_html.index("<b>EARLY.DE</b>")
     ichi_one_start = text.index("WYNIKI 1 ICHIMOKU")
     ichi_one_end = text.index("</table>", ichi_one_start)
     ichi_one_html = text[ichi_one_start:ichi_one_end]
-    assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>ENR.DE</b>")
+    assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>Siemens Energy (ENR.DE)</b>")
     assert "data-status='⚪ above' class='today-signal'" in ichi_one_html
     assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
     assert "Latest Retest status</th>" not in text
@@ -1075,8 +1113,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
-    assert "<b>CRI</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
-    assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
+    assert "<b>CREOTECH (CRI)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
+    assert "<b>Siemens Energy (ENR.DE)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
     assert "<span class='ichi-status-label'>last:</span>" not in text
@@ -1129,7 +1167,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
+    assert "<strong>🇺🇸 Starbucks (SBUX.US)</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
     assert "class='choice-reason choice-reason-wedge'" in text
     assert "<i>◆</i>Falling wedge" in text
