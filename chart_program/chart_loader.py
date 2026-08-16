@@ -35,6 +35,7 @@ YAHOO_RECENT_CANDLE_REBASE_THRESHOLD = 2
 
 DATA_DIR_BY_INSTRUMENT = {
     "stock": CSV_DATA_DIR / "stocks",
+    "etf": CSV_DATA_DIR / "etfs",
     "commodity": CSV_DATA_DIR / "commodities",
     "index": CSV_DATA_DIR / "indexes",
     "forex": CSV_DATA_DIR / "forex",
@@ -222,7 +223,7 @@ def _humanize_symbol(symbol: str) -> str:
 
 
 def _best_effort_display_name(symbol: str, instrument_type: str, source_symbol: str | None) -> str | None:
-    if instrument_type == "stock":
+    if instrument_type in {"stock", "etf"}:
         return None
     try:
         import yfinance as yf
@@ -424,7 +425,7 @@ def _yahoo_download_window(
             except Exception:
                 pass
             display_name = None
-            if instrument_type == "stock":
+            if instrument_type in {"stock", "etf"}:
                 try:
                     info = ticker.info if hasattr(ticker, "info") else {}
                     display_name = info.get("longName") or info.get("shortName")
@@ -665,7 +666,7 @@ def _stooq_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
     cleaned = symbol.strip().lower().replace("/", "")
 
     candidates: list[str] = []
-    if instrument_type == "stock":
+    if instrument_type in {"stock", "etf"}:
         if "." in cleaned:
             left, right = cleaned.split(".", 1)
             candidates.append(f"{left}.{right}")
@@ -1145,8 +1146,8 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         return df, "yahoo", candidate, display_name, "Yahoo forced by --data-source yahoo."
     csv_path_ref = local_csv_path_for_symbol(symbol, instrument_type)
     older_days, older_anchor = _older_fetch_plan(csv_path_ref, instrument_type) if fetch_older_data else (364, None)
-    if instrument_type == "stock":
-        if _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
+    if instrument_type in {"stock", "etf"}:
+        if instrument_type == "stock" and _is_stock_like_wig_symbol(symbol) and not fetch_older_data:
             return _stock_local_cache_or_yahoo_download(symbol, csv_path_ref)
         df, candidate, display_name = _yahoo_download(symbol, instrument_type)
         return df, "yahoo", candidate, display_name, "Yahoo used as primary source for non-Warsaw-stock data."
@@ -1514,6 +1515,6 @@ def load_or_update_daily_data(
         preferred_stooq_symbol = COMMODITY_STOOQ_MAP.get(canonical_symbol)
         if preferred_stooq_symbol and not _is_index_like_commodity(canonical_symbol):
             display_symbol = preferred_stooq_symbol.upper()
-    elif instrument_type == "stock":
+    elif instrument_type in {"stock", "etf"}:
         display_name = source_name or symbol.upper()
     return merged, csv_path, {"source": source, "symbol": display_symbol, "name": display_name, "fallback_reason": fallback_reason}

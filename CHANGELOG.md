@@ -6,7 +6,7 @@ The project currently documents release tags `1.0` through `7.5`, plus unrelease
 
 ## [Unreleased]
 
-- Added a 50-instrument ETFs and funds scanner market, preserving the supplied international Yahoo tickers and fetching the market through Yahoo Finance.
+- Added a 50-instrument ETF scanner market to allsearch, preserving the supplied international Yahoo tickers, fetching directly through Yahoo Finance, and storing its candles separately under `data/csv/etfs/`.
 
 Compare: [`7.5...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.5...HEAD)
 

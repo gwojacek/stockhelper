@@ -33,7 +33,7 @@ Use this table as the fastest path to the commands you will run most often. The 
 | Prepare PDF journal | `stock --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
 | Run Ichimoku scan | `stock -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
 | Run Fibonacci scan | `stock -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
-| Scan ETFs and funds | `stock -ichimoku_search etfs` | Scans the built-in 50-instrument ETF/fund market using its exact Yahoo Finance tickers and Yahoo-primary data. |
+| Scan ETFs | `stock -ichimoku_search etfs` | Scans the built-in 50-instrument ETF market using exact Yahoo Finance tickers and a dedicated `data/csv/etfs/` cache. The `all` scope includes this market. |
 | Build combined report | `stock -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
 | Scan candlestick patterns | `stock -pattern_search forex` | Independently checks every enumerated candlestick detector over the latest 10 candles and writes an iconed hit/audit report; add `--pattern morning_star` to search for only one formation. |
 | Reopen combined report | `stock --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
@@ -84,7 +84,7 @@ Normal output is kept minimal: one captcha/consent line per symbol and page prog
   - Yahoo fresh-candle merges into Stooq/local bases for Warsaw stocks, WIG20, and selected commodities;
   - Stooq bulk `d_pl_txt` refresh for Warsaw/WIG stock CSVs from the archive `wse stocks` txt folder, automatically trimmed to two years from the run date;
   - Stooq bulk `wse indices/wig20.txt` import as `data/csv/commodities/WIG20.csv` (other WSE index txt files are intentionally ignored);
-  - local CSV cache in `data/csv/stocks/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
+  - local CSV cache in `data/csv/stocks/`, `data/csv/etfs/`, `data/csv/forex/`, `data/csv/commodities/`, and `data/state/indices/`.
 - **Ichimoku cloud scanner** for WIG, DAX/DAX40, Nasdaq-100/US100, forex, commodities, or a single instrument, with breakout/retest metadata forwarded into chart Setup information and direction-aware breakout highlights anchored to the first close beyond the cloud.
 - **Fibonacci formation scanner** with long setups across supported markets and mirrored short setup search for forex, commodities, DAX40, and US100; movable early/23.6/61.8 lifecycle states; one-, two-, and three-candle reversal windows in which any pattern candle may touch 61.8; confirming-candle pattern dates; independent/new-high and extended-base re-anchoring; saved chart-anchor overrides that are recalculated by the scanner and expire after two invalid weeks; robust sideways/stale-cycle handling; and an explain/debug mode.
 - **Scanner candle-pattern checks** for hammer/shooting-star style one-candle rejections, engulfing, harami, piercing-line/dark-cloud-cover, and morning/evening star variants used by Ichimoku retests and Fibo 61.8 reversals.
@@ -603,7 +603,7 @@ stock -ichimoku_search wig
 **Important scopes:**
 
 ```text
-wig, dax, dax40, ndx, ndx100, us100, forex, commodities, indexes, etfs, funds, single, all
+wig, dax, dax40, ndx, ndx100, us100, forex, commodities, indexes, etfs, single, all
 ```
 
 **Output files created:**

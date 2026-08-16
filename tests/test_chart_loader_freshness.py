@@ -721,12 +721,12 @@ def test_commodity_search_uses_canonical_metal_names():
     assert scanner._search_fetch_symbol("PALLADIUM", "commodities", None) == ("PALLADIUM", "commodity")
 
 
-def test_etfs_funds_market_uses_exact_yahoo_tickers():
+def test_etfs_market_uses_exact_yahoo_tickers_and_cache_folder():
     import scanner_search as scanner
 
     group, members, source, suffix = scanner._get_members("etfs")
 
-    assert group == "etfs_funds"
+    assert group == "etfs"
     assert source == "Yahoo Finance"
     assert suffix is None
     assert len(members) == 50
@@ -734,9 +734,32 @@ def test_etfs_funds_market_uses_exact_yahoo_tickers():
     assert members[0] == "VOO"
     assert members[-1] == "SCHG"
     assert {"1306.T", "CSPX.L", "IWDA.L", "0050.TW"} <= set(members)
-    assert scanner._get_members("funds")[1] == members
-    assert scanner._search_fetch_symbol("VOO", group, suffix) == ("VOO", "stock")
-    assert scanner._search_fetch_symbol("1306.T", group, suffix) == ("1306.T", "stock")
+    assert scanner._search_fetch_symbol("VOO", group, suffix) == ("VOO", "etf")
+    assert scanner._search_fetch_symbol("1306.T", group, suffix) == ("1306.T", "etf")
+
+    from chart_program.chart_loader import local_csv_path_for_symbol
+    assert local_csv_path_for_symbol("VOO", "etf").as_posix().endswith("data/csv/etfs/VOO.csv")
+
+
+def test_etf_remote_download_is_yahoo_primary(monkeypatch):
+    from chart_program import chart_loader as loader
+
+    expected = pd.DataFrame(
+        [{"Date": "2026-08-14", "Open": 1, "High": 2, "Low": 0.5, "Close": 1.5, "Volume": 100}]
+    )
+    calls = []
+
+    def fake_yahoo(symbol, instrument_type):
+        calls.append((symbol, instrument_type))
+        return expected, symbol, "Vanguard S&P 500 ETF"
+
+    monkeypatch.setattr(loader, "_yahoo_download", fake_yahoo)
+    frame, source, symbol, name, reason = loader._download_remote("VOO", "etf")
+
+    assert frame is expected
+    assert (source, symbol, name) == ("yahoo", "VOO", "Vanguard S&P 500 ETF")
+    assert "Yahoo used as primary source" in reason
+    assert calls == [("VOO", "etf")]
 
 
 def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):

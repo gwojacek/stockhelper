@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 CONFIG_SUBDIR_BY_INSTRUMENT = {
     "stock": "stocks",
+    "etf": "etfs",
     "commodity": "commodities",
     "forex": "forex",
 }
@@ -25,7 +26,7 @@ def _build_template(instrument_type: str, values: dict) -> str:
     risk_levels = values.get("risk_levels", DEFAULT_RISK_LEVELS)
     filename = values.get("filename", "")
 
-    if instrument_type == "stock":
+    if instrument_type in {"stock", "etf"}:
         symbol = (values.get("symbol") or "").upper()
         include_fee_fields = not (symbol.endswith(".WA") or symbol.endswith(".PL"))
         fee_lines = ""
@@ -54,7 +55,7 @@ class TradingConfig:
     name: str = "{values["name"]}"
     symbol: str = "{values["symbol"]}"
     market_data_source: str = "{values.get("market_data_source", "auto")}"
-    instrument_type: str = "stock"
+    instrument_type: str = "{instrument_type}"
 {fee_lines}    capital: float = {values.get("capital", 0)}
     entry: float = {values["entry"]}
     stop_loss: float = {values["stop_loss"]}

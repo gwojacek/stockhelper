@@ -1145,10 +1145,20 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
 
 def test_allsearch_all_scopes_include_indexes():
     mod = load_run_module()
-    assert mod.DEFAULT_ALLSEARCH_SCOPES == ["wig", "dax", "us100", "forex", "commodities", "indexes"]
+    assert mod.DEFAULT_ALLSEARCH_SCOPES == ["wig", "dax", "us100", "forex", "commodities", "indexes", "etfs"]
     assert mod._allsearch_report_stem(mod.DEFAULT_ALLSEARCH_SCOPES) == "allsearch_latest_all"
     assert mod._scope_file_keys("indices") == ["indexes", "indices", "index"]
     assert "📊 INDEXES" == mod._scope_label("indexes")
+    assert "📈 ETFS" == mod._scope_label("etfs")
+
+
+def test_etf_report_chart_uses_etf_cache_instrument():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="ETFS", scanner="ICHIMOKU", category="position", ticker="VOO", status="above"
+    )
+
+    assert mod._chart_command_for_row(row).startswith("python run -c VOO --instrument etf ")
 
 
 def test_open_existing_allsearch_report_refreshes_html_before_serving(tmp_path: Path):

@@ -51,7 +51,7 @@ ALL_REPORT_DIR = PROJECT_ROOT / "chart_program" / "data" / "all_insturments_sear
 
 TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
 
-DEFAULT_ALLSEARCH_SCOPES = ["wig", "dax", "us100", "forex", "commodities", "indexes"]
+DEFAULT_ALLSEARCH_SCOPES = ["wig", "dax", "us100", "forex", "commodities", "indexes", "etfs"]
 JOURNAL_HTML = PROJECT_ROOT / "data" / "journal" / "transactions.html"
 
 
@@ -179,14 +179,15 @@ def _chart_command_for_row(row: ScannerRow) -> str:
             ticker_cmd = str(mapped).upper()
     elif market == "WIG" and "." not in ticker_cmd and len(ticker_cmd) <= 5:
         ticker_cmd = f"{ticker_cmd}.WA"
-    instrument = "stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market in {"COMMODITIES", "INDEXES"} else "stock"))
+    instrument = "etf" if market == "ETFS" else ("stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market in {"COMMODITIES", "INDEXES"} else "stock")))
+    instrument_arg = " --instrument etf" if instrument == "etf" else ""
     def _append_optional(cmd: str, flag: str, value: str | None) -> str:
         text = str(value or "").strip()
         if not text or text == "-":
             return cmd
         return f"{cmd} {flag} {shlex.quote(text)}"
     if row.scanner == "ICHIMOKU":
-        cmd = f"python run -c {ticker_cmd} --ichimoku-mode on"
+        cmd = f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode on"
         cmd = _append_optional(cmd, "--scanner-breakout-date", row.dates.get("flip_date") or row.dates.get("start_date"))
         cmd = _append_optional(cmd, "--scanner-breakout-direction", _ichimoku_breakout_direction(row))
         retest_count = str(row.metrics.get("retest_count") or row.metrics.get("latest_retest_count") or "").strip()
@@ -204,7 +205,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         cmd = _append_optional(cmd, "--scanner-previous-respect-months", row.metrics.get("previous_respect_months"))
         return cmd
     if row.scanner == "WEDGE":
-        cmd = f"python run -c {ticker_cmd}"
+        cmd = f"python run -c {ticker_cmd}{instrument_arg}"
         for arg_name, key in [("--wedge-upper-start", "upper_start"), ("--wedge-upper-end", "upper_end"), ("--wedge-lower-start", "lower_start"), ("--wedge-lower-end", "lower_end")]:
             value = (row.metrics.get(key, "") or "").strip()
             if value:
@@ -227,9 +228,9 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
-        return f"python run -c {ticker_cmd} --ichimoku-mode off --fibo-lines 5{pattern_args}"
-    return f"python run -c {ticker_cmd}"
+                return f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
+        return f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode off --fibo-lines 5{pattern_args}"
+    return f"python run -c {ticker_cmd}{instrument_arg}"
 
 
 def _command_option(command: str, option: str) -> str:
@@ -255,7 +256,7 @@ def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
 
 def _scope_label(scope: str) -> str:
     s = scope.upper()
-    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️", "INDEXES": "📊"}
+    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️", "INDEXES": "📊", "ETFS": "📈"}
     return f"{flags.get(s, '📊')} {s}"
 
 def _liquidity_legend_html() -> str:
@@ -598,6 +599,7 @@ def _scope_file_keys(scope: str) -> list[str]:
         "forex": ["forex", "fx"],
         "commodities": ["commodities", "commodity"],
         "indexes": ["indexes", "indices", "index"],
+        "etfs": ["etfs", "etf"],
         "indices": ["indexes", "indices", "index"],
         "index": ["indexes", "indices", "index"],
     }
@@ -3168,7 +3170,9 @@ def _expected_scope_csv_paths(scope: str) -> list[Path]:
         return []
     out: list[Path] = []
     for ticker in members:
-        if group == "forex":
+        if group == "etfs":
+            instrument = "etf"
+        elif group == "forex":
             instrument = "forex"
         elif group in {"commodities", "indexes"}:
             instrument = "commodity"
@@ -3198,7 +3202,7 @@ def _retry_missing_scope_csvs_once(scope: str) -> bool:
         from chart_program.chart_loader import load_or_update_daily_data
         for p in missing:
             parent = p.parent.name
-            instrument = "commodity" if parent in {"commodities", "indexes"} else ("forex" if parent == "forex" else "stock")
+            instrument = "commodity" if parent in {"commodities", "indexes"} else ("forex" if parent == "forex" else ("etf" if parent == "etfs" else "stock"))
             symbol = p.stem.replace("_", ".")
             load_or_update_daily_data(symbol=symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
     except Exception as exc:
@@ -3417,6 +3421,7 @@ def main()->int:
     parser.add_argument('--journal-pdf', action='store_true', help='Open the transaction journal HTML and use the PDF button/print dialog to save it as PDF.')
     parser.add_argument('-explain',dest='fibo_explain_target'); parser.add_argument('-d','--search-debug',action='store_true'); parser.add_argument('target',nargs='?'); parser.add_argument('chart_modifier', nargs='?', choices=['cfd', 'CFD'], help='Use after -c target to open a stock as CFD/commodity mode.')
     parser.add_argument('-c','--chart',action='store_true'); parser.add_argument('--debug-stooq',dest='debug_stooq'); parser.add_argument('--debug-stooq-fetch',action='store_true',help='When used with --debug-stooq, merge fetched visible Stooq rows into the matching commodity CSV.'); parser.add_argument('-inspector','--inspector',action='store_true')
+    parser.add_argument('--instrument', choices=['stock', 'etf', 'commodity', 'forex'], help='Force chart instrument type.')
     parser.add_argument('--ichimoku-mode', choices=['on', 'off'], default='off')
     parser.add_argument('--scanner-breakout-date')
     parser.add_argument('--scanner-breakout-direction')
@@ -3827,6 +3832,8 @@ def main()->int:
                 cmd.extend(['--instrument', instrument_type])
         else:
             cmd=[sys.executable,'-m','chart_program',target]
+            if args.instrument:
+                cmd.extend(['--instrument', args.instrument])
         if args.ichimoku_mode:
             cmd.extend(['--ichimoku-mode', args.ichimoku_mode])
         for flag, value in [
