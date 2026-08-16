@@ -1017,6 +1017,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "function techniqueFor(el)" in text
     assert "One favorite instrument may appear in several technique groups" in text
     assert "data-ticker='RWE.DE'" in text
+    assert "⚠️ Names still needed" not in text
+    assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
+    assert "td.chart-action-cell{text-align:right}" in text
+    assert "<th>Expected date</th><th>stockhelper_chart</th></tr>" in text
+    assert "<td>2026-05-30</td><td class='chart-action-cell'>" in text
     assert "📄 PDF" in text
     assert "📄 Download PDF" not in text
     assert 'onclick="downloadPdfReport()"' in text
@@ -1168,7 +1173,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th>" in text
     assert "<th>Score</th><th>Avg10d PLN</th>" not in text
     assert "<th>Dir</th><th>Avg10d PLN</th>" in text
-    assert ".top-choice .chart-action-cell{width:68px;min-width:68px;max-width:68px}" in text
+    assert ".top-choice .chart-action-cell{width:82px;min-width:82px;max-width:82px}" in text
     assert "1.000.000" in text
     assert "copyNextTableSheetsCells" in text
     assert "Copy Google Sheets links from this table" in text
