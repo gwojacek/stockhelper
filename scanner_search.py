@@ -93,6 +93,7 @@ GROUP_MARKET_DATA_RULES: dict[str, str] = {
     "COMMODITIES": "commodity_market",
     "FOREX": "forex_market",
     "INDEXES": "commodity_market",
+    "ETFS_FUNDS": "stock_market_generic",
 }
 
 
@@ -192,6 +193,30 @@ INDEXES_SEARCH_TICKERS = [
     "SG20CASH", "AU200.CASH", "CHN.CASH", "JP225", "WIG20", "UK100",
     "ITA40", "DE40", "FRA40", "NED25", "SUI20", "SPA35", "EU50",
 ]
+
+# Exchange-qualified Yahoo symbols are kept verbatim.  This market deliberately
+# bypasses StockHelper's normal bare-stock ``.WA`` inference and is downloaded
+# through the Yahoo-primary stock route in chart_loader.
+ETFS_FUNDS_MARKET = [
+    ("Vanguard S&P 500 ETF", "VOO"), ("iShares Core S&P 500 ETF", "IVV"), ("SPDR S&P 500 ETF Trust", "SPY"),
+    ("Vanguard Total Stock Market ETF", "VTI"), ("Invesco QQQ", "QQQ"), ("Vanguard FTSE Developed Markets", "VEA"),
+    ("Vanguard Growth ETF", "VUG"), ("NEXT FUNDS TOPIX ETF", "1306.T"), ("iShares Core MSCI EAFE", "IEFA"),
+    ("Vanguard Value ETF", "VTV"), ("SPDR Portfolio S&P 500", "SPYM"), ("Vanguard Total International Stock", "VXUS"),
+    ("Vanguard Total Bond Market", "BND"), ("iShares Core MSCI Emerging Markets", "IEMG"), ("iShares Core S&P 500 UCITS", "CSPX.L"),
+    ("Vanguard Information Technology", "VGT"), ("iShares Core MSCI World UCITS", "IWDA.L"), ("SPDR Gold Shares", "GLD"),
+    ("iShares Core U.S. Aggregate Bond", "AGG"), ("iShares Russell 1000 Growth", "IWF"), ("iShares Core S&P Mid-Cap", "IJH"),
+    ("Vanguard FTSE Emerging Markets", "VWO"), ("Technology Select Sector SPDR", "XLK"), ("Vanguard Dividend Appreciation", "VIG"),
+    ("NEXT FUNDS Nikkei 225 ETF", "1321.T"), ("iShares Core S&P Small-Cap", "IJR"), ("Vanguard Mid-Cap ETF", "VO"),
+    ("Schwab U.S. Dividend Equity", "SCHD"), ("Invesco NASDAQ 100 ETF", "QQQM"), ("iShares 0-3 Month Treasury Bond", "SGOV"),
+    ("Listed Index Fund TOPIX", "1308.T"), ("Invesco S&P 500 Equal Weight", "RSP"), ("iFreeETF TOPIX", "1305.T"),
+    ("iShares Core S&P Total U.S. Market", "ITOT"), ("iShares Russell 1000 Value", "IWD"), ("Vanguard High Dividend Yield", "VYM"),
+    ("Vanguard Small-Cap ETF", "VB"), ("Vanguard Total International Bond", "BNDX"), ("iShares Russell 2000", "IWM"),
+    ("Vanguard Total World Stock", "VT"), ("iShares MSCI EAFE", "EFA"), ("iShares S&P 500 Growth", "IVW"),
+    ("Schwab U.S. Large-Cap", "SCHX"), ("Yuanta Taiwan Top 50", "0050.TW"), ("VanEck Semiconductor ETF", "SMH"),
+    ("Vanguard FTSE All-World ex-US", "VEU"), ("Schwab International Equity", "SCHF"), ("Vanguard Intermediate Corporate Bond", "VCIT"),
+    ("iShares Gold Trust", "IAU"), ("Schwab U.S. Large-Cap Growth", "SCHG"),
+]
+ETFS_FUNDS_SEARCH_TICKERS = [ticker for _name, ticker in ETFS_FUNDS_MARKET]
 
 WIG_SEARCH_TICKERS = [
     "EBP","PKO","MBK","OPL","PEO","CEZ","GTN","GTC","AGO","KGH","PXM","PKN","CPS","BIO","ACP","MIL","ENA","ECH","EUR","PGE",
@@ -1408,7 +1433,7 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
     fetch_symbol = ticker
     if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
         fetch_symbol = f"{ticker}{exchange_suffix}"
-    if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+    if instrument == "stock" and group_name != "etfs_funds" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
     if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
         fetch_symbol = str(COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol)).upper()
@@ -2236,6 +2261,8 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         return "forex", _members_from_configs("forex"), "configs", None
     if normalized in {"indexes", "indices", "index"}:
         return "indexes", INDEXES_SEARCH_TICKERS, "commodity maps", None
+    if normalized in {"etfs", "etf", "funds", "etfs_funds", "etfs-funds"}:
+        return "etfs_funds", ETFS_FUNDS_SEARCH_TICKERS, "Yahoo Finance", None
 
     if INDEX_MEMBERS_FILE.exists():
         payload = json.loads(INDEX_MEMBERS_FILE.read_text(encoding="utf-8"))
@@ -2668,7 +2695,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
     if instrument == "stock" and exchange_suffix and not ticker.endswith(exchange_suffix.upper()):
         fetch_symbol = f"{ticker}{exchange_suffix}"
         display_symbol = fetch_symbol
-    elif instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+    elif instrument == "stock" and group_name != "etfs_funds" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         # Keep single Warsaw-stock scans aligned with the refresh probe and CSV
         # path logic. Without this, e.g. -allsearch xtb probes/refreshes XTB.WA
         # but the scan itself loads/persists XTB.csv, leaving XTB_WA.csv stale.
@@ -6157,7 +6184,7 @@ def run_fibo_search(target: str) -> int:
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
-        if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+        if instrument == "stock" and group_name != "etfs_funds" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
@@ -6498,7 +6525,7 @@ def run_fibo_search(target: str) -> int:
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
-        if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+        if instrument == "stock" and group_name != "etfs_funds" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
             fetch_symbol = f"{fetch_symbol}.WA"
         if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
@@ -6641,7 +6668,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
-    if instrument == "stock" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
+    if instrument == "stock" and group_name != "etfs_funds" and "." not in fetch_symbol and len(fetch_symbol) <= 5:
         fetch_symbol = f"{fetch_symbol}.WA"
     if instrument == "commodity" and group_name != "indexes" and ticker.upper() not in API_METAL_COMMODITIES:
         fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()

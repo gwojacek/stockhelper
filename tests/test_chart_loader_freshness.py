@@ -721,6 +721,24 @@ def test_commodity_search_uses_canonical_metal_names():
     assert scanner._search_fetch_symbol("PALLADIUM", "commodities", None) == ("PALLADIUM", "commodity")
 
 
+def test_etfs_funds_market_uses_exact_yahoo_tickers():
+    import scanner_search as scanner
+
+    group, members, source, suffix = scanner._get_members("etfs")
+
+    assert group == "etfs_funds"
+    assert source == "Yahoo Finance"
+    assert suffix is None
+    assert len(members) == 50
+    assert len(set(members)) == 50
+    assert members[0] == "VOO"
+    assert members[-1] == "SCHG"
+    assert {"1306.T", "CSPX.L", "IWDA.L", "0050.TW"} <= set(members)
+    assert scanner._get_members("funds")[1] == members
+    assert scanner._search_fetch_symbol("VOO", group, suffix) == ("VOO", "stock")
+    assert scanner._search_fetch_symbol("1306.T", group, suffix) == ("1306.T", "stock")
+
+
 def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):
     from utilities.stooq_playwright import trim_wig_stock_csvs
 

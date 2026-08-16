@@ -33,6 +33,7 @@ Use this table as the fastest path to the commands you will run most often. The 
 | Prepare PDF journal | `stock --journal-pdf` | Opens the journal HTML and prompts you to use the browser/PDF button to save it as PDF. |
 | Run Ichimoku scan | `stock -ichimoku_search wig` | Scans a market group and writes an Ichimoku Markdown report. |
 | Run Fibonacci scan | `stock -fibo_search wig` | Scans a market group and writes a Fibonacci Markdown report. |
+| Scan ETFs and funds | `stock -ichimoku_search etfs` | Scans the built-in 50-instrument ETF/fund market using its exact Yahoo Finance tickers and Yahoo-primary data. |
 | Build combined report | `stock -allsearch all` | Runs scanners, refreshes latest candles, creates combined Markdown/HTML reports, and auto-opens the local HTML report URL. |
 | Scan candlestick patterns | `stock -pattern_search forex` | Independently checks every enumerated candlestick detector over the latest 10 candles and writes an iconed hit/audit report; add `--pattern morning_star` to search for only one formation. |
 | Reopen combined report | `stock --open-allsearch-report all` | Opens the latest existing HTML all-search report in a new browser window. |
@@ -602,7 +603,7 @@ stock -ichimoku_search wig
 **Important scopes:**
 
 ```text
-wig, dax, dax40, ndx, ndx100, us100, forex, commodities, indexes, single, all
+wig, dax, dax40, ndx, ndx100, us100, forex, commodities, indexes, etfs, funds, single, all
 ```
 
 **Output files created:**
@@ -617,6 +618,7 @@ wig, dax, dax40, ndx, ndx100, us100, forex, commodities, indexes, single, all
 stock -ichimoku_search all
 stock -ichimoku_search commodities
 stock -ichimoku_search forex
+stock -ichimoku_search etfs
 STOCKHELPER_DEBUG_SYMBOL=XTB.WA stock -ichimoku_search wig
 ```
 
