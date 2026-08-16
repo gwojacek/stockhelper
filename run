@@ -256,7 +256,7 @@ def _section_banner(name: str, width: int = 84, fill: str = "=") -> str:
 
 def _scope_label(scope: str) -> str:
     s = scope.upper()
-    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️", "INDEXES": "📊", "ETFS": "📈"}
+    flags = {"WIG": "🇵🇱", "DAX": "🇩🇪", "US100": "🇺🇸", "FOREX": "💱", "COMMODITIES": "🛢️", "INDEXES": "📊", "ETFS": "🧺"}
     return f"{flags.get(s, '📊')} {s}"
 
 def _liquidity_legend_html() -> str:
@@ -1057,6 +1057,8 @@ def _parse_markdown_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
 def _market_icon(scope: str, ticker: str = "") -> str:
     scope_n = (scope or "").strip().lower()
     ticker_u = (ticker or "").upper()
+    if scope_n in {"etf", "etfs"}:
+        return "🧺"
     if ticker_u.endswith(".WA"):
         return "🇵🇱"
     if ticker_u.endswith(".DE"):

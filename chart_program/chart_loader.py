@@ -316,6 +316,12 @@ def _yahoo_symbol_candidates(symbol: str, instrument_type: str) -> list[str]:
         if cleaned.endswith(".F") and "=" not in cleaned:
             candidates.append(cleaned.replace(".F", "=F"))
         candidates.append(cleaned)
+    elif instrument_type == "etf":
+        if cleaned.endswith(".US"):
+            candidates.append(cleaned[:-3])
+        elif cleaned.endswith(".JP"):
+            candidates.append(f"{cleaned[:-3]}.T")
+        candidates.append(cleaned)
     else:
         if cleaned.endswith(".US"):
             candidates.append(cleaned[:-3])

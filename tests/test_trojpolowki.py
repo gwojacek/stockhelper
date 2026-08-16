@@ -1149,16 +1149,18 @@ def test_allsearch_all_scopes_include_indexes():
     assert mod._allsearch_report_stem(mod.DEFAULT_ALLSEARCH_SCOPES) == "allsearch_latest_all"
     assert mod._scope_file_keys("indices") == ["indexes", "indices", "index"]
     assert "📊 INDEXES" == mod._scope_label("indexes")
-    assert "📈 ETFS" == mod._scope_label("etfs")
+    assert "🧺 ETFS" == mod._scope_label("etfs")
 
 
 def test_etf_report_chart_uses_etf_cache_instrument():
     mod = load_run_module()
     row = mod.ScannerRow(
-        market="ETFS", scanner="ICHIMOKU", category="position", ticker="VOO", status="above"
+        market="ETFS", scanner="ICHIMOKU", category="position", ticker="VOO.US", status="above"
     )
 
-    assert mod._chart_command_for_row(row).startswith("python run -c VOO --instrument etf ")
+    assert mod._chart_command_for_row(row).startswith("python run -c VOO.US --instrument etf ")
+    assert mod._market_icon("ETFS", "GLD.US") == "🧺"
+    assert "s=gld.us" in mod._stooq_chart_url("GLD.US")
 
 
 def test_open_existing_allsearch_report_refreshes_html_before_serving(tmp_path: Path):

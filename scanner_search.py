@@ -194,27 +194,27 @@ INDEXES_SEARCH_TICKERS = [
     "ITA40", "DE40", "FRA40", "NED25", "SUI20", "SPA35", "EU50",
 ]
 
-# Exchange-qualified Yahoo symbols are kept verbatim.  This market deliberately
-# bypasses StockHelper's normal bare-stock ``.WA`` inference and is downloaded
-# through the dedicated Yahoo-primary ETF route in chart_loader.
+# Stooq-qualified symbols are kept as the scanner/report identity. The ETF
+# loader translates provider suffixes (notably .US and .JP) to Yahoo symbols
+# while persisting these canonical names in the dedicated ETF cache.
 ETFS_MARKET = [
-    ("Vanguard S&P 500 ETF", "VOO"), ("iShares Core S&P 500 ETF", "IVV"), ("SPDR S&P 500 ETF Trust", "SPY"),
-    ("Vanguard Total Stock Market ETF", "VTI"), ("Invesco QQQ", "QQQ"), ("Vanguard FTSE Developed Markets", "VEA"),
-    ("Vanguard Growth ETF", "VUG"), ("NEXT FUNDS TOPIX ETF", "1306.T"), ("iShares Core MSCI EAFE", "IEFA"),
-    ("Vanguard Value ETF", "VTV"), ("SPDR Portfolio S&P 500", "SPYM"), ("Vanguard Total International Stock", "VXUS"),
-    ("Vanguard Total Bond Market", "BND"), ("iShares Core MSCI Emerging Markets", "IEMG"), ("iShares Core S&P 500 UCITS", "CSPX.L"),
-    ("Vanguard Information Technology", "VGT"), ("iShares Core MSCI World UCITS", "IWDA.L"), ("SPDR Gold Shares", "GLD"),
-    ("iShares Core U.S. Aggregate Bond", "AGG"), ("iShares Russell 1000 Growth", "IWF"), ("iShares Core S&P Mid-Cap", "IJH"),
-    ("Vanguard FTSE Emerging Markets", "VWO"), ("Technology Select Sector SPDR", "XLK"), ("Vanguard Dividend Appreciation", "VIG"),
-    ("NEXT FUNDS Nikkei 225 ETF", "1321.T"), ("iShares Core S&P Small-Cap", "IJR"), ("Vanguard Mid-Cap ETF", "VO"),
-    ("Schwab U.S. Dividend Equity", "SCHD"), ("Invesco NASDAQ 100 ETF", "QQQM"), ("iShares 0-3 Month Treasury Bond", "SGOV"),
-    ("Listed Index Fund TOPIX", "1308.T"), ("Invesco S&P 500 Equal Weight", "RSP"), ("iFreeETF TOPIX", "1305.T"),
-    ("iShares Core S&P Total U.S. Market", "ITOT"), ("iShares Russell 1000 Value", "IWD"), ("Vanguard High Dividend Yield", "VYM"),
-    ("Vanguard Small-Cap ETF", "VB"), ("Vanguard Total International Bond", "BNDX"), ("iShares Russell 2000", "IWM"),
-    ("Vanguard Total World Stock", "VT"), ("iShares MSCI EAFE", "EFA"), ("iShares S&P 500 Growth", "IVW"),
-    ("Schwab U.S. Large-Cap", "SCHX"), ("Yuanta Taiwan Top 50", "0050.TW"), ("VanEck Semiconductor ETF", "SMH"),
-    ("Vanguard FTSE All-World ex-US", "VEU"), ("Schwab International Equity", "SCHF"), ("Vanguard Intermediate Corporate Bond", "VCIT"),
-    ("iShares Gold Trust", "IAU"), ("Schwab U.S. Large-Cap Growth", "SCHG"),
+    ("Vanguard S&P 500 ETF", "VOO.US"), ("iShares Core S&P 500 ETF", "IVV.US"), ("SPDR S&P 500 ETF Trust", "SPY.US"),
+    ("Vanguard Total Stock Market ETF", "VTI.US"), ("Invesco QQQ", "QQQ.US"), ("Vanguard FTSE Developed Markets", "VEA.US"),
+    ("Vanguard Growth ETF", "VUG.US"), ("NEXT FUNDS TOPIX ETF", "1306.JP"), ("iShares Core MSCI EAFE", "IEFA.US"),
+    ("Vanguard Value ETF", "VTV.US"), ("SPDR Portfolio S&P 500", "SPYM.US"), ("Vanguard Total International Stock", "VXUS.US"),
+    ("Vanguard Total Bond Market", "BND.US"), ("iShares Core MSCI Emerging Markets", "IEMG.US"), ("iShares Core S&P 500 UCITS", "SXR8.DE"),
+    ("Vanguard Information Technology", "VGT.US"), ("iShares Core MSCI World UCITS", "EUNL.DE"), ("SPDR Gold Shares", "GLD.US"),
+    ("iShares Core U.S. Aggregate Bond", "AGG.US"), ("iShares Russell 1000 Growth", "IWF.US"), ("iShares Core S&P Mid-Cap", "IJH.US"),
+    ("Vanguard FTSE Emerging Markets", "VWO.US"), ("Technology Select Sector SPDR", "XLK.US"), ("Vanguard Dividend Appreciation", "VIG.US"),
+    ("NEXT FUNDS Nikkei 225 ETF", "1321.JP"), ("iShares Core S&P Small-Cap", "IJR.US"), ("Vanguard Mid-Cap ETF", "VO.US"),
+    ("Schwab U.S. Dividend Equity", "SCHD.US"), ("Invesco NASDAQ 100 ETF", "QQQM.US"), ("iShares 0-3 Month Treasury Bond", "SGOV.US"),
+    ("Listed Index Fund TOPIX", "1308.JP"), ("Invesco S&P 500 Equal Weight", "RSP.US"), ("iFreeETF TOPIX", "1305.JP"),
+    ("iShares Core S&P Total U.S. Market", "ITOT.US"), ("iShares Russell 1000 Value", "IWD.US"), ("Vanguard High Dividend Yield", "VYM.US"),
+    ("Vanguard Small-Cap ETF", "VB.US"), ("Vanguard Total International Bond", "BNDX.US"), ("iShares Russell 2000", "IWM.US"),
+    ("Vanguard Total World Stock", "VT.US"), ("iShares MSCI EAFE", "EFA.US"), ("iShares S&P 500 Growth", "IVW.US"),
+    ("Schwab U.S. Large-Cap", "SCHX.US"), ("Yuanta Taiwan Top 50", "0050.TW"), ("VanEck Semiconductor ETF", "SMH.US"),
+    ("Vanguard FTSE All-World ex-US", "VEU.US"), ("Schwab International Equity", "SCHF.US"), ("Vanguard Intermediate Corporate Bond", "VCIT.US"),
+    ("iShares Gold Trust", "IAU.US"), ("Schwab U.S. Large-Cap Growth", "SCHG.US"),
 ]
 ETFS_SEARCH_TICKERS = [ticker for _name, ticker in ETFS_MARKET]
 
