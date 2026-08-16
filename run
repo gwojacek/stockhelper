@@ -42,7 +42,7 @@ except ImportError:
     _RUN_PROJECT_ROOT = Path(__file__).resolve().parent
     CSV_DATA_DIR = _RUN_PROJECT_ROOT / "chart_program" / "data"
     STATE_DATA_DIR = _RUN_PROJECT_ROOT / "chart_program" / "data" / "state"
-from scanner_search import COMMODITIES_SEARCH_TICKERS
+from scanner_search import COMMODITIES_SEARCH_TICKERS, ETFS_MARKET
 PROJECT_ROOT = Path(__file__).resolve().parent
 SEARCH_OUTPUT_DIR = PROJECT_ROOT / "chart_program" / "data" / "search"
 ICHIMOKU_SEARCH_OUTPUT_DIR = SEARCH_OUTPUT_DIR / "ichimoku"
@@ -53,6 +53,42 @@ TROJPOLLOWKI_DIR = PROJECT_ROOT / "Trojpolowki"
 
 DEFAULT_ALLSEARCH_SCOPES = ["wig", "dax", "us100", "forex", "commodities", "indexes", "etfs"]
 JOURNAL_HTML = PROJECT_ROOT / "data" / "journal" / "transactions.html"
+INSTRUMENT_NAMES_FILE = PROJECT_ROOT / "data" / "instrument_names.json"
+
+
+def _instrument_name_registry() -> dict[str, str]:
+    """Return user-maintainable names plus names already known by the scanner."""
+    names = {ticker.upper(): name for name, ticker in ETFS_MARKET}
+    if INSTRUMENT_NAMES_FILE.exists():
+        try:
+            configured = json.loads(INSTRUMENT_NAMES_FILE.read_text(encoding="utf-8"))
+            names.update({str(ticker).upper(): str(name).strip() for ticker, name in configured.items() if str(name).strip()})
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"[allsearch] warning: cannot read {INSTRUMENT_NAMES_FILE}: {exc}")
+    return names
+
+
+def _report_instrument_label(market: str, ticker: str, names: dict[str, str] | None = None) -> str:
+    """Format named securities while preserving established FX/commodity labels."""
+    raw = str(ticker or "").strip()
+    if str(market or "").upper() in {"FOREX", "COMMODITIES"}:
+        return raw
+    registry = names if names is not None else _instrument_name_registry()
+    candidates = [raw.upper()]
+    if "." not in raw and str(market or "").upper().startswith("WIG"):
+        candidates.append(f"{raw.upper()}.WA")
+    name = next((registry[key] for key in candidates if registry.get(key)), "")
+    return f"{name} ({raw})" if name else raw
+
+
+def _ticker_from_troj_cell(cell: str) -> str | None:
+    """Extract the raw ticker from either named or legacy 3P board cells."""
+    raw = str(cell or "")
+    named = re.search(r"\(([A-Z0-9][A-Z0-9._]{0,24})\)(?=\s+(?:↗️|↘️|👀|🔁|\())", raw)
+    if named:
+        return named.group(1).upper()
+    legacy = re.search(r"\*\*[^A-Za-z0-9]*(?:[^\s]+\s+)?([A-Z0-9][A-Z0-9._]{0,24})(?=\s)", raw)
+    return legacy.group(1).upper() if legacy else None
 
 
 def _clear_stooq_debug_artifacts() -> None:
@@ -1263,7 +1299,8 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
 def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
     direction = "↘️" if str(row.direction).lower() == "short" else "↗️"
     start = row.dates.get("start") or _extract_start_date({"Incline": row.dates.get("incline", "")})
-    parts = [f"{_market_icon(row.market, row.ticker)} {row.ticker} {direction} ({start})"]
+    label = _report_instrument_label(row.market, row.ticker)
+    parts = [f"{_market_icon(row.market, row.ticker)} {label} {direction} ({start})"]
     if include_near:
         near = _parse_float_text(str(row.metrics.get("near61_raw") or row.metrics.get("near61") or ""), -1.0)
         if near >= 0:
@@ -1279,12 +1316,12 @@ def _fibo_item(row: ScannerRow, include_near: bool = False) -> str:
 
 def _fibo_board_cell_key(cell: str) -> tuple[str, str, str] | None:
     """Return the stable ticker/direction/anchor identity stored in a 3P cell."""
-    ticker = re.search(r"\*\*[^A-Za-z0-9]*(?:[^\s]+\s+)?([A-Z0-9][A-Z0-9._]{0,24})(?=\s)", str(cell or ""))
+    ticker_value = _ticker_from_troj_cell(cell)
     start = re.search(r"\((\d{4}-\d{2}-\d{2})\)", str(cell or ""))
-    if not ticker or not start:
+    if not ticker_value or not start:
         return None
     direction = "short" if "↘️" in cell else "long"
-    return ticker.group(1).upper(), direction, start.group(1)
+    return ticker_value, direction, start.group(1)
 
 
 def _read_previous_fibo_board(path: Path) -> dict[tuple[str, str, str], tuple[str, int]]:
@@ -1915,7 +1952,8 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         note = info["note"] if info["note"] != "-" else "-"
         note = _note_with_date(row, note)
         bias_txt = "" if detailed and info["bias"] in {"👀 watch", "🔁 retest"} else f" {info['bias']}"
-        lines = [f"**{_market_icon(row.market, row.ticker)} {row.ticker}{bias_txt} ({months_txt})**"]
+        label = _report_instrument_label(row.market, row.ticker)
+        lines = [f"**{_market_icon(row.market, row.ticker)} {label}{bias_txt} ({months_txt})**"]
         if detailed:
             latest_pattern = _source_metric(row, "latest_retest_pattern")
             latest_pattern_date = _source_metric(row, "latest_retest_date")
@@ -2194,6 +2232,19 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     }
     by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
+    instrument_names = _instrument_name_registry()
+
+    def _instrument_label(row: ScannerRow) -> str:
+        return _report_instrument_label(row.market, row.ticker, instrument_names)
+
+    unresolved_names = sorted({
+        str(row.ticker or "").strip()
+        for row in rows
+        if str(row.market or "").upper() not in {"FOREX", "COMMODITIES"}
+        and _instrument_label(row) == str(row.ticker or "").strip()
+    })
+    unresolved_path = output_path.with_name("unresolved_instrument_names.txt")
+    unresolved_path.write_text("\n".join(unresolved_names) + ("\n" if unresolved_names else ""), encoding="utf-8")
 
 
     def _is_recent_retest_date(val: str) -> bool:
@@ -2318,15 +2369,16 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if row is None:
             return ticker
         icon = _market_icon(row.market, row.ticker)
+        label = _report_instrument_label(row.market, row.ticker, instrument_names)
         if "fibo" in section_id:
             incline = str(row.dates.get("incline", "") or "")
             start = incline.split("->", 1)[0].strip() if "->" in incline else (row.dates.get("start_date", "") or "")
-            return " ".join(part for part in [icon, row.ticker, start] if part)
+            return " ".join(part for part in [icon, label, start] if part)
         if "ichimoku" in section_id:
             months = str(row.metrics.get("months", "") or "").strip()
             months_label = f"{months}m" if months else ""
-            return " ".join(part for part in [icon, row.ticker, _direction_icon(row.direction or row.status), months_label] if part)
-        return " ".join(part for part in [icon, row.ticker] if part)
+            return " ".join(part for part in [icon, label, _direction_icon(row.direction or row.status), months_label] if part)
+        return " ".join(part for part in [icon, label] if part)
 
     def _ichi_status_piece_html(piece: str) -> str:
         txt = str(piece or "").strip()
@@ -2401,10 +2453,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         if "fibo" in section_id:
             rendered = rendered.replace("↗️", "<span class='fibo-arrow fibo-arrow-long'>↗</span>")
             rendered = rendered.replace("↘️", "<span class='fibo-arrow fibo-arrow-short'>↘</span>")
-        ticker_match = re.search(r"\*\*[^A-Za-z0-9]*(?:[^\s]+\s+)?([A-Z0-9][A-Z0-9._]{0,24})(?=\s)", raw)
-        if not ticker_match:
+        ticker = _ticker_from_troj_cell(raw)
+        if not ticker:
             return rendered
-        ticker = ticker_match.group(1)
         if "ichimoku" in section_id:
             row = troj_ichi_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
         elif "fibo" in section_id:
@@ -2647,10 +2698,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
 
     def _troj_row_for_cell(cell: str, section_id: str = "") -> ScannerRow | None:
         raw = str(cell or "")
-        ticker_match = re.search(r"\*\*[^A-Za-z0-9]*(?:[^\s]+\s+)?([A-Z0-9][A-Z0-9._]{0,24})(?=\s)", raw)
-        if not ticker_match:
+        ticker = _ticker_from_troj_cell(raw)
+        if not ticker:
             return None
-        ticker = ticker_match.group(1)
         if "ichimoku" in section_id:
             return troj_ichi_row_by_ticker.get(ticker) or troj_row_by_ticker.get(ticker)
         if "fibo" in section_id:
@@ -2906,7 +2956,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         ]
         top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:5]
         top_rows = "".join(
-            f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('upper_touches','?') + '/' + r.metrics.get('lower_touches','?'))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>"
+            f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(_instrument_label(r))}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('upper_touches','?') + '/' + r.metrics.get('lower_touches','?'))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>"
             for r in top
         )
         parts.append(f"<div class='top-choice'><h3>Top choices <button class='iconbtn' title='Open stooq links from top choices' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Copy Google Sheets links from top choices' onclick='copyClosestSheetsCells(this)'>📋</button> <button class='iconbtn' title='Open stockhelper charts from top choices' onclick='openClosestStockhelperCharts(this)'>📊</button></h3><table class='data'><thead><tr><th>Instrument</th><th>Market</th><th>Status</th><th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th><th>Start width</th><th>End width</th><th>Avg10d PLN</th><th class='chart-link-cell'>Stooq</th><th class='chart-action-cell'>Chart</th></tr></thead><tbody>{top_rows}</tbody></table></div>")
@@ -2917,7 +2967,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             parts.append(f"<div class='wedge-market-group' data-market-block='{html.escape(market)}'><h3>{html.escape(_scope_label(market.lower()))} ({len(group)}) <button class='iconbtn' title='Open stooq links from this table' onclick='openNextTableStooqLinks(this)'>🔗</button> <button class='iconbtn' title='Copy Google Sheets links from this table' onclick='copyNextTableSheetsCells(this)'>📋</button> <button class='iconbtn' title='Open stockhelper charts from this table' onclick='openNextTableStockhelperCharts(this)'>📊</button></h3><div style='overflow:auto'><table class='data'><thead><tr><th>Ticker</th><th>Status</th><th>Wedge</th><th>Months</th><th>Touches U/L</th><th>Start width</th><th>End width</th><th>Slope</th><th>Breakout</th><th>Dir</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>stockhelper_chart</th></tr></thead><tbody>")
             for r in group:
                 touches = f"{r.metrics.get('upper_touches','')}/{r.metrics.get('lower_touches','')}"
-                parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.dates.get('wedge',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(touches)}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>")
+                parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.dates.get('wedge',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(touches)}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{html.escape(r.metrics.get('breakout_direction','-'))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>")
             parts.append("</tbody></table></div></div>")
         parts.append("</section>")
         return "".join(parts)
@@ -2996,7 +3046,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 cmd = html.escape(_chart_command_for_row(r))
                 stooq = r.chart_url or _stooq_chart_url(r.ticker)
                 stooq_btn = _stooq_link_with_cell_button(stooq, r.ticker)
-                rows_html += f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(r.ticker)}</strong></td><td>{_reason_html(reason, r)}</td><td class='chart-link-cell'>{stooq_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f'{_market_icon(r.market, r.ticker)} {r.ticker} {reason}', label)}</td></tr>"
+                rows_html += f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(_instrument_label(r))}</strong></td><td>{_reason_html(reason, r)}</td><td class='chart-link-cell'>{stooq_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f'{_market_icon(r.market, r.ticker)} {r.ticker} {reason}', label)}</td></tr>"
             if rows_html:
                 group_sections.append(
                     f"<div class='top-choice-group'><h3>{html.escape(label)} <button class='iconbtn' title='Open stooq links from this top group' onclick='_openLinks(_tableLinks(this.closest(&quot;.top-choice-group&quot;).querySelector(&quot;table&quot;)))'>🔗</button> <button class='iconbtn' title='Open stockhelper charts from this top group' onclick='openClosestStockhelperCharts(this)'>📊</button></h3>"
@@ -3026,6 +3076,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><p>Use tabs to switch between the full allsearch report and focused Trójpolówki watchlists.</p><div class='tabbar'><button class='btn tabbtn active' data-tab='allsearch' onclick=\"showReportTab('allsearch')\">ALLSEARCH REPORT</button><button class='btn tabbtn' data-tab='troj-fibo' onclick=\"showReportTab('troj-fibo')\">3P FIBO</button><button class='btn tabbtn' data-tab='troj-ichimoku' onclick=\"showReportTab('troj-ichimoku')\">3P ICHIMOKU</button><button class='btn tabbtn' data-tab='wedges' onclick=\"showReportTab('wedges')\">🔻 Kliny</button><button class='btn tabbtn' type='button' onclick=\"window.open('/journal-html','_blank')\">🧾 Open journal</button><button class='btn compactbtn push-right' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
     html_parts.append("<div class='balance-card'><div class='balance-section'><span>💰</span><label for='current-balance'>Current balance</label></div><div class='balance-section balance-amount'><input id='current-balance' type='number' min='1' step='100' inputmode='decimal' aria-label='Current balance amount'><strong>PLN</strong></div><div class='balance-section balance-note-section'><span class='balance-bars' aria-hidden='true'><i></i><i></i><i></i></span><span id='balance-status' class='balance-status'>Used by every StockHelper chart</span></div></div>")
     html_parts.append(search_toolbar_html)
+    if unresolved_names:
+        unresolved_html = ", ".join(html.escape(ticker) for ticker in unresolved_names)
+        html_parts.append(
+            "<details class='market'><summary><b>⚠️ Names still needed "
+            f"({len(unresolved_names)})</b></summary><p class='muted'>Add these entries to "
+            f"<code>{html.escape(str(INSTRUMENT_NAMES_FILE.relative_to(PROJECT_ROOT)))}</code>. "
+            f"The same list was saved to <code>{html.escape(unresolved_path.name)}</code>.</p>"
+            f"<p>{unresolved_html}</p></details>"
+        )
     html_parts.append(_liquidity_legend_html())
     html_parts.append("<div id='tab-allsearch' class='tab-panel active'>")
     html_parts.append(_allsearch_top_choices())
@@ -3131,17 +3190,17 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 if is_i1:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.metrics.get('candles',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.dates.get('start_date',''))}</td><td>{html.escape(r.metrics.get('close',''))}</td><td>{html.escape(avg10d_fmt)}</td><td>{html.escape(r.metrics.get('latest_retest_count',''))}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_date',''), recent_retest)}</td><td>{_maybe_green_recent(r.metrics.get('latest_retest_pattern',''), recent_retest)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f0:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
                     near_value = r.metrics.get('near61') or (f"{_parse_float_text(r.metrics.get('near61_raw', '-1'), -1.0):.1f}%" if _parse_float_text(r.metrics.get('near61_raw', '-1'), -1.0) >= 0 else "-")
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(near_value)}</td><td>{_color_fibo_metric(r.status)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(near_value)}</td><td>{_color_fibo_metric(r.status)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 elif is_f1:
                     s = str(r.status)
                     color_status = ("touched_61_8" in s) or ("valid_reversal" in s)
@@ -3149,12 +3208,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{status_html}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{status_html}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
                 else:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(r.ticker)}</b></td><td>{html.escape(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{html.escape(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div>")

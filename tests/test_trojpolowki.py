@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ast
+import csv
 import importlib.machinery
 import importlib.util
-import csv
 import itertools
+import json
 import re
 import statistics
 import sys
@@ -22,6 +24,7 @@ def load_run_module():
     loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
+    scanner.ETFS_MARKET = [("iShares MSCI EAFE ETF", "EFA.US")]
     sys.modules["chart_program.instrument_detector"] = detector
     sys.modules["chart_program.chart_loader"] = loader_mod
     sys.modules["scanner_search"] = scanner
@@ -32,6 +35,49 @@ def load_run_module():
     sys.modules[loader.name] = module
     loader.exec_module(module)
     return module
+
+
+def test_scanner_report_instrument_labels_include_full_names_and_tickers():
+    mod = load_run_module()
+
+    assert mod._report_instrument_label("WIG", "KGH", {"KGH.WA": "KGHM"}) == "KGHM (KGH)"
+    assert mod._report_instrument_label("ETFS", "EFA.US", {"EFA.US": "iShares MSCI EAFE ETF"}) == "iShares MSCI EAFE ETF (EFA.US)"
+    assert mod._report_instrument_label("FOREX", "EURUSD", {"EURUSD": "ignored"}) == "EURUSD"
+    assert mod._report_instrument_label("COMMODITIES", "GOLD", {"GOLD": "ignored"}) == "GOLD"
+    assert mod._report_instrument_label("US100", "UNKNOWN.US", {}) == "UNKNOWN.US"
+
+    row = mod.ScannerRow(
+        market="US100", scanner="FIBO", category="waiting", ticker="AAPL.US", status="waiting",
+        direction="long", dates={"start": "2026-01-02", "incline": "2026-01-02->2026-02-03"},
+    )
+    cell = mod._fibo_item(row)
+    assert "Apple (AAPL.US)" in cell
+    assert mod._fibo_board_cell_key(cell) == ("AAPL.US", "long", "2026-01-02")
+
+
+def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
+    source = ast.parse(Path("scanner_search.py").read_text(encoding="utf-8"))
+    universes = {}
+    for node in source.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in {
+                "WIG_SEARCH_TICKERS", "DAX40_SEARCH_TICKERS", "NDX100_SEARCH_TICKERS", "ETFS_MARKET"
+            }:
+                universes[target.id] = ast.literal_eval(node.value)
+
+    registry = json.loads(Path("data/instrument_names.json").read_text(encoding="utf-8"))
+    etf_names = {ticker.upper(): name for name, ticker in universes["ETFS_MARKET"]}
+    registry.update(etf_names)
+    expected = {
+        *(f"{ticker}.WA" for ticker in universes["WIG_SEARCH_TICKERS"]),
+        *universes["DAX40_SEARCH_TICKERS"],
+        *universes["NDX100_SEARCH_TICKERS"],
+        *(ticker for _name, ticker in universes["ETFS_MARKET"]),
+    }
+
+    assert expected <= registry.keys()
 
 
 def test_report_launcher_protocol_matches_report_server():
@@ -149,16 +195,16 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "# Trójpolówki — Fibo" in text
     assert "Updated from allsearch: 2026-05-30 10:11:12" in text
     assert "✅ Pattern ≤14d / SL intact" in text
-    assert "**🇵🇱 TPE ↗️ (2026-03-23)**" in text
-    assert "**🇵🇱 OPL ↗️ (2026-01-15)**" in text
-    assert "**🇵🇱 CPS ↗️ (2026-03-23) 0.0%**" in text
+    assert "**🇵🇱 TAURONPE (TPE) ↗️ (2026-03-23)**" in text
+    assert "**🇵🇱 ORANGEPL (OPL) ↗️ (2026-01-15)**" in text
+    assert "**🇵🇱 CYFRPLSAT (CPS) ↗️ (2026-03-23) 0.0%**" in text
     assert "**🇩🇪 EARLY.DE ↗️ (2026-04-15) 10.0%**" in text
-    assert text.count("**🇵🇱 GPW ↗️ (2026-03-27) 14.5%**") == 1
-    assert text.index("**🇵🇱 OPL ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
-    assert "**🇺🇸 AEP.US ↗️ (2026-01-05) 62.5%**" in text
-    assert text.count("**🇵🇱 TRN ↗️") == 1
-    assert "**🇵🇱 TRN ↗️ (2026-01-30) 92.7%**" in text
-    assert "**🇵🇱 TRN ↗️ (2025-12-29) 91.6%**" not in text
+    assert text.count("**🇵🇱 GPW (GPW) ↗️ (2026-03-27) 14.5%**") == 1
+    assert text.index("**🇵🇱 ORANGEPL (OPL) ↗️") < text.index("**🇩🇪 EARLY.DE ↗️")
+    assert "**🇺🇸 American Electric Power (AEP.US) ↗️ (2026-01-05) 62.5%**" in text
+    assert text.count("**🇵🇱 TRANSPOL (TRN) ↗️") == 1
+    assert "**🇵🇱 TRANSPOL (TRN) ↗️ (2026-01-30) 92.7%**" in text
+    assert "**🇵🇱 TRANSPOL (TRN) ↗️ (2025-12-29) 91.6%**" not in text
     assert "CROSSED" not in text
     assert text.count("**🛢️ BRACOMP") == 2
     assert "**🛢️ BRACOMP ↘️ (2026-02-25) 45.3%**" in text
@@ -166,8 +212,8 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     assert "**🛢️ BRACOMP ↘️ (2026-04-14) 22.5%**" not in text
     data_rows = [line for line in text.splitlines() if line.startswith("| ") and not line.startswith("|---")][1:]
     split_rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in data_rows]
-    assert any("**🇵🇱 CPS" in cells[1] for cells in split_rows)
-    assert not any("**🇵🇱 CPS" in cells[0] for cells in split_rows)
+    assert any("**🇵🇱 CYFRPLSAT (CPS)" in cells[1] for cells in split_rows)
+    assert not any("**🇵🇱 CYFRPLSAT (CPS)" in cells[0] for cells in split_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/trn)" in text
     assert "<!--fibo-end:2026-03-30-->" in text
@@ -821,8 +867,8 @@ def test_third_fibo_column_keeps_crossed_61_8_row_during_pattern_window(tmp_path
         ),
     ]
     text = mod._write_trojpolowki_fibo(rows, tmp_path, datetime(2026, 7, 24, 9, 0, 0)).read_text(encoding="utf-8")
-    assert "JSW ↗️" in text
-    assert "TTWO.US ↗️" in text
+    assert "JSW (JSW) ↗️" in text
+    assert "Take-Two Interactive (TTWO.US) ↗️" in text
 
 
 def test_fibo_scan_avoids_duplicate_and_reduces_broad_offset_work():
@@ -880,13 +926,13 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "| 🟢 Strong / continuation | 👀 Kijun / watch | ☁️ Cloud / retest / breakout | 🔁 Retest <4m |" in text
-    assert "**🇵🇱 CRI ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
-    assert "**🇩🇪 HFG.DE 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>Kijun: under" in text
+    assert "**🇵🇱 CREOTECH (CRI) ↗️ long (8.9m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇩🇪 HelloFresh (HFG.DE) 🔁 retest (5.1m)**<br>🏷️ last retest pattern (2026-02-01)<br>Kijun: under" in text
     assert "Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns" in text
     assert "TK values use the latest actionable Tenkan/Kijun direction" in text
-    assert "**🇺🇸 MSFT.US (2.0m)**" in text
+    assert "**🇺🇸 Microsoft (MSFT.US) (2.0m)**" in text
     assert "🏷️ touched cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
-    assert "**🇩🇪 RWE.DE 🔁 retest (4.0m)**" in text
+    assert "**🇩🇪 RWE (RWE.DE) 🔁 retest (4.0m)**" in text
     assert "🟡 risk: 2% · ⬆️ Chikou over · 🟢 kumo" in text
     assert "**🇩🇪 BEAR.DE (0.0m)**" in text
     assert "🟢 risk: 3% · ⬇️ Chikou under · 🔴 kumo" in text
@@ -896,12 +942,12 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     lines = text.splitlines()
     data_rows = [line for line in lines if line.startswith("| ") and not line.startswith("|---")][1:]
     assert "**🇩🇪 BEAR.DE" in data_rows[0]
-    assert any("**🇩🇪 RWE.DE" in row for row in data_rows)
-    assert "**🇺🇸 MSFT.US" in text
-    assert "**🇵🇱 CRI" in data_rows[0]
+    assert any("**🇩🇪 RWE (RWE.DE)" in row for row in data_rows)
+    assert "**🇺🇸 Microsoft (MSFT.US)" in text
+    assert "**🇵🇱 CREOTECH (CRI)" in data_rows[0]
     assert "**🇵🇱 ABC" in text
     assert any(row.startswith("| **🇵🇱 ABC") for row in data_rows)
-    assert "**🇺🇸 AMGN.US ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
+    assert "**🇺🇸 Amgen (AMGN.US) ↗️ long (2.5m)**<br>🏷️ above cloud<br>Kijun: over" in text
     assert "**🇺🇸 LONG.US (8.0m)**<br>🏷️ inside cloud · Long trend<br>🕘 retest hammer (2026-05-29)" in text
     assert text.count("**🛢️ GOLD") == 1
     assert "**🛢️ GOLD ↘️ short (7.0m)**<br>🏷️ below cloud<br>Kijun: touched" in text
@@ -1030,15 +1076,15 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th>" in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 3
-    assert "<b>SBUX.US</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text
+    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text
     fibo_one_start = text.index("WYNIKI FIBO #1 (Waiting")
     fibo_one_end = text.index("</table>", fibo_one_start)
     fibo_one_html = text[fibo_one_start:fibo_one_end]
-    assert fibo_one_html.index("<b>AEP.US</b>") < fibo_one_html.index("<b>RWE.DE</b>") < fibo_one_html.index("<b>EARLY.DE</b>")
+    assert fibo_one_html.index("<b>American Electric Power (AEP.US)</b>") < fibo_one_html.index("<b>RWE (RWE.DE)</b>") < fibo_one_html.index("<b>EARLY.DE</b>")
     ichi_one_start = text.index("WYNIKI 1 ICHIMOKU")
     ichi_one_end = text.index("</table>", ichi_one_start)
     ichi_one_html = text[ichi_one_start:ichi_one_end]
-    assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>ENR.DE</b>")
+    assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>Siemens Energy (ENR.DE)</b>")
     assert "data-status='⚪ above' class='today-signal'" in ichi_one_html
     assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
     assert "Latest Retest status</th>" not in text
@@ -1052,9 +1098,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'>" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
-    assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 LIN\.US", text)
+    assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 Linde \(LIN\.US\)", text)
     assert "data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long' class='today-signal'" in text
-    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE.DE" in text
+    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE (RWE.DE)" in text
     assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'><strong>🇺🇸 VAL.US" in text
     assert "data-scanner='FIBO' data-troj-direction='long' class='today-signal'" in text
     assert "AEP.US" in text and "bullish_hammer" in text
@@ -1075,8 +1121,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
-    assert "<b>CRI</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
-    assert "<b>ENR.DE</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
+    assert "<b>CREOTECH (CRI)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
+    assert "<b>Siemens Energy (ENR.DE)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
     assert "<span class='ichi-status-label'>last:</span>" not in text
@@ -1129,7 +1175,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 SBUX.US</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
+    assert "<strong>🇺🇸 Starbucks (SBUX.US)</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
     assert "class='choice-reason choice-reason-wedge'" in text
     assert "<i>◆</i>Falling wedge" in text

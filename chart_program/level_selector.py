@@ -15,6 +15,7 @@ from chart_program.chart_loader import load_or_update_daily_data
 from chart_program.lightweight_chart_ui import LightweightChartLevelSelectorUI
 from chart_program.config_writer import resolve_config_path, write_or_update_config
 from chart_program.instrument_detector import detect_instrument_type
+from utilities.instrument_names import instrument_name_for_ticker
 
 
 
@@ -975,6 +976,8 @@ def run_level_selector(raw_args=None):
             existing.pop(key, None)
 
     display_name, display_ticker = _display_identity(symbol, fetch_info.get("symbol"), base_target, fetch_info.get("name"))
+    if instrument_type not in {"forex", "commodity"}:
+        display_name = instrument_name_for_ticker(display_ticker, fetch_info.get("symbol"), base_target, symbol) or display_name
 
     ui = LightweightChartLevelSelectorUI(
         symbol=symbol,
