@@ -721,6 +721,49 @@ def test_commodity_search_uses_canonical_metal_names():
     assert scanner._search_fetch_symbol("PALLADIUM", "commodities", None) == ("PALLADIUM", "commodity")
 
 
+def test_etfs_market_uses_stooq_tickers_and_cache_folder():
+    import scanner_search as scanner
+
+    group, members, source, suffix = scanner._get_members("etfs")
+
+    assert group == "etfs"
+    assert source == "Yahoo Finance"
+    assert suffix is None
+    assert len(members) == 50
+    assert len(set(members)) == 50
+    assert members[0] == "VOO.US"
+    assert members[-1] == "SCHG.US"
+    assert {"1306.JP", "SXR8.DE", "EUNL.DE", "0050.TW"} <= set(members)
+    assert scanner._search_fetch_symbol("VOO.US", group, suffix) == ("VOO.US", "etf")
+    assert scanner._search_fetch_symbol("1306.JP", group, suffix) == ("1306.JP", "etf")
+
+    from chart_program.chart_loader import local_csv_path_for_symbol
+    assert local_csv_path_for_symbol("VOO.US", "etf").as_posix().endswith("data/csv/etfs/VOO_US.csv")
+
+
+def test_etf_remote_download_is_yahoo_primary(monkeypatch):
+    from chart_program import chart_loader as loader
+
+    expected = pd.DataFrame(
+        [{"Date": "2026-08-14", "Open": 1, "High": 2, "Low": 0.5, "Close": 1.5, "Volume": 100}]
+    )
+    calls = []
+
+    def fake_yahoo(symbol, instrument_type):
+        calls.append((symbol, instrument_type))
+        return expected, "VOO", "Vanguard S&P 500 ETF"
+
+    monkeypatch.setattr(loader, "_yahoo_download", fake_yahoo)
+    frame, source, symbol, name, reason = loader._download_remote("VOO.US", "etf")
+
+    assert frame is expected
+    assert (source, symbol, name) == ("yahoo", "VOO", "Vanguard S&P 500 ETF")
+    assert "Yahoo used as primary source" in reason
+    assert calls == [("VOO.US", "etf")]
+    assert loader._yahoo_symbol_candidates("VOO.US", "etf")[:2] == ["VOO", "VOO.US"]
+    assert loader._yahoo_symbol_candidates("1306.JP", "etf")[:2] == ["1306.T", "1306.JP"]
+
+
 def test_trim_wig_stock_csvs_keeps_only_last_two_years(tmp_path):
     from utilities.stooq_playwright import trim_wig_stock_csvs
 

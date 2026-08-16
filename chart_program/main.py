@@ -10,7 +10,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("target", nargs="?", help="Symbol, pair, or config slug (e.g. jsw, coffee_long, AUD/USD)")
     parser.add_argument("chart_modifier", nargs="?", choices=["cfd", "CFD"], help="Use after a stock symbol to open it as CFD/commodity mode.")
     parser.add_argument("--config", help="Explicit config file path")
-    parser.add_argument("--instrument", choices=["stock", "commodity", "forex"], help="Force instrument type")
+    parser.add_argument("--instrument", choices=["stock", "etf", "commodity", "forex"], help="Force instrument type")
     parser.add_argument("--position-type", choices=["long", "short"], help="Position type for commodity/forex")
     parser.add_argument("--capital", type=float, default=0.0)
     parser.add_argument("--lot-cost", type=float, default=0.0)

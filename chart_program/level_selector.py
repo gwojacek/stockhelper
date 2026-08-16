@@ -105,7 +105,7 @@ def _parse_args(raw_args=None):
     parser = argparse.ArgumentParser(description="Interactive chart-based level selector")
     parser.add_argument("target", help="Target symbol or config slug. Examples: jsw, coffee_long, AUD/USD")
     parser.add_argument("--config", help="Explicit config path to update/create")
-    parser.add_argument("--instrument", choices=["stock", "commodity", "forex"], help="Override instrument type")
+    parser.add_argument("--instrument", choices=["stock", "etf", "commodity", "forex"], help="Override instrument type")
     parser.add_argument("--position-type", choices=["long", "short"], help="Position type for commodity/forex")
     parser.add_argument("--capital", type=float, default=0.0)
     parser.add_argument("--lot-cost", type=float, default=0.0)
@@ -523,15 +523,16 @@ def run_level_selector(raw_args=None):
 
     if instrument_type == "forex":
         symbol = existing.get("pair", base_target if "/" in base_target else f"{base_target[:3].upper()}/{base_target[3:6].upper()}")
-    elif instrument_type == "stock":
-        symbol = existing.get("symbol", base_target.upper() if "." in base_target else f"{base_target.upper()}.WA")
+    elif instrument_type in {"stock", "etf"}:
+        default_symbol = base_target.upper() if instrument_type == "etf" or "." in base_target else f"{base_target.upper()}.WA"
+        symbol = existing.get("symbol", default_symbol)
     else:
         symbol = existing.get("name", base_target.upper())
         symbol = re.sub(r"\s+CFD$", "", symbol, flags=re.IGNORECASE).strip()
         if symbol.upper() in {"GOLD", "XAU/USD", "XAUUSD"}:
             symbol = "XAUUSD"
 
-    if instrument_type in ("stock", "forex"):
+    if instrument_type in ("stock", "etf", "forex"):
         if "apply_currency_conversion_fee" not in existing:
             existing["apply_currency_conversion_fee"] = _default_currency_conversion_fee(instrument_type, symbol)
         existing["currency_conversion_fee_pct"] = float(existing.get("currency_conversion_fee_pct", 0.01) or 0.01)
@@ -1030,7 +1031,7 @@ def run_level_selector(raw_args=None):
         "capital": selected.get("capital", args.capital),
     }
 
-    if save_instrument_type == "stock":
+    if save_instrument_type in {"stock", "etf"}:
         values.update(
             {
                 "name": _resolve_stock_name(symbol, base_target),

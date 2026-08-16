@@ -93,6 +93,7 @@ GROUP_MARKET_DATA_RULES: dict[str, str] = {
     "COMMODITIES": "commodity_market",
     "FOREX": "forex_market",
     "INDEXES": "commodity_market",
+    "ETFS": "stock_market_generic",
 }
 
 
@@ -192,6 +193,30 @@ INDEXES_SEARCH_TICKERS = [
     "SG20CASH", "AU200.CASH", "CHN.CASH", "JP225", "WIG20", "UK100",
     "ITA40", "DE40", "FRA40", "NED25", "SUI20", "SPA35", "EU50",
 ]
+
+# Stooq-qualified symbols are kept as the scanner/report identity. The ETF
+# loader translates provider suffixes (notably .US and .JP) to Yahoo symbols
+# while persisting these canonical names in the dedicated ETF cache.
+ETFS_MARKET = [
+    ("Vanguard S&P 500 ETF", "VOO.US"), ("iShares Core S&P 500 ETF", "IVV.US"), ("SPDR S&P 500 ETF Trust", "SPY.US"),
+    ("Vanguard Total Stock Market ETF", "VTI.US"), ("Invesco QQQ", "QQQ.US"), ("Vanguard FTSE Developed Markets", "VEA.US"),
+    ("Vanguard Growth ETF", "VUG.US"), ("NEXT FUNDS TOPIX ETF", "1306.JP"), ("iShares Core MSCI EAFE", "IEFA.US"),
+    ("Vanguard Value ETF", "VTV.US"), ("SPDR Portfolio S&P 500", "SPYM.US"), ("Vanguard Total International Stock", "VXUS.US"),
+    ("Vanguard Total Bond Market", "BND.US"), ("iShares Core MSCI Emerging Markets", "IEMG.US"), ("iShares Core S&P 500 UCITS", "SXR8.DE"),
+    ("Vanguard Information Technology", "VGT.US"), ("iShares Core MSCI World UCITS", "EUNL.DE"), ("SPDR Gold Shares", "GLD.US"),
+    ("iShares Core U.S. Aggregate Bond", "AGG.US"), ("iShares Russell 1000 Growth", "IWF.US"), ("iShares Core S&P Mid-Cap", "IJH.US"),
+    ("Vanguard FTSE Emerging Markets", "VWO.US"), ("Technology Select Sector SPDR", "XLK.US"), ("Vanguard Dividend Appreciation", "VIG.US"),
+    ("NEXT FUNDS Nikkei 225 ETF", "1321.JP"), ("iShares Core S&P Small-Cap", "IJR.US"), ("Vanguard Mid-Cap ETF", "VO.US"),
+    ("Schwab U.S. Dividend Equity", "SCHD.US"), ("Invesco NASDAQ 100 ETF", "QQQM.US"), ("iShares 0-3 Month Treasury Bond", "SGOV.US"),
+    ("Listed Index Fund TOPIX", "1308.JP"), ("Invesco S&P 500 Equal Weight", "RSP.US"), ("iFreeETF TOPIX", "1305.JP"),
+    ("iShares Core S&P Total U.S. Market", "ITOT.US"), ("iShares Russell 1000 Value", "IWD.US"), ("Vanguard High Dividend Yield", "VYM.US"),
+    ("Vanguard Small-Cap ETF", "VB.US"), ("Vanguard Total International Bond", "BNDX.US"), ("iShares Russell 2000", "IWM.US"),
+    ("Vanguard Total World Stock", "VT.US"), ("iShares MSCI EAFE", "EFA.US"), ("iShares S&P 500 Growth", "IVW.US"),
+    ("Schwab U.S. Large-Cap", "SCHX.US"), ("Yuanta Taiwan Top 50", "0050.TW"), ("VanEck Semiconductor ETF", "SMH.US"),
+    ("Vanguard FTSE All-World ex-US", "VEU.US"), ("Schwab International Equity", "SCHF.US"), ("Vanguard Intermediate Corporate Bond", "VCIT.US"),
+    ("iShares Gold Trust", "IAU.US"), ("Schwab U.S. Large-Cap Growth", "SCHG.US"),
+]
+ETFS_SEARCH_TICKERS = [ticker for _name, ticker in ETFS_MARKET]
 
 WIG_SEARCH_TICKERS = [
     "EBP","PKO","MBK","OPL","PEO","CEZ","GTN","GTC","AGO","KGH","PXM","PKN","CPS","BIO","ACP","MIL","ENA","ECH","EUR","PGE",
@@ -1400,6 +1425,8 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
         instrument = "forex"
     elif group_name in {"commodities", "indexes"}:
         instrument = "commodity"
+    elif group_name == "etfs":
+        instrument = "etf"
     elif group_name == "single":
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
@@ -2236,6 +2263,8 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         return "forex", _members_from_configs("forex"), "configs", None
     if normalized in {"indexes", "indices", "index"}:
         return "indexes", INDEXES_SEARCH_TICKERS, "commodity maps", None
+    if normalized in {"etfs", "etf"}:
+        return "etfs", ETFS_SEARCH_TICKERS, "Yahoo Finance", None
 
     if INDEX_MEMBERS_FILE.exists():
         payload = json.loads(INDEX_MEMBERS_FILE.read_text(encoding="utf-8"))
@@ -2657,6 +2686,8 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         instrument = "commodity"
     elif group_name == "indexes":
         instrument = "commodity"
+    elif group_name == "etfs":
+        instrument = "etf"
     elif group_name == "single":
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
@@ -6153,6 +6184,8 @@ def run_fibo_search(target: str) -> int:
             instrument = "forex"
         elif group_name in {"commodities", "indexes"}:
             instrument = "commodity"
+        elif group_name == "etfs":
+            instrument = "etf"
         elif group_name == "single":
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
@@ -6494,6 +6527,8 @@ def run_fibo_search(target: str) -> int:
             instrument = "forex"
         elif group_name in {"commodities", "indexes"}:
             instrument = "commodity"
+        elif group_name == "etfs":
+            instrument = "etf"
         elif group_name == "single":
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
@@ -6637,6 +6672,8 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         instrument = "forex"
     elif group_name in {"commodities", "indexes"}:
         instrument = "commodity"
+    elif group_name == "etfs":
+        instrument = "etf"
     elif group_name == "single":
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
