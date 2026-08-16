@@ -1010,6 +1010,13 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📈 StockHelper scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
+    assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
+    assert "id='tab-favorites' class='tab-panel'" in text
+    assert "stockhelper.favorite-instruments.v1" in text
+    assert "function toggleFavorite(ticker)" in text
+    assert "function techniqueFor(el)" in text
+    assert "One favorite instrument may appear in several technique groups" in text
+    assert "data-ticker='RWE.DE'" in text
     assert "📄 PDF" in text
     assert "📄 Download PDF" not in text
     assert 'onclick="downloadPdfReport()"' in text
