@@ -1027,7 +1027,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "favorites-3p-empty" in text
     assert "No favorites" in text
     assert "favorites-wedge-table" in text
-    assert "<th>Instrument</th><th>Market</th><th>Status</th><th>Chart</th>" in text
+    assert "const threePTickers=new Set" in text
+    assert "!threePTickers.has(o.ticker)" in text
+    assert "favorite-direction-long" in text and "favorite-direction-short" in text
+    assert "↗ Long" in text and "↘ Short" in text
+    assert "<th>Instrument</th><th>Market</th><th>Direction</th><th>Status</th><th>Chart</th>" in text
     assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
     assert "function favoriteWedgeContext(host)" in text
     assert "date?'Breakout: '+date:'Unbroken'" in text
@@ -1109,7 +1113,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     ichi_one_end = text.index("</table>", ichi_one_start)
     ichi_one_html = text[ichi_one_start:ichi_one_end]
     assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>Siemens Energy (ENR.DE)</b>")
-    assert "data-status='⚪ above' class='today-signal'" in ichi_one_html
+    assert "data-status='⚪ above' data-troj-direction='long' class='today-signal'" in ichi_one_html
     assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
