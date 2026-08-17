@@ -337,15 +337,16 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
 
 
-def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
+def test_fibo_pattern_may_finish_later_but_must_include_initial_touch_candle():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "touch_idxs[:1]" not in source
     assert "first_touch_idx = all_touch_idxs[0]" in source
     assert "c = w.iloc[first_touch_idx]" in source
-    assert "includes_touch = any(t in {i - 1, i} for t in all_touch_idxs)" in source
-    assert "includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
+    assert "includes_first_touch = first_touch_idx in {i - 1, i}" in source
+    assert "includes_first_touch = first_touch_idx in {i - 2, i - 1, i}" in source
+    assert "includes_touch = any(t in {i - 1, i}" not in source
     assert "pattern_idx = i" in source
-    assert "The touching candle can therefore be the first, middle, or" in source
+    assert "It can be the first, middle, or final pattern candle" in source
     assert "close above 61.8" in source
     assert "float(close.iloc[pattern_idx]) <= fib_618" in source
     assert "pattern_failed_close = True" in source
@@ -1010,6 +1011,36 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📈 StockHelper scanner workspace" in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
+    assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
+    assert "id='tab-favorites' class='tab-panel'" in text
+    assert "stockhelper.favorite-instruments.v1" in text
+    assert "function toggleFavorite(ticker)" in text
+    assert "function techniqueFor(el)" in text
+    assert "One favorite instrument may appear in several technique groups" in text
+    assert "data-ticker='RWE.DE'" in text
+    assert "⚠️ Names still needed" not in text
+    assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
+    assert "data-favorite-ready='1' data-favorite-ticker='RWE.DE'" in text
+    assert "onclick=\"toggleFavorite('RWE.DE')\"" in text
+    assert "favorites-3p-table" in text
+    assert "<colgroup><col><col><col><col></colgroup>" in text
+    assert ".favorites-3p-table col{width:25%}" in text
+    assert ".favorites-3p-table td{width:25%;padding:0" in text
+    assert "const columns=[0,1,2,3]" in text
+    assert "favorites-3p-empty" in text
+    assert "No favorites" in text
+    assert "favorites-wedge-table" in text
+    assert "const threePTickers=new Set" in text
+    assert "!threePTickers.has(o.ticker)" in text
+    assert "favorite-direction-long" in text and "favorite-direction-short" in text
+    assert "↗ Long" in text and "↘ Short" in text
+    assert "<th>Instrument</th><th>Market</th><th>Direction</th><th>Status</th><th>Chart</th>" in text
+    assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
+    assert "function favoriteWedgeContext(host)" in text
+    assert "date?'Breakout: '+date:'Unbroken'" in text
+    assert "td.chart-action-cell{text-align:right}" in text
+    assert "<th>Expected date</th><th>stockhelper_chart</th></tr>" in text
+    assert "<td>2026-05-30</td><td class='chart-action-cell'>" in text
     assert "📄 PDF" in text
     assert "📄 Download PDF" not in text
     assert 'onclick="downloadPdfReport()"' in text
@@ -1085,7 +1116,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     ichi_one_end = text.index("</table>", ichi_one_start)
     ichi_one_html = text[ichi_one_start:ichi_one_end]
     assert ichi_one_html.index("<b>PAT.US</b>") < ichi_one_html.index("<b>Siemens Energy (ENR.DE)</b>")
-    assert "data-status='⚪ above' class='today-signal'" in ichi_one_html
+    assert "data-status='⚪ above' data-troj-direction='long' class='today-signal'" in ichi_one_html
     assert "<th>Latest Retest</th><th>Avg10d PLN</th>" in text
     assert "Latest Retest status</th>" not in text
     assert "medium_retest_pattern: bullish_harami (2026-05-21)" in text
@@ -1148,7 +1179,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🚀 breakout" in text
     assert ".today-signal td{background:#14532d!important}" in text
     assert ".troj-cell-card.today-signal{background:#14532d!important" in text
-    assert "data-scanner='WEDGE' data-status='🚀 breakout' data-troj-direction='long' class='today-signal'" in text
+    assert "data-scanner='WEDGE' data-status='🚀 breakout' data-breakout-date='2026-05-30' data-troj-direction='long' class='today-signal'" in text
     assert "class='market direction-filter-section' id='wedge-report'" in text
     assert "setTrojDirection('wedge-report','long',this)" in text
     assert "setTrojDirection('wedge-report','short',this)" in text
@@ -1161,7 +1192,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Months</th><th>Touches U/L</th><th>Slope</th><th>Breakout</th><th>Dir</th>" in text
     assert "<th>Score</th><th>Avg10d PLN</th>" not in text
     assert "<th>Dir</th><th>Avg10d PLN</th>" in text
-    assert ".top-choice .chart-action-cell{width:68px;min-width:68px;max-width:68px}" in text
+    assert ".top-choice .chart-action-cell{width:82px;min-width:82px;max-width:82px}" in text
     assert "1.000.000" in text
     assert "copyNextTableSheetsCells" in text
     assert "Copy Google Sheets links from this table" in text
@@ -1315,3 +1346,27 @@ def test_kumo_twist_uses_projected_cloud_source():
     assert "leading_span_a" in metrics_source
     assert "High\"].tail(52)" in metrics_source
     assert "span_a\"] - c[\"span_b" not in metrics_source
+
+
+def test_fibo_reversal_pattern_must_include_the_first_61_8_touch():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "includes_first_touch = first_touch_idx in {i - 1, i}" in setup
+    assert "includes_first_touch = first_touch_idx in {i - 2, i - 1, i}" in setup
+    assert "includes_touch = any(t in {i - 1, i}" not in setup
+    assert "for i in ([first_touch_idx] if first_touch_idx is not None else [])" in setup
+    assert "detect_end = min(i_end, first_touch_idx + 2)" in setup
+
+
+def test_checkavg_accepts_case_insensitive_stooq_bulk_cache_sources():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def run_checkavg")
+    end = source.index("def _print_flip_results_with_links", start)
+    checkavg = source[start:end]
+
+    assert '.strip().upper()' in checkavg
+    assert 'df, cache_path, meta = _load_full_cached_history_for_scan' in checkavg
+    assert 'if not source.startswith("stooq"):' in checkavg
+    assert 'source != "stooq"' not in checkavg
+    assert 'cache={cache_path}' in checkavg
