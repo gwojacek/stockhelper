@@ -3258,7 +3258,9 @@ def _print_results_with_links(results: list[ScanResult], retest_by_ticker_side: 
     return links
 
 def run_checkavg(target: str) -> int:
-    ticker = (target or "").strip()
+    # Provider symbols and cache filenames are canonical uppercase identities.
+    # Accept shell input in any case (for example ``alr.wa``).
+    ticker = (target or "").strip().upper()
     if not ticker:
         print("Usage: python run -checkavg <instrument>")
         return 2
@@ -3275,14 +3277,16 @@ def run_checkavg(target: str) -> int:
             fetch_symbol = f"{fetch_symbol}.WA"
 
     try:
-        df, _, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
+        df, cache_path, meta = _load_full_cached_history_for_scan(symbol=fetch_symbol, instrument_type=instrument)
     except Exception as exc:
         print(f"[checkavg] failed to load data for {ticker}: {exc}")
         return 1
 
     source = str((meta or {}).get("source", "unknown")).lower()
-    if source != "stooq":
-        print(f"[checkavg] expected stooq source, got: {source}")
+    # WSE bulk archives are an authoritative Stooq source too. Yahoo may only
+    # append a fresher candle, so every stooq-derived source remains eligible.
+    if not source.startswith("stooq"):
+        print(f"[checkavg] expected stooq-derived source, got: {source}")
         return 1
 
     if "Close" not in df.columns or "Volume" not in df.columns:
@@ -3296,7 +3300,7 @@ def run_checkavg(target: str) -> int:
         return 1
 
     avg_10d_pln = float(turnover_pln.tail(10).mean())
-    print(f"[checkavg] instrument={instrument} ticker={ticker} fetch_symbol={fetch_symbol} source={source}")
+    print(f"[checkavg] instrument={instrument} ticker={ticker} fetch_symbol={fetch_symbol} source={source} cache={cache_path}")
     print(f"[checkavg] Avg10d PLN: {avg_10d_pln:,.0f}")
     print(f"[checkavg] 1% max capital: {avg_10d_pln * 0.01:,.2f} PLN")
     return 0

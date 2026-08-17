@@ -1357,3 +1357,16 @@ def test_fibo_reversal_pattern_must_include_the_first_61_8_touch():
     assert "includes_touch = any(t in {i - 1, i}" not in setup
     assert "for i in ([first_touch_idx] if first_touch_idx is not None else [])" in setup
     assert "detect_end = min(i_end, first_touch_idx + 2)" in setup
+
+
+def test_checkavg_accepts_case_insensitive_stooq_bulk_cache_sources():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    start = source.index("def run_checkavg")
+    end = source.index("def _print_flip_results_with_links", start)
+    checkavg = source[start:end]
+
+    assert '.strip().upper()' in checkavg
+    assert 'df, cache_path, meta = _load_full_cached_history_for_scan' in checkavg
+    assert 'if not source.startswith("stooq"):' in checkavg
+    assert 'source != "stooq"' not in checkavg
+    assert 'cache={cache_path}' in checkavg
