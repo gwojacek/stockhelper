@@ -1019,6 +1019,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-ticker='RWE.DE'" in text
     assert "⚠️ Names still needed" not in text
     assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
+    assert "data-favorite-ready='1' data-favorite-ticker='RWE.DE'" in text
+    assert "onclick=\"toggleFavorite('RWE.DE')\"" in text
+    assert "favorites-3p-columns" in text
+    assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
+    assert "function favoriteWedgeContext(host)" in text
+    assert "date?'Breakout: '+date:'Unbroken'" in text
     assert "td.chart-action-cell{text-align:right}" in text
     assert "<th>Expected date</th><th>stockhelper_chart</th></tr>" in text
     assert "<td>2026-05-30</td><td class='chart-action-cell'>" in text
@@ -1160,7 +1166,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🚀 breakout" in text
     assert ".today-signal td{background:#14532d!important}" in text
     assert ".troj-cell-card.today-signal{background:#14532d!important" in text
-    assert "data-scanner='WEDGE' data-status='🚀 breakout' data-troj-direction='long' class='today-signal'" in text
+    assert "data-scanner='WEDGE' data-status='🚀 breakout' data-breakout-date='2026-05-30' data-troj-direction='long' class='today-signal'" in text
     assert "class='market direction-filter-section' id='wedge-report'" in text
     assert "setTrojDirection('wedge-report','long',this)" in text
     assert "setTrojDirection('wedge-report','short',this)" in text
