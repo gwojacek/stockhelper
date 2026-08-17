@@ -337,15 +337,16 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
 
 
-def test_fibo_pattern_can_form_on_later_candle_in_first_touch_block():
+def test_fibo_pattern_may_finish_later_but_must_include_initial_touch_candle():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "touch_idxs[:1]" not in source
     assert "first_touch_idx = all_touch_idxs[0]" in source
     assert "c = w.iloc[first_touch_idx]" in source
-    assert "includes_touch = any(t in {i - 1, i} for t in all_touch_idxs)" in source
-    assert "includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)" in source
+    assert "includes_first_touch = first_touch_idx in {i - 1, i}" in source
+    assert "includes_first_touch = first_touch_idx in {i - 2, i - 1, i}" in source
+    assert "includes_touch = any(t in {i - 1, i}" not in source
     assert "pattern_idx = i" in source
-    assert "The touching candle can therefore be the first, middle, or" in source
+    assert "It can be the first, middle, or final pattern candle" in source
     assert "close above 61.8" in source
     assert "float(close.iloc[pattern_idx]) <= fib_618" in source
     assert "pattern_failed_close = True" in source
@@ -1022,6 +1023,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-favorite-ready='1' data-favorite-ticker='RWE.DE'" in text
     assert "onclick=\"toggleFavorite('RWE.DE')\"" in text
     assert "favorites-3p-columns" in text
+    assert "const columns=[0,1,2,3]" in text
+    assert "favorites-3p-empty" in text
+    assert "No favorites" in text
+    assert "favorites-wedge-table" in text
+    assert "<th>Instrument</th><th>Market</th><th>Status</th><th>Chart</th>" in text
     assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
     assert "function favoriteWedgeContext(host)" in text
     assert "date?'Breakout: '+date:'Unbroken'" in text
@@ -1333,3 +1339,14 @@ def test_kumo_twist_uses_projected_cloud_source():
     assert "leading_span_a" in metrics_source
     assert "High\"].tail(52)" in metrics_source
     assert "span_a\"] - c[\"span_b" not in metrics_source
+
+
+def test_fibo_reversal_pattern_must_include_the_first_61_8_touch():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "includes_first_touch = first_touch_idx in {i - 1, i}" in setup
+    assert "includes_first_touch = first_touch_idx in {i - 2, i - 1, i}" in setup
+    assert "includes_touch = any(t in {i - 1, i}" not in setup
+    assert "for i in ([first_touch_idx] if first_touch_idx is not None else [])" in setup
+    assert "detect_end = min(i_end, first_touch_idx + 2)" in setup

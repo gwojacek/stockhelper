@@ -5694,10 +5694,11 @@ def _find_fibo_setup(
         pattern_failed_close = False
         first_touch_idx = all_touch_idxs[0] if all_touch_idxs else None
         pattern_idx = first_touch_idx if first_touch_idx is not None else i_end
-        # A Fibo reversal only requires one candle in the formation to touch
-        # 61.8.  The touching candle can therefore be the first, middle, or
-        # final candle; reversal_pattern_date always identifies the confirming
-        # (final) candle so chart highlights can expand backwards correctly.
+        # The first candle that touches 61.8 must belong to the reversal
+        # formation. It can be the first, middle, or final pattern candle, but
+        # a pattern formed only by later candles/touches starts a new event and
+        # cannot validate this Fibo. reversal_pattern_date identifies the
+        # confirming (final) candle for chart highlighting.
         if first_touch_idx is not None:
             c = w.iloc[first_touch_idx]
             if _is_bullish_hammer(c) and float(c["Close"]) > fib_618:
@@ -5706,7 +5707,7 @@ def _find_fibo_setup(
         if pattern == "none" and first_touch_idx is not None:
             for i in range(max(i_peak + 1, first_touch_idx), detect_end + 1):
                 c1, c2 = w.iloc[i - 1], w.iloc[i]
-                includes_touch = any(t in {i - 1, i} for t in all_touch_idxs)
+                includes_first_touch = first_touch_idx in {i - 1, i}
                 engulf = (
                     float(c1["Close"]) < float(c1["Open"])
                     and float(c2["Close"]) > float(c2["Open"])
@@ -5714,22 +5715,22 @@ def _find_fibo_setup(
                     and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                     and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
                 )
-                if includes_touch and engulf and float(c2["Close"]) > fib_618:
+                if includes_first_touch and engulf and float(c2["Close"]) > fib_618:
                     pattern = "bullish_engulfing"
-                elif includes_touch and _is_bullish_piercing_line(c1, c2, fib_618):
+                elif includes_first_touch and _is_bullish_piercing_line(c1, c2, fib_618):
                     pattern = "bullish_piercing_line"
-                elif includes_touch and _is_bullish_harami(c1, c2, fib_618):
+                elif includes_first_touch and _is_bullish_harami(c1, c2, fib_618):
                     pattern = "bullish_harami"
                 if pattern != "none":
                     pattern_idx = i
                     break
         if pattern == "none" and first_touch_idx is not None:
             for i in range(max(i_peak + 2, first_touch_idx), detect_end + 1):
-                includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
+                includes_first_touch = first_touch_idx in {i - 2, i - 1, i}
                 c1, c2, c3 = w.iloc[i - 2], w.iloc[i - 1], w.iloc[i]
-                if includes_touch and _is_morning_star(c1, c2, c3, fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
+                if includes_first_touch and _is_morning_star(c1, c2, c3, fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_star"
-                elif includes_touch and _is_morning_star(c1, c2, c3, fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
+                elif includes_first_touch and _is_morning_star(c1, c2, c3, fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                     pattern = "morning_doji_star"
                 if pattern != "none":
                     pattern_idx = i
@@ -5925,9 +5926,10 @@ def _find_fibo_setup(
         return None
     status = "valid_reversal"
     pattern = "none"
-    pattern_idx = touch_idxs[-1] if touch_idxs else i_end
-    detect_end = min(i_end, (touch_idxs[-1] + 2) if touch_idxs else i_end)
-    for i in touch_idxs:
+    first_touch_idx = all_touch_idxs[0] if all_touch_idxs else None
+    pattern_idx = first_touch_idx if first_touch_idx is not None else i_end
+    detect_end = min(i_end, first_touch_idx + 2) if first_touch_idx is not None else i_end
+    for i in ([first_touch_idx] if first_touch_idx is not None else []):
         c = w.iloc[i]
         if _is_bearish_shooting_star(c) and _touches_level(c, fib_618) and float(c["Close"]) < fib_618:
             pattern = "shooting_star"
@@ -5943,36 +5945,36 @@ def _find_fibo_setup(
                 and min(float(c2["Open"]), float(c2["Close"])) <= min(float(c1["Open"]), float(c1["Close"]))
                 and max(float(c2["Open"]), float(c2["Close"])) >= max(float(c1["Open"]), float(c1["Close"]))
             )
-            includes_touch = any(t in {i - 1, i} for t in touch_idxs)
-            if engulf and includes_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
+            includes_first_touch = first_touch_idx in {i - 1, i}
+            if engulf and includes_first_touch and (_touches_level(c1, fib_618) or _touches_level(c2, fib_618)) and float(c2["Close"]) < fib_618:
                 pattern = "bearish_engulfing"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            includes_touch = any(t in {i - 1, i} for t in touch_idxs)
-            if includes_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_first_touch = first_touch_idx in {i - 1, i}
+            if includes_first_touch and _is_bearish_harami(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "bearish_harami"
                 pattern_idx = i
                 break
     if pattern == "none" and touch_idxs:
         for i in range(max(i_bottom + 1, touch_idxs[0]), detect_end + 1):
-            includes_touch = any(t in {i - 1, i} for t in touch_idxs)
-            if includes_touch and _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
+            includes_first_touch = first_touch_idx in {i - 1, i}
+            if includes_first_touch and _is_dark_cloud_cover(w.iloc[i - 1], w.iloc[i], fib_618):
                 pattern = "dark_cloud_cover"
                 pattern_idx = i
                 break
     if pattern == "none" and all_touch_idxs:
         for i in range(max(i_bottom + 2, all_touch_idxs[0]), detect_end + 1):
-            includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-            if includes_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
+            includes_first_touch = first_touch_idx in {i - 2, i - 1, i}
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=False, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_star"
                 pattern_idx = i
                 break
     if pattern == "none" and all_touch_idxs:
         for i in range(max(i_bottom + 2, all_touch_idxs[0]), detect_end + 1):
-            includes_touch = any(t in {i - 2, i - 1, i} for t in all_touch_idxs)
-            if includes_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
+            includes_first_touch = first_touch_idx in {i - 2, i - 1, i}
+            if includes_first_touch and _is_evening_star(w.iloc[i - 2], w.iloc[i - 1], w.iloc[i], fib_618, doji_middle=True, allow_equal_third_close=allow_equal_third_close):
                 pattern = "evening_doji_star"
                 pattern_idx = i
                 break
