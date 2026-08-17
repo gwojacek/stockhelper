@@ -1022,7 +1022,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
     assert "data-favorite-ready='1' data-favorite-ticker='RWE.DE'" in text
     assert "onclick=\"toggleFavorite('RWE.DE')\"" in text
-    assert "favorites-3p-columns" in text
+    assert "favorites-3p-table" in text
+    assert "<colgroup><col><col><col><col></colgroup>" in text
+    assert ".favorites-3p-table col{width:25%}" in text
+    assert ".favorites-3p-table td{width:25%;padding:0" in text
     assert "const columns=[0,1,2,3]" in text
     assert "favorites-3p-empty" in text
     assert "No favorites" in text
