@@ -844,6 +844,19 @@ def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
     assert "only a newly anchored Fibo may return" in stale
 
 
+def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _scan_fibo_one")]
+    stale_start = source.index("def _is_waiting_candidate_stale")
+    stale = source[stale_start:source.index("def _scan_fibo_one", stale_start)]
+
+    assert "if _has_extended_sideways(correction_seg):" in setup
+    assert "correction is dominated by an extended side trend" in setup
+    assert "if _mirrored_short and _has_extended_sideways(impulse_seg):" in setup
+    assert "decline is dominated by an extended side trend" in setup
+    assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
+
+
 def test_fibo_rejects_correction_through_original_anchor():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "if corr_low <= fib_start:" in source

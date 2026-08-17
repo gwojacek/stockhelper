@@ -5653,6 +5653,12 @@ def _find_fibo_setup(
             )
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
+        # A retracement that spends several months in overlapping flat ranges
+        # is no longer the decline/recovery leg of the selected impulse. Apply
+        # this symmetrically to long and short formations.
+        if _has_extended_sideways(correction_seg):
+            _log(f"Rejected {direction}: correction is dominated by an extended side trend.")
+            return None
         if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
             newest_near_recovery_extreme = _sideways_correction_near_active_extreme(correction_seg, "long")
             if not newest_near_recovery_extreme:
@@ -5679,6 +5685,10 @@ def _find_fibo_setup(
         # its bottom/peak anchors.  Prefer the bottom that produced the largest
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
+        impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+        if _mirrored_short and _has_extended_sideways(impulse_seg):
+            _log("Rejected short: decline is dominated by an extended side trend.")
+            return None
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
         if all_touch_idxs:
@@ -6140,8 +6150,11 @@ def run_fibo_search(target: str) -> int:
         if after.empty:
             return False
         # Offset scans can capture a short before its later correction turns
-        # into a month-long range. Re-check against the full current dataset so
-        # an old NG.F candidate cannot bypass the live side-trend rejection.
+        # into a month-long range, or either direction before a correction
+        # becomes an extended side trend. Re-check against the full current
+        # dataset so stale offset candidates cannot bypass the live rejection.
+        if _has_extended_sideways(after.reset_index(drop=True)):
+            return True
         if cand.direction == "short" and _has_long_sideways(
             after.reset_index(drop=True), max_days=22, band_pct=0.12
         ):
