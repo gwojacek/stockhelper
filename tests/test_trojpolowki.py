@@ -115,6 +115,15 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
     assert 'os.environ["STOCKHELPER_SNAPSHOT_CACHE_ONLY"] = "1"' in batch
     assert "if code == 0 and not strict_cache_only:" in batch
 
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert 'if os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1":' in scanner_source
+    assert 'os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)' in scanner_source
+    fibo_worker = scanner_source[
+        scanner_source.index("def _scan_fibo_one"):
+        scanner_source.index("def run_fibo_explain", scanner_source.index("def _scan_fibo_one"))
+    ]
+    assert "with MARKET_REFRESH_LOCK:" in fibo_worker
+
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()

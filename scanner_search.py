@@ -1520,6 +1520,15 @@ def _commodity_refresh_targets_from_env() -> set[str]:
     return {part.strip().upper() for part in re.split(r"[,;\s]+", raw) if part.strip()}
 
 
+def _commodity_refresh_targets_for_scan(group_name: str) -> set[str]:
+    """Return targeted refreshes unless this scan must use a frozen snapshot."""
+    if group_name != "commodities":
+        return set()
+    if os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1":
+        return set()
+    return _commodity_refresh_targets_from_env()
+
+
 def _commodity_refresh_target_matches(ticker: str, fetch_symbol: str, refresh_targets: set[str]) -> bool:
     if not refresh_targets:
         return False
@@ -3972,7 +3981,13 @@ def run_ichimoku_search(target: str) -> int:
     if group_name == "forex":
         _print_forex_source_summary("search", members, data_source_by_ticker)
     if group_name == "commodities":
-        _commodity_csv_health_check(members)
+        try:
+            _commodity_csv_health_check(members)
+        finally:
+            # Refresh targets belong to this completed Ichimoku pass. Leaving
+            # them set makes the following allsearch Fibo snapshot reopen the
+            # Stooq downloader for the formerly stale commodities.
+            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
     elif group_name == "forex":
         _forex_csv_health_check(members, data_source_by_ticker)
 
@@ -6117,7 +6132,7 @@ def run_fibo_search(target: str) -> int:
     _should_refresh_group_data(group_name, members, exchange_suffix)
     print(f"[fibo] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     current_datetime = datetime.now(UTC)
-    commodity_refresh_targets = _commodity_refresh_targets_from_env() if group_name == "commodities" else set()
+    commodity_refresh_targets = _commodity_refresh_targets_for_scan(group_name)
     rows: list[FiboScanResult] = []
     rows3p_steep: list[FiboScanResult] = []
     wedge_rows: list[WedgeScanResult] = []
@@ -6215,28 +6230,33 @@ def run_fibo_search(target: str) -> int:
             fetch_symbol = COMMODITY_STOOQ_MAP.get(ticker.upper(), fetch_symbol).upper()
         out_rows: list[FiboScanResult | WedgeScanResult] = []
         try:
-            prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
-            prev_force_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
             scoped_env = group_name == "commodities" and bool(commodity_refresh_targets)
             if scoped_env:
-                if _commodity_refresh_target_matches(ticker, fetch_symbol, commodity_refresh_targets):
-                    os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
-                    os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
-                else:
-                    os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
-                    os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
-            try:
-                df, _, meta = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
-            finally:
-                if scoped_env:
-                    if prev_cache_only is None:
+                # Refresh flags are process-global. Keep their override and the
+                # loader call under one lock so a target worker cannot disable
+                # cache-only mode for unrelated parallel workers.
+                with MARKET_REFRESH_LOCK:
+                    prev_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
+                    prev_force_refresh = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
+                    if _commodity_refresh_target_matches(ticker, fetch_symbol, commodity_refresh_targets):
                         os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
                     else:
-                        os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
-                    if prev_force_refresh is None:
+                        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
                         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
-                    else:
-                        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = prev_force_refresh
+                    try:
+                        df, _, meta = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+                    finally:
+                        if prev_cache_only is None:
+                            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+                        else:
+                            os.environ["STOCKHELPER_CACHE_ONLY"] = prev_cache_only
+                        if prev_force_refresh is None:
+                            os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                        else:
+                            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = prev_force_refresh
+            else:
+                df, _, meta = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
