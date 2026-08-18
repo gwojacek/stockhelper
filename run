@@ -3360,7 +3360,12 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     all_links: set[str] = set()
     # Phase 1: run all Ichimoku scans first across all scopes.
     print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
-    code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False, force_cache_only=force_cache_only, strict_cache_only=force_cache_only, force_remote_refresh=force_remote_refresh)
+    if not force_cache_only and not force_remote_refresh:
+        os.environ["STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES"] = "1"
+    try:
+        code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False, force_cache_only=force_cache_only, strict_cache_only=force_cache_only, force_remote_refresh=force_remote_refresh)
+    finally:
+        os.environ.pop("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", None)
     if code_i != 0:
         print("[allsearch] Ichimoku phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1

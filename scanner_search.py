@@ -1944,6 +1944,64 @@ def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
     return missing
 
 
+def _latest_candle_signature(df: pd.DataFrame) -> tuple | None:
+    """Return the provider fields of the chronologically newest daily candle."""
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    candles = df.copy()
+    candles["Date"] = pd.to_datetime(candles["Date"], errors="coerce").dt.normalize()
+    candles = candles.dropna(subset=["Date"]).sort_values("Date")
+    if candles.empty:
+        return None
+    newest = candles.iloc[-1]
+    fields = ("Open", "High", "Low", "Close", "Volume")
+    if any(field not in candles.columns or pd.isna(newest[field]) for field in fields):
+        return None
+    return (
+        newest["Date"].date().isoformat(),
+        *(float(newest[field]) for field in fields),
+    )
+
+
+def _allsearch_ichimoku_yahoo_probe(
+    group_name: str,
+    members: list[str],
+    exchange_suffix: str | None,
+) -> bool:
+    """Compare three random cached latest candles exactly with live Yahoo data."""
+    probe_count = min(3, len(members))
+    probes = random.sample(list(members), k=probe_count) if probe_count else []
+    print(
+        f"[refresh-check] {group_name}: allsearch Ichimoku Yahoo probes "
+        f"({probe_count} random instrument(s)): {', '.join(probes) or 'none'}"
+    )
+    for ticker in probes:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+        yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
+        try:
+            csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+            cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+            remote, candidate, _name = call_silenced(
+                _yahoo_download_window, yahoo_symbol, instrument, period="10d"
+            )
+            cached_signature = _latest_candle_signature(cached)
+            yahoo_signature = _latest_candle_signature(remote)
+            matches = cached_signature is not None and cached_signature == yahoo_signature
+            print(
+                f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature}, "
+                f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
+            )
+            if not matches:
+                return True
+        except Exception as exc:
+            print(
+                f"[refresh-check] {ticker}: allsearch Yahoo probe failed "
+                f"({_retry_error_brief(exc)}); refreshing the whole market to avoid stale data"
+            )
+            return True
+    return False
+
+
 def _stooq_bulk_bucket(day: str | None = None) -> str | None:
     daily_bulk_day = day or _warsaw_daily_bulk_day()
     if not daily_bulk_day:
@@ -2041,6 +2099,25 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         return False
     STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
     group_l = (group_name or "").lower()
+    if os.environ.get("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES") == "1":
+        if _allsearch_ichimoku_yahoo_probe(group_name, members, exchange_suffix):
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
+            os.environ.pop("STOCKHELPER_MARKET_REFRESH_AUDITED", None)
+            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            print(
+                f"[refresh-check] {group_name}: a probe differs from Yahoo; "
+                "refreshing the whole market"
+            )
+            return True
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        print(
+            f"[refresh-check] {group_name}: all Yahoo probes match exactly; "
+            "cache-only mode ON"
+        )
+        return False
     if group_l == "commodities":
         day, phase = _warsaw_phase_now()
         state = _read_refresh_state()

@@ -931,6 +931,60 @@ def test_stock_group_refreshes_same_day_candle_while_market_is_open(monkeypatch,
     assert "today's Yahoo candle is updated" in capsys.readouterr().out
 
 
+def test_allsearch_ichimoku_three_yahoo_probes_refresh_whole_market_on_changed_candle(monkeypatch, tmp_path):
+    import os
+    import scanner_search as scanner
+
+    members = ["AAA", "BBB", "CCC", "DDD"]
+    cached = _df("2026-08-12", "2026-08-13")
+    changed = cached.copy()
+    changed.loc[changed.index[-1], "Close"] += 0.01
+    for ticker in members:
+        cached.to_csv(tmp_path / f"{ticker}.csv", index=False)
+
+    monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner.random, "sample", lambda population, k: members[:k])
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, *_args: (ticker, "stock"))
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, *_args: tmp_path / f"{symbol}.csv")
+    monkeypatch.setattr(
+        scanner,
+        "_yahoo_download_window",
+        lambda symbol, *_args, **_kwargs: (changed if symbol == "CCC" else cached, symbol, None),
+    )
+
+    assert scanner._should_refresh_group_data("DAX40", members, ".DE") is True
+    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+    assert "STOCKHELPER_CACHE_ONLY" not in os.environ
+
+
+def test_allsearch_ichimoku_three_exact_yahoo_probes_keep_cached_market(monkeypatch, tmp_path):
+    import os
+    import scanner_search as scanner
+
+    members = ["AAA", "BBB", "CCC", "DDD"]
+    cached = _df("2026-08-12", "2026-08-13")
+    for ticker in members:
+        cached.to_csv(tmp_path / f"{ticker}.csv", index=False)
+
+    monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner.random, "sample", lambda population, k: members[:k])
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, *_args: (ticker, "stock"))
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, *_args: tmp_path / f"{symbol}.csv")
+    monkeypatch.setattr(
+        scanner,
+        "_yahoo_download_window",
+        lambda symbol, *_args, **_kwargs: (cached.copy(), symbol, None),
+    )
+
+    assert scanner._should_refresh_group_data("DAX40", members, ".DE") is False
+    assert os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    assert "STOCKHELPER_FORCE_REMOTE_REFRESH" not in os.environ
+
+
 def test_market_session_open_uses_local_market_hours():
     from datetime import UTC, datetime
     import scanner_search as scanner
