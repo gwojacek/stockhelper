@@ -1406,7 +1406,15 @@ def load_or_update_daily_data(
             "name": symbol.title(),
             "fallback_reason": "Cache-only mode enabled.",
         }
-    if cache_only:
+    report_missing_cache_fallback = (
+        cache_only
+        and local is None
+        and os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1"
+        and os.environ.get("STOCKHELPER_REPORT_FETCH_IF_CACHE_MISSING") == "1"
+        and os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") != "1"
+        and os.environ.get("STOCKHELPER_USER_ONLYCACHE") != "1"
+    )
+    if cache_only and not report_missing_cache_fallback:
         raise ValueError(f"Cache-only mode: no local CSV data for {symbol}")
 
     if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):

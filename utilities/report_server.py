@@ -311,6 +311,11 @@ def main() -> int:
         # fallback before the chart UI publishes its URL.
         env["STOCKHELPER_CACHE_ONLY"] = "1"
         env["STOCKHELPER_CHART_FAST_CACHE"] = "1"
+        # Most report charts should use the scan's exact cached candle snapshot.
+        # A dropout may, however, refer to an instrument whose CSV was pruned or
+        # never persisted (for example ITOT.US). Let the chart loader fetch only
+        # in that missing-file case instead of failing before the UI starts.
+        env["STOCKHELPER_REPORT_FETCH_IF_CACHE_MISSING"] = "1"
         if group_id:
             with chart_group_lock:
                 group_data = chart_groups.get(group_id, {})

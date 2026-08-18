@@ -2,6 +2,7 @@ import sys
 import types
 
 import pandas as pd
+import pytest
 
 import chart_program.chart_loader as loader
 
@@ -1004,6 +1005,45 @@ def test_allsearch_fibo_snapshot_ignores_leftover_commodity_refresh_targets(monk
         "OIL",
         "GOLD",
     }
+
+
+def test_report_chart_fetches_when_its_cache_file_is_missing(monkeypatch, tmp_path):
+    csv_path = tmp_path / "ITOT_US.csv"
+    remote = _df("2026-08-17", "2026-08-18")
+    calls = []
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "_download_remote",
+        lambda **kwargs: (
+            calls.append(kwargs) or remote.copy(),
+            "yahoo",
+            "ITOT",
+            "iShares Core S&P Total U.S. Stock Market ETF",
+            "Report chart missing-cache fallback.",
+        ),
+    )
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+    monkeypatch.setenv("STOCKHELPER_REPORT_LAUNCHED_CHART", "1")
+    monkeypatch.setenv("STOCKHELPER_REPORT_FETCH_IF_CACHE_MISSING", "1")
+
+    loaded, resolved_path, info = loader.load_or_update_daily_data("ITOT.US", "etf")
+
+    assert calls
+    assert resolved_path == csv_path
+    assert info["source"] == "yahoo"
+    assert list(loaded["Date"].dt.strftime("%Y-%m-%d")) == ["2026-08-17", "2026-08-18"]
+
+
+def test_snapshot_cache_only_still_rejects_missing_report_chart_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: tmp_path / "missing.csv")
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
+    monkeypatch.setenv("STOCKHELPER_REPORT_LAUNCHED_CHART", "1")
+    monkeypatch.setenv("STOCKHELPER_REPORT_FETCH_IF_CACHE_MISSING", "1")
+    monkeypatch.setenv("STOCKHELPER_SNAPSHOT_CACHE_ONLY", "1")
+
+    with pytest.raises(ValueError, match="Cache-only mode: no local CSV data"):
+        loader.load_or_update_daily_data("ITOT.US", "etf")
 
 
 def test_yahoo_only_download_keeps_about_18_months(monkeypatch):
