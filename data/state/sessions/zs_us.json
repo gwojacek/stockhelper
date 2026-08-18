@@ -1,0 +1,85 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (114.625)",
+      "x0": "2026-04-10",
+      "x1": "2034-07-06",
+      "y0": 114.625,
+      "y1": 114.625,
+      "price": 114.625,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (199.56843)",
+      "x0": "2026-02-10",
+      "x1": "2034-07-06",
+      "y0": 199.56843,
+      "y1": 199.56843,
+      "price": 199.56843,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (225.80749)",
+      "x0": "2026-01-22",
+      "x1": "2034-07-06",
+      "y0": 225.80749,
+      "y1": 225.80749,
+      "price": 225.80749,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (252.04656)",
+      "x0": "2026-01-02",
+      "x1": "2034-07-06",
+      "y0": 252.04656,
+      "y1": 252.04656,
+      "price": 252.04656,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (336.98999)",
+      "x0": "2025-11-03",
+      "x1": "2034-07-06",
+      "y0": 336.98999,
+      "y1": 336.98999,
+      "price": 336.98999,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2025-11-03",
+      "x1": "2026-04-10",
+      "y0": 336.98999,
+      "y1": 114.625,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ]
+}

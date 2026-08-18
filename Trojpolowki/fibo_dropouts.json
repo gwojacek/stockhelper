@@ -1,52 +1,4 @@
 {
-  "BCX|long|2026-03-23": {
-    "cell": "**🇵🇱 BCX ↗️ (2026-03-23) 107.0%** <!--fibo-end:2026-07-27-->[🔗 stooq](https://stooq.pl/q/a2/?s=bcx&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-04",
-    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
-    "column": 2
-  },
-  "HK.CASH|short|2026-01-29": {
-    "cell": "**📊 HK.CASH ↘️ (2026-01-29) 97.3%** <!--fibo-end:2026-06-26-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Ehsi&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-04",
-    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
-    "column": 2
-  },
-  "QRS|long|2026-03-30": {
-    "cell": "**🇵🇱 QRS ↗️ (2026-03-30)** <!--fibo-end:2026-07-27-->[🔗 stooq](https://stooq.pl/q/a2/?s=qrs&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-04",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
-  "USDJPY|long|2026-05-14": {
-    "cell": "**💱 USDJPY ↗️ (2026-05-14)** <!--fibo-end:2026-07-01-->[🔗 stooq](https://stooq.pl/q/a2/?s=usdjpy&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-04",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
-  "CMP|long|2026-04-13": {
-    "cell": "**🇵🇱 CMP ↗️ (2026-04-13)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=cmp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-05",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
-  "MPWR.US|short|2026-05-26": {
-    "cell": "**🇺🇸 MPWR.US ↘️ (2026-05-26)** <!--fibo-end:2026-07-17-->[🔗 stooq](https://stooq.pl/q/a2/?s=mpwr.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-05",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
-  "NVDA.US|short|2026-05-14": {
-    "cell": "**🇺🇸 NVDA.US ↘️ (2026-05-14) 62.2%** <!--fibo-end:2026-06-29-->[🔗 stooq](https://stooq.pl/q/a2/?s=nvda.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-05",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
-  "BRACOMP|short|2026-04-14": {
-    "cell": "**📊 BRACOMP ↘️ (2026-04-14) 22.8%** <!--fibo-end:2026-06-19-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Ebvp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-05",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
   "LBW|long|2026-04-27": {
     "cell": "**🇵🇱 LBW ↗️ (2026-04-27) 65.9%** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=lbw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-11",
@@ -77,12 +29,6 @@
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 1
   },
-  "VRSK.US|long|2026-05-14": {
-    "cell": "**🇺🇸 VRSK.US ↗️ (2026-05-14) 77.5%** <!--fibo-end:2026-07-29-->[🔗 stooq](https://stooq.pl/q/a2/?s=vrsk.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-11",
-    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
-    "column": 2
-  },
   "VRG|long|2026-03-23": {
     "cell": "**🇵🇱 VRG ↗️ (2026-03-23) 3.2%** <!--fibo-end:2026-05-25-->[🔗 stooq](https://stooq.pl/q/a2/?s=vrg&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-11",
@@ -101,12 +47,6 @@
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 1
   },
-  "VRTX.US|long|2026-05-05": {
-    "cell": "**🇺🇸 VRTX.US ↗️ (2026-05-05) 43.5%** <!--fibo-end:2026-07-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=vrtx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-11",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
   "MSTR.US|short|2025-08-11": {
     "cell": "**🇺🇸 MSTR.US ↘️ (2025-08-11)** <!--fibo-end:2026-06-26-->[🔗 stooq](https://stooq.pl/q/a2/?s=mstr.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-11",
@@ -115,12 +55,6 @@
   },
   "MNST.US|long|2026-05-04": {
     "cell": "**🇺🇸 MNST.US ↗️ (2026-05-04)** <!--fibo-end:2026-07-17-->[🔗 stooq](https://stooq.pl/q/a2/?s=mnst.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-11",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
-  "COST.US|short|2026-05-19": {
-    "cell": "**🇺🇸 COST.US ↘️ (2026-05-19)** <!--fibo-end:2026-07-10-->[🔗 stooq](https://stooq.pl/q/a2/?s=cost.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-11",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 0
@@ -179,32 +113,8 @@
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 1
   },
-  "COFFEE|short|2025-10-23": {
-    "cell": "**🛢️ COFFEE ↘️ (2025-10-23) 38.2%** <!--fibo-end:2026-06-09-->[🔗 stooq](https://stooq.pl/q/a2/?s=kc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-13",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
-  "COFFEE|long|2026-06-09": {
-    "cell": "**🛢️ COFFEE ↗️ (2026-06-09) 29.3%** <!--fibo-end:2026-07-06-->[🔗 stooq](https://stooq.pl/q/a2/?s=kc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-13",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
-  "CPS|long|2026-04-21": {
-    "cell": "**🇵🇱 CPS ↗️ (2026-04-21)** <!--fibo-end:2026-07-29-->[🔗 stooq](https://stooq.pl/q/a2/?s=cps&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-13",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
   "AVGO.US|short|2026-06-03": {
     "cell": "**🇺🇸 AVGO.US ↘️ (2026-06-03) 50.9%** <!--fibo-end:2026-07-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=avgo.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-13",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
-  "EURGBP|short|2026-06-22": {
-    "cell": "**💱 EURGBP ↘️ (2026-06-22) 34.3%** <!--fibo-end:2026-07-15-->[🔗 stooq](https://stooq.pl/q/a2/?s=eurgbp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-13",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 1
@@ -221,33 +131,417 @@
     "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
     "column": 3
   },
-  "ASE|long|2026-05-13": {
-    "cell": "**🇵🇱 ASE ↗️ (2026-05-13)** <!--fibo-end:2026-08-11-->[🔗 stooq](https://stooq.pl/q/a2/?s=ase&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-13",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
-  "PEO|long|2026-03-09": {
-    "cell": "**🇵🇱 PEO ↗️ (2026-03-09)** <!--fibo-end:2026-07-10-->[🔗 stooq](https://stooq.pl/q/a2/?s=peo&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-13",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
   "MOL|long|2025-12-19": {
     "cell": "**🇵🇱 MOL ↗️ (2025-12-19)** <!--fibo-end:2026-04-14-->[🔗 stooq](https://stooq.pl/q/a2/?s=mol&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-13",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 0
   },
-  "PLATINUM|short|2026-01-26": {
-    "cell": "**🛢️ PLATINUM ↘️ (2026-01-26)** <!--fibo-end:2026-07-01-->[🔗 stooq](https://stooq.pl/q/a2/?s=pl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-14",
+  "WBD.US|short|2025-12-12": {
+    "cell": "**🇺🇸 WBD.US ↘️ (2025-12-12) 89.2%** <!--fibo-end:2026-07-27-->[🔗 stooq](https://stooq.pl/q/a2/?s=wbd.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 2
+  },
+  "SHL.DE|short|2025-10-24": {
+    "cell": "**🇩🇪 SHL.DE ↘️ (2025-10-24) 41.4%** <!--fibo-end:2026-05-18-->[🔗 stooq](https://stooq.pl/q/a2/?s=shl.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "GILD.US|short|2026-02-11": {
+    "cell": "**🇺🇸 GILD.US ↘️ (2026-02-11) 62.0%** <!--fibo-end:2026-06-10-->[🔗 stooq](https://stooq.pl/q/a2/?s=gild.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "HFG.DE|short|2025-08-11": {
+    "cell": "**🇩🇪 HFG.DE ↘️ (2025-08-11)** <!--fibo-end:2026-08-14-->[🔗 stooq](https://stooq.pl/q/a2/?s=hfg.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "BMW.DE|short|2025-12-09": {
+    "cell": "**🇩🇪 BMW.DE ↘️ (2025-12-09)** <!--fibo-end:2026-07-24-->[🔗 stooq](https://stooq.pl/q/a2/?s=bmw.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "HEI.DE|short|2026-01-26": {
+    "cell": "**🇩🇪 HEI.DE ↘️ (2026-01-26)** <!--fibo-end:2026-07-31-->[🔗 stooq](https://stooq.pl/q/a2/?s=hei.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "CSGP.US|short|2025-08-11": {
+    "cell": "**🇺🇸 CSGP.US ↘️ (2025-08-11)** <!--fibo-end:2026-07-29-->[🔗 stooq](https://stooq.pl/q/a2/?s=csgp.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "ALNY.US|short|2025-10-20": {
+    "cell": "**🇺🇸 ALNY.US ↘️ (2025-10-20)** <!--fibo-end:2026-07-30-->[🔗 stooq](https://stooq.pl/q/a2/?s=alny.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "ISRG.US|short|2026-01-07": {
+    "cell": "**🇺🇸 ISRG.US ↘️ (2026-01-07) 0.9%** <!--fibo-end:2026-07-23-->[🔗 stooq](https://stooq.pl/q/a2/?s=isrg.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "EURJPY|short|2026-04-17": {
+    "cell": "**💱 EURJPY ↘️ (2026-04-17) 74.2%** <!--fibo-end:2026-08-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=eurjpy&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "BRACOMP|short|2026-04-14": {
+    "cell": "**📊 BRACOMP ↘️ (2026-04-14)** <!--fibo-end:2026-08-14-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Ebvp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-15",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "BEI.DE|short|2026-02-24": {
+    "cell": "**🇩🇪 BEI.DE ↘️ (2026-02-24) 9.3%** <!--fibo-end:2026-06-04-->[🔗 stooq](https://stooq.pl/q/a2/?s=bei.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "SMH|long|2026-03-30": {
+    "cell": "**📊 SMH ↗️ (2026-03-30) 8.7%** <!--fibo-end:2026-06-22-->[🔗 stooq](https://stooq.pl/q/a2/?s=smh&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "1306.T|long|2026-03-30": {
+    "cell": "**📊 1306.T ↗️ (2026-03-30)** <!--fibo-end:2026-08-14-->[🔗 stooq](https://stooq.pl/q/a2/?s=1306.t&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "XLK|long|2026-03-30": {
+    "cell": "**📊 XLK ↗️ (2026-03-30)** <!--fibo-end:2026-06-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=xlk&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VGT|long|2026-03-30": {
+    "cell": "**📊 VGT ↗️ (2026-03-30)** <!--fibo-end:2026-06-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=vgt&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "1321.T|long|2026-03-23": {
+    "cell": "**📊 1321.T ↗️ (2026-03-23)** <!--fibo-end:2026-06-22-->[🔗 stooq](https://stooq.pl/q/a2/?s=1321.t&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "QQQ|long|2026-03-30": {
+    "cell": "**📊 QQQ ↗️ (2026-03-30)** <!--fibo-end:2026-06-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=qqq&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "QQQM|long|2026-03-30": {
+    "cell": "**📊 QQQM ↗️ (2026-03-30)** <!--fibo-end:2026-06-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=qqqm&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "IVW|long|2026-03-30": {
+    "cell": "**📊 IVW ↗️ (2026-03-30)** <!--fibo-end:2026-08-05-->[🔗 stooq](https://stooq.pl/q/a2/?s=ivw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VUG|long|2026-03-30": {
+    "cell": "**📊 VUG ↗️ (2026-03-30)** <!--fibo-end:2026-06-01-->[🔗 stooq](https://stooq.pl/q/a2/?s=vug&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "IWF|long|2026-03-30": {
+    "cell": "**📊 IWF ↗️ (2026-03-30)** <!--fibo-end:2026-06-01-->[🔗 stooq](https://stooq.pl/q/a2/?s=iwf&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VXUS|long|2026-03-30": {
+    "cell": "**📊 VXUS ↗️ (2026-03-30)** <!--fibo-end:2026-06-22-->[🔗 stooq](https://stooq.pl/q/a2/?s=vxus&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VIG|long|2026-05-18": {
+    "cell": "**📊 VIG ↗️ (2026-05-18)** <!--fibo-end:2026-07-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=vig&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "RSP|long|2026-05-20": {
+    "cell": "**📊 RSP ↗️ (2026-05-20)** <!--fibo-end:2026-07-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=rsp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SCHD|long|2026-06-24": {
+    "cell": "**📊 SCHD ↗️ (2026-06-24)** <!--fibo-end:2026-07-28-->[🔗 stooq](https://stooq.pl/q/a2/?s=schd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "ITOT|long|2026-03-30": {
+    "cell": "**📊 ITOT ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=itot&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "IJR|long|2026-05-19": {
+    "cell": "**📊 IJR ↗️ (2026-05-19)** <!--fibo-end:2026-07-01-->[🔗 stooq](https://stooq.pl/q/a2/?s=ijr&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VTV|long|2026-05-19": {
+    "cell": "**📊 VTV ↗️ (2026-05-19)** <!--fibo-end:2026-06-25-->[🔗 stooq](https://stooq.pl/q/a2/?s=vtv&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "IVV|long|2026-03-30": {
+    "cell": "**📊 IVV ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=ivv&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SCHX|long|2026-03-30": {
+    "cell": "**📊 SCHX ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=schx&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SPYM|long|2026-03-30": {
+    "cell": "**📊 SPYM ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=spym&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SCHG|long|2026-03-30": {
+    "cell": "**📊 SCHG ↗️ (2026-03-30)** <!--fibo-end:2026-06-01-->[🔗 stooq](https://stooq.pl/q/a2/?s=schg&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-16",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "ATC|long|2026-06-12": {
+    "cell": "**🇵🇱 ARCTIC (ATC) ↗️ (2026-06-12) 40.0%** <!--fibo-end:2026-08-11-->[🔗 stooq](https://stooq.pl/q/a2/?s=atc&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "GOOGL.US|short|2026-05-18": {
+    "cell": "**🇺🇸 Alphabet Class A (GOOGL.US) ↘️ (2026-05-18)** <!--fibo-end:2026-07-23-->[🔗 stooq](https://stooq.pl/q/a2/?s=googl.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 3
+  },
+  "GOOG.US|short|2026-05-18": {
+    "cell": "**🇺🇸 Alphabet Class C (GOOG.US) ↘️ (2026-05-18)** <!--fibo-end:2026-07-23-->[🔗 stooq](https://stooq.pl/q/a2/?s=goog.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 3
+  },
+  "RBW|long|2026-05-20": {
+    "cell": "**🇵🇱 RAINBOW (RBW) ↗️ (2026-05-20)** <!--fibo-end:2026-07-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=rbw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SXR8.DE|long|2026-03-30": {
+    "cell": "**🧺 iShares Core S&P 500 UCITS (SXR8.DE) ↗️ (2026-03-30)** <!--fibo-end:2026-06-03-->[🔗 stooq](https://stooq.pl/q/a2/?s=sxr8.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "EOAN.DE|long|2025-12-11": {
+    "cell": "**🇩🇪 E.ON (EOAN.DE) ↗️ (2025-12-11) 81.7%** <!--fibo-end:2026-03-17-->[🔗 stooq](https://stooq.pl/q/a2/?s=eoan.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 2
+  },
+  "TRI.US|short|2025-12-05": {
+    "cell": "**🇺🇸 Thomson Reuters (TRI.US) ↘️ (2025-12-05)** <!--fibo-end:2026-06-22-->[🔗 stooq](https://stooq.pl/q/a2/?s=tri.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 3
+  },
+  "SAP.DE|short|2026-01-13": {
+    "cell": "**🇩🇪 SAP (SAP.DE) ↘️ (2026-01-13)** <!--fibo-end:2026-07-23-->[🔗 stooq](https://stooq.pl/q/a2/?s=sap.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 3
+  },
+  "GBPUSD|short|2026-01-27": {
+    "cell": "**💱 GBPUSD ↘️ (2026-01-27) 92.8%** <!--fibo-end:2026-06-24-->[🔗 stooq](https://stooq.pl/q/a2/?s=gbpusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 2
+  },
+  "ORLY.US|short|2026-01-26": {
+    "cell": "**🇺🇸 O'Reilly Automotive (ORLY.US) ↘️ (2026-01-26) 51.7%** <!--fibo-end:2026-07-15-->[🔗 stooq](https://stooq.pl/q/a2/?s=orly.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "CMCSA.US|short|2026-02-12": {
+    "cell": "**🇺🇸 Comcast (CMCSA.US) ↘️ (2026-02-12) 49.0%** <!--fibo-end:2026-07-24-->[🔗 stooq](https://stooq.pl/q/a2/?s=cmcsa.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "RWE.DE|long|2025-12-04": {
+    "cell": "**🇩🇪 RWE (RWE.DE) ↗️ (2025-12-04)** <!--fibo-end:2026-04-30-->[🔗 stooq](https://stooq.pl/q/a2/?s=rwe.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "CPRT.US|short|2026-01-21": {
+    "cell": "**🇺🇸 Copart (CPRT.US) ↘️ (2026-01-21) 22.1%** <!--fibo-end:2026-07-23-->[🔗 stooq](https://stooq.pl/q/a2/?s=cprt.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "ZS.US|short|2025-11-03": {
+    "cell": "**🇺🇸 Zscaler (ZS.US) ↘️ (2025-11-03) 19.4%** <!--fibo-end:2026-04-10-->[🔗 stooq](https://stooq.pl/q/a2/?s=zs.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "NFLX.US|short|2026-04-16": {
+    "cell": "**🇺🇸 Netflix (NFLX.US) ↘️ (2026-04-16) 16.3%** <!--fibo-end:2026-07-17-->[🔗 stooq](https://stooq.pl/q/a2/?s=nflx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "TMUS.US|short|2026-02-24": {
+    "cell": "**🇺🇸 T-Mobile US (TMUS.US) ↘️ (2026-02-24) 13.3%** <!--fibo-end:2026-06-30-->[🔗 stooq](https://stooq.pl/q/a2/?s=tmus.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "FER.US|short|2026-04-14": {
+    "cell": "**🇺🇸 Ferrovial (FER.US) ↘️ (2026-04-14) 7.2%** <!--fibo-end:2026-07-28-->[🔗 stooq](https://stooq.pl/q/a2/?s=fer.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "GOLD|short|2026-01-29": {
+    "cell": "**🛢️ GOLD ↘️ (2026-01-29) 19.2%** <!--fibo-end:2026-06-30-->[🔗 stooq](https://stooq.pl/q/a2/?s=xauusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "CHN.CASH|short|2026-01-29": {
+    "cell": "**📊 CHN.CASH ↘️ (2026-01-29) 62.5%** <!--fibo-end:2026-06-26-->[🔗 stooq](https://stooq.pl/q/a2/?s=0el.c&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "VRSK.US|long|2026-05-14": {
+    "cell": "**🇺🇸 Verisk Analytics (VRSK.US) ↗️ (2026-05-14)** <!--fibo-end:2026-07-17-->[🔗 stooq](https://stooq.pl/q/a2/?s=vrsk.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "PEP.US|short|2026-02-12": {
+    "cell": "**🇺🇸 PepsiCo (PEP.US) ↘️ (2026-02-12)** <!--fibo-end:2026-07-23-->[🔗 stooq](https://stooq.pl/q/a2/?s=pep.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "FANG.US|long|2026-01-07": {
+    "cell": "**🇺🇸 Diamondback Energy (FANG.US) ↗️ (2026-01-07)** <!--fibo-end:2026-05-04-->[🔗 stooq](https://stooq.pl/q/a2/?s=fang.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 0
   },
   "PALLADIUM|short|2026-01-26": {
     "cell": "**🛢️ PALLADIUM ↘️ (2026-01-26)** <!--fibo-end:2026-06-24-->[🔗 stooq](https://stooq.pl/q/a2/?s=pa.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-14",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VIG.US|long|2026-05-18": {
+    "cell": "**🧺 Vanguard Dividend Appreciation (VIG.US) ↗️ (2026-05-18)** <!--fibo-end:2026-07-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=vig.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "RSP.US|long|2026-05-20": {
+    "cell": "**🧺 Invesco S&P 500 Equal Weight (RSP.US) ↗️ (2026-05-20)** <!--fibo-end:2026-07-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=rsp.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "ITOT.US|long|2026-03-30": {
+    "cell": "**🧺 iShares Core S&P Total U.S. Market (ITOT.US) ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=itot.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "IVV.US|long|2026-03-30": {
+    "cell": "**🧺 iShares Core S&P 500 ETF (IVV.US) ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=ivv.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SCHX.US|long|2026-03-30": {
+    "cell": "**🧺 Schwab U.S. Large-Cap (SCHX.US) ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=schx.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SPYM.US|long|2026-03-30": {
+    "cell": "**🧺 SPDR Portfolio S&P 500 (SPYM.US) ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=spym.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "US500|long|2026-03-30": {
+    "cell": "**📊 US500 ↗️ (2026-03-30)** <!--fibo-end:2026-06-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Espx&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-17",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "RVU|long|2026-07-22": {
+    "cell": "**🇵🇱 RYVU (RVU) ↗️ (2026-07-22) 12.8%** <!--fibo-end:2026-08-11-->[🔗 stooq](https://stooq.pl/q/a2/?s=rvu&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-18",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "OPN|long|2026-05-21": {
+    "cell": "**🇵🇱 OPONEO.PL (OPN) ↗️ (2026-05-21)** <!--fibo-end:2026-08-12-->[🔗 stooq](https://stooq.pl/q/a2/?s=opn&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-18",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SNPS.US|short|2026-05-26": {
+    "cell": "**🇺🇸 Synopsys (SNPS.US) ↘️ (2026-05-26) 15.6%** <!--fibo-end:2026-07-17-->[🔗 stooq](https://stooq.pl/q/a2/?s=snps.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-18",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "SCHD.US|long|2026-06-24": {
+    "cell": "**🧺 Schwab U.S. Dividend Equity (SCHD.US) ↗️ (2026-06-24)** <!--fibo-end:2026-07-28-->[🔗 stooq](https://stooq.pl/q/a2/?s=schd.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-18",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "VB.US|long|2026-05-19": {
+    "cell": "**🧺 Vanguard Small-Cap ETF (VB.US) ↗️ (2026-05-19)** <!--fibo-end:2026-07-02-->[🔗 stooq](https://stooq.pl/q/a2/?s=vb.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-08-18",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 0
   }
