@@ -2462,7 +2462,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             end_match = re.search(r"<!--fibo-end:(\d{4}-\d{2}-\d{2})-->", raw)
             start_arg = f" --fibo-anchor-start {start_match.group(1)}" if start_match else ""
             end_arg = f" --fibo-anchor-end {end_match.group(1)}" if end_match else ""
-            cmd = html.escape(f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5{start_arg}{end_arg} --fibo-right")
+            etf_tickers = {symbol.upper() for _name, symbol in ETFS_MARKET}
+            instrument_arg = " --instrument etf" if ticker.upper() in etf_tickers else ""
+            cmd = html.escape(f"python run -c {ticker}{instrument_arg} --ichimoku-mode off --fibo-lines 5{start_arg}{end_arg} --fibo-right")
         else:
             cmd = html.escape(f"python run -c {ticker}")
         stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))

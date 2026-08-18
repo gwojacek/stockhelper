@@ -1260,6 +1260,10 @@ def test_etf_report_chart_uses_etf_cache_instrument():
     assert mod._chart_command_for_row(row).startswith("python run -c VOO.US --instrument etf ")
     assert mod._market_icon("ETFS", "GLD.US") == "🧺"
     assert "s=gld.us" in mod._stooq_chart_url("GLD.US")
+    source = Path("run").read_text(encoding="utf-8")
+    dropout_start = source.index('elif "fibo" in section_id:')
+    dropout_fallback = source[dropout_start:source.index("stooq =", dropout_start)]
+    assert 'instrument_arg = " --instrument etf" if ticker.upper() in etf_tickers else ""' in dropout_fallback
 
 
 def test_open_existing_allsearch_report_refreshes_html_before_serving(tmp_path: Path):
