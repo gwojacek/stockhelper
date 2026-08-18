@@ -1,12 +1,12 @@
 {
   "__show_ichimoku__": true,
   "__journal_source_technique__": "Ichimoku",
-  "lot_cost": 51052.03,
-  "pip_value": 3.72,
+  "lot_cost": 48737.57,
+  "pip_value": 3.73,
   "__scanner_breakout_date__": "2026-08-06",
   "__scanner_retest_count__": "2",
-  "__scanner_latest_retest_date__": "2026-08-10",
-  "__scanner_latest_retest_pattern__": "hammer",
+  "__scanner_latest_retest_date__": "2026-08-12",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
   "__scanner_breakout_direction__": "long",
   "__scanner_previous_respect_months__": "5.3"
 }

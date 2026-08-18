@@ -1,0 +1,113 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2025-10-20",
+        "2026-07-13",
+        "2027-12-31"
+      ],
+      "y": [
+        8.06,
+        5.59,
+        0.29123
+      ],
+      "x0": "2025-10-20",
+      "x1": "2027-12-31",
+      "y0": 8.06,
+      "y1": 0.29123,
+      "anchor_x": [
+        "2025-10-20",
+        "2026-07-13"
+      ],
+      "anchor_y": [
+        8.06,
+        5.59
+      ],
+      "price": 0.29123,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-04-23",
+        "2026-12-24"
+      ],
+      "y": [
+        4.35,
+        5.64
+      ],
+      "x0": "2026-07-08",
+      "x1": "2026-12-08",
+      "y0": 4.74,
+      "y1": 5.83,
+      "anchor_x": [
+        "2026-04-23",
+        "2026-08-05"
+      ],
+      "anchor_y": [
+        4.35,
+        4.94
+      ],
+      "price": 5.83,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true
+    }
+  ],
+  "high": 8.06,
+  "__wedge_auto_high__": true,
+  "low": 4.35,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 4.97,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "short",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 5.11,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 320000,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 8.06,
+      "plot_price": 8.06,
+      "date": "2025-10-20",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 4.35,
+      "plot_price": 4.35,
+      "date": "2026-04-23",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 4.97,
+      "plot_price": 4.97,
+      "date": "2026-08-18",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 5.11,
+      "plot_price": 5.11,
+      "date": "2026-08-18",
+      "auto_wedge": true
+    }
+  }
+}

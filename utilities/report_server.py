@@ -298,6 +298,15 @@ def main() -> int:
         argv = shlex.split(command)
         if _is_journal_html_command(command):
             return 0, _journal_response_payload()
+        # Older generated reports did not include --instrument for Forex/ETF
+        # dropout commands. Resolve it before launching so even an already-open
+        # HTML report selects data/csv/forex or data/csv/etfs, never a stock
+        # path and never a remote missing-cache fallback.
+        if _is_run_chart_command(argv) and len(argv) >= 4 and "--instrument" not in argv:
+            from chart_program.instrument_detector import detect_instrument_type
+            detected_instrument = detect_instrument_type(argv[3])
+            if detected_instrument in {"forex", "etf"}:
+                argv.extend(["--instrument", detected_instrument])
         if len(argv) >= 2 and argv[0] in {"python", "python3"} and argv[1] == "run":
             argv = [sys.executable, str(project_root / "run"), *argv[2:]]
         argv = _direct_chart_argv(argv)

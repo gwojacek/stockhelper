@@ -4,10 +4,10 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
   "__scanner_breakout_date__": "2026-04-16",
-  "__scanner_retest_count__": "1",
+  "__scanner_retest_count__": "3",
   "__scanner_previous_respect_months__": "4.2",
   "__journal_source_technique__": "Ichimoku",
   "__scanner_breakout_direction__": "long",
-  "__scanner_latest_retest_date__": "2026-08-10",
-  "__scanner_latest_retest_pattern__": "bullish_engulfing"
+  "__scanner_latest_retest_date__": "2026-08-13",
+  "__scanner_latest_retest_pattern__": "morning_star"
 }

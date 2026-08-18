@@ -92,9 +92,5 @@
       "color": "#64748b",
       "group_id": "auto-fibo"
     }
-  ],
-  "__saved_fibo_invalid__": {
-    "since": "2026-08-14",
-    "fingerprint": "0e964d7e5c598b3cdc6bf816a4c0e76110f772af11dd5f245a69dc8c82bcee9c"
-  }
+  ]
 }

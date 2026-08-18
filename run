@@ -216,7 +216,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
     elif market == "WIG" and "." not in ticker_cmd and len(ticker_cmd) <= 5:
         ticker_cmd = f"{ticker_cmd}.WA"
     instrument = "etf" if market == "ETFS" else ("stock" if market in {"WIG", "DAX", "US100"} else ("forex" if market == "FOREX" else ("commodity" if market in {"COMMODITIES", "INDEXES"} else "stock")))
-    instrument_arg = " --instrument etf" if instrument == "etf" else ""
+    instrument_arg = f" --instrument {instrument}" if instrument in {"etf", "forex"} else ""
     def _append_optional(cmd: str, flag: str, value: str | None) -> str:
         text = str(value or "").strip()
         if not text or text == "-":
@@ -2462,7 +2462,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             end_match = re.search(r"<!--fibo-end:(\d{4}-\d{2}-\d{2})-->", raw)
             start_arg = f" --fibo-anchor-start {start_match.group(1)}" if start_match else ""
             end_arg = f" --fibo-anchor-end {end_match.group(1)}" if end_match else ""
-            cmd = html.escape(f"python run -c {ticker} --ichimoku-mode off --fibo-lines 5{start_arg}{end_arg} --fibo-right")
+            etf_tickers = {symbol.upper() for _name, symbol in ETFS_MARKET}
+            detected_instrument = "etf" if ticker.upper() in etf_tickers else detect_instrument_type(ticker)
+            instrument_arg = f" --instrument {detected_instrument}" if detected_instrument in {"etf", "forex"} else ""
+            cmd = html.escape(f"python run -c {ticker}{instrument_arg} --ichimoku-mode off --fibo-lines 5{start_arg}{end_arg} --fibo-right")
         else:
             cmd = html.escape(f"python run -c {ticker}")
         stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))

@@ -1,0 +1,88 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (1156.0)",
+      "x0": "2026-06-24",
+      "x1": "2034-07-07",
+      "y0": 1156.0,
+      "y1": 1156.0,
+      "price": 1156.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (1553.089)",
+      "x0": "2026-04-28",
+      "x1": "2034-07-07",
+      "y0": 1553.089,
+      "y1": 1553.089,
+      "price": 1553.089,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (1675.75)",
+      "x0": "2026-04-09",
+      "x1": "2034-07-07",
+      "y0": 1675.75,
+      "y1": 1675.75,
+      "price": 1675.75,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (1798.411)",
+      "x0": "2026-03-24",
+      "x1": "2034-07-07",
+      "y0": 1798.411,
+      "y1": 1798.411,
+      "price": 1798.411,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (2195.5)",
+      "x0": "2026-01-26",
+      "x1": "2034-07-07",
+      "y0": 2195.5,
+      "y1": 2195.5,
+      "price": 2195.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-01-26",
+      "x1": "2026-06-24",
+      "y0": 2195.5,
+      "y1": 1156.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 53950.45,
+  "pip_value": 361.87,
+  "__saved_fibo_invalid__": {
+    "since": "2026-08-18",
+    "fingerprint": "314c467803afb86538d56596d570800ac2006a234ab08995a61f489989dff2bf"
+  }
+}

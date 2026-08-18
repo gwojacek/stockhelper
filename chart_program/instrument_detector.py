@@ -6,6 +6,7 @@ import re
 
 INSTRUMENT_DIR_TO_TYPE = {
     "stocks": "stock",
+    "etfs": "etf",
     "commodities": "commodity",
     "forex": "forex",
 }
@@ -132,8 +133,27 @@ def detect_from_symbol(symbol_or_pair: str) -> str:
     return "stock"
 
 
+def detect_from_cached_csv(symbol_or_pair: str, csv_root: Path | None = None) -> str | None:
+    """Use the dedicated ETF cache as authoritative type information.
+
+    ETF tickers share exchange suffixes such as ``.US`` with stocks, so their
+    type cannot be inferred from the symbol alone. Historical dropout commands
+    may omit ``--instrument etf``, but the scanner CSV already identifies them.
+    """
+    filename = symbol_or_pair.strip().replace("/", "").replace(".", "_").upper()
+    if not filename:
+        return None
+    data_root = csv_root or (Path(__file__).resolve().parents[1] / "data" / "csv")
+    if (data_root / "etfs" / f"{filename}.csv").is_file():
+        return "etf"
+    return None
+
+
 def detect_instrument_type(symbol_or_pair: str, config_path: Path | None = None) -> str:
     detected = detect_from_config_path(config_path)
+    if detected:
+        return detected
+    detected = detect_from_cached_csv(symbol_or_pair)
     if detected:
         return detected
     return detect_from_symbol(symbol_or_pair)

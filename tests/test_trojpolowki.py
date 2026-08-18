@@ -115,6 +115,15 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
     assert 'os.environ["STOCKHELPER_SNAPSHOT_CACHE_ONLY"] = "1"' in batch
     assert "if code == 0 and not strict_cache_only:" in batch
 
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert 'if os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1":' in scanner_source
+    assert 'os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)' in scanner_source
+    fibo_worker = scanner_source[
+        scanner_source.index("def _scan_fibo_one"):
+        scanner_source.index("def run_fibo_explain", scanner_source.index("def _scan_fibo_one"))
+    ]
+    assert "with MARKET_REFRESH_LOCK:" in fibo_worker
+
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
@@ -844,6 +853,19 @@ def test_old_fibo_cannot_be_resurrected_by_later_61_8_touches():
     assert "only a newly anchored Fibo may return" in stale
 
 
+def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _scan_fibo_one")]
+    stale_start = source.index("def _is_waiting_candidate_stale")
+    stale = source[stale_start:source.index("def _scan_fibo_one", stale_start)]
+
+    assert "if _has_extended_sideways(correction_seg):" in setup
+    assert "correction is dominated by an extended side trend" in setup
+    assert "if _mirrored_short and _has_extended_sideways(impulse_seg):" in setup
+    assert "decline is dominated by an extended side trend" in setup
+    assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
+
+
 def test_fibo_rejects_correction_through_original_anchor():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "if corr_low <= fib_start:" in source
@@ -1238,6 +1260,24 @@ def test_etf_report_chart_uses_etf_cache_instrument():
     assert mod._chart_command_for_row(row).startswith("python run -c VOO.US --instrument etf ")
     assert mod._market_icon("ETFS", "GLD.US") == "🧺"
     assert "s=gld.us" in mod._stooq_chart_url("GLD.US")
+    source = Path("run").read_text(encoding="utf-8")
+    dropout_start = source.index('elif "fibo" in section_id:')
+    dropout_fallback = source[dropout_start:source.index("stooq =", dropout_start)]
+    assert 'detected_instrument = "etf" if ticker.upper() in etf_tickers else detect_instrument_type(ticker)' in dropout_fallback
+    assert 'instrument_arg = f" --instrument {detected_instrument}" if detected_instrument in {"etf", "forex"} else ""' in dropout_fallback
+
+
+def test_forex_report_chart_commands_force_forex_cache_directory():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="FOREX", scanner="FIBO", category="waiting", ticker="USDCAD",
+        status="reached_23_6_waiting_for_61_8",
+        dates={"incline": "2026-05-01->2026-06-24"},
+    )
+
+    assert mod._chart_command_for_row(row).startswith(
+        "python run -c USDCAD --instrument forex --ichimoku-mode off"
+    )
 
 
 def test_open_existing_allsearch_report_refreshes_html_before_serving(tmp_path: Path):

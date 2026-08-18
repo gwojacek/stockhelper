@@ -990,6 +990,22 @@ def test_allsearch_fibo_snapshot_does_not_refresh_same_day_candle(monkeypatch, t
     assert list(loaded["Date"].dt.strftime("%Y-%m-%d")) == ["2026-08-12", "2026-08-13"]
 
 
+def test_allsearch_fibo_snapshot_ignores_leftover_commodity_refresh_targets(monkeypatch):
+    import scanner_search as scanner
+
+    monkeypatch.setenv("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", "PLATINUM,OIL,GOLD")
+    monkeypatch.setenv("STOCKHELPER_SNAPSHOT_CACHE_ONLY", "1")
+
+    assert scanner._commodity_refresh_targets_for_scan("commodities") == set()
+
+    monkeypatch.delenv("STOCKHELPER_SNAPSHOT_CACHE_ONLY")
+    assert scanner._commodity_refresh_targets_for_scan("commodities") == {
+        "PLATINUM",
+        "OIL",
+        "GOLD",
+    }
+
+
 def test_yahoo_only_download_keeps_about_18_months(monkeypatch):
     dates = pd.date_range("2025-01-01", periods=700, freq="D")
     full = _df(*(d.strftime("%Y-%m-%d") for d in dates))

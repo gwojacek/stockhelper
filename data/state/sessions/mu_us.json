@@ -2,8 +2,8 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Kliny",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -12,17 +12,17 @@
       "x": [
         "2026-06-25",
         "2026-08-05",
-        "2026-12-03"
+        "2026-12-07"
       ],
       "y": [
         1255.0,
         928.97998,
-        -72.36722
+        -95.65437
       ],
       "x0": "2026-06-25",
-      "x1": "2026-12-03",
+      "x1": "2026-12-07",
       "y0": 1255.0,
-      "y1": -72.36722,
+      "y1": -95.65437,
       "anchor_x": [
         "2026-06-25",
         "2026-08-05"
@@ -31,7 +31,7 @@
         1255.0,
         928.97998
       ],
-      "price": -72.36722,
+      "price": -95.65437,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -41,31 +41,37 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-05-19",
+        "2026-05-21",
         "2026-07-29",
-        "2026-12-25"
+        "2026-12-23"
       ],
       "y": [
-        652.21002,
+        732.20001,
         737.88,
-        928.85268
+        750.84521
       ],
-      "x0": "2026-05-19",
-      "x1": "2026-12-25",
-      "y0": 652.21002,
-      "y1": 928.85268,
+      "x0": "2026-05-21",
+      "x1": "2026-12-23",
+      "y0": 732.20001,
+      "y1": 750.84521,
       "anchor_x": [
-        "2026-05-19",
+        "2026-05-21",
         "2026-07-29"
       ],
       "anchor_y": [
-        652.21002,
+        732.20001,
         737.88
       ],
-      "price": 928.85268,
+      "price": 750.84521,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
     }
-  ]
+  ],
+  "__scanner_breakout_date__": "2026-07-29",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-08-18",
+  "__scanner_latest_retest_pattern__": "shooting_star",
+  "__scanner_previous_respect_months__": "3.9"
 }
