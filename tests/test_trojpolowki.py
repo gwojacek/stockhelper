@@ -1263,7 +1263,21 @@ def test_etf_report_chart_uses_etf_cache_instrument():
     source = Path("run").read_text(encoding="utf-8")
     dropout_start = source.index('elif "fibo" in section_id:')
     dropout_fallback = source[dropout_start:source.index("stooq =", dropout_start)]
-    assert 'instrument_arg = " --instrument etf" if ticker.upper() in etf_tickers else ""' in dropout_fallback
+    assert 'detected_instrument = "etf" if ticker.upper() in etf_tickers else detect_instrument_type(ticker)' in dropout_fallback
+    assert 'instrument_arg = f" --instrument {detected_instrument}" if detected_instrument in {"etf", "forex"} else ""' in dropout_fallback
+
+
+def test_forex_report_chart_commands_force_forex_cache_directory():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="FOREX", scanner="FIBO", category="waiting", ticker="USDCAD",
+        status="reached_23_6_waiting_for_61_8",
+        dates={"incline": "2026-05-01->2026-06-24"},
+    )
+
+    assert mod._chart_command_for_row(row).startswith(
+        "python run -c USDCAD --instrument forex --ichimoku-mode off"
+    )
 
 
 def test_open_existing_allsearch_report_refreshes_html_before_serving(tmp_path: Path):
