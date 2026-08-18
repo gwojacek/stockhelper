@@ -1980,12 +1980,13 @@ def _allsearch_ichimoku_yahoo_probe(
 ) -> bool:
     """Compare three random cached latest candles exactly with live Yahoo data."""
     probe_count = min(3, len(members))
-    probes = random.sample(list(members), k=probe_count) if probe_count else []
+    candidates = random.sample(list(members), k=len(members)) if members else []
     print(
         f"[refresh-check] {group_name}: allsearch Ichimoku Yahoo probes "
-        f"({probe_count} random instrument(s)): {', '.join(probes) or 'none'}"
+        f"(need {probe_count} comparable random instrument(s))"
     )
-    for ticker in probes:
+    compared = 0
+    for ticker in candidates:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
         yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
         try:
@@ -1996,6 +1997,21 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             cached_signature = _latest_candle_signature(cached)
             yahoo_signature = _latest_candle_signature(remote)
+            if (
+                cached_signature is not None
+                and yahoo_signature is not None
+                and yahoo_signature[0] < cached_signature[0]
+            ):
+                # Illiquid Yahoo symbols sometimes expose an older last-trade
+                # candle than a valid cached candle.  Such a symbol cannot say
+                # whether the market cache is fresh, so replace this probe with
+                # another random member rather than forcing a bogus refresh.
+                print(
+                    f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature[0]} is older "
+                    f"than cached newest={cached_signature[0]}; probe not comparable, trying another"
+                )
+                continue
+            compared += 1
             matches = _latest_candle_signatures_match(cached_signature, yahoo_signature)
             print(
                 f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature}, "
@@ -2003,12 +2019,20 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             if not matches:
                 return True
+            if compared >= probe_count:
+                return False
         except Exception as exc:
             print(
                 f"[refresh-check] {ticker}: allsearch Yahoo probe failed "
                 f"({_retry_error_brief(exc)}); refreshing the whole market to avoid stale data"
             )
             return True
+    if compared < probe_count:
+        print(
+            f"[refresh-check] {group_name}: only {compared}/{probe_count} Yahoo probes were comparable; "
+            "refreshing the whole market to avoid an unverified cache"
+        )
+        return True
     return False
 
 

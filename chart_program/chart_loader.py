@@ -372,8 +372,52 @@ def _yahoo_quote_result(symbol: str) -> dict | None:
     return results[0] if results else None
 
 
-def _merge_yahoo_regular_market_quote(df: pd.DataFrame, yahoo_symbol: str) -> pd.DataFrame:
-    quote = _yahoo_quote_result(yahoo_symbol)
+def _yfinance_regular_market_quote(ticker) -> dict | None:
+    """Build quote fields from yfinance when Yahoo's quote endpoint is blocked."""
+    try:
+        metadata = ticker.get_history_metadata() or {}
+    except Exception:
+        metadata = {}
+    try:
+        fast_info = ticker.fast_info
+    except Exception:
+        fast_info = {}
+
+    def _value(*keys):
+        for source in (metadata, fast_info):
+            for key in keys:
+                try:
+                    value = source.get(key) if hasattr(source, "get") else source[key]
+                except Exception:
+                    continue
+                if value is not None:
+                    return value
+        return None
+
+    quote = {
+        "regularMarketTime": _value("regularMarketTime", "last_trade_time"),
+        "exchangeTimezoneName": _value("exchangeTimezoneName", "timezone"),
+        "regularMarketOpen": _value("regularMarketOpen", "open"),
+        "regularMarketDayHigh": _value("regularMarketDayHigh", "dayHigh", "day_high"),
+        "regularMarketDayLow": _value("regularMarketDayLow", "dayLow", "day_low"),
+        "regularMarketPrice": _value("regularMarketPrice", "lastPrice", "last_price"),
+        "regularMarketVolume": _value("regularMarketVolume", "lastVolume", "last_volume"),
+    }
+    return quote if quote["regularMarketTime"] is not None else None
+
+
+def _merge_yahoo_regular_market_quote(
+    df: pd.DataFrame,
+    yahoo_symbol: str,
+    *,
+    ticker=None,
+) -> pd.DataFrame:
+    try:
+        quote = _yahoo_quote_result(yahoo_symbol)
+    except Exception:
+        quote = None
+    if not quote and ticker is not None:
+        quote = _yfinance_regular_market_quote(ticker)
     if not quote:
         return df
     raw_time = quote.get("regularMarketTime")
@@ -427,7 +471,7 @@ def _yahoo_download_window(
                 # Warsaw stocks.  Merge the regular-market quote as the newest
                 # daily row so freshness probes and persisted CSVs match the
                 # visible Yahoo quote date.
-                df = _merge_yahoo_regular_market_quote(df, candidate)
+                df = _merge_yahoo_regular_market_quote(df, candidate, ticker=ticker)
             except Exception:
                 pass
             display_name = None

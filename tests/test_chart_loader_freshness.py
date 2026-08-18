@@ -920,6 +920,33 @@ def test_yahoo_quote_page_row_fills_history_lag(monkeypatch):
     assert float(latest["Volume"]) == 515100.0
 
 
+def test_yfinance_metadata_fills_quote_when_direct_quote_endpoint_fails(monkeypatch):
+    base = _df("2026-08-17", "2026-08-18")
+
+    class FakeTicker:
+        fast_info = {
+            "open": 167.14,
+            "day_high": 168.0,
+            "day_low": 160.7,
+            "last_price": 166.46,
+            "last_volume": 500_000,
+        }
+
+        def get_history_metadata(self):
+            return {
+                "regularMarketTime": pd.Timestamp("2026-08-18 15:04:35", tz="UTC").timestamp(),
+                "exchangeTimezoneName": "Europe/Warsaw",
+            }
+
+    monkeypatch.setattr(loader, "_yahoo_quote_result", lambda *_args: (_ for _ in ()).throw(OSError("401")))
+
+    merged = loader._merge_yahoo_regular_market_quote(base, "XTB.WA", ticker=FakeTicker())
+
+    assert list(merged["Date"].dt.strftime("%Y-%m-%d")) == ["2026-08-17", "2026-08-18"]
+    assert float(merged.iloc[-1]["Close"]) == 166.46
+    assert float(merged.iloc[-1]["Volume"]) == 500_000
+
+
 def test_single_stock_refresh_probe_uses_yahoo_missing_candle_count(monkeypatch):
     import os
     import scanner_search as scanner
@@ -1022,6 +1049,30 @@ def test_allsearch_ichimoku_probe_ignores_csv_float_round_trip_noise():
     yahoo = ("2026-08-18", 0.46000000834465027, 0.46950000524520874, 0.46000000834465027, 0.46950000524520874, 2150.0)
 
     assert scanner._latest_candle_signatures_match(cached, yahoo)
+
+
+def test_allsearch_ichimoku_probe_skips_yahoo_symbol_older_than_cache(monkeypatch, tmp_path):
+    import os
+    import scanner_search as scanner
+
+    members = ["IPE", "AAA", "BBB", "CCC"]
+    cached = _df("2026-08-17", "2026-08-18")
+    older = _df("2026-08-17")
+    for ticker in members:
+        cached.to_csv(tmp_path / f"{ticker}.csv", index=False)
+
+    monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.setattr(scanner.random, "sample", lambda population, k: members)
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, *_args: (ticker, "stock"))
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, *_args: tmp_path / f"{symbol}.csv")
+    monkeypatch.setattr(
+        scanner,
+        "_yahoo_download_window",
+        lambda symbol, *_args, **_kwargs: (older if symbol == "IPE" else cached, symbol, None),
+    )
+
+    assert scanner._should_refresh_group_data("WIG", members, ".WA") is False
+    assert os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
 
 
 def test_market_session_open_uses_local_market_hours():
