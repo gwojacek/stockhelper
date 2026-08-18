@@ -459,6 +459,7 @@ def _merge_yahoo_fresh_candle(
     *,
     period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
     trim_to_last_year: bool = True,
+    replace_same_date: bool = False,
 ) -> tuple[pd.DataFrame, str, str | None, int]:
     yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
     yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
@@ -480,6 +481,20 @@ def _merge_yahoo_fresh_candle(
             # is allowed into the cache.
             yahoo_newest_row = yahoo_new_rows.sort_values("Date").tail(1)
             merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True))
+        elif replace_same_date and local_latest is not None and not yahoo_df.empty:
+            yahoo_newest_row = yahoo_df.sort_values("Date").tail(1)
+            yahoo_latest = _latest_date_from_df(yahoo_newest_row)
+            if yahoo_latest is not None and yahoo_latest.date() == local_latest.date():
+                # A still-forming or just-closed daily candle can change without
+                # advancing its date.  Warsaw bulk data must therefore accept
+                # Yahoo's quote-enriched same-date OHLCV row during a refresh.
+                merged = _sanitize_ohlc_dataframe(
+                    pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True)
+                )
+                changed = _latest_ohlcv_changed(sanitized_base, merged, local_latest)
+                added_count = 1 if changed else 0
+            else:
+                merged = sanitized_base
         else:
             merged = sanitized_base
     return (_last_year_only(merged) if trim_to_last_year else merged), yahoo_symbol, display_name, added_count
@@ -639,6 +654,7 @@ def _stock_local_cache_or_yahoo_download(
                     local_df,
                     symbol,
                     "stock",
+                    replace_same_date=True,
                 )
             except Exception as yahoo_exc:
                 return (
@@ -650,8 +666,8 @@ def _stock_local_cache_or_yahoo_download(
                 )
             if yahoo_newer_count > 0:
                 reason = (
-                    "Using local Stooq bulk cache plus Yahoo newer candle(s); "
-                    f"Yahoo candles appended={yahoo_newer_count}."
+                    "Using local Stooq bulk cache plus Yahoo latest candle; "
+                    f"Yahoo candles appended={yahoo_newer_count} (or same-date updated)."
                 )
                 if yahoo_newer_count > 1:
                     reason += " WARNING: more than one Yahoo candle was needed because Stooq bulk/local cache was behind."

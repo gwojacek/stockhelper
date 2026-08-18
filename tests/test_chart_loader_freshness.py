@@ -198,6 +198,36 @@ def test_warsaw_stock_uses_local_cache_and_merges_single_yahoo_candle(monkeypatc
     assert "Yahoo candles appended=1" in reason
 
 
+def test_warsaw_stock_refresh_persists_changed_same_date_yahoo_quote(monkeypatch, tmp_path):
+    csv_path = tmp_path / "XTB_WA.csv"
+    cached = _df("2026-08-17", "2026-08-18")
+    cached.to_csv(csv_path, index=False)
+    yahoo = cached.copy()
+    yahoo.loc[yahoo.index[-1], ["High", "Close", "Volume"]] = [170.0, 166.46, 500_000]
+
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo.copy(), "XTB.WA", "XTB S.A."),
+    )
+    monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
+
+    df, written_path, info = loader.load_or_update_daily_data(
+        symbol="XTB.WA",
+        instrument_type="stock",
+    )
+
+    assert info["source"] == "stooq_bulk+yahoo"
+    assert info["symbol"] == "XTB.WA"
+    assert float(df.iloc[-1]["Close"]) == 166.46
+    assert float(df.iloc[-1]["Volume"]) == 500_000
+    assert "same-date updated" in info["fallback_reason"]
+    persisted = pd.read_csv(written_path)
+    assert float(persisted.iloc[-1]["Close"]) == 166.46
+    assert float(persisted.iloc[-1]["Volume"]) == 500_000
+
+
 def test_warsaw_stock_uses_yahoo_when_no_local_bulk_cache(monkeypatch, tmp_path):
     csv_path = tmp_path / "ZAB_WA.csv"
 
@@ -983,6 +1013,15 @@ def test_allsearch_ichimoku_three_exact_yahoo_probes_keep_cached_market(monkeypa
     assert scanner._should_refresh_group_data("DAX40", members, ".DE") is False
     assert os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     assert "STOCKHELPER_FORCE_REMOTE_REFRESH" not in os.environ
+
+
+def test_allsearch_ichimoku_probe_ignores_csv_float_round_trip_noise():
+    import scanner_search as scanner
+
+    cached = ("2026-08-18", 0.4600000083446502, 0.4695000052452087, 0.4600000083446502, 0.4695000052452087, 2150.0)
+    yahoo = ("2026-08-18", 0.46000000834465027, 0.46950000524520874, 0.46000000834465027, 0.46950000524520874, 2150.0)
+
+    assert scanner._latest_candle_signatures_match(cached, yahoo)
 
 
 def test_market_session_open_uses_local_market_hours():

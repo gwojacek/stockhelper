@@ -1963,6 +1963,16 @@ def _latest_candle_signature(df: pd.DataFrame) -> tuple | None:
     )
 
 
+def _latest_candle_signatures_match(cached: tuple | None, yahoo: tuple | None) -> bool:
+    """Compare candle values while ignoring harmless CSV float round-trips."""
+    if cached is None or yahoo is None or cached[0] != yahoo[0]:
+        return False
+    return all(
+        math.isclose(cached_value, yahoo_value, rel_tol=1e-12, abs_tol=1e-12)
+        for cached_value, yahoo_value in zip(cached[1:], yahoo[1:])
+    )
+
+
 def _allsearch_ichimoku_yahoo_probe(
     group_name: str,
     members: list[str],
@@ -1986,7 +1996,7 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             cached_signature = _latest_candle_signature(cached)
             yahoo_signature = _latest_candle_signature(remote)
-            matches = cached_signature is not None and cached_signature == yahoo_signature
+            matches = _latest_candle_signatures_match(cached_signature, yahoo_signature)
             print(
                 f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature}, "
                 f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
