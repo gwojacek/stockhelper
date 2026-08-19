@@ -480,6 +480,13 @@
       "COCOA"
     ]
   },
+  "commodities:2026-08-18:post1945": {
+    "checked_at": "2026-08-18T21:07:22.499650+00:00",
+    "result": "stale",
+    "tickers": [
+      "COCOA"
+    ]
+  },
   "commodities:2026-08-18:pre1945": {
     "checked_at": "2026-08-18T14:12:08.323365+00:00",
     "result": "stale",
@@ -665,6 +672,10 @@
   },
   "stooq_bulk:2026-08-18": {
     "checked_at": "2026-08-18T08:00:38.495654+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-19": {
+    "checked_at": "2026-08-19T09:21:43.757211+00:00",
     "result": "bulk"
   },
   "wig": {
