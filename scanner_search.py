@@ -3904,13 +3904,25 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 valid_reaction = [(offset, float(value)) for offset, value in enumerate(reaction) if pd.notna(value)]
                 if not valid_reaction:
                     continue
-                local_offset, _local_value = (
-                    min(valid_reaction, key=lambda item: item[1])
+                # A reversal formation is valid only when one of its own
+                # candles prints the best price extreme seen since this cloud
+                # visit began.  In particular, a hammer one candle after a
+                # lower, unrelated candle must not inherit that candle's local
+                # low (and the inverse applies to short retests).  The running
+                # extreme resets naturally at ``cycle_start`` after price has
+                # closed back outside the cloud and subsequently returns.
+                span = pattern_span.get(formation, 1)
+                pattern_start_abs = max(cycle_start, pattern_abs - span + 1)
+                running_extreme = (
+                    min(value for _offset, value in valid_reaction)
                     if current_side == "above"
-                    else max(valid_reaction, key=lambda item: item[1])
+                    else max(value for _offset, value in valid_reaction)
                 )
-                local_reaction_abs = cycle_start + local_offset
-                if pattern_abs - local_reaction_abs >= 2:
+                pattern_extreme = _finite_extreme(
+                    df["Low" if current_side == "above" else "High"].iloc[pattern_start_abs:pattern_abs + 1],
+                    highest=current_side != "above",
+                )
+                if pattern_extreme is None or pattern_extreme != running_extreme:
                     found_too_late = True
                     continue
                 probe = _pattern_reaction_extreme((pattern_idx, formation))

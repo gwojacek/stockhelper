@@ -294,6 +294,74 @@ def test_hammer_after_breakout_is_valid_retest_only_when_hammer_touches_cloud(mo
     assert events == []
 
 
+def test_retest_pattern_must_contain_local_low_since_cloud_entry(monkeypatch):
+    dates = pd.date_range("2026-08-14", periods=6, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [10.4, 10.5, 10.4, 9.8, 10.2, 10.6],
+            "High": [10.8, 10.9, 10.7, 10.2, 10.5, 10.9],
+            "Low": [10.2, 10.3, 10.1, 9.2, 9.6, 10.3],
+            "Close": [10.5, 10.6, 10.3, 9.7, 10.3, 10.7],
+            "cloud_top": [10.0] * 6,
+            "cloud_bottom": [9.0] * 6,
+        }
+    )
+    hammer_date = dates[4]
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_hammer",
+        lambda row: pd.Timestamp(row["Date"]) == hammer_date,
+    )
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "invalid_pattern_too_late"
+    assert count == 0
+    assert events == []
+
+
+def test_local_low_resets_after_price_exits_and_returns_to_cloud(monkeypatch):
+    dates = pd.date_range("2026-08-13", periods=7, freq="D")
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [10.4, 10.5, 9.8, 10.5, 10.4, 10.1, 10.6],
+            "High": [10.8, 10.9, 10.2, 10.9, 10.8, 10.5, 10.9],
+            "Low": [10.2, 10.3, 9.1, 10.3, 10.1, 9.7, 10.3],
+            "Close": [10.5, 10.6, 9.8, 10.6, 10.5, 10.3, 10.7],
+            "cloud_top": [10.0] * 7,
+            "cloud_bottom": [9.0] * 7,
+        }
+    )
+    hammer_date = dates[5]
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_hammer",
+        lambda row: pd.Timestamp(row["Date"]) == hammer_date,
+    )
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, depth, count, first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "medium_retest_pattern"
+    assert depth == "medium"
+    assert count == 1
+    assert first_date == hammer_date.strftime("%Y-%m-%d")
+    assert events == [(hammer_date.strftime("%Y-%m-%d"), "hammer", "medium")]
+
+
 def test_ndx100_members_include_spcx():
     assert "SPCX.US" in scanner_search.NDX100_SEARCH_TICKERS
 
