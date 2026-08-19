@@ -981,6 +981,32 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 
+def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choice(tmp_path: Path):
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker="JSW",
+        status="shallow_retest_pattern", dates={"flip_date": "2026-08-10"},
+        metrics={
+            "months": "0.3", "previous_respect_months": "3.8", "retest_count": "1",
+            "latest_retest_date": "2026-08-18", "latest_retest_pattern": "bullish_piercing_line",
+            "raw_status": "shallow_retest_pattern", "current_side": "above",
+            "ichimoku_status": "Over Kijun-sen", "risk": "3%",
+        },
+    )
+
+    assert mod._ichimoku_qualification_state(row) == "waiting_second"
+    assert "NOT PLAYABLE" in mod._ichimoku_qualification_label(row)
+    out = mod._write_trojpolowki_ichimoku([row], tmp_path, datetime(2026, 8, 19, 12, 0, 0))
+    text = out.read_text(encoding="utf-8")
+    jsw_line = next(line for line in text.splitlines() if "JSW" in line)
+    cells = [cell.strip() for cell in jsw_line.strip("|").split("|")]
+    assert cells[:3] == ["", "", ""]
+    assert "NOT PLAYABLE — first retest after 4m; waiting for second" in cells[3]
+
+    source = Path("run").read_text(encoding="utf-8")
+    assert 'if "not playable" in cell.lower()' in source
+
+
 def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     mod = load_run_module()
     mod.TROJPOLLOWKI_DIR = tmp_path / "Trojpolowki"
