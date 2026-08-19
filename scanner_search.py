@@ -3739,6 +3739,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 
         cycle_start = i
         cycle_end = i
+        cycle_exit_idx: int | None = None
         while cycle_end + 1 < len(df):
             n = cycle_end + 1
             if current_side == "above":
@@ -3751,6 +3752,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             # if the same candle's wick still touches the cloud. A later return
             # to the cloud is a new retest and gets its own local extreme.
             if n_outside:
+                cycle_exit_idx = n
                 break
             if n_touched:
                 cycle_end = n
@@ -3760,7 +3762,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         w_start = max(cycle_start - 2, flip_idx + 1)
         # Include the first candle that leaves the cloud after a retest cycle.
         # Bearish/bullish harami confirmation often prints on that outside candle.
-        detect_until = min(cycle_end + 1, len(df) - 1)
+        detect_until = cycle_exit_idx if cycle_exit_idx is not None else cycle_end
         w = df.iloc[w_start: detect_until + 1].reset_index(drop=True)
         if len(w) >= 2:
             pattern_candidates: list[tuple[int, str]] = []
@@ -3916,8 +3918,13 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 body_hi = max(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
                 if (current_side == "above" and body_lo >= float(top.iloc[pattern_abs])) or (current_side == "below" and body_hi <= float(bottom.iloc[pattern_abs])):
                     depth = "shallow"
-                valid_count += 1
                 ev_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
+                # The outside confirmation candle belongs to the cycle it
+                # closes.  Never report that same candle again as a new retest
+                # merely because its wick still overlaps the cloud.
+                if last_pattern_abs == pattern_abs:
+                    break
+                valid_count += 1
                 events.append((ev_date, formation, depth))
                 last_pattern_abs = pattern_abs
                 if first_valid_date == "-":
@@ -3925,7 +3932,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     first_valid_depth = depth
                     first_valid_status = f"{depth}_retest_pattern"
                 break
-        i = cycle_end + 1
+        # ``detect_until`` may be the first outside confirmation candle and is
+        # already part of this cycle's pattern window. Consume it before
+        # looking for the next independent return to the cloud.
+        i = detect_until + 1
 
     if valid_count > 0:
         # If after a valid retest pattern price returned to cloud and then broke

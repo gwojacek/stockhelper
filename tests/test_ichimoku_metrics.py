@@ -228,6 +228,37 @@ def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
     assert events == []
 
 
+def test_outside_confirmation_candle_is_not_counted_as_a_second_retest(monkeypatch):
+    dates = pd.date_range("2026-08-01", periods=7, freq="D")
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [8.0, 10.4, 10.6, 10.7, 10.4, 10.3, 10.8],
+        "High": [8.5, 10.8, 11.0, 11.1, 10.9, 11.0, 11.2],
+        "Low": [7.5, 10.2, 10.3, 10.4, 9.8, 9.9, 10.5],
+        "Close": [8.0, 10.6, 10.8, 10.9, 10.4, 10.8, 11.0],
+        "cloud_top": [10.0] * 7,
+        "cloud_bottom": [9.0] * 7,
+    })
+    confirmation_date = dates[5]
+    monkeypatch.setattr(scanner_search, "_is_bullish_hammer", lambda *_args: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args: False)
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_piercing_line",
+        lambda _previous, current, _level: pd.Timestamp(current["Date"]) == confirmation_date,
+    )
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "shallow_retest_pattern"
+    assert count == 1
+    assert events == [(confirmation_date.strftime("%Y-%m-%d"), "bullish_piercing_line", "shallow")]
+
+
 def test_hammer_after_breakout_is_valid_retest_only_when_hammer_touches_cloud(monkeypatch):
     dates = pd.date_range("2026-08-01", periods=7, freq="D")
     df = pd.DataFrame(

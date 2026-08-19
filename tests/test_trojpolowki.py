@@ -552,6 +552,8 @@ def test_ichimoku_retest_counts_only_best_local_extreme_until_close_resets_cycle
     assert "def _pattern_reaction_extreme" in retest
     assert "-_pattern_reaction_extreme(x)" in retest
     assert "One cloud visit is one retest cycle" in retest
+    assert "cycle_exit_idx = n" in retest
+    assert "i = detect_until + 1" in retest
 
 
 def test_chart_png_includes_drawings_and_context_header():
