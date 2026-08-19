@@ -527,6 +527,8 @@ def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection
     assert "allow_independent_peak=independent_recent_peak" in steep
     assert "reset_after_sideways=False" in steep
     assert "reset_after_extended_sideways=not _mirrored_short" in steep
+    assert "reset_after_extended_sideways=not _mirrored_short" in setup
+    assert "(44, 0.22, 0.08, 1)" in source
     assert "reset fib start after extended sideways base" in source
     assert "base_end + 35" in source
     assert "newest_near_recovery_extreme" in setup
