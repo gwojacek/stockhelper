@@ -991,6 +991,7 @@ def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choic
         metrics={
             "months": "0.3", "previous_respect_months": "3.8", "retest_count": "1",
             "qualification_status": "early_breakout_valid_after_second_post_4m_retest",
+            "valid_retests_from_date": "2026-08-16",
             "latest_retest_date": "2026-08-18", "latest_retest_pattern": "bullish_piercing_line",
             "raw_status": "shallow_retest_pattern", "current_side": "above",
             "ichimoku_status": "Over Kijun-sen", "risk": "3%",
@@ -1005,9 +1006,12 @@ def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choic
     cells = [cell.strip() for cell in jsw_line.strip("|").split("|")]
     assert cells[:3] == ["", "", ""]
     assert "NOT PLAYABLE — first retest after 4m; waiting for second" in cells[3]
+    assert "valid retests counted from: 2026-08-16" in cells[3]
 
     source = Path("run").read_text(encoding="utf-8")
     assert 'if "not playable" in cell.lower()' in source
+    assert "Valid retests counted from (early breakouts only)" in source
+    assert "--scanner-valid-retests-from-date" in mod._chart_command_for_row(row)
 
 
 def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):

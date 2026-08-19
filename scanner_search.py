@@ -342,6 +342,7 @@ class FlipResult:
     tenkan_in_cloud: str | None = None
     previous_respect_months: float | None = None
     qualification_status: str = "standard_4m_breakout"
+    valid_retests_from_date: str = "-"
 
 
 
@@ -3642,6 +3643,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     # post-anniversary retest makes the setup actionable.
     four_month_date = previous_respect_start_ts + pd.DateOffset(months=4)
     if flip_ts < four_month_date:
+        flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
         post_rule_events = [
             event for event in (flip.retest_events or [])
             if pd.to_datetime(event[0]) >= four_month_date
@@ -4212,11 +4214,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.qualification_status,row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.valid_retests_from_date,row.qualification_status,row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Mies. respektu przed wybiciem","4m qualification status","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Ichimoku status","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Mies. respektu przed wybiciem","Valid retests from","4m qualification status","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Ichimoku status","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",

@@ -1269,6 +1269,7 @@ class LightweightChartLevelSelectorUI:
     const breakout = scannerBreakout ? null : detectIchimokuBreakout();
     const startDate = scannerContext.csvStartDate || breakout?.time || (ohlc[0]?.time || null);
     const retestCount = scannerMetaValue('__scanner_retest_count__');
+    const validRetestsFromDate = scannerMetaValue('__scanner_valid_retests_from_date__');
     const validRetestCount = Math.max(0, parseInt(retestCount || '0', 10) || 0);
     const latestRetestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
@@ -1281,7 +1282,8 @@ class LightweightChartLevelSelectorUI:
       lines.push(`Breakout day: ${{breakout ? `${{breakout.time}} (${{breakout.side.replace('_', ' ')}} close=${{fmt(breakout.close)}} kijun=${{fmt(breakout.kijun)}})` : '-'}}`);
       if (breakout?.followed_by_recent_breakout) lines.push(`Recent opposite breakout <4m ignored for CSV start: ${{breakout.followed_by_recent_breakout.time}} (${{breakout.followed_by_recent_breakout.side.replace('_', ' ')}})`);
     }}
-    if (retestCount) lines.push(`Retest count: ${{retestCount}}`);
+    if (validRetestsFromDate) lines.push(`Valid retests counted from: ${{validRetestsFromDate}} (early breakout only)`);
+    if (retestCount) lines.push(`Valid retest count: ${{retestCount}}`);
     lines.push('');
     lines.push('Retests / patterns since breakout:');
     if (scannerBreakout || latestRetestDate || latestRetestPattern || retestCount) {{

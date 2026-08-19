@@ -124,6 +124,7 @@ def _parse_args(raw_args=None):
     parser.add_argument("--scanner-latest-retest-date")
     parser.add_argument("--scanner-latest-retest-pattern")
     parser.add_argument("--scanner-previous-respect-months")
+    parser.add_argument("--scanner-valid-retests-from-date")
     parser.add_argument("--fibo-lines", type=int, default=0)
     parser.add_argument("--fibo-anchor-start")
     parser.add_argument("--fibo-anchor-end")
@@ -596,6 +597,7 @@ def run_level_selector(raw_args=None):
         ("__scanner_latest_retest_date__", args.scanner_latest_retest_date),
         ("__scanner_latest_retest_pattern__", args.scanner_latest_retest_pattern),
         ("__scanner_previous_respect_months__", args.scanner_previous_respect_months),
+        ("__scanner_valid_retests_from_date__", args.scanner_valid_retests_from_date),
     ]:
         text = str(value or "").strip()
         if text and text != "-":

@@ -165,6 +165,7 @@ def test_early_calendar_breakout_requires_second_retest_after_four_month_mark(mo
     assert flip is not None
     assert flip.previous_respect_months < 4.0
     assert flip.qualification_status == "early_breakout_valid_after_second_post_4m_retest"
+    assert flip.valid_retests_from_date == anniversary.strftime("%Y-%m-%d")
     assert flip.valid_retests_count == 2
     assert flip.first_valid_retest_pattern_date == event_dates[1].strftime("%Y-%m-%d")
 
@@ -192,6 +193,7 @@ def test_early_calendar_breakout_with_one_post_4m_retest_is_not_playable(monkeyp
     assert flip is not None
     assert flip.valid_retests_count == 1
     assert flip.qualification_status == "early_breakout_waiting_second_post_4m_retest"
+    assert flip.valid_retests_from_date == event_date
     assert flip.retest_status == "waiting_for_second_post_4m_retest"
 
 
