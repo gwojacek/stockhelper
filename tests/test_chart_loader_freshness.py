@@ -1062,6 +1062,7 @@ def test_allsearch_ichimoku_probe_skips_yahoo_symbol_older_than_cache(monkeypatc
         cached.to_csv(tmp_path / f"{ticker}.csv", index=False)
 
     monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.setattr(scanner, "_warsaw_daily_bulk_day", lambda: None)
     monkeypatch.setattr(scanner.random, "sample", lambda population, k: members)
     monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, *_args: (ticker, "stock"))
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, *_args: tmp_path / f"{symbol}.csv")
@@ -1073,6 +1074,35 @@ def test_allsearch_ichimoku_probe_skips_yahoo_symbol_older_than_cache(monkeypatc
 
     assert scanner._should_refresh_group_data("WIG", members, ".WA") is False
     assert os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+
+
+def test_allsearch_wig_refreshes_stooq_bulk_before_yahoo_probe(monkeypatch):
+    import os
+    import scanner_search as scanner
+
+    calls = []
+    monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(scanner, "_warsaw_daily_bulk_day", lambda: "2026-08-19")
+    monkeypatch.setattr(scanner, "_stooq_bulk_already_attempted", lambda _bucket: False)
+
+    def refresh_bulk(group_name, reason):
+        calls.append((group_name, reason))
+        os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+        return True
+
+    monkeypatch.setattr(scanner, "_try_refresh_wig_with_stooq_bulk", refresh_bulk)
+    monkeypatch.setattr(
+        scanner,
+        "_allsearch_ichimoku_yahoo_probe",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("Yahoo probe must run after the Stooq bulk rebase")),
+    )
+
+    assert scanner._should_refresh_group_data("WIG", ["XTB"], ".WA") is True
+    assert calls and calls[0][0] == "WIG"
+    assert "before Yahoo newest-candle probe" in calls[0][1]
+    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
 def test_market_session_open_uses_local_market_hours():
