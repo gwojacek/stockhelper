@@ -701,7 +701,13 @@ def _is_bullish_engulfing(
     )
 
 
-def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_bullish_piercing_line(
+    c1: pd.Series,
+    c2: pd.Series,
+    level: float,
+    close_floor: float | None = None,
+    zone_floor: float | None = None,
+) -> bool:
     c1_open = float(c1["Open"])
     c1_close = float(c1["Close"])
     c1_high = float(c1["High"])
@@ -731,6 +737,11 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
     )
     if contained_small_body:
         return False
+    close_floor = level if close_floor is None else close_floor
+    if zone_floor is None:
+        touched_retest_area = _touches_level(c1, level) or _touches_level(c2, level)
+    else:
+        touched_retest_area = _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
     open_at_body_low = c2_open < c1_body_low or abs(c2_open - c1_body_low) <= max(abs(c1_open), abs(c1_close), 1e-9) * 0.005
     return (
         open_at_body_low
@@ -739,8 +750,8 @@ def _is_bullish_piercing_line(c1: pd.Series, c2: pd.Series, level: float) -> boo
         # continuation, not a piercing line. The second close must finish
         # strictly inside the first real body.
         and c2_close < c1_open
-        and (_touches_level(c1, level) or _touches_level(c2, level))
-        and c2_close > level
+        and touched_retest_area
+        and c2_close > close_floor
     )
 
 def _candle_parts(c: pd.Series) -> tuple[float, float, float, float, float]:
@@ -3790,7 +3801,13 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         pattern_candidates.append((j, "bullish_engulfing"))
                     if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
                         pattern_candidates.append((j, "bullish_harami"))
-                    if _is_bullish_piercing_line(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_bullish_piercing_line(
+                        w.iloc[j - 1],
+                        w.iloc[j],
+                        lvl,
+                        close_floor=floor,
+                        zone_floor=floor,
+                    ):
                         pattern_candidates.append((j, "bullish_piercing_line"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_top"].iloc[j])

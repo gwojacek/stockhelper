@@ -248,7 +248,7 @@ def test_outside_confirmation_candle_is_not_counted_as_a_second_retest(monkeypat
     monkeypatch.setattr(
         scanner_search,
         "_is_bullish_piercing_line",
-        lambda _previous, current, _level: pd.Timestamp(current["Date"]) == confirmation_date,
+        lambda _previous, current, _level, **_kwargs: pd.Timestamp(current["Date"]) == confirmation_date,
     )
     monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
 
@@ -360,6 +360,39 @@ def test_local_low_resets_after_price_exits_and_returns_to_cloud(monkeypatch):
     assert count == 1
     assert first_date == hammer_date.strftime("%Y-%m-%d")
     assert events == [(hammer_date.strftime("%Y-%m-%d"), "hammer", "medium")]
+
+
+def test_mdv_piercing_line_inside_cloud_is_latest_local_low_retest():
+    df = pd.DataFrame(
+        [
+            {"Date": "2026-06-17", "Open": 92.50, "High": 92.50, "Low": 89.00, "Close": 91.00},
+            # The flip and an earlier cloud visit are followed by a close back
+            # above the cloud, which resets the local-low cycle.
+            {"Date": "2026-08-10", "Open": 91.50, "High": 93.64, "Low": 90.62, "Close": 91.84},
+            {"Date": "2026-08-11", "Open": 92.50, "High": 94.10, "Low": 91.80, "Close": 93.50},
+            {"Date": "2026-08-12", "Open": 93.46, "High": 97.10, "Low": 92.84, "Close": 97.00},
+            {"Date": "2026-08-13", "Open": 97.00, "High": 98.38, "Low": 93.02, "Close": 93.60},
+            {"Date": "2026-08-14", "Open": 93.60, "High": 93.90, "Low": 92.56, "Close": 92.70},
+            {"Date": "2026-08-17", "Open": 93.50, "High": 93.50, "Low": 90.60, "Close": 90.92},
+            {"Date": "2026-08-18", "Open": 90.60, "High": 92.82, "Low": 90.56, "Close": 92.50},
+            {"Date": "2026-08-19", "Open": 92.40, "High": 92.40, "Low": 90.70, "Close": 92.18},
+        ]
+    )
+    # On August 18 the piercing close remains inside the Kumo. It need not
+    # reclaim cloud_top; closing above cloud_bottom is sufficient for a valid
+    # in-cloud retest pattern.
+    df["cloud_top"] = [93.0] * len(df)
+    df["cloud_bottom"] = [90.0] * len(df)
+
+    status, depth, count, first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "deep_retest_pattern"
+    assert depth == "deep"
+    assert count == 1
+    assert first_date == "2026-08-18"
+    assert events == [("2026-08-18", "bullish_piercing_line", "deep")]
 
 
 def test_ndx100_members_include_spcx():
