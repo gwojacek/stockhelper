@@ -372,8 +372,52 @@ def _yahoo_quote_result(symbol: str) -> dict | None:
     return results[0] if results else None
 
 
-def _merge_yahoo_regular_market_quote(df: pd.DataFrame, yahoo_symbol: str) -> pd.DataFrame:
-    quote = _yahoo_quote_result(yahoo_symbol)
+def _yfinance_regular_market_quote(ticker) -> dict | None:
+    """Build quote fields from yfinance when Yahoo's quote endpoint is blocked."""
+    try:
+        metadata = ticker.get_history_metadata() or {}
+    except Exception:
+        metadata = {}
+    try:
+        fast_info = ticker.fast_info
+    except Exception:
+        fast_info = {}
+
+    def _value(*keys):
+        for source in (metadata, fast_info):
+            for key in keys:
+                try:
+                    value = source.get(key) if hasattr(source, "get") else source[key]
+                except Exception:
+                    continue
+                if value is not None:
+                    return value
+        return None
+
+    quote = {
+        "regularMarketTime": _value("regularMarketTime", "last_trade_time"),
+        "exchangeTimezoneName": _value("exchangeTimezoneName", "timezone"),
+        "regularMarketOpen": _value("regularMarketOpen", "open"),
+        "regularMarketDayHigh": _value("regularMarketDayHigh", "dayHigh", "day_high"),
+        "regularMarketDayLow": _value("regularMarketDayLow", "dayLow", "day_low"),
+        "regularMarketPrice": _value("regularMarketPrice", "lastPrice", "last_price"),
+        "regularMarketVolume": _value("regularMarketVolume", "lastVolume", "last_volume"),
+    }
+    return quote if quote["regularMarketTime"] is not None else None
+
+
+def _merge_yahoo_regular_market_quote(
+    df: pd.DataFrame,
+    yahoo_symbol: str,
+    *,
+    ticker=None,
+) -> pd.DataFrame:
+    try:
+        quote = _yahoo_quote_result(yahoo_symbol)
+    except Exception:
+        quote = None
+    if not quote and ticker is not None:
+        quote = _yfinance_regular_market_quote(ticker)
     if not quote:
         return df
     raw_time = quote.get("regularMarketTime")
@@ -427,7 +471,7 @@ def _yahoo_download_window(
                 # Warsaw stocks.  Merge the regular-market quote as the newest
                 # daily row so freshness probes and persisted CSVs match the
                 # visible Yahoo quote date.
-                df = _merge_yahoo_regular_market_quote(df, candidate)
+                df = _merge_yahoo_regular_market_quote(df, candidate, ticker=ticker)
             except Exception:
                 pass
             display_name = None
@@ -459,6 +503,7 @@ def _merge_yahoo_fresh_candle(
     *,
     period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
     trim_to_last_year: bool = True,
+    replace_same_date: bool = False,
 ) -> tuple[pd.DataFrame, str, str | None, int]:
     yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
     yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
@@ -480,6 +525,20 @@ def _merge_yahoo_fresh_candle(
             # is allowed into the cache.
             yahoo_newest_row = yahoo_new_rows.sort_values("Date").tail(1)
             merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True))
+        elif replace_same_date and local_latest is not None and not yahoo_df.empty:
+            yahoo_newest_row = yahoo_df.sort_values("Date").tail(1)
+            yahoo_latest = _latest_date_from_df(yahoo_newest_row)
+            if yahoo_latest is not None and yahoo_latest.date() == local_latest.date():
+                # A still-forming or just-closed daily candle can change without
+                # advancing its date.  Warsaw bulk data must therefore accept
+                # Yahoo's quote-enriched same-date OHLCV row during a refresh.
+                merged = _sanitize_ohlc_dataframe(
+                    pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True)
+                )
+                changed = _latest_ohlcv_changed(sanitized_base, merged, local_latest)
+                added_count = 1 if changed else 0
+            else:
+                merged = sanitized_base
         else:
             merged = sanitized_base
     return (_last_year_only(merged) if trim_to_last_year else merged), yahoo_symbol, display_name, added_count
@@ -639,6 +698,7 @@ def _stock_local_cache_or_yahoo_download(
                     local_df,
                     symbol,
                     "stock",
+                    replace_same_date=True,
                 )
             except Exception as yahoo_exc:
                 return (
@@ -650,8 +710,8 @@ def _stock_local_cache_or_yahoo_download(
                 )
             if yahoo_newer_count > 0:
                 reason = (
-                    "Using local Stooq bulk cache plus Yahoo newer candle(s); "
-                    f"Yahoo candles appended={yahoo_newer_count}."
+                    "Using local Stooq bulk cache plus Yahoo latest candle; "
+                    f"Yahoo candles appended={yahoo_newer_count} (or same-date updated)."
                 )
                 if yahoo_newer_count > 1:
                     reason += " WARNING: more than one Yahoo candle was needed because Stooq bulk/local cache was behind."
@@ -1182,7 +1242,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         # into either browser downloader.  This boundary normalization also
         # protects callers which use human-readable pairs such as ``GBP/PLN``.
         stooq_forex_symbol = symbol.replace("/", "")
-        if not fetch_older_data and _local_forex_has_required_window(csv_path_ref):
+        if (
+            not fetch_older_data
+            and not _force_remote_refresh_enabled()
+            and _local_forex_has_required_window(csv_path_ref)
+        ):
             local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
             if not _cache_has_too_many_recent_yahoo_candles(local_df, symbol, "forex"):
                 yahoo_merged = _try_yahoo_fresh_candle_merge(
@@ -1198,7 +1262,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 if yahoo_merged is not None and yahoo_merged[-1] <= 1:
                     return yahoo_merged[:5]
                 return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
-        lookback = older_days if fetch_older_data else 548
+        lookback = (
+            older_days
+            if fetch_older_data
+            else _incremental_lookback_days(csv_path_ref, default_days=548)
+        )
         # Forex follows the same simple paginated history-table workflow as
         # literal commodities. Avoid Stooq's CSV download endpoint entirely.
         df = update_stooq_history_with_playwright(
@@ -1389,7 +1457,14 @@ def load_or_update_daily_data(
     # the process-level cache suppress Yahoo's latest-candle check: a second
     # scan/chart load must be able to replace today's still-forming OHLCV row.
     # The session guard remains useful for slower Stooq-backed instruments.
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and instrument_type != "stock" and not _force_remote_refresh_enabled():
+    if (
+        refresh_key in _SESSION_REFRESHED_KEYS
+        and local is not None
+        and not local.empty
+        and instrument_type != "stock"
+        and not _force_remote_refresh_enabled()
+        and os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") != "1"
+    ):
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",
@@ -1409,7 +1484,29 @@ def load_or_update_daily_data(
     if cache_only:
         raise ValueError(f"Cache-only mode: no local CSV data for {symbol}")
 
-    if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
+    yahoo_latest_only = (
+        os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") == "1"
+        and instrument_type in {"commodity", "forex"}
+        and not fetch_older_data
+        and not _force_remote_refresh_enabled()
+    )
+    if yahoo_latest_only and local is not None and not local.empty:
+        merged_latest, yahoo_symbol, yahoo_name, changed = _merge_yahoo_fresh_candle(
+            local,
+            symbol,
+            instrument_type,
+            trim_to_last_year=False,
+            replace_same_date=True,
+        )
+        remote_info = (
+            merged_latest,
+            "cache+yahoo",
+            yahoo_symbol,
+            yahoo_name,
+            f"Reused Stooq history and updated only Yahoo's newest candle; changed={changed}.",
+        )
+
+    if remote_info is None and instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         local_yahoo_merge = _try_local_commodity_yahoo_merge(symbol, csv_path) if local is not None else None
         if local_yahoo_merge is None:
             cached_df = _last_year_only(local) if local is not None else pd.DataFrame()

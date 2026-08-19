@@ -1944,6 +1944,112 @@ def _stock_missing_candles_vs_yahoo(fetch_symbol: str) -> int:
     return missing
 
 
+def _latest_candle_signature(df: pd.DataFrame) -> tuple | None:
+    """Return the provider fields of the chronologically newest daily candle."""
+    if df is None or df.empty or "Date" not in df.columns:
+        return None
+    candles = df.copy()
+    candles["Date"] = pd.to_datetime(candles["Date"], errors="coerce").dt.normalize()
+    candles = candles.dropna(subset=["Date"]).sort_values("Date")
+    if candles.empty:
+        return None
+    newest = candles.iloc[-1]
+    fields = ("Open", "High", "Low", "Close", "Volume")
+    if any(field not in candles.columns or pd.isna(newest[field]) for field in fields):
+        return None
+    return (
+        newest["Date"].date().isoformat(),
+        *(float(newest[field]) for field in fields),
+    )
+
+
+def _latest_candle_signatures_match(cached: tuple | None, yahoo: tuple | None) -> bool:
+    """Compare candle values while ignoring harmless CSV float round-trips."""
+    if cached is None or yahoo is None or cached[0] != yahoo[0]:
+        return False
+    return all(
+        math.isclose(cached_value, yahoo_value, rel_tol=1e-12, abs_tol=1e-12)
+        for cached_value, yahoo_value in zip(cached[1:], yahoo[1:])
+    )
+
+
+def _allsearch_ichimoku_yahoo_probe(
+    group_name: str,
+    members: list[str],
+    exchange_suffix: str | None,
+) -> bool:
+    """Compare three random cached latest candles exactly with live Yahoo data."""
+    probe_count = min(3, len(members))
+    candidates = random.sample(list(members), k=len(members)) if members else []
+    print(
+        f"[refresh-check] {group_name}: allsearch Ichimoku Yahoo probes "
+        f"(need {probe_count} comparable random instrument(s))"
+    )
+    compared = 0
+    for ticker in candidates:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+        yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
+        try:
+            csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+            cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+            remote, candidate, _name = call_silenced(
+                _yahoo_download_window, yahoo_symbol, instrument, period="10d"
+            )
+            cached_signature = _latest_candle_signature(cached)
+            yahoo_signature = _latest_candle_signature(remote)
+            if (
+                cached_signature is not None
+                and yahoo_signature is not None
+                and yahoo_signature[0] < cached_signature[0]
+            ):
+                # Illiquid Yahoo symbols sometimes expose an older last-trade
+                # candle than a valid cached candle.  Such a symbol cannot say
+                # whether the market cache is fresh, so replace this probe with
+                # another random member rather than forcing a bogus refresh.
+                print(
+                    f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature[0]} is older "
+                    f"than cached newest={cached_signature[0]}; probe not comparable, trying another"
+                )
+                continue
+            compared += 1
+            matches = _latest_candle_signatures_match(cached_signature, yahoo_signature)
+            print(
+                f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature}, "
+                f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
+            )
+            if not matches:
+                if (
+                    group_name.lower() in {"commodities", "forex"}
+                    and cached_signature is not None
+                    and yahoo_signature is not None
+                    and yahoo_signature[0] >= cached_signature[0]
+                ):
+                    # The Stooq history is already present; only Yahoo's live
+                    # newest row changed or Yahoo exposes missing dates.  Audit
+                    # the group below: only instruments needing older missing
+                    # rows are sent to Stooq; all others update Yahoo's newest
+                    # candle without opening the Stooq UI.
+                    os.environ["STOCKHELPER_YAHOO_LATEST_ONLY"] = "1"
+                else:
+                    os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
+                return True
+            if compared >= probe_count:
+                return False
+        except Exception as exc:
+            print(
+                f"[refresh-check] {ticker}: allsearch Yahoo probe failed "
+                f"({_retry_error_brief(exc)}); refreshing the whole market to avoid stale data"
+            )
+            return True
+    if compared < probe_count:
+        print(
+            f"[refresh-check] {group_name}: only {compared}/{probe_count} Yahoo probes were comparable; "
+            "refreshing the whole market to avoid an unverified cache"
+        )
+        return True
+    return False
+
+
 def _stooq_bulk_bucket(day: str | None = None) -> str | None:
     daily_bulk_day = day or _warsaw_daily_bulk_day()
     if not daily_bulk_day:
@@ -2041,6 +2147,80 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         return False
     STOP_SCAN_EVENT.clear(); PAUSE_SCAN_EVENT.clear()
     group_l = (group_name or "").lower()
+
+    # Stooq is authoritative for Warsaw history.  Run the once-daily bulk
+    # replacement before looking at Yahoo's live candle; otherwise yesterday's
+    # Yahoo-only row survives and today's merge creates two Yahoo tail rows.
+    daily_bulk_day = _warsaw_daily_bulk_day()
+    if daily_bulk_day and (group_l.startswith("wig") or group_l == "indexes"):
+        bucket = _stooq_bulk_bucket(daily_bulk_day)
+        if not _stooq_bulk_already_attempted(bucket):
+            if _try_refresh_wig_with_stooq_bulk(
+                group_name,
+                f"refreshing authoritative Stooq history before Yahoo newest-candle probe on {daily_bulk_day}",
+            ):
+                return True
+
+    if os.environ.get("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES") == "1":
+        if _allsearch_ichimoku_yahoo_probe(group_name, members, exchange_suffix):
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
+            os.environ.pop("STOCKHELPER_MARKET_REFRESH_AUDITED", None)
+            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+            yahoo_latest_only = (
+                group_l in {"commodities", "forex"}
+                and os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") == "1"
+            )
+            if yahoo_latest_only:
+                contaminated: list[str] = []
+                for ticker in members:
+                    fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+                    csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+                    try:
+                        cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+                        cached_dates = pd.to_datetime(cached.get("Date"), errors="coerce").dropna()
+                        yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
+                        yahoo, _candidate, _name = call_silenced(
+                            _yahoo_download_window, yahoo_symbol, instrument, period="10d"
+                        )
+                        yahoo_dates = pd.to_datetime(yahoo.get("Date"), errors="coerce").dropna()
+                        local_latest = cached_dates.max().date() if not cached_dates.empty else None
+                        missing_older_rows = (
+                            int((yahoo_dates.dt.date > local_latest).sum()) > 1
+                            if local_latest is not None
+                            else True
+                        )
+                        if (
+                            not csv_path.exists()
+                            or missing_older_rows
+                            or _recent_high_precision_candle_count(cached) >= 2
+                        ):
+                            contaminated.append(fetch_symbol.upper())
+                    except Exception:
+                        contaminated.append(fetch_symbol.upper())
+                os.environ["STOCKHELPER_MARKET_REFRESH_SYMBOLS"] = ",".join(contaminated)
+                os.environ["STOCKHELPER_MARKET_REFRESH_AUDITED"] = "1"
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                print(
+                    f"[refresh-check] {group_name}: newest Yahoo candle changed; "
+                    f"updating Yahoo newest candle for the group; Stooq UI will fetch missing/older "
+                    f"rows only for {len(contaminated)}/{len(members)} instrument(s)"
+                )
+                return True
+            os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
+            os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
+            print(
+                f"[refresh-check] {group_name}: a probe differs from Yahoo; "
+                "refreshing the whole market"
+            )
+            return True
+        os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
+        os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+        print(
+            f"[refresh-check] {group_name}: all Yahoo probes match exactly; "
+            "cache-only mode ON"
+        )
+        return False
     if group_l == "commodities":
         day, phase = _warsaw_phase_now()
         state = _read_refresh_state()
@@ -2072,13 +2252,6 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
         os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
         os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         return False
-
-    daily_bulk_day = _warsaw_daily_bulk_day()
-    if daily_bulk_day and (group_l.startswith("wig") or group_l == "indexes"):
-        bucket = _stooq_bulk_bucket(daily_bulk_day)
-        if not _stooq_bulk_already_attempted(bucket):
-            if _try_refresh_wig_with_stooq_bulk(group_name, f"first WIG/index search after 03:00 Warsaw on {daily_bulk_day}"):
-                return True
 
     if group_l == "indexes" and "WIG20" in {str(member).upper() for member in members}:
         missing_candles, local_latest, yahoo_latest, yahoo_candidate = _wig20_index_yahoo_freshness_probe()

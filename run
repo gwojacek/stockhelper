@@ -3360,7 +3360,12 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     all_links: set[str] = set()
     # Phase 1: run all Ichimoku scans first across all scopes.
     print(f"\n\033[1;32m------------------------------------------- ICHIMOKU -------------------------------------------\033[0m")
-    code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False, force_cache_only=force_cache_only, strict_cache_only=force_cache_only, force_remote_refresh=force_remote_refresh)
+    if not force_cache_only and not force_remote_refresh:
+        os.environ["STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES"] = "1"
+    try:
+        code_i = _run_batch_search("ichimoku", scopes, ask_open_links=False, force_cache_only=force_cache_only, strict_cache_only=force_cache_only, force_remote_refresh=force_remote_refresh)
+    finally:
+        os.environ.pop("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", None)
     if code_i != 0:
         print("[allsearch] Ichimoku phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1
@@ -3442,6 +3447,9 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
+        os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_AUDITED", None)
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         if force_cache_only:
             if strict_cache_only or _scope_has_complete_cache(scope):
@@ -3510,6 +3518,9 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     os.environ.pop('STOCKHELPER_CACHE_ONLY',None)
     os.environ.pop('STOCKHELPER_FORCE_REMOTE_REFRESH',None)
     os.environ.pop('STOCKHELPER_SNAPSHOT_CACHE_ONLY',None)
+    os.environ.pop('STOCKHELPER_YAHOO_LATEST_ONLY',None)
+    os.environ.pop('STOCKHELPER_MARKET_REFRESH_SYMBOLS',None)
+    os.environ.pop('STOCKHELPER_MARKET_REFRESH_AUDITED',None)
     return 1 if failures else 0
 
 def main()->int:

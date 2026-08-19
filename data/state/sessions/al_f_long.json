@@ -4,7 +4,7 @@
   "__scanner_retest_count__": "0",
   "__scanner_previous_respect_months__": "7.6",
   "__journal_source_technique__": "Kliny",
-  "lot_cost": 127021.83,
+  "lot_cost": 125053.06,
   "pip_value": 3.73,
   "__scanner_breakout_direction__": "short",
   "drawn_objects": [
@@ -14,28 +14,30 @@
       "label": "Falling wedge upper",
       "x": [
         "2026-06-05",
-        "2026-12-07"
+        "2026-08-11",
+        "2026-12-23"
       ],
       "y": [
         3793.5,
-        3092.8
+        3548.25,
+        3025.05
       ],
       "x0": "2026-06-05",
-      "x1": "2027-05-09",
+      "x1": "2026-12-23",
       "y0": 3793.5,
-      "y1": 1226,
+      "y1": 3025.05,
       "anchor_x": [
         "2026-06-05",
-        "2026-08-06"
+        "2026-08-11"
       ],
       "anchor_y": [
         3793.5,
-        3452.25
+        3548.25
       ],
-      "price": 1226,
+      "price": 3025.05,
       "color": "#dc2626",
       "group_id": "auto-wedge",
-      "free_extension": true
+      "free_extension": false
     },
     {
       "id": "auto-wedge-lower",
@@ -43,28 +45,30 @@
       "label": "Falling wedge lower",
       "x": [
         "2026-02-02",
-        "2026-09-29"
+        "2026-07-01",
+        "2027-06-03"
       ],
       "y": [
         2856.5,
-        3449.05
+        3219.0,
+        4063.66019
       ],
-      "x0": "2025-08-20",
-      "x1": "2027-05-09",
-      "y0": 2470,
-      "y1": 4266.43,
+      "x0": "2026-02-02",
+      "x1": "2027-06-03",
+      "y0": 2856.5,
+      "y1": 4063.66019,
       "anchor_x": [
         "2026-02-02",
-        "2026-06-25"
+        "2026-07-01"
       ],
       "anchor_y": [
         2856.5,
-        3209.5
+        3219.0
       ],
-      "price": 4266.43,
+      "price": 4063.66019,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": true
+      "free_extension": false
     }
   ],
   "high": 3793.5,
