@@ -341,6 +341,8 @@ class FlipResult:
     tk_plus: str | None = None
     tenkan_in_cloud: str | None = None
     previous_respect_months: float | None = None
+    qualification_status: str = "standard_4m_breakout"
+    valid_retests_from_date: str = "-"
 
 
 
@@ -3535,6 +3537,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     previous_side: str | None = None
     current_side: str | None = None
     previous_respect_run = 0
+    previous_respect_start_idx = 0
 
     # Allow a multi-week cloud transition before the final close on the other
     # side.  OPL.WA-style setups can spend longer than 15 sessions inside/near
@@ -3566,6 +3569,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             previous_side = "below"
             current_side = "above"
             previous_respect_run = prev_run
+            previous_respect_start_idx = j + 1
             break
 
     # If not found, apply the mirrored rule to an above->below regime.
@@ -3590,6 +3594,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
                 previous_side = "above"
                 current_side = "below"
                 previous_respect_run = prev_run
+                previous_respect_start_idx = j + 1
                 break
 
     if flip_idx is None or previous_side is None or current_side is None:
@@ -3619,7 +3624,6 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     end_ts = pd.to_datetime(df.iloc[-1]["Date"])
     months = ((end_ts - flip_ts).days + 1) / 30.44
 
-    previous_respect_start_idx = max(0, flip_idx - previous_respect_run)
     previous_respect_start_ts = pd.to_datetime(df.iloc[previous_respect_start_idx]["Date"])
     previous_respect_months = max(0.0, (flip_ts - previous_respect_start_ts).days / 30.44)
 
@@ -3632,6 +3636,36 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
         flip.first_valid_retest_pattern_date,
         flip.retest_events,
     ) = _detect_ichimoku_retest(df, flip_idx, current_side, allow_equal_third_close=allow_equal_third_close)
+    # ``min_days`` is a trading-session approximation, but the strategy's four
+    # months are calendar months. An 80-session run can break slightly early
+    # (for example after 3.8 months). After such a breakout the first patterned
+    # retest following the exact anniversary is probationary; only the second
+    # post-anniversary retest makes the setup actionable.
+    four_month_date = previous_respect_start_ts + pd.DateOffset(months=4)
+    if flip_ts < four_month_date:
+        flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
+        post_rule_events = [
+            event for event in (flip.retest_events or [])
+            if pd.to_datetime(event[0]) >= four_month_date
+        ]
+        flip.retest_events = post_rule_events
+        # Report the real number of post-anniversary retests.  Subtracting the
+        # probationary first retest made a valid two-retest setup display a
+        # count of 1, which was indistinguishable from the still-waiting state.
+        flip.valid_retests_count = len(post_rule_events)
+        flip.first_valid_retest_pattern_date = post_rule_events[1][0] if len(post_rule_events) >= 2 else "-"
+        if not post_rule_events:
+            flip.qualification_status = "early_breakout_waiting_first_post_4m_retest"
+            flip.retest_status = "waiting_for_first_post_4m_retest"
+            flip.retest_depth = "-"
+        elif len(post_rule_events) == 1:
+            flip.qualification_status = "early_breakout_waiting_second_post_4m_retest"
+            flip.retest_status = "waiting_for_second_post_4m_retest"
+            flip.retest_depth = "-"
+        else:
+            flip.qualification_status = "early_breakout_valid_after_second_post_4m_retest"
+            flip.retest_depth = post_rule_events[-1][2]
+            flip.retest_status = f"{flip.retest_depth}_retest_pattern"
     return flip
 
 
@@ -3707,6 +3741,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 
         cycle_start = i
         cycle_end = i
+        cycle_exit_idx: int | None = None
         while cycle_end + 1 < len(df):
             n = cycle_end + 1
             if current_side == "above":
@@ -3719,6 +3754,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             # if the same candle's wick still touches the cloud. A later return
             # to the cloud is a new retest and gets its own local extreme.
             if n_outside:
+                cycle_exit_idx = n
                 break
             if n_touched:
                 cycle_end = n
@@ -3728,7 +3764,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         w_start = max(cycle_start - 2, flip_idx + 1)
         # Include the first candle that leaves the cloud after a retest cycle.
         # Bearish/bullish harami confirmation often prints on that outside candle.
-        detect_until = min(cycle_end + 1, len(df) - 1)
+        detect_until = cycle_exit_idx if cycle_exit_idx is not None else cycle_end
         w = df.iloc[w_start: detect_until + 1].reset_index(drop=True)
         if len(w) >= 2:
             pattern_candidates: list[tuple[int, str]] = []
@@ -3884,8 +3920,13 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 body_hi = max(float(df["Open"].iloc[pattern_abs]), float(df["Close"].iloc[pattern_abs]))
                 if (current_side == "above" and body_lo >= float(top.iloc[pattern_abs])) or (current_side == "below" and body_hi <= float(bottom.iloc[pattern_abs])):
                     depth = "shallow"
-                valid_count += 1
                 ev_date = pd.to_datetime(df.iloc[pattern_abs]["Date"]).strftime("%Y-%m-%d")
+                # The outside confirmation candle belongs to the cycle it
+                # closes.  Never report that same candle again as a new retest
+                # merely because its wick still overlaps the cloud.
+                if last_pattern_abs == pattern_abs:
+                    break
+                valid_count += 1
                 events.append((ev_date, formation, depth))
                 last_pattern_abs = pattern_abs
                 if first_valid_date == "-":
@@ -3893,7 +3934,10 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     first_valid_depth = depth
                     first_valid_status = f"{depth}_retest_pattern"
                 break
-        i = cycle_end + 1
+        # ``detect_until`` may be the first outside confirmation candle and is
+        # already part of this cycle's pattern window. Consume it before
+        # looking for the next independent return to the cloud.
+        i = detect_until + 1
 
     if valid_count > 0:
         # If after a valid retest pattern price returned to cloud and then broke
@@ -4170,11 +4214,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_flip_md=[]
     for row in sorted(flip_results, key=lambda r: r.months_since_flip, reverse=True):
         cur_col = "⚪ above" if row.current_side == "above" else ("🔴 below" if row.current_side == "below" else row.current_side)
-        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_flip_md.append([row.ticker,row.previous_side,cur_col,row.flip_date,f"{row.months_since_flip:.1f}",(f"{row.previous_respect_months:.1f}" if row.previous_respect_months is not None else "-"),row.valid_retests_from_date,row.qualification_status,row.retest_status,row.valid_retests_count,(f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-"),(row.retest_events[-1][0] if row.retest_events else '-'),(row.retest_events[-1][1] if row.retest_events else '-'), (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker),_build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md_flip,
         "WYNIKI 2",
-        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Mies. respektu przed wybiciem","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Ichimoku status","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Było","Jest","Data wybicia","Mies. od wybicia","Mies. respektu przed wybiciem","Valid retests from","4m qualification status","Latest Retest status","Retest count","Avg10d PLN","Latest Retest date","Latest Retest pattern","Ichimoku status","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_flip_md,
         append=True,
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
