@@ -2018,6 +2018,27 @@ def _allsearch_ichimoku_yahoo_probe(
                 f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
             )
             if not matches:
+                cached_latest_date = pd.Timestamp(cached_signature[0]).date() if cached_signature else None
+                yahoo_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
+                yahoo_newer_count = (
+                    int((yahoo_dates.dt.date > cached_latest_date).sum())
+                    if cached_latest_date is not None
+                    else 9999
+                )
+                if (
+                    group_name.lower() in {"commodities", "forex"}
+                    and cached_signature is not None
+                    and yahoo_signature is not None
+                    and yahoo_signature[0] >= cached_signature[0]
+                    and yahoo_newer_count <= 1
+                ):
+                    # The Stooq history is already present; only Yahoo's live
+                    # newest row changed (the normal case when allsearch is run
+                    # repeatedly during one session).  Do not send the whole
+                    # group through the slow Stooq UI again.
+                    os.environ["STOCKHELPER_YAHOO_LATEST_ONLY"] = "1"
+                else:
+                    os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
                 return True
             if compared >= probe_count:
                 return False
@@ -2153,6 +2174,31 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
             os.environ.pop("STOCKHELPER_MARKET_REFRESH_AUDITED", None)
             os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+            yahoo_latest_only = (
+                group_l in {"commodities", "forex"}
+                and os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") == "1"
+            )
+            if yahoo_latest_only:
+                contaminated: list[str] = []
+                for ticker in members:
+                    fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+                    csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+                    try:
+                        cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+                        if not csv_path.exists() or _recent_high_precision_candle_count(cached) >= 2:
+                            contaminated.append(fetch_symbol.upper())
+                    except Exception:
+                        contaminated.append(fetch_symbol.upper())
+                os.environ["STOCKHELPER_MARKET_REFRESH_SYMBOLS"] = ",".join(contaminated)
+                os.environ["STOCKHELPER_MARKET_REFRESH_AUDITED"] = "1"
+                os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
+                print(
+                    f"[refresh-check] {group_name}: newest Yahoo candle changed; "
+                    f"updating Yahoo only for the group, Stooq UI rebase needed for "
+                    f"{len(contaminated)}/{len(members)} cache(s) with 2+ Yahoo candles"
+                )
+                return True
+            os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             print(
                 f"[refresh-check] {group_name}: a probe differs from Yahoo; "

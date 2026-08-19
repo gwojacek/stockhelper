@@ -3447,6 +3447,9 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     report.write_text(f"{mode.upper()} ALL COMBO REPORT\n", encoding='utf-8')
     failures=0; all_links=set(); csv_refs: list[Path] = []
     for idx,scope in enumerate(batch,1):
+        os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_AUDITED", None)
         print(f"\n\033[1m\033[36m=== [{idx}/{len(batch)}] {mode.upper()} :: {scope.upper()} ===\033[0m")
         if force_cache_only:
             if strict_cache_only or _scope_has_complete_cache(scope):
@@ -3515,6 +3518,9 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
     os.environ.pop('STOCKHELPER_CACHE_ONLY',None)
     os.environ.pop('STOCKHELPER_FORCE_REMOTE_REFRESH',None)
     os.environ.pop('STOCKHELPER_SNAPSHOT_CACHE_ONLY',None)
+    os.environ.pop('STOCKHELPER_YAHOO_LATEST_ONLY',None)
+    os.environ.pop('STOCKHELPER_MARKET_REFRESH_SYMBOLS',None)
+    os.environ.pop('STOCKHELPER_MARKET_REFRESH_AUDITED',None)
     return 1 if failures else 0
 
 def main()->int:

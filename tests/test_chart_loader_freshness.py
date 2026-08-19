@@ -1105,6 +1105,84 @@ def test_allsearch_wig_refreshes_stooq_bulk_before_yahoo_probe(monkeypatch):
     assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
+def test_allsearch_commodity_same_day_change_uses_yahoo_only_without_stooq_ui(monkeypatch, tmp_path):
+    import os
+    import scanner_search as scanner
+
+    cached = _df("2026-08-18", "2026-08-19")
+    yahoo = cached.copy()
+    yahoo.loc[yahoo.index[-1], ["Close", "Volume"]] = [683.75, 5362]
+    csv_path = tmp_path / "ZW_F.csv"
+    cached.to_csv(csv_path, index=False)
+
+    monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.setattr(scanner.random, "sample", lambda population, k: list(population))
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda *_args: ("ZW.F", "commodity"))
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        scanner,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo.copy(), "ZW=F", None),
+    )
+
+    assert scanner._should_refresh_group_data("commodities", ["WHEAT"], None) is True
+    assert os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") == "1"
+    assert os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS") == ""
+    assert "STOCKHELPER_FORCE_REMOTE_REFRESH" not in os.environ
+
+
+def test_commodity_yahoo_latest_only_persists_same_day_without_stooq_download(monkeypatch, tmp_path):
+    csv_path = tmp_path / "ZW_F.csv"
+    cached = _df("2026-08-18", "2026-08-19")
+    cached.to_csv(csv_path, index=False)
+    yahoo = cached.copy()
+    yahoo.loc[yahoo.index[-1], ["Close", "Volume"]] = [683.75, 5362]
+
+    monkeypatch.setenv("STOCKHELPER_YAHOO_LATEST_ONLY", "1")
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo.copy(), "ZW=F", None),
+    )
+    monkeypatch.setattr(
+        loader,
+        "_download_remote",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("Stooq UI must not run for a same-day Yahoo update")),
+    )
+
+    loaded, written_path, info = loader.load_or_update_daily_data("ZW.F", "commodity")
+
+    assert info["source"] == "cache+yahoo"
+    assert float(loaded.iloc[-1]["Close"]) == 683.75
+    assert float(pd.read_csv(written_path).iloc[-1]["Volume"]) == 5362
+
+
+def test_allsearch_commodity_two_missing_yahoo_dates_requires_stooq_ui(monkeypatch, tmp_path):
+    import os
+    import scanner_search as scanner
+
+    cached = _df("2026-08-17")
+    yahoo = _df("2026-08-17", "2026-08-18", "2026-08-19")
+    csv_path = tmp_path / "ZW_F.csv"
+    cached.to_csv(csv_path, index=False)
+
+    monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
+    monkeypatch.setattr(scanner.random, "sample", lambda population, k: list(population))
+    monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda *_args: ("ZW.F", "commodity"))
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        scanner,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo.copy(), "ZW=F", None),
+    )
+
+    assert scanner._should_refresh_group_data("commodities", ["WHEAT"], None) is True
+    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+    assert "STOCKHELPER_YAHOO_LATEST_ONLY" not in os.environ
+
+
 def test_market_session_open_uses_local_market_hours():
     from datetime import UTC, datetime
     import scanner_search as scanner

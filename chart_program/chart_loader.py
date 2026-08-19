@@ -1449,7 +1449,14 @@ def load_or_update_daily_data(
     # the process-level cache suppress Yahoo's latest-candle check: a second
     # scan/chart load must be able to replace today's still-forming OHLCV row.
     # The session guard remains useful for slower Stooq-backed instruments.
-    if refresh_key in _SESSION_REFRESHED_KEYS and local is not None and not local.empty and instrument_type != "stock" and not _force_remote_refresh_enabled():
+    if (
+        refresh_key in _SESSION_REFRESHED_KEYS
+        and local is not None
+        and not local.empty
+        and instrument_type != "stock"
+        and not _force_remote_refresh_enabled()
+        and os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") != "1"
+    ):
         cached_df = local if fetch_older_data else _last_year_only(local)
         return cached_df, csv_path, {
             "source": "cache",
@@ -1469,7 +1476,29 @@ def load_or_update_daily_data(
     if cache_only:
         raise ValueError(f"Cache-only mode: no local CSV data for {symbol}")
 
-    if instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
+    yahoo_latest_only = (
+        os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") == "1"
+        and instrument_type in {"commodity", "forex"}
+        and not fetch_older_data
+        and not _force_remote_refresh_enabled()
+    )
+    if yahoo_latest_only and local is not None and not local.empty:
+        merged_latest, yahoo_symbol, yahoo_name, changed = _merge_yahoo_fresh_candle(
+            local,
+            symbol,
+            instrument_type,
+            trim_to_last_year=False,
+            replace_same_date=True,
+        )
+        remote_info = (
+            merged_latest,
+            "cache+yahoo",
+            yahoo_symbol,
+            yahoo_name,
+            f"Reused Stooq history and updated only Yahoo's newest candle; changed={changed}.",
+        )
+
+    if remote_info is None and instrument_type == "commodity" and not fetch_older_data and not _force_remote_refresh_enabled() and _local_csv_has_min_year(csv_path):
         local_yahoo_merge = _try_local_commodity_yahoo_merge(symbol, csv_path) if local is not None else None
         if local_yahoo_merge is None:
             cached_df = _last_year_only(local) if local is not None else pd.DataFrame()
