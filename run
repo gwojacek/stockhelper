@@ -1137,19 +1137,23 @@ def _ichimoku_qualification_state(row: ScannerRow) -> str:
     if row.scanner != "ICHIMOKU" or row.category != "retest_breakout":
         return "standard"
     explicit = str(row.metrics.get("qualification_status", "")).strip().lower()
+    count = int(_parse_float_text(row.metrics.get("retest_count", "0"), 0.0))
     if "waiting_first" in explicit:
         return "waiting_first"
     if "waiting_second" in explicit:
         return "waiting_second"
     if "valid_after_second" in explicit:
-        return "valid_after_second"
+        # Guard reports produced by the earlier implementation, which marked
+        # two detected events as valid but wrote Retest count=1 after removing
+        # the probationary event from the count. A visible count below two is
+        # never playable.
+        return "valid_after_second" if count >= 2 else "waiting_second"
     respect = _parse_float_text(row.metrics.get("previous_respect_months", "0"), 0.0)
     if respect >= 4.0:
         return "standard"
     # Reports generated before the qualification-status column still need to
     # be safe. They cannot prove that two retests occurred after the exact
     # anniversary, so never promote them to playable merely from a raw count.
-    count = int(_parse_float_text(row.metrics.get("retest_count", "0"), 0.0))
     if count <= 0:
         return "waiting_first"
     return "waiting_second"
@@ -1161,7 +1165,7 @@ def _ichimoku_qualification_label(row: ScannerRow) -> str:
         "waiting_first": "⏳ NOT PLAYABLE — waiting for first retest after 4m",
         "waiting_second": "⏳ NOT PLAYABLE — first retest after 4m; waiting for second",
         "valid_after_second": "✅ PLAYABLE — second retest after 4m confirmed",
-        "standard": "✅ PLAYABLE — 4m respected before breakout",
+        "standard": "—",
     }[state]
 
 
@@ -3208,7 +3212,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if is_i1:
                 thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
             elif is_i2:
-                thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Playable status</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Early breakout status (&lt;4m: playable after 2 post-4m retests)</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
             elif is_f0:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Near61.8</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
             elif is_f1:

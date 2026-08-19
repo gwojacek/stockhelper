@@ -165,8 +165,34 @@ def test_early_calendar_breakout_requires_second_retest_after_four_month_mark(mo
     assert flip is not None
     assert flip.previous_respect_months < 4.0
     assert flip.qualification_status == "early_breakout_valid_after_second_post_4m_retest"
-    assert flip.valid_retests_count == 1
+    assert flip.valid_retests_count == 2
     assert flip.first_valid_retest_pattern_date == event_dates[1].strftime("%Y-%m-%d")
+
+
+def test_early_calendar_breakout_with_one_post_4m_retest_is_not_playable(monkeypatch):
+    dates = pd.date_range("2026-01-02", periods=100, freq="B")
+    flip_idx = 80
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [8.0] * flip_idx + [11.0] * 20,
+        "High": [8.5] * flip_idx + [11.5] * 20,
+        "Low": [7.5] * flip_idx + [10.5] * 20,
+        "Close": [8.0] * flip_idx + [11.0] * 20,
+        "cloud_top": [10.0] * 100,
+        "cloud_bottom": [9.0] * 100,
+    })
+    event_date = dates[dates >= dates[0] + pd.DateOffset(months=4)][0].strftime("%Y-%m-%d")
+    monkeypatch.setattr(
+        scanner_search, "_detect_ichimoku_retest",
+        lambda *_args, **_kwargs: ("shallow_retest_pattern", "shallow", 1, event_date, [(event_date, "bullish_piercing_line", "shallow")]),
+    )
+
+    flip = scanner_search._flip_after_long_respect(df)
+
+    assert flip is not None
+    assert flip.valid_retests_count == 1
+    assert flip.qualification_status == "early_breakout_waiting_second_post_4m_retest"
+    assert flip.retest_status == "waiting_for_second_post_4m_retest"
 
 
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):

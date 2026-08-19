@@ -988,6 +988,7 @@ def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choic
         status="shallow_retest_pattern", dates={"flip_date": "2026-08-10"},
         metrics={
             "months": "0.3", "previous_respect_months": "3.8", "retest_count": "1",
+            "qualification_status": "early_breakout_valid_after_second_post_4m_retest",
             "latest_retest_date": "2026-08-18", "latest_retest_pattern": "bullish_piercing_line",
             "raw_status": "shallow_retest_pattern", "current_side": "above",
             "ichimoku_status": "Over Kijun-sen", "risk": "3%",

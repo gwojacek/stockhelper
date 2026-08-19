@@ -3647,7 +3647,10 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
             if pd.to_datetime(event[0]) >= four_month_date
         ]
         flip.retest_events = post_rule_events
-        flip.valid_retests_count = max(0, len(post_rule_events) - 1)
+        # Report the real number of post-anniversary retests.  Subtracting the
+        # probationary first retest made a valid two-retest setup display a
+        # count of 1, which was indistinguishable from the still-waiting state.
+        flip.valid_retests_count = len(post_rule_events)
         flip.first_valid_retest_pattern_date = post_rule_events[1][0] if len(post_rule_events) >= 2 else "-"
         if not post_rule_events:
             flip.qualification_status = "early_breakout_waiting_first_post_4m_retest"
