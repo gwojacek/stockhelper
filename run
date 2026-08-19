@@ -1228,7 +1228,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                 market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
                 status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
                 metrics={
-                    "months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "retest_count": str(r.get("Retest count", "")),
+                    "months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "qualification_status": str(r.get("4m qualification status", "standard_4m_breakout")), "retest_count": str(r.get("Retest count", "")),
                     "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
                     "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
                     "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
@@ -1746,7 +1746,10 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         # WYNIKI 2 is intended to contain flips after at least four months of
         # respecting one cloud side. Keep that guard here too because older
         # markdown fixtures/reports may still contain shorter pre-breakout runs.
-        return row.category == "retest_breakout" and _previous_respect_months(row) >= 4.0
+        return row.category == "retest_breakout" and (
+            _previous_respect_months(row) >= 4.0
+            or row.metrics.get("qualification_status") == "early_breakout_valid_after_second_post_4m_retest"
+        )
 
     def _is_fresh_retest_window(row: ScannerRow) -> bool:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
@@ -2114,7 +2117,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             rows.append(ScannerRow(
                 market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
                 status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
-                metrics={"months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", "")), "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")), "current_side": str(r.get("Jest", "") or r.get("Current", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
+                metrics={"months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "qualification_status": str(r.get("4m qualification status", "standard_4m_breakout")), "retest_count": str(r.get("Retest count", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_retest_date": str(r.get("Latest Retest date", "")), "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "raw_status": str(r.get("Latest Retest status", "")), "previous_side": str(r.get("Poprzednia", "") or r.get("Było", "")), "current_side": str(r.get("Jest", "") or r.get("Current", "")), "ichimoku_status": str(r.get("Ichimoku status", "")), "risk": str(r.get("Risk", "")), "tk_cross": str(r.get("TK cross", "")), "dynamic": str(r.get("Dynamic", "")), "cloud": str(r.get("Cloud", "")), "chikou": str(r.get("Chikou", "")), "twist": str(r.get("Twist", "")), "tk_plus": str(r.get("TK plus", "")), "tenkan_in_cloud": str(r.get("Tenkan in cloud", ""))},
                 chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"
             ))
         for r in i_w1:
