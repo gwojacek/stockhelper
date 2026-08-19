@@ -2018,24 +2018,17 @@ def _allsearch_ichimoku_yahoo_probe(
                 f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
             )
             if not matches:
-                cached_latest_date = pd.Timestamp(cached_signature[0]).date() if cached_signature else None
-                yahoo_dates = pd.to_datetime(remote.get("Date"), errors="coerce").dropna()
-                yahoo_newer_count = (
-                    int((yahoo_dates.dt.date > cached_latest_date).sum())
-                    if cached_latest_date is not None
-                    else 9999
-                )
                 if (
                     group_name.lower() in {"commodities", "forex"}
                     and cached_signature is not None
                     and yahoo_signature is not None
                     and yahoo_signature[0] >= cached_signature[0]
-                    and yahoo_newer_count <= 1
                 ):
                     # The Stooq history is already present; only Yahoo's live
-                    # newest row changed (the normal case when allsearch is run
-                    # repeatedly during one session).  Do not send the whole
-                    # group through the slow Stooq UI again.
+                    # newest row changed or Yahoo exposes missing dates.  Audit
+                    # the group below: only instruments needing older missing
+                    # rows are sent to Stooq; all others update Yahoo's newest
+                    # candle without opening the Stooq UI.
                     os.environ["STOCKHELPER_YAHOO_LATEST_ONLY"] = "1"
                 else:
                     os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)
@@ -2185,7 +2178,23 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                     csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
                     try:
                         cached = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
-                        if not csv_path.exists() or _recent_high_precision_candle_count(cached) >= 2:
+                        cached_dates = pd.to_datetime(cached.get("Date"), errors="coerce").dropna()
+                        yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
+                        yahoo, _candidate, _name = call_silenced(
+                            _yahoo_download_window, yahoo_symbol, instrument, period="10d"
+                        )
+                        yahoo_dates = pd.to_datetime(yahoo.get("Date"), errors="coerce").dropna()
+                        local_latest = cached_dates.max().date() if not cached_dates.empty else None
+                        missing_older_rows = (
+                            int((yahoo_dates.dt.date > local_latest).sum()) > 1
+                            if local_latest is not None
+                            else True
+                        )
+                        if (
+                            not csv_path.exists()
+                            or missing_older_rows
+                            or _recent_high_precision_candle_count(cached) >= 2
+                        ):
                             contaminated.append(fetch_symbol.upper())
                     except Exception:
                         contaminated.append(fetch_symbol.upper())
@@ -2194,8 +2203,8 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
                 print(
                     f"[refresh-check] {group_name}: newest Yahoo candle changed; "
-                    f"updating Yahoo only for the group, Stooq UI rebase needed for "
-                    f"{len(contaminated)}/{len(members)} cache(s) with 2+ Yahoo candles"
+                    f"updating Yahoo newest candle for the group; Stooq UI will fetch missing/older "
+                    f"rows only for {len(contaminated)}/{len(members)} instrument(s)"
                 )
                 return True
             os.environ.pop("STOCKHELPER_YAHOO_LATEST_ONLY", None)

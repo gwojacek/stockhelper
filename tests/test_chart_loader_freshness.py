@@ -1159,7 +1159,7 @@ def test_commodity_yahoo_latest_only_persists_same_day_without_stooq_download(mo
     assert float(pd.read_csv(written_path).iloc[-1]["Volume"]) == 5362
 
 
-def test_allsearch_commodity_two_missing_yahoo_dates_requires_stooq_ui(monkeypatch, tmp_path):
+def test_allsearch_commodity_two_missing_yahoo_dates_targets_only_that_instrument_for_stooq(monkeypatch, tmp_path):
     import os
     import scanner_search as scanner
 
@@ -1179,8 +1179,35 @@ def test_allsearch_commodity_two_missing_yahoo_dates_requires_stooq_ui(monkeypat
     )
 
     assert scanner._should_refresh_group_data("commodities", ["WHEAT"], None) is True
-    assert os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
-    assert "STOCKHELPER_YAHOO_LATEST_ONLY" not in os.environ
+    assert os.environ.get("STOCKHELPER_YAHOO_LATEST_ONLY") == "1"
+    assert os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS") == "ZW.F"
+    assert "STOCKHELPER_FORCE_REMOTE_REFRESH" not in os.environ
+
+
+def test_targeted_forex_rebase_fetches_only_incremental_stooq_window(monkeypatch, tmp_path):
+    csv_path = tmp_path / "EURUSD.csv"
+    cached = _df("2025-02-20", "2026-08-17")
+    cached.to_csv(csv_path, index=False)
+    calls = []
+
+    monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(
+        loader,
+        "update_stooq_history_with_playwright",
+        lambda **kwargs: (calls.append(kwargs) or _df("2026-08-17", "2026-08-18")),
+    )
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (_df("2026-08-18", "2026-08-19"), "EURUSD=X", None),
+    )
+
+    df, source, *_rest = loader._download_remote("EURUSD", "forex", None, "auto")
+
+    assert calls[0]["lookback_days"] == 30
+    assert source == "stooq_web+yahoo"
+    assert list(df["Date"].dt.strftime("%Y-%m-%d")) == ["2026-08-17", "2026-08-18", "2026-08-19"]
 
 
 def test_market_session_open_uses_local_market_hours():

@@ -1242,7 +1242,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         # into either browser downloader.  This boundary normalization also
         # protects callers which use human-readable pairs such as ``GBP/PLN``.
         stooq_forex_symbol = symbol.replace("/", "")
-        if not fetch_older_data and _local_forex_has_required_window(csv_path_ref):
+        if (
+            not fetch_older_data
+            and not _force_remote_refresh_enabled()
+            and _local_forex_has_required_window(csv_path_ref)
+        ):
             local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
             if not _cache_has_too_many_recent_yahoo_candles(local_df, symbol, "forex"):
                 yahoo_merged = _try_yahoo_fresh_candle_merge(
@@ -1258,7 +1262,11 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 if yahoo_merged is not None and yahoo_merged[-1] <= 1:
                     return yahoo_merged[:5]
                 return local_df, "cache", symbol.upper(), None, "Forex cache already covers the rolling 1.5-year window."
-        lookback = older_days if fetch_older_data else 548
+        lookback = (
+            older_days
+            if fetch_older_data
+            else _incremental_lookback_days(csv_path_ref, default_days=548)
+        )
         # Forex follows the same simple paginated history-table workflow as
         # literal commodities. Avoid Stooq's CSV download endpoint entirely.
         df = update_stooq_history_with_playwright(
