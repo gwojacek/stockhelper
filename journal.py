@@ -181,6 +181,34 @@ def _selected(value: Any, expected: str) -> str:
     return " selected" if str(value or "").lower() == expected else ""
 
 
+def _reason_select(entry: dict[str, Any], reason: Any, eid: str) -> str:
+    """Build the technique-specific setup selector used in Trade Summary."""
+    technique = str(entry.get("technique") or "Manual").strip().lower()
+    pattern = str(entry.get("pattern") or "").strip()
+    current = str(reason or "").strip()
+    if not pattern:
+        match = re.search(r"(?:retest|61\.8)\s*\+\s*(.+)$", current, re.IGNORECASE)
+        pattern = match.group(1).strip() if match else ""
+    if technique in {"kliny", "wedge", "wedges"}:
+        options = ["Wedge breakout"]
+    elif technique == "ichimoku":
+        options = ["Cloud breakout", f"Retest + {pattern}" if pattern else "Retest"]
+    elif technique == "fibo":
+        options = [f"Fibo 61.8 + {pattern}" if pattern else "Fibo 61.8"]
+    else:
+        options = [current or "Manual"]
+    if current and current not in options:
+        options.append(current)
+    rendered = "".join(
+        f"<option value='{html.escape(option)}'{_selected(current, option.lower())}>{html.escape(option)}</option>"
+        for option in options
+    )
+    return (
+        f"<select class='summary-autosave summary-reason' data-field='reason_label' "
+        f"data-id='{eid}'>{rendered}</select>"
+    )
+
+
 def _row(entry: dict[str, Any], number: int = 1) -> str:
     def e(v: Any) -> str:
         return html.escape(str(v or ""))
@@ -228,7 +256,7 @@ def _row(entry: dict[str, Any], number: int = 1) -> str:
         f"<div class='kv'><span>Sold / Close</span><b>{e(entry.get('exit_price') or '--')}</b></div>",
         f"<div class='kv'><span>Estimated P/L</span><b class='estimated-pl'>{e(estimated or '--')}</b></div>",
         f"<div class='kv'><span>Stop loss</span><b>{e(entry.get('stop_loss'))}</b></div>",
-        f"<div class='kv editable'><span>Reason</span><input class='summary-autosave summary-reason' data-field='reason_label' data-id='{eid}' value='{e(reason)}'></div>",
+        f"<div class='kv editable'><span>Reason</span>{_reason_select(entry, reason, eid)}</div>",
         f"<div class='kv editable'><span>Touches</span><input class='summary-autosave summary-touches' data-field='touches' data-id='{eid}' value='{e(entry.get('touches'))}'></div>",
         f"<div class='kv'><span>Auto context</span><b>{e(entry.get('technique'))} / {e(reason)}</b></div>",
         f"<div class='kv'><span>Exit reason</span><b>{e(entry.get('exit_reason'))}</b></div>",
@@ -295,7 +323,7 @@ body{{max-width:none;background:radial-gradient(circle at 18% 0,rgba(59,130,246,
 /* final layout width/screenshot fixes */
 body{{padding:18px 20px}}.shell{{width:calc(100vw - 40px);max-width:none;margin:0 auto}}.card-grid{{grid-template-columns:minmax(360px,.95fr) minmax(360px,1fr) minmax(360px,.95fr);gap:16px}}.screens{{grid-column:1 / -1}}.screens .thumb{{width:100%;max-height:640px;min-height:360px;object-fit:contain}}.notes{{grid-column:auto;display:block}}.notes pre{{min-height:250px}}.edit{{grid-column:1 / -1}}.journal-card{{margin-bottom:32px}}@media(max-width:1280px){{.card-grid{{grid-template-columns:1fr}}.screens,.notes,.edit{{grid-column:auto}}.screens .thumb{{min-height:220px}}}}
 
-.kv.editable{{align-items:center}}.kv.editable input{{width:170px;max-width:48%;text-align:right;padding:7px 10px;border-radius:8px;font-weight:800}}.kv.editable b{{min-width:42px;text-align:right;color:#e5e7eb}}.detected-status{{width:100%;border:1px solid rgba(148,163,184,.34);border-radius:10px;padding:10px 12px;background:rgba(15,23,42,.70);font-weight:900;color:#dbeafe;text-transform:uppercase;letter-spacing:.06em}}.screen-caption{{margin:10px 0 8px;color:#93c5fd;font-weight:900;text-transform:uppercase;letter-spacing:.08em;font-size:12px}}.stats{{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;margin:0 0 24px}}.stat{{padding:14px 16px;border:1px solid rgba(96,165,250,.28);border-radius:16px;background:linear-gradient(135deg,rgba(30,41,59,.72),rgba(15,23,42,.74));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}}.stat span{{display:block;color:#93a4bd;text-transform:uppercase;font-size:11px;font-weight:900;letter-spacing:.08em}}.stat b{{display:block;margin-top:6px;font-size:22px;color:#f8fafc}}@media(max-width:900px){{.stats{{grid-template-columns:repeat(2,1fr)}}}}.toolbar .btn-danger{{border-color:#ef4444;color:#fecaca}}.mini-update{{margin-left:auto;padding:6px 10px;border-radius:999px;border:1px solid rgba(96,165,250,.35);background:rgba(15,23,42,.62);color:#dbeafe;cursor:pointer}}.bulk{{margin:0 10px 0 0;display:flex;align-items:center}}.bulk input{{width:18px;height:18px;accent-color:#38bdf8}}.autosave-label{{margin-left:auto;color:#93c5fd;font-size:12px;text-transform:uppercase;letter-spacing:.08em}}.notes textarea.autosave-notes{{width:100%;min-height:250px}}.estimated-pl.positive{{color:#86efac}}.estimated-pl.negative{{color:#fecaca}}.review{{gap:16px;line-height:1.35}}.review .section-title{{margin:10px 0 6px;display:block;white-space:normal}}.review input,.review select,.review textarea,.review .detected-status{{min-height:44px;font-size:15px;line-height:1.35}}.review .preview{{margin:10px 0;min-height:48px;line-height:1.45}}.review .btn{{min-height:42px;margin-top:8px;white-space:normal}}.review-grid{{gap:14px}}body.compressed .review,body.compressed .notes,body.compressed .edit{{display:none}}body.compressed .card-grid{{grid-template-columns:minmax(340px,.75fr) minmax(520px,1.25fr);align-items:stretch}}body.compressed .facts{{order:1;grid-column:auto}}body.compressed .screens{{order:2;grid-column:auto}}body.compressed .screens .open-screen,body.compressed .screens .screen-empty{{display:none}}body.compressed .screens .thumb{{min-height:260px;max-height:520px}}body.compressed .journal-card{{margin-bottom:16px}}.facts{{order:2}}.review{{order:1}}.notes{{order:3}}.edit{{order:4}}@media(max-width:1000px){{body.compressed .card-grid{{grid-template-columns:1fr}}}}
+.kv.editable{{align-items:center}}.kv.editable input,.kv.editable select{{width:170px;max-width:58%;text-align:right;padding:7px 10px;border-radius:8px;font-weight:800}}.kv.editable b{{min-width:42px;text-align:right;color:#e5e7eb}}.detected-status{{width:100%;border:1px solid rgba(148,163,184,.34);border-radius:10px;padding:10px 12px;background:rgba(15,23,42,.70);font-weight:900;color:#dbeafe;text-transform:uppercase;letter-spacing:.06em}}.screen-caption{{margin:10px 0 8px;color:#93c5fd;font-weight:900;text-transform:uppercase;letter-spacing:.08em;font-size:12px}}.stats{{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:12px;margin:0 0 24px}}.stat{{padding:14px 16px;border:1px solid rgba(96,165,250,.28);border-radius:16px;background:linear-gradient(135deg,rgba(30,41,59,.72),rgba(15,23,42,.74));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}}.stat span{{display:block;color:#93a4bd;text-transform:uppercase;font-size:11px;font-weight:900;letter-spacing:.08em}}.stat b{{display:block;margin-top:6px;font-size:22px;color:#f8fafc}}@media(max-width:900px){{.stats{{grid-template-columns:repeat(2,1fr)}}}}.toolbar .btn-danger{{border-color:#ef4444;color:#fecaca}}.mini-update{{margin-left:auto;padding:6px 10px;border-radius:999px;border:1px solid rgba(96,165,250,.35);background:rgba(15,23,42,.62);color:#dbeafe;cursor:pointer}}.bulk{{margin:0 10px 0 0;display:flex;align-items:center}}.bulk input{{width:18px;height:18px;accent-color:#38bdf8}}.autosave-label{{margin-left:auto;color:#93c5fd;font-size:12px;text-transform:uppercase;letter-spacing:.08em}}.notes textarea.autosave-notes{{width:100%;min-height:250px}}.estimated-pl.positive{{color:#86efac}}.estimated-pl.negative{{color:#fecaca}}.review{{gap:16px;line-height:1.35}}.review .section-title{{margin:10px 0 6px;display:block;white-space:normal}}.review input,.review select,.review textarea,.review .detected-status{{min-height:44px;font-size:15px;line-height:1.35}}.review .preview{{margin:10px 0;min-height:48px;line-height:1.45}}.review .btn{{min-height:42px;margin-top:8px;white-space:normal}}.review-grid{{gap:14px}}body.compressed .review,body.compressed .notes,body.compressed .edit{{display:none}}body.compressed .card-grid{{grid-template-columns:minmax(340px,.75fr) minmax(520px,1.25fr);align-items:stretch}}body.compressed .facts{{order:1;grid-column:auto}}body.compressed .screens{{order:2;grid-column:auto}}body.compressed .screens .open-screen,body.compressed .screens .screen-empty{{display:none}}body.compressed .screens .thumb{{min-height:260px;max-height:520px}}body.compressed .journal-card{{margin-bottom:16px}}.facts{{order:2}}.review{{order:1}}.notes{{order:3}}.edit{{order:4}}@media(max-width:1000px){{body.compressed .card-grid{{grid-template-columns:1fr}}}}
 </style></head><body><div class='shell'>
 <div class='top'><div><h1>StockHelper Transaction Journal</h1><p>Generated: {html.escape(_clean_date(_now()))}</p></div><div class='toolbar noprint'><label>Year <select id='year-filter'><option value=''>All years</option>{options}</select></label><button class='btn' onclick='toggleCompressed()'>Compress all</button><button class='btn btn-danger' onclick='bulkDelete(false)'>Delete selected</button><button class='btn btn-danger' onclick='bulkDelete(true)'>Delete all</button><button class='btn' onclick='window.print()'>📄 Download PDF</button></div></div>
 {stats}
