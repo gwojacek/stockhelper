@@ -3018,7 +3018,7 @@ class LightweightChartLevelSelectorUI:
       ['wedge_breakout', 'Wedge breakout']
     ],
     Ichimoku: [
-      ['ichimoku_cloud_breakout', 'Cloud breakout'],
+      ['ichimoku_cloud_breakout', 'Breakout'],
       ['ichimoku_retest_pattern', 'Retest + candle pattern']
     ],
     Fibo: [

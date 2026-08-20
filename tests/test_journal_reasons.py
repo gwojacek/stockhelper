@@ -13,11 +13,13 @@ def test_trade_summary_reason_is_technique_specific_select():
     page = html_fragment(entries)
 
     assert page.count("<select class='summary-autosave summary-reason'") == 3
-    assert "<option value='Cloud breakout'>Cloud breakout</option>" in page
+    assert "<option value='Breakout'>Breakout</option>" in page
     assert "<option value='Retest + Bullish Harami' selected>Retest + Bullish Harami</option>" in page
     assert "<option value='Fibo 61.8 + Hammer' selected>Fibo 61.8 + Hammer</option>" in page
     assert page.count("<option value='Wedge breakout' selected>Wedge breakout</option>") == 1
     assert "Wedge retest" not in page
+    assert "Review notes" not in page
+    assert "review-comment" not in page
 
 
 def test_trade_summary_recovers_legacy_pattern_from_reason_label():
@@ -26,6 +28,15 @@ def test_trade_summary_recovers_legacy_pattern_from_reason_label():
     ])
 
     assert "<option value='Retest + Morning Star' selected>Retest + Morning Star</option>" in page
+
+
+def test_trade_summary_normalizes_legacy_ichimoku_breakout_label():
+    page = html_fragment([
+        {"id": "legacy-breakout", "technique": "Ichimoku", "reason_label": "Cloud breakout"},
+    ])
+
+    assert "<option value='Breakout' selected>Breakout</option>" in page
+    assert "Cloud breakout" not in page
 
 
 def test_chart_sidebar_uses_scanner_patterns_for_reason_choices():
