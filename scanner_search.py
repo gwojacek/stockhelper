@@ -2753,16 +2753,19 @@ def _qualify_retests_after_early_rebreakout(
     df: pd.DataFrame, breakout_idx: int, current_side: str,
     events: list[tuple[str, str, str]],
 ) -> tuple[list[tuple[str, str, str]], str, str]:
-    """Require two post-anniversary retests after a quick second breakout."""
+    """Ignore retests until four months after a quick preceding breakout.
+
+    The preceding breakout may be in either direction.  In particular, CBF's
+    2026-04-28 breakdown followed by its 2026-05-21 breakout is an early
+    breakout pair; looking only for a preceding breakout in the current
+    direction incorrectly classified its 2026-08-20 retest as valid.
+    """
     close, top, bottom = df["Close"], df["cloud_top"], df["cloud_bottom"]
     prior: list[int] = []
     for idx in range(1, breakout_idx):
-        crossed = (
-            close.iloc[idx] > top.iloc[idx] and close.iloc[idx - 1] <= top.iloc[idx - 1]
-            if current_side == "above"
-            else close.iloc[idx] < bottom.iloc[idx] and close.iloc[idx - 1] >= bottom.iloc[idx - 1]
-        )
-        if crossed:
+        crossed_up = close.iloc[idx] > top.iloc[idx] and close.iloc[idx - 1] <= top.iloc[idx - 1]
+        crossed_down = close.iloc[idx] < bottom.iloc[idx] and close.iloc[idx - 1] >= bottom.iloc[idx - 1]
+        if crossed_up or crossed_down:
             prior.append(idx)
     if not prior:
         return events, "standard_4m_breakout", "-"
@@ -2774,10 +2777,8 @@ def _qualify_retests_after_early_rebreakout(
     qualified = [event for event in events if pd.to_datetime(event[0]) >= cutoff]
     if not qualified:
         status = "early_breakout_waiting_first_post_4m_retest"
-    elif len(qualified) == 1:
-        status = "early_breakout_waiting_second_post_4m_retest"
     else:
-        status = "early_breakout_valid_after_second_post_4m_retest"
+        status = "early_breakout_valid_after_post_4m_retest"
     return qualified, status, cutoff.strftime("%Y-%m-%d")
 
 

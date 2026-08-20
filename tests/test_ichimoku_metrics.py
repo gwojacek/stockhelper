@@ -200,18 +200,19 @@ def test_early_calendar_breakout_with_one_post_4m_retest_is_not_playable(monkeyp
 def test_quick_second_breakout_ignores_retests_until_four_months_from_first():
     dates = pd.to_datetime([
         "2026-04-27", "2026-04-28", "2026-05-20", "2026-05-21",
-        "2026-08-20", "2026-08-28", "2026-09-01",
+        "2026-08-20", "2026-08-28",
     ])
     df = pd.DataFrame({
         "Date": dates,
-        "Close": [9.5, 10.5, 9.5, 10.5, 10.4, 10.4, 10.4],
+        # The first breakout is in the opposite direction, as with CBF:
+        # breakdown on April 28, then breakout above on May 21.
+        "Close": [10.5, 8.5, 9.5, 10.5, 10.4, 10.4],
         "cloud_top": [10.0] * len(dates),
         "cloud_bottom": [9.0] * len(dates),
     })
     events = [
         ("2026-08-20", "bullish_harami", "shallow"),
         ("2026-08-28", "hammer", "shallow"),
-        ("2026-09-01", "bullish_piercing_line", "medium"),
     ]
 
     qualified, status, valid_from = scanner_search._qualify_retests_after_early_rebreakout(
@@ -219,8 +220,26 @@ def test_quick_second_breakout_ignores_retests_until_four_months_from_first():
     )
 
     assert valid_from == "2026-08-28"
-    assert [event[0] for event in qualified] == ["2026-08-28", "2026-09-01"]
-    assert status == "early_breakout_valid_after_second_post_4m_retest"
+    assert [event[0] for event in qualified] == ["2026-08-28"]
+    assert status == "early_breakout_valid_after_post_4m_retest"
+
+
+def test_quick_second_breakout_has_no_valid_retest_before_anniversary():
+    dates = pd.to_datetime(["2026-04-27", "2026-04-28", "2026-05-20", "2026-05-21", "2026-08-20"])
+    df = pd.DataFrame({
+        "Date": dates,
+        "Close": [10.5, 8.5, 9.5, 10.5, 10.4],
+        "cloud_top": [10.0] * len(dates),
+        "cloud_bottom": [9.0] * len(dates),
+    })
+
+    qualified, status, valid_from = scanner_search._qualify_retests_after_early_rebreakout(
+        df, 3, "above", [("2026-08-20", "bullish_harami", "shallow")]
+    )
+
+    assert qualified == []
+    assert valid_from == "2026-08-28"
+    assert status == "early_breakout_waiting_first_post_4m_retest"
 
 
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):

@@ -1145,6 +1145,8 @@ def _ichimoku_qualification_state(row: ScannerRow) -> str:
         return "waiting_first"
     if "waiting_second" in explicit:
         return "waiting_second"
+    if "valid_after_post_4m_retest" in explicit:
+        return "valid_after_second" if count >= 1 else "waiting_first"
     if "valid_after_second" in explicit:
         # Guard reports produced by the earlier implementation, which marked
         # two detected events as valid but wrote Retest count=1 after removing
