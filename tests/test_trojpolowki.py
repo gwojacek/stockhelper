@@ -1016,6 +1016,19 @@ def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choic
     assert "--scanner-valid-retests-from-date" in mod._chart_command_for_row(row)
 
 
+def test_early_rebreakout_in_position_table_is_not_playable():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="position", ticker="CBF", status="above",
+        metrics={
+            "qualification_status": "early_breakout_waiting_first_post_4m_retest",
+            "valid_retests_from_date": "2026-08-28", "retest_count": "0",
+        },
+    )
+
+    assert mod._ichimoku_qualification_state(row) == "waiting_first"
+
+
 def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     mod = load_run_module()
     mod.TROJPOLLOWKI_DIR = tmp_path / "Trojpolowki"

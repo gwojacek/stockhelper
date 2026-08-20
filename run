@@ -1135,10 +1135,12 @@ def _parse_float_text(value: str, default: float = 0.0) -> float:
 
 def _ichimoku_qualification_state(row: ScannerRow) -> str:
     """Return the playable state, including compatibility with old reports."""
-    if row.scanner != "ICHIMOKU" or row.category != "retest_breakout":
+    if row.scanner != "ICHIMOKU":
         return "standard"
     explicit = str(row.metrics.get("qualification_status", "")).strip().lower()
     count = int(_parse_float_text(row.metrics.get("retest_count", "0"), 0.0))
+    if row.category == "position" and not explicit:
+        return "standard"
     if "waiting_first" in explicit:
         return "waiting_first"
     if "waiting_second" in explicit:
@@ -1289,7 +1291,9 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                 metrics={
                     "candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")),
                     "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")),
-                    "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
+                    "valid_retests_from_date": str(r.get("Valid retests from", "")),
+                    "qualification_status": str(r.get("4m qualification status", "standard_4m_breakout")),
+                    "retest_count": str(r.get("Retest count", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
                     "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
                     "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                     "raw_status": str(r.get("Ichimoku status", "")),

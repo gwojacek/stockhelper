@@ -313,6 +313,8 @@ class ScanResult:
     kumo_twist: str | None = None
     tk_plus: str | None = None
     tenkan_in_cloud: str | None = None
+    qualification_status: str = "standard_4m_breakout"
+    valid_retests_from_date: str = "-"
 
 
 @dataclass
@@ -2747,6 +2749,38 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
     return 0, "-", "-"
 
 
+def _qualify_retests_after_early_rebreakout(
+    df: pd.DataFrame, breakout_idx: int, current_side: str,
+    events: list[tuple[str, str, str]],
+) -> tuple[list[tuple[str, str, str]], str, str]:
+    """Require two post-anniversary retests after a quick second breakout."""
+    close, top, bottom = df["Close"], df["cloud_top"], df["cloud_bottom"]
+    prior: list[int] = []
+    for idx in range(1, breakout_idx):
+        crossed = (
+            close.iloc[idx] > top.iloc[idx] and close.iloc[idx - 1] <= top.iloc[idx - 1]
+            if current_side == "above"
+            else close.iloc[idx] < bottom.iloc[idx] and close.iloc[idx - 1] >= bottom.iloc[idx - 1]
+        )
+        if crossed:
+            prior.append(idx)
+    if not prior:
+        return events, "standard_4m_breakout", "-"
+    previous_date = pd.to_datetime(df.iloc[prior[-1]]["Date"])
+    breakout_date = pd.to_datetime(df.iloc[breakout_idx]["Date"])
+    cutoff = previous_date + pd.DateOffset(months=4)
+    if breakout_date >= cutoff:
+        return events, "standard_4m_breakout", "-"
+    qualified = [event for event in events if pd.to_datetime(event[0]) >= cutoff]
+    if not qualified:
+        status = "early_breakout_waiting_first_post_4m_retest"
+    elif len(qualified) == 1:
+        status = "early_breakout_waiting_second_post_4m_retest"
+    else:
+        status = "early_breakout_valid_after_second_post_4m_retest"
+    return qualified, status, cutoff.strftime("%Y-%m-%d")
+
+
 
 def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
     """Refresh newest data first, then run calculations on full cached CSV history.
@@ -2945,10 +2979,15 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             bidx = _find_latest_breakout_idx(enriched, result.side, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
             if bidx is not None:
                 result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
-                rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side, allow_equal_third_close=(instrument == "forex"))
-                result.retest_count = rc
-                result.latest_retest_date = rd
-                result.latest_retest_pattern = rp
+                _status, _depth, _count, _first, events = _detect_ichimoku_retest(
+                    enriched, bidx, result.side, allow_equal_third_close=(instrument == "forex")
+                )
+                events, result.qualification_status, result.valid_retests_from_date = (
+                    _qualify_retests_after_early_rebreakout(enriched, bidx, result.side, events)
+                )
+                result.retest_count = len(events)
+                result.latest_retest_date = events[-1][0] if events else "-"
+                result.latest_retest_pattern = events[-1][1] if events else "-"
             else:
                 result.retest_count = 0
                 result.latest_retest_date = "-"
@@ -4209,11 +4248,11 @@ def run_ichimoku_search(target: str) -> int:
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.valid_retests_from_date, row.qualification_status, str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Valid retests from","4m qualification status","Retest count","Latest Retest date","Latest Retest pattern","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
     )
