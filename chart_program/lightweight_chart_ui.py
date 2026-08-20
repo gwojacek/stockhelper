@@ -3015,13 +3015,10 @@ class LightweightChartLevelSelectorUI:
   }}
   const journalReasonOptions = {{
     Kliny: [
-      ['wedge_breakout', 'Wedge breakout'],
-      ['wedge_retest', 'Wedge retest'],
-      ['wedge_stop_loss', 'Wedge stop loss review'],
-      ['manual', 'Manual']
+      ['wedge_breakout', 'Wedge breakout']
     ],
     Ichimoku: [
-      ['ichimoku_cloud_breakout', 'Cloud breakout'],
+      ['ichimoku_cloud_breakout', 'Breakout'],
       ['ichimoku_retest_pattern', 'Retest + candle pattern']
     ],
     Fibo: [
@@ -3036,21 +3033,29 @@ class LightweightChartLevelSelectorUI:
   function reasonOptionsForTechnique(tech) {{
     return journalReasonOptions[tech] || journalReasonOptions.Manual;
   }}
-  function candlePatternLabel() {{
-    const last = ohlc[ohlc.length - 1] || {{}};
-    const open = Number(last.open), high = Number(last.high), low = Number(last.low), close = Number(last.close);
-    if (![open, high, low, close].every(Number.isFinite)) return 'candle pattern';
-    const body = Math.abs(close - open);
-    const range = Math.max(0.000001, high - low);
-    const upper = high - Math.max(open, close);
-    const lower = Math.min(open, close) - low;
-    if (lower > body * 2 && upper < range * 0.35) return close >= open ? 'bullish hammer' : 'hammer';
-    if (upper > body * 2 && lower < range * 0.35) return close <= open ? 'bearish shooting star' : 'shooting star';
-    if (body / range < 0.18) return 'doji';
-    return close >= open ? 'bullish candle' : 'bearish candle';
+  function detectedJournalPattern(tech) {{
+    if (tech === 'Ichimoku') {{
+      const count = Math.max(0, parseInt(scannerMetaValue('__scanner_retest_count__') || '0', 10) || 0);
+      const latest = scannerMetaValue('__scanner_latest_retest_pattern__');
+      return count > 0 && isValidScannerPattern(latest) ? scannerPatternLabel(latest) : '';
+    }}
+    if (tech === 'Fibo') {{
+      const scannerPattern = scannerMetaValue('__scanner_pattern_name__');
+      if (isValidScannerPattern(scannerPattern)) return scannerPatternLabel(scannerPattern);
+      const chartPattern = fibo618PatternFromChart();
+      return chartPattern && isValidScannerPattern(chartPattern.name) ? scannerPatternLabel(chartPattern.name) : '';
+    }}
+    return '';
   }}
-  function reasonLabel(value, label) {{
-    if (String(value).startsWith('ichimoku_retest') || String(value).startsWith('fibo_')) return label.replace('candle pattern', candlePatternLabel());
+  function reasonLabel(value, label, tech) {{
+    if (value === 'ichimoku_retest_pattern') {{
+      const pattern = detectedJournalPattern(tech);
+      return pattern ? `Retest + ${{pattern}}` : 'Retest';
+    }}
+    if (value === 'fibo_618_pattern') {{
+      const pattern = detectedJournalPattern(tech);
+      return pattern ? `Fibo 61.8 + ${{pattern}}` : 'Fibo 61.8';
+    }}
     return label;
   }}
   function setJournalReasonOptions(tech, preferred=null) {{
@@ -3058,11 +3063,12 @@ class LightweightChartLevelSelectorUI:
     if (!reason) return;
     const oldValue = preferred || reason.value;
     const opts = reasonOptionsForTechnique(tech);
-    reason.innerHTML = opts.map(([value, label]) => `<option value="${{value}}">${{reasonLabel(value, label)}}</option>`).join('');
+    reason.innerHTML = opts.map(([value, label]) => `<option value="${{value}}">${{reasonLabel(value, label, tech)}}</option>`).join('');
     reason.value = opts.some(([value]) => value === oldValue) ? oldValue : opts[0][0];
   }}
   function activeJournalReason() {{
     const tech = activeJournalTechnique();
+    if (tech === 'Ichimoku' && detectedJournalPattern(tech)) return 'ichimoku_retest_pattern';
     return reasonOptionsForTechnique(tech)[0][0];
   }}
   function reasonUsesTouches(reasonValue) {{
@@ -3270,7 +3276,7 @@ class LightweightChartLevelSelectorUI:
       low: levels.low || '',
       reason: (($('journal-reason') && $('journal-reason').value) || ''),
       reason_label: reasonText,
-      pattern: reasonText,
+      pattern: detectedJournalPattern((($('journal-technique') && $('journal-technique').value) || activeJournalTechnique())),
       touches: reasonUsesTouches($('journal-reason')?.value) ? (($('journal-touches') && $('journal-touches').value) || '') : '',
       notes: (($('journal-notes') && $('journal-notes').value) || ''),
       preview,

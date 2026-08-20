@@ -5323,31 +5323,40 @@ def _select_fibo_long_impulse_base(
         # 30-session flat windows, then anchor at the lowest candle immediately
         # after that base. OPL's Aug-Nov range therefore starts its Fibo at the
         # Nov 21 low, rather than the obsolete Aug low or a later March pause.
-        qualifying_starts: list[int] = []
-        for window_start in range(0, max(0, i_peak - 29)):
-            window_end = window_start + 30
-            if window_end > i_peak:
-                break
-            window = w.iloc[window_start:window_end]
-            window_high = float(pd.to_numeric(window["High"], errors="coerce").max())
-            window_low = float(pd.to_numeric(window["Low"], errors="coerce").min())
-            window_mid = (window_high + window_low) / 2.0
-            first_close = float(pd.to_numeric(window["Close"], errors="coerce").iloc[0])
-            last_close = float(pd.to_numeric(window["Close"], errors="coerce").iloc[-1])
-            band = (window_high - window_low) / max(window_mid, 1e-9)
-            progress = abs(last_close - first_close) / max(abs(first_close), 1e-9)
-            if band <= 0.12 and progress <= 0.05:
-                qualifying_starts.append(window_start)
-        runs: list[list[int]] = []
-        for window_start in qualifying_starts:
-            if not runs or window_start != runs[-1][-1] + 1:
-                runs.append([window_start])
-            else:
-                runs[-1].append(window_start)
-        extended_runs = [run for run in runs if len(run) >= 10]
-        if extended_runs:
-            last_run = extended_runs[-1]
-            base_end = last_run[-1] + 29
+        base_ends: list[int] = []
+        # Tight overlapping monthly windows catch ordinary long bases.  A
+        # volatile stock can also spend roughly two months going nowhere in a
+        # wider range (KLAC Feb-Apr 2026).  Treat that 44-session, <=22% range
+        # as a reset too; otherwise an obsolete pre-range low makes the later
+        # correction appear to be merely approaching 61.8.
+        for window_days, band_limit, progress_limit, min_run in (
+            (30, 0.12, 0.05, 10),
+            (44, 0.22, 0.08, 1),
+        ):
+            qualifying_starts: list[int] = []
+            for window_start in range(0, max(0, i_peak - window_days + 1)):
+                window_end = window_start + window_days
+                if window_end > i_peak:
+                    break
+                window = w.iloc[window_start:window_end]
+                window_high = float(pd.to_numeric(window["High"], errors="coerce").max())
+                window_low = float(pd.to_numeric(window["Low"], errors="coerce").min())
+                window_mid = (window_high + window_low) / 2.0
+                first_close = float(pd.to_numeric(window["Close"], errors="coerce").iloc[:3].median())
+                last_close = float(pd.to_numeric(window["Close"], errors="coerce").iloc[-3:].median())
+                band = (window_high - window_low) / max(window_mid, 1e-9)
+                progress = abs(last_close - first_close) / max(abs(first_close), 1e-9)
+                if band <= band_limit and progress <= progress_limit:
+                    qualifying_starts.append(window_start)
+            runs: list[list[int]] = []
+            for window_start in qualifying_starts:
+                if not runs or window_start != runs[-1][-1] + 1:
+                    runs.append([window_start])
+                else:
+                    runs[-1].append(window_start)
+            base_ends.extend(run[-1] + window_days - 1 for run in runs if len(run) >= min_run)
+        if base_ends:
+            base_end = max(base_ends)
             # The first durable impulse low may form several weeks after a very
             # long base ends. Search roughly seven weeks so ALV/CTAS retain the
             # May reaction low instead of being anchored to a later June pause.
@@ -5814,6 +5823,7 @@ def _find_fibo_setup(
                 w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode,
                 reset_after_sideways=True, sideways_band_pct=0.02 if _mirrored_short else 0.08,
                 preserve_deeper_short_continuation=_mirrored_short,
+                reset_after_extended_sideways=not _mirrored_short,
             )
         )
         if base is None:
