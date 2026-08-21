@@ -220,8 +220,8 @@ def test_quick_second_breakout_ignores_retests_until_four_months_from_first():
     )
 
     assert valid_from == "2026-08-28"
-    assert [event[0] for event in qualified] == ["2026-08-28"]
-    assert status == "early_breakout_valid_after_post_4m_retest"
+    assert [event[0] for event in qualified] == ["2026-08-20", "2026-08-28"]
+    assert status == "standard_4m_breakout"
 
 
 def test_quick_second_breakout_has_no_valid_retest_before_anniversary():
@@ -237,9 +237,9 @@ def test_quick_second_breakout_has_no_valid_retest_before_anniversary():
         df, 3, "above", [("2026-08-20", "bullish_harami", "shallow")]
     )
 
-    assert qualified == []
+    assert qualified == [("2026-08-20", "bullish_harami", "shallow")]
     assert valid_from == "2026-08-28"
-    assert status == "early_breakout_waiting_first_post_4m_retest"
+    assert status == "early_breakout_waiting_until_4m"
 
 
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):

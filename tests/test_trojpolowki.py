@@ -985,36 +985,26 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 
-def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choice(tmp_path: Path):
+def test_early_ichimoku_is_hidden_from_3p_until_cutoff(tmp_path: Path):
     mod = load_run_module()
     row = mod.ScannerRow(
         market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker="JSW",
         status="shallow_retest_pattern", dates={"flip_date": "2026-08-10"},
         metrics={
-            "months": "0.3", "previous_respect_months": "3.8", "retest_count": "1",
-            "qualification_status": "early_breakout_valid_after_second_post_4m_retest",
-            "valid_retests_from_date": "2026-08-16",
+            "months": "3.0", "previous_respect_months": "3.8", "retest_count": "1",
+            "qualification_status": "early_breakout_waiting_until_4m",
+            "valid_retests_from_date": "2026-08-28",
             "latest_retest_date": "2026-08-18", "latest_retest_pattern": "bullish_piercing_line",
             "raw_status": "shallow_retest_pattern", "current_side": "above",
             "ichimoku_status": "Over Kijun-sen", "risk": "3%",
         },
     )
 
-    assert mod._ichimoku_qualification_state(row) == "waiting_second"
-    assert "NOT PLAYABLE" in mod._ichimoku_qualification_label(row)
-    out = mod._write_trojpolowki_ichimoku([row], tmp_path, datetime(2026, 8, 19, 12, 0, 0))
+    assert mod._ichimoku_qualification_state(row) == "waiting_first"
+    out = mod._write_trojpolowki_ichimoku([row], tmp_path, datetime(2026, 8, 21, 12, 0, 0))
     text = out.read_text(encoding="utf-8")
-    jsw_line = next(line for line in text.splitlines() if "JSW" in line)
-    cells = [cell.strip() for cell in jsw_line.strip("|").split("|")]
-    assert cells[:3] == ["", "", ""]
-    assert "WAITING FOR DIRECTION RETEST — NO PLAY" in cells[3]
-    assert "valid retests counted from: 2026-08-16" in cells[3]
-
-    source = Path("run").read_text(encoding="utf-8")
-    assert '"no play" in text' in source
-    assert ".troj-cell-card.ichi-no-play{background:#7f1d1d!important" in source
-    assert "Valid retests counted from (early breakouts only)" in source
-    assert "--scanner-valid-retests-from-date" in mod._chart_command_for_row(row)
+    assert "JSW" not in text
+    assert "WAITING FOR DIRECTION RETEST" not in text
 
 
 def test_early_rebreakout_in_position_table_is_not_playable():
@@ -1022,15 +1012,18 @@ def test_early_rebreakout_in_position_table_is_not_playable():
     row = mod.ScannerRow(
         market="WIG", scanner="ICHIMOKU", category="position", ticker="CBF", status="above",
         metrics={
-            "qualification_status": "early_breakout_waiting_first_post_4m_retest",
+            "qualification_status": "early_breakout_waiting_until_4m",
             "valid_retests_from_date": "2026-08-28", "retest_count": "0",
         },
     )
 
     assert mod._ichimoku_qualification_state(row) == "waiting_first"
+    assert mod._ichimoku_early_breakout_html(row) == (
+        "<strong style='color:#dc2626'>YES! NO PLAY UNTIL 2026-08-28</strong>"
+    )
 
 
-def test_3p_ichimoku_early_breakout_statuses_and_non_playable_sorting(tmp_path: Path):
+def test_3p_ichimoku_returns_early_breakout_after_cutoff(tmp_path: Path):
     mod = load_run_module()
 
     def row(ticker: str, valid_from: str, qualification: str, count: str = "0"):
@@ -1045,17 +1038,12 @@ def test_3p_ichimoku_early_breakout_statuses_and_non_playable_sorting(tmp_path: 
             },
         )
 
-    rows = [
-        row("PLAY", "-", "standard_4m_breakout"),
-        row("EARLY", "2026-08-28", "early_breakout_waiting_first_post_4m_retest"),
-        row("WAIT", "2026-08-20", "early_breakout_waiting_first_post_4m_retest"),
-    ]
-    out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 8, 21, 12, 0, 0))
+    rows = [row("RETURNED", "2026-08-28", "standard_4m_breakout", "3")]
+    out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 8, 29, 12, 0, 0))
     text = out.read_text(encoding="utf-8")
 
-    assert "🔴 EARLY BREAKOUT — NO PLAY" in text
-    assert "🔴 WAITING FOR DIRECTION RETEST — NO PLAY" in text
-    assert text.index("**🇵🇱 PLAY") < text.index("**🇵🇱 EARLY") < text.index("**🇵🇱 WAIT")
+    assert "**🇵🇱 RETURNED" in text
+    assert "NO PLAY" not in text
 
 
 def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
@@ -1206,6 +1194,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-status-info" in text
     assert "troj-detail-info" in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th>" in text
+    assert "<th>Mies. respektu przed wybiciem</th><th>Early breakout</th><th>Retest count</th>" in text
+    assert "Early breakout status (&lt;4m" not in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 3
     assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text

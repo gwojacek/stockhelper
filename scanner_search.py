@@ -2753,7 +2753,7 @@ def _qualify_retests_after_early_rebreakout(
     df: pd.DataFrame, breakout_idx: int, current_side: str,
     events: list[tuple[str, str, str]],
 ) -> tuple[list[tuple[str, str, str]], str, str]:
-    """Ignore retests until four months after a quick preceding breakout.
+    """Mark a quick re-breakout unavailable until its four-month cutoff.
 
     The preceding breakout may be in either direction.  In particular, CBF's
     2026-04-28 breakdown followed by its 2026-05-21 breakout is an early
@@ -2774,12 +2774,12 @@ def _qualify_retests_after_early_rebreakout(
     cutoff = previous_date + pd.DateOffset(months=4)
     if breakout_date >= cutoff:
         return events, "standard_4m_breakout", "-"
-    qualified = [event for event in events if pd.to_datetime(event[0]) >= cutoff]
-    if not qualified:
-        status = "early_breakout_waiting_first_post_4m_retest"
-    else:
-        status = "early_breakout_valid_after_post_4m_retest"
-    return qualified, status, cutoff.strftime("%Y-%m-%d")
+    # Retests inside the probation window still strengthen the direction and
+    # remain visible/countable. They are not an extra playability condition:
+    # once the cutoff passes, the setup is treated like every other breakout.
+    latest_date = pd.to_datetime(df.iloc[-1]["Date"])
+    status = "early_breakout_waiting_until_4m" if latest_date < cutoff else "standard_4m_breakout"
+    return events, status, cutoff.strftime("%Y-%m-%d")
 
 
 
@@ -4248,6 +4248,10 @@ def run_ichimoku_search(target: str) -> int:
     out_md = _daily_report_path("search", group_name)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
+        if row.qualification_status == "early_breakout_waiting_until_4m":
+            # Early re-breakouts belong to WYNIKI 2 while their four-month
+            # probation is active; do not duplicate/promote them in WYNIKI 1.
+            continue
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
         rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.valid_retests_from_date, row.qualification_status, str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
