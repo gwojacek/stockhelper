@@ -324,7 +324,7 @@ def test_outside_confirmation_candle_is_not_counted_as_a_second_retest(monkeypat
     confirmation_date = dates[5]
     monkeypatch.setattr(scanner_search, "_is_bullish_hammer", lambda *_args: False)
     monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         scanner_search,
         "_is_bullish_piercing_line",
@@ -456,6 +456,8 @@ def test_mdv_piercing_line_inside_cloud_is_latest_local_low_retest():
             {"Date": "2026-08-17", "Open": 93.50, "High": 93.50, "Low": 90.60, "Close": 90.92},
             {"Date": "2026-08-18", "Open": 90.60, "High": 92.82, "Low": 90.56, "Close": 92.50},
             {"Date": "2026-08-19", "Open": 92.40, "High": 92.40, "Low": 90.70, "Close": 92.18},
+            {"Date": "2026-08-20", "Open": 92.18, "High": 92.26, "Low": 89.78, "Close": 89.78},
+            {"Date": "2026-08-21", "Open": 90.16, "High": 91.50, "Low": 90.16, "Close": 90.56},
         ]
     )
     # On August 18 the piercing close remains inside the Kumo. It need not
@@ -470,9 +472,74 @@ def test_mdv_piercing_line_inside_cloud_is_latest_local_low_retest():
 
     assert status == "deep_retest_pattern"
     assert depth == "deep"
-    assert count == 1
+    assert count == 2
     assert first_date == "2026-08-18"
-    assert events == [("2026-08-18", "bullish_piercing_line", "deep")]
+    assert events == [
+        ("2026-08-18", "bullish_piercing_line", "deep"),
+        ("2026-08-21", "bullish_harami", "deep"),
+    ]
+
+
+def test_short_retest_prefers_newer_higher_dark_cloud_cover(monkeypatch):
+    dates = pd.to_datetime([
+        "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10",
+        "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14",
+    ])
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [94.0, 98.22, 102.33, 98.26, 96.78, 101.33, 101.51, 104.48],
+        "High": [96.0, 103.38, 103.66, 100.03, 98.35, 103.16, 107.57, 106.87],
+        "Low": [93.0, 95.60, 98.03, 96.30, 95.35, 100.12, 100.33, 102.05],
+        "Close": [95.0, 99.81, 101.65, 97.52, 97.71, 100.95, 104.56, 102.50],
+        "cloud_top": [108.0] * len(dates),
+        "cloud_bottom": [96.0] * len(dates),
+    })
+    monkeypatch.setattr(scanner_search, "_is_bearish_shooting_star", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bearish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bearish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        scanner_search, "_is_evening_star",
+        lambda _a, _b, current, *_args, **_kwargs: pd.Timestamp(current["Date"]) == dates[3],
+    )
+    monkeypatch.setattr(
+        scanner_search, "_is_dark_cloud_cover",
+        lambda _previous, current, *_args, **_kwargs: pd.Timestamp(current["Date"]) == dates[7],
+    )
+
+    status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=0, current_side="below"
+    )
+
+    assert status.endswith("_retest_pattern")
+    assert count == 1
+    assert events[-1][0:2] == ("2026-08-14", "dark_cloud_cover")
+
+
+def test_axon_local_low_hammer_is_tagged_as_retest(monkeypatch):
+    raw = [
+        ("2026-06-09",467.61,479.47,436.36,452.51), ("2026-06-10",448.66,462.99,437.98,447.59),
+        ("2026-06-11",444.77,453.15,423.04,446.20), ("2026-06-12",446.89,450.00,427.00,441.73),
+        ("2026-06-15",448.72,457.57,434.53,443.21), ("2026-06-16",441.64,448.10,427.00,435.39),
+        ("2026-06-17",431.80,442.81,422.11,423.01), ("2026-06-18",424.89,428.05,402.00,423.40),
+        ("2026-06-22",417.05,419.03,403.79,410.03), ("2026-06-23",414.44,441.11,414.44,433.04),
+        ("2026-06-24",432.27,468.04,429.84,456.73), ("2026-06-25",454.50,466.63,443.00,444.73),
+        ("2026-06-26",445.04,477.17,440.00,464.83),
+    ]
+    df = pd.DataFrame(raw, columns=["Date", "Open", "High", "Low", "Close"])
+    df["Date"] = pd.to_datetime(df["Date"])
+    df["cloud_top"] = 460.0
+    df["cloud_bottom"] = 390.0
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    _status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=0, current_side="above"
+    )
+
+    assert count == 1
+    assert events == [("2026-06-18", "hammer", "deep")]
 
 
 def test_ndx100_members_include_spcx():

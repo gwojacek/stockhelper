@@ -651,7 +651,11 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
         # around two-thirds up and must not qualify).
         body_floor = min(float(c["Open"]), float(c["Close"]))
         return body_floor >= float(c["Low"]) + candle_range * 0.90 and lower > upper
-    return lower >= 2 * body and upper <= body
+    # Permit a small upper wick relative to the full candle range. AXON's
+    # 2026-06-18 local-low hammer has a tiny real body and a 12% upper wick;
+    # requiring that wick to be no larger than the tiny body rejects an
+    # otherwise clear long lower-shadow reversal.
+    return lower >= 2 * body and upper <= max(body, candle_range * 0.15)
 
 
 def _is_bearish_shooting_star(c: pd.Series) -> bool:
@@ -766,12 +770,17 @@ def _is_doji(c: pd.Series, tol: float = 0.15) -> bool:
     rng = max(h - l, 1e-9)
     return body / rng <= tol
 
-def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_floor: float | None = None) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
     if not (cl1 < o1 and cl2 > o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
+    touches_retest = (
+        _touches_level(c1, level) or _touches_level(c2, level)
+        if zone_floor is None
+        else _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
+    )
+    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
 
 def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
@@ -794,12 +803,17 @@ def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, 
     mid1 = (o1 + cl1) / 2.0
     return cl3 > mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 > level
 
-def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_ceiling: float | None = None) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
     if not (cl1 > o1 and cl2 < o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
+    touches_retest = (
+        _touches_level(c1, level) or _touches_level(c2, level)
+        if zone_ceiling is None
+        else _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
+    )
+    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
 
 def _is_bearish_engulfing(
     c1: pd.Series,
@@ -827,7 +841,7 @@ def _is_bearish_engulfing(
     )
 
 
-def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float, zone_ceiling: float | None = None) -> bool:
     o1, cl1, h1, l1, b1 = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
     c1_body_high = max(o1, cl1)
     # Futures frequently reopen a few ticks below the preceding close even when
@@ -843,7 +857,11 @@ def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
         # Mirror the piercing-line rule: a close below the first candle's open
         # is bearish engulfing/continuation, not dark-cloud cover.
         and cl2 > o1
-        and (_touches_level(c1, level) or _touches_level(c2, level))
+        and (
+            _touches_level(c1, level) or _touches_level(c2, level)
+            if zone_ceiling is None
+            else _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
+        )
         and cl2 < level
     )
 
@@ -3750,14 +3768,8 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
     touch_idxs: list[int] = []
     for i in post:
         if current_side == "above":
-            # Retests may enter cloud; invalidate only when close breaks to opposite side.
-            if float(df["Close"].iloc[i]) < float(bottom.iloc[i]):
-                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
         else:
-            # Retests may enter cloud; invalidate only when close breaks to opposite side.
-            if float(df["Close"].iloc[i]) > float(top.iloc[i]):
-                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
         if touched:
             waiting = True
@@ -3765,6 +3777,17 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 
     if not waiting:
         return _breakout_status_for_age(), "-", 0, "-", []
+
+    # A temporary close through the far cloud edge can be the local extreme of
+    # a retest formation and must not erase the whole history when price later
+    # recovers (MDV 2026-08-20/21 and AXON June 2026). Invalidate only while the
+    # latest candle still closes on the opposite side.
+    latest_close = float(df["Close"].iloc[-1])
+    if (
+        (current_side == "above" and latest_close < float(bottom.iloc[-1]))
+        or (current_side == "below" and latest_close > float(top.iloc[-1]))
+    ):
+        return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
 
     first_valid_date = "-"
     first_valid_status = "-"
@@ -3835,7 +3858,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         zone_floor=floor,
                     ):
                         pattern_candidates.append((j, "bullish_engulfing"))
-                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl, zone_floor=floor):
                         pattern_candidates.append((j, "bullish_harami"))
                     if _is_bullish_piercing_line(
                         w.iloc[j - 1],
@@ -3872,9 +3895,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         zone_ceiling=ceiling,
                     ):
                         pattern_candidates.append((j, "bearish_engulfing"))
-                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl, zone_ceiling=ceiling):
                         pattern_candidates.append((j, "bearish_harami"))
-                    if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl, zone_ceiling=ceiling):
                         pattern_candidates.append((j, "dark_cloud_cover"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
@@ -3932,14 +3955,15 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 
             # One cloud visit is one retest cycle. Select only the pattern at
             # that cycle's best reaction extreme: lowest for a long setup,
-            # highest for a short setup. Lower secondary bearish patterns (or
+            # highest for a short setup. If candidates share that extreme, the
+            # newest formation wins. Lower secondary bearish patterns (or
             # higher secondary bullish patterns) are not additional retests.
             ordered_candidates = sorted(
                 set(pattern_candidates),
                 key=lambda x: (
                     _pattern_reaction_extreme(x) if current_side == "above" else -_pattern_reaction_extreme(x),
+                    -x[0],
                     formation_priority.get(x[1], 99),
-                    x[0],
                 ),
             )
             for pattern_idx, formation in ordered_candidates:

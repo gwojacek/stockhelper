@@ -50,10 +50,11 @@ def candle(open_: float, high: float, low: float, close: float) -> dict[str, flo
     return {"Open": open_, "High": high, "Low": low, "Close": close}
 
 
-def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_upper_shadow_at_most_body():
+def test_bullish_hammer_requires_long_lower_shadow_and_only_small_upper_wick():
     assert _is_bullish_hammer(candle(10.0, 12.0, 6.0, 11.0))
     assert not _is_bullish_hammer(candle(10.0, 12.1, 6.0, 11.0))
     assert not _is_bullish_hammer(candle(10.0, 12.0, 8.1, 11.0))
+    assert _is_bullish_hammer(candle(424.89, 428.05, 402.00, 423.40))
 
 
 def test_bullish_hammer_allows_doji_hammer_shape():
