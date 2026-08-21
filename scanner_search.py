@@ -2760,7 +2760,7 @@ def _qualify_retests_after_early_rebreakout(
     breakout pair; looking only for a preceding breakout in the current
     direction incorrectly classified its 2026-08-20 retest as valid.
     """
-    previous_idx = _find_previous_ichimoku_breakout_idx(df, breakout_idx)
+    previous_idx = _find_previous_ichimoku_breakout_idx(df, breakout_idx, current_side)
     if previous_idx is None:
         return events, "standard_4m_breakout", "-"
     previous_date = pd.to_datetime(df.iloc[previous_idx]["Date"])
@@ -2777,16 +2777,23 @@ def _qualify_retests_after_early_rebreakout(
     return events, "standard_4m_breakout", "-"
 
 
-def _find_previous_ichimoku_breakout_idx(df: pd.DataFrame, before_idx: int) -> int | None:
-    """Return the last far-cloud-edge breakout in either direction."""
-    close, top, bottom = df["Close"], df["cloud_top"], df["cloud_bottom"]
-    previous: int | None = None
-    for idx in range(1, before_idx):
-        crossed_up = close.iloc[idx] > top.iloc[idx] and close.iloc[idx - 1] <= top.iloc[idx - 1]
-        crossed_down = close.iloc[idx] < bottom.iloc[idx] and close.iloc[idx - 1] >= bottom.iloc[idx - 1]
-        if crossed_up or crossed_down:
-            previous = idx
-    return previous
+def _find_previous_ichimoku_breakout_idx(
+    df: pd.DataFrame, before_idx: int, current_side: str,
+) -> int | None:
+    """Return the breakout that established the preceding opposite-side regime.
+
+    Merely crossing a far cloud edge again during an existing regime is a
+    retest/re-entry, not another breakout. Selecting the last raw crossing made
+    QIA use 2026-06-05 and BEI use 2026-06-19, producing October cutoffs. Search
+    the history truncated immediately before the newest breakout and require
+    the earlier regime to remain respected through that truncation instead.
+    """
+    if before_idx <= 1:
+        return None
+    previous_side = "below" if current_side == "above" else "above"
+    return _find_latest_breakout_idx(
+        df.iloc[:before_idx].reset_index(drop=True), previous_side, min_age_days=0,
+    )
 
 
 
@@ -3699,7 +3706,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     # 2026-02-17 (not the 2026-02-26 respect-window start), so its 2026-06-25
     # breakout is already standard. Retests remain counted during probation;
     # after the cutoff the instrument immediately behaves like any other setup.
-    previous_breakout_idx = _find_previous_ichimoku_breakout_idx(df, flip_idx)
+    previous_breakout_idx = _find_previous_ichimoku_breakout_idx(df, flip_idx, current_side)
     if previous_breakout_idx is not None:
         previous_breakout_ts = pd.to_datetime(df.iloc[previous_breakout_idx]["Date"])
         four_month_date = previous_breakout_ts + pd.DateOffset(months=4)

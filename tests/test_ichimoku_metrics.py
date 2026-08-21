@@ -250,11 +250,31 @@ def test_previous_breakout_uses_actual_cross_not_later_respect_window_start():
         "cloud_bottom": [9.0] * len(dates),
     })
 
-    previous_idx = scanner_search._find_previous_ichimoku_breakout_idx(df, 4)
+    previous_idx = scanner_search._find_previous_ichimoku_breakout_idx(df, 4, "above")
 
     assert previous_idx == 1
     assert df.iloc[previous_idx]["Date"].strftime("%Y-%m-%d") == "2026-02-17"
     assert dates[4] >= dates[1] + pd.DateOffset(months=4)
+
+
+def test_previous_breakout_ignores_later_same_regime_far_edge_recross():
+    dates = pd.to_datetime([
+        "2026-02-16", "2026-02-17", "2026-05-01", "2026-06-05",
+        "2026-06-24", "2026-06-25",
+    ])
+    df = pd.DataFrame({
+        "Date": dates,
+        # February 17 establishes the below regime. June 5 only exits the
+        # cloud below again after an inside-cloud retest.
+        "Close": [10.5, 8.5, 9.5, 8.5, 9.5, 10.5],
+        "cloud_top": [10.0] * len(dates),
+        "cloud_bottom": [9.0] * len(dates),
+    })
+
+    previous_idx = scanner_search._find_previous_ichimoku_breakout_idx(df, 5, "above")
+
+    assert previous_idx == 1
+    assert df.iloc[previous_idx]["Date"].strftime("%Y-%m-%d") == "2026-02-17"
 
 
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
