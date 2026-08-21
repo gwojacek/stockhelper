@@ -1007,11 +1007,12 @@ def test_early_ichimoku_first_retest_is_visibly_not_playable_and_not_a_top_choic
     jsw_line = next(line for line in text.splitlines() if "JSW" in line)
     cells = [cell.strip() for cell in jsw_line.strip("|").split("|")]
     assert cells[:3] == ["", "", ""]
-    assert "NOT PLAYABLE — first retest after 4m; waiting for second" in cells[3]
+    assert "WAITING FOR DIRECTION RETEST — NO PLAY" in cells[3]
     assert "valid retests counted from: 2026-08-16" in cells[3]
 
     source = Path("run").read_text(encoding="utf-8")
-    assert 'if "not playable" in cell.lower()' in source
+    assert '"no play" in text' in source
+    assert ".troj-cell-card.ichi-no-play{background:#7f1d1d!important" in source
     assert "Valid retests counted from (early breakouts only)" in source
     assert "--scanner-valid-retests-from-date" in mod._chart_command_for_row(row)
 
@@ -1027,6 +1028,34 @@ def test_early_rebreakout_in_position_table_is_not_playable():
     )
 
     assert mod._ichimoku_qualification_state(row) == "waiting_first"
+
+
+def test_3p_ichimoku_early_breakout_statuses_and_non_playable_sorting(tmp_path: Path):
+    mod = load_run_module()
+
+    def row(ticker: str, valid_from: str, qualification: str, count: str = "0"):
+        return mod.ScannerRow(
+            market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker=ticker,
+            status="breakout_confirmed", dates={"flip_date": "2026-05-21"},
+            metrics={
+                "months": "3.0", "qualification_status": qualification,
+                "valid_retests_from_date": valid_from, "retest_count": count,
+                "raw_status": "breakout_confirmed", "current_side": "above",
+                "ichimoku_status": "Over Kijun-sen", "risk": "3%",
+            },
+        )
+
+    rows = [
+        row("PLAY", "-", "standard_4m_breakout"),
+        row("EARLY", "2026-08-28", "early_breakout_waiting_first_post_4m_retest"),
+        row("WAIT", "2026-08-20", "early_breakout_waiting_first_post_4m_retest"),
+    ]
+    out = mod._write_trojpolowki_ichimoku(rows, tmp_path, datetime(2026, 8, 21, 12, 0, 0))
+    text = out.read_text(encoding="utf-8")
+
+    assert "🔴 EARLY BREAKOUT — NO PLAY" in text
+    assert "🔴 WAITING FOR DIRECTION RETEST — NO PLAY" in text
+    assert text.index("**🇵🇱 PLAY") < text.index("**🇵🇱 EARLY") < text.index("**🇵🇱 WAIT")
 
 
 def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
