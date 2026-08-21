@@ -2760,16 +2760,10 @@ def _qualify_retests_after_early_rebreakout(
     breakout pair; looking only for a preceding breakout in the current
     direction incorrectly classified its 2026-08-20 retest as valid.
     """
-    close, top, bottom = df["Close"], df["cloud_top"], df["cloud_bottom"]
-    prior: list[int] = []
-    for idx in range(1, breakout_idx):
-        crossed_up = close.iloc[idx] > top.iloc[idx] and close.iloc[idx - 1] <= top.iloc[idx - 1]
-        crossed_down = close.iloc[idx] < bottom.iloc[idx] and close.iloc[idx - 1] >= bottom.iloc[idx - 1]
-        if crossed_up or crossed_down:
-            prior.append(idx)
-    if not prior:
+    previous_idx = _find_previous_ichimoku_breakout_idx(df, breakout_idx)
+    if previous_idx is None:
         return events, "standard_4m_breakout", "-"
-    previous_date = pd.to_datetime(df.iloc[prior[-1]]["Date"])
+    previous_date = pd.to_datetime(df.iloc[previous_idx]["Date"])
     breakout_date = pd.to_datetime(df.iloc[breakout_idx]["Date"])
     cutoff = previous_date + pd.DateOffset(months=4)
     if breakout_date >= cutoff:
@@ -2778,8 +2772,21 @@ def _qualify_retests_after_early_rebreakout(
     # remain visible/countable. They are not an extra playability condition:
     # once the cutoff passes, the setup is treated like every other breakout.
     latest_date = pd.to_datetime(df.iloc[-1]["Date"])
-    status = "early_breakout_waiting_until_4m" if latest_date < cutoff else "standard_4m_breakout"
-    return events, status, cutoff.strftime("%Y-%m-%d")
+    if latest_date < cutoff:
+        return events, "early_breakout_waiting_until_4m", cutoff.strftime("%Y-%m-%d")
+    return events, "standard_4m_breakout", "-"
+
+
+def _find_previous_ichimoku_breakout_idx(df: pd.DataFrame, before_idx: int) -> int | None:
+    """Return the last far-cloud-edge breakout in either direction."""
+    close, top, bottom = df["Close"], df["cloud_top"], df["cloud_bottom"]
+    previous: int | None = None
+    for idx in range(1, before_idx):
+        crossed_up = close.iloc[idx] > top.iloc[idx] and close.iloc[idx - 1] <= top.iloc[idx - 1]
+        crossed_down = close.iloc[idx] < bottom.iloc[idx] and close.iloc[idx - 1] >= bottom.iloc[idx - 1]
+        if crossed_up or crossed_down:
+            previous = idx
+    return previous
 
 
 
@@ -3687,36 +3694,18 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
         flip.first_valid_retest_pattern_date,
         flip.retest_events,
     ) = _detect_ichimoku_retest(df, flip_idx, current_side, allow_equal_third_close=allow_equal_third_close)
-    # ``min_days`` is a trading-session approximation, but the strategy's four
-    # months are calendar months. An 80-session run can break slightly early
-    # (for example after 3.8 months). After such a breakout the first patterned
-    # retest following the exact anniversary is probationary; only the second
-    # post-anniversary retest makes the setup actionable.
-    four_month_date = previous_respect_start_ts + pd.DateOffset(months=4)
-    if flip_ts < four_month_date:
-        flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
-        post_rule_events = [
-            event for event in (flip.retest_events or [])
-            if pd.to_datetime(event[0]) >= four_month_date
-        ]
-        flip.retest_events = post_rule_events
-        # Report the real number of post-anniversary retests.  Subtracting the
-        # probationary first retest made a valid two-retest setup display a
-        # count of 1, which was indistinguishable from the still-waiting state.
-        flip.valid_retests_count = len(post_rule_events)
-        flip.first_valid_retest_pattern_date = post_rule_events[1][0] if len(post_rule_events) >= 2 else "-"
-        if not post_rule_events:
-            flip.qualification_status = "early_breakout_waiting_first_post_4m_retest"
-            flip.retest_status = "waiting_for_first_post_4m_retest"
-            flip.retest_depth = "-"
-        elif len(post_rule_events) == 1:
-            flip.qualification_status = "early_breakout_waiting_second_post_4m_retest"
-            flip.retest_status = "waiting_for_second_post_4m_retest"
-            flip.retest_depth = "-"
-        else:
-            flip.qualification_status = "early_breakout_valid_after_second_post_4m_retest"
-            flip.retest_depth = post_rule_events[-1][2]
-            flip.retest_status = f"{flip.retest_depth}_retest_pattern"
+    # Early-breakout probation is measured from the actual preceding breakout,
+    # not from the beginning of the respect run. QIA's preceding breakout is
+    # 2026-02-17 (not the 2026-02-26 respect-window start), so its 2026-06-25
+    # breakout is already standard. Retests remain counted during probation;
+    # after the cutoff the instrument immediately behaves like any other setup.
+    previous_breakout_idx = _find_previous_ichimoku_breakout_idx(df, flip_idx)
+    if previous_breakout_idx is not None:
+        previous_breakout_ts = pd.to_datetime(df.iloc[previous_breakout_idx]["Date"])
+        four_month_date = previous_breakout_ts + pd.DateOffset(months=4)
+        if flip_ts < four_month_date and end_ts < four_month_date:
+            flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
+            flip.qualification_status = "early_breakout_waiting_until_4m"
     return flip
 
 

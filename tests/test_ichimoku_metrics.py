@@ -135,21 +135,21 @@ def test_cloud_retest_exit_does_not_replace_original_breakout_date():
     assert df.loc[breakout_idx, "Date"].strftime("%Y-%m-%d") == "2025-09-24"
 
 
-def test_early_calendar_breakout_requires_second_retest_after_four_month_mark(monkeypatch):
-    dates = pd.date_range("2026-01-02", periods=100, freq="B")
-    flip_idx = 80
+def test_early_breakout_becomes_standard_after_previous_breakout_anniversary(monkeypatch):
+    dates = pd.date_range("2026-01-02", periods=101, freq="B")
+    flip_idx = 81
     df = pd.DataFrame(
         {
             "Date": dates,
-            "Open": [8.0] * flip_idx + [11.0] * (len(dates) - flip_idx),
-            "High": [8.5] * flip_idx + [11.5] * (len(dates) - flip_idx),
-            "Low": [7.5] * flip_idx + [10.5] * (len(dates) - flip_idx),
-            "Close": [8.0] * flip_idx + [11.0] * (len(dates) - flip_idx),
+            "Open": [10.5] + [8.0] * 80 + [11.0] * 20,
+            "High": [11.0] + [8.5] * 80 + [11.5] * 20,
+            "Low": [10.2] + [7.5] * 80 + [10.5] * 20,
+            "Close": [10.5] + [8.0] * 80 + [11.0] * 20,
             "cloud_top": [10.0] * len(dates),
             "cloud_bottom": [9.0] * len(dates),
         }
     )
-    anniversary = dates[0] + pd.DateOffset(months=4)
+    anniversary = dates[1] + pd.DateOffset(months=4)
     event_dates = dates[dates >= anniversary][:2]
     monkeypatch.setattr(
         scanner_search,
@@ -163,26 +163,25 @@ def test_early_calendar_breakout_requires_second_retest_after_four_month_mark(mo
     flip = scanner_search._flip_after_long_respect(df)
 
     assert flip is not None
-    assert flip.previous_respect_months < 4.0
-    assert flip.qualification_status == "early_breakout_valid_after_second_post_4m_retest"
-    assert flip.valid_retests_from_date == anniversary.strftime("%Y-%m-%d")
+    assert flip.qualification_status == "standard_4m_breakout"
+    assert flip.valid_retests_from_date == "-"
     assert flip.valid_retests_count == 2
-    assert flip.first_valid_retest_pattern_date == event_dates[1].strftime("%Y-%m-%d")
+    assert flip.retest_status == "shallow_retest_pattern"
 
 
-def test_early_calendar_breakout_with_one_post_4m_retest_is_not_playable(monkeypatch):
-    dates = pd.date_range("2026-01-02", periods=100, freq="B")
-    flip_idx = 80
+def test_early_breakout_before_anniversary_keeps_retests_but_is_not_playable(monkeypatch):
+    dates = pd.date_range("2026-01-02", periods=86, freq="B")
+    flip_idx = 81
     df = pd.DataFrame({
         "Date": dates,
-        "Open": [8.0] * flip_idx + [11.0] * 20,
-        "High": [8.5] * flip_idx + [11.5] * 20,
-        "Low": [7.5] * flip_idx + [10.5] * 20,
-        "Close": [8.0] * flip_idx + [11.0] * 20,
-        "cloud_top": [10.0] * 100,
-        "cloud_bottom": [9.0] * 100,
+        "Open": [10.5] + [8.0] * 80 + [11.0] * 5,
+        "High": [11.0] + [8.5] * 80 + [11.5] * 5,
+        "Low": [10.2] + [7.5] * 80 + [10.5] * 5,
+        "Close": [10.5] + [8.0] * 80 + [11.0] * 5,
+        "cloud_top": [10.0] * 86,
+        "cloud_bottom": [9.0] * 86,
     })
-    event_date = dates[dates >= dates[0] + pd.DateOffset(months=4)][0].strftime("%Y-%m-%d")
+    event_date = dates[-1].strftime("%Y-%m-%d")
     monkeypatch.setattr(
         scanner_search, "_detect_ichimoku_retest",
         lambda *_args, **_kwargs: ("shallow_retest_pattern", "shallow", 1, event_date, [(event_date, "bullish_piercing_line", "shallow")]),
@@ -192,9 +191,9 @@ def test_early_calendar_breakout_with_one_post_4m_retest_is_not_playable(monkeyp
 
     assert flip is not None
     assert flip.valid_retests_count == 1
-    assert flip.qualification_status == "early_breakout_waiting_second_post_4m_retest"
-    assert flip.valid_retests_from_date == event_date
-    assert flip.retest_status == "waiting_for_second_post_4m_retest"
+    assert flip.qualification_status == "early_breakout_waiting_until_4m"
+    assert flip.valid_retests_from_date == (dates[1] + pd.DateOffset(months=4)).strftime("%Y-%m-%d")
+    assert flip.retest_status == "shallow_retest_pattern"
 
 
 def test_quick_second_breakout_ignores_retests_until_four_months_from_first():
@@ -219,7 +218,7 @@ def test_quick_second_breakout_ignores_retests_until_four_months_from_first():
         df, 3, "above", events
     )
 
-    assert valid_from == "2026-08-28"
+    assert valid_from == "-"
     assert [event[0] for event in qualified] == ["2026-08-20", "2026-08-28"]
     assert status == "standard_4m_breakout"
 
@@ -240,6 +239,22 @@ def test_quick_second_breakout_has_no_valid_retest_before_anniversary():
     assert qualified == [("2026-08-20", "bullish_harami", "shallow")]
     assert valid_from == "2026-08-28"
     assert status == "early_breakout_waiting_until_4m"
+
+
+def test_previous_breakout_uses_actual_cross_not_later_respect_window_start():
+    dates = pd.to_datetime(["2026-02-16", "2026-02-17", "2026-02-26", "2026-06-24", "2026-06-25"])
+    df = pd.DataFrame({
+        "Date": dates,
+        "Close": [10.5, 8.5, 8.4, 9.5, 10.5],
+        "cloud_top": [10.0] * len(dates),
+        "cloud_bottom": [9.0] * len(dates),
+    })
+
+    previous_idx = scanner_search._find_previous_ichimoku_breakout_idx(df, 4)
+
+    assert previous_idx == 1
+    assert df.iloc[previous_idx]["Date"].strftime("%Y-%m-%d") == "2026-02-17"
+    assert dates[4] >= dates[1] + pd.DateOffset(months=4)
 
 
 def test_retest_ignores_pattern_ending_on_lead_in_candle(monkeypatch):
