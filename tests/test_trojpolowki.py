@@ -24,6 +24,7 @@ def load_run_module():
     loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
+    scanner._get_members = lambda scope: (scope.upper(), ["AAA", "BBB"], "test", None)
     scanner.ETFS_MARKET = [("iShares MSCI EAFE ETF", "EFA.US")]
     sys.modules["chart_program.instrument_detector"] = detector
     sys.modules["chart_program.chart_loader"] = loader_mod
@@ -83,8 +84,8 @@ def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v21"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v22"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v22"' in server_source
 
 
 def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
@@ -1019,7 +1020,7 @@ def test_early_rebreakout_in_position_table_is_not_playable():
 
     assert mod._ichimoku_qualification_state(row) == "waiting_first"
     assert mod._ichimoku_early_breakout_html(row) == (
-        "<strong style='color:#dc2626'>YES! NO PLAY UNTIL 2026-08-28</strong>"
+        "<strong style='color:#dc2626'>NO PLAY UNTIL 2026-08-28</strong>"
     )
 
 
@@ -1098,12 +1099,19 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "ALLSEARCH REPORT" in text
     assert "📈 StockHelper scanner workspace" in text
+    assert "Use tabs to switch between" not in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
     assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
+    assert "href='#tab-troj-fibo'" in text
+    assert "href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a>" in text
+    assert "window.addEventListener('hashchange',showReportTabFromHash)" in text
     assert "id='tab-favorites' class='tab-panel'" in text
     assert "stockhelper.favorite-instruments.v1" in text
     assert "function toggleFavorite(ticker)" in text
+    assert "fetch('/favorites',{method:'POST'" in text
+    assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
+    assert "endpoint.searchParams.set('favoriteTicker',btn.dataset.favoriteTicker||favoriteTicker(btn))" in text
     assert "function techniqueFor(el)" in text
     assert "One favorite instrument may appear in several technique groups" in text
     assert "data-ticker='RWE.DE'" in text
@@ -1119,6 +1127,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "favorites-3p-empty" in text
     assert "No favorites" in text
     assert "favorites-wedge-table" in text
+    assert "const stooqLink=o=>o.stooqUrl?" in text
+    assert "stooqLink(o)+chartButton(o)" in text
     assert "const threePTickers=new Set" in text
     assert "!threePTickers.has(o.ticker)" in text
     assert "favorite-direction-long" in text and "favorite-direction-short" in text
@@ -1127,17 +1137,24 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
     assert "function favoriteWedgeContext(host)" in text
     assert "date?'Breakout: '+date:'Unbroken'" in text
-    assert "td.chart-action-cell{text-align:right}" in text
+    assert "td.chart-action-cell{text-align:center}" in text
+    assert "function placeStooqColumnsNextToCharts()" in text
+    assert "row.insertBefore(stooq,chart)" in text
+    assert "placeStooqColumnsNextToCharts();document.querySelectorAll('table.data')" in text
     assert "<th>Expected date</th><th>stockhelper_chart</th></tr>" in text
     assert "<td>2026-05-30</td><td class='chart-action-cell'>" in text
     assert "📄 PDF" in text
+    assert "🗂 Checked" in text
+    assert "id='checked-instruments-dialog'" in text
+    assert "<h3>WIG <span>(2)</span></h3>" in text
+    assert "<code>AAA</code><code>BBB</code>" in text
     assert "📄 Download PDF" not in text
     assert 'onclick="downloadPdfReport()"' in text
     assert "@media print" in text
     assert "zoom:.78" in text
     assert "id='tab-allsearch' class='tab-panel active'" in text
     assert "id='current-balance'" in text
-    assert "Used by every StockHelper chart" in text
+    assert "Jacek Gwoździewicz trading masterpiece" in text
     assert "fetch('/current-balance'" in text
     assert ".balance-card{display:grid;grid-template-columns:1.1fr .75fr 1.25fr" in text
     assert "class='balance-section balance-amount'" in text
@@ -1160,7 +1177,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📋 Cell" not in text
     assert "href='https://stooq.pl/rwe-ichi' target='_blank' title='Open stooq chart'>📈</a><button class='btn sheets-cell-btn'" in text
     assert "aria-label='Copy Google Sheets HYPERLINK formula'>📋</button>" in text
-    assert "aria-label='Open stockhelper chart'>📊</button>" in text
+    assert "target='_blank' rel='noopener'" in text
+    assert "href='/open-chart?command=" in text
+    assert "aria-label='Open stockhelper chart'>📊</a>" in text
     assert ".chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}" in text
     assert "<td class='latest-data-cell'>✅</td>" in text
     assert ">Open</button>" not in text

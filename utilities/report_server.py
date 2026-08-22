@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v22"
 DEFAULT_CURRENT_BALANCE = 255000.0
 
 
@@ -88,6 +88,30 @@ def main() -> int:
     chart_group_lock = threading.Lock()
     settings_lock = threading.Lock()
     settings_path = project_root / "chart_program" / "data" / "user_settings.json"
+
+    def _current_favorites() -> list[str]:
+        with settings_lock:
+            try:
+                values = json.loads(settings_path.read_text(encoding="utf-8")).get("favorite_instruments", [])
+                return sorted({str(value).strip().upper() for value in values if re.fullmatch(r"[A-Za-z0-9._-]{1,25}", str(value).strip())})
+            except (OSError, TypeError, json.JSONDecodeError):
+                return []
+
+    def _save_favorites(values: object) -> list[str]:
+        if not isinstance(values, list):
+            raise ValueError("favorites must be a list")
+        favorites = sorted({str(value).strip().upper() for value in values if re.fullmatch(r"[A-Za-z0-9._-]{1,25}", str(value).strip())})
+        with settings_lock:
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                current = json.loads(settings_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                current = {}
+            current["favorite_instruments"] = favorites
+            temporary = settings_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(settings_path)
+        return favorites
 
     def _current_balance() -> float:
         with settings_lock:
@@ -292,8 +316,10 @@ def main() -> int:
         except Exception:
             return False
 
-    def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
+    def _run_chart_command(command: str, group_id: str = "", favorite_ticker_override: str = "") -> tuple[int, dict]:
         original_command = command
+        favorite_match = re.search(r"(?:^|\s)(?:-c|chart_program)\s+['\"]?([A-Za-z0-9._-]+)", original_command, re.IGNORECASE)
+        favorite_ticker = favorite_ticker_override.strip().upper() or (favorite_match.group(1).upper() if favorite_match else "")
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
         if _is_journal_html_command(command):
@@ -314,6 +340,10 @@ def main() -> int:
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
         env["STOCKHELPER_REPORT_SERVER_URL"] = f"http://{args.host}:{args.port}"
+        if favorite_ticker:
+            # Keep the report-facing alias (for example OIL) rather than the
+            # provider symbol loaded by the chart (for example CL.F).
+            env["STOCKHELPER_FAVORITE_TICKER"] = favorite_ticker
         # Report buttons are viewers for data that the report scan has already
         # downloaded.  Never let opening a chart trigger Stooq/Yahoo refreshes:
         # a denied Stooq CSV can otherwise spend minutes in the paginated-table
@@ -450,6 +480,9 @@ def main() -> int:
             if parsed.path == "/current-balance":
                 payload = {"ok": True, "balance": _current_balance(), "currency": "PLN"}
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/favorites":
+                payload = {"ok": True, "favorites": _current_favorites()}
+                self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
             if parsed.path == "/fibo-dropout-analysis":
                 qs = parse_qs(parsed.query)
                 ticker = (qs.get("ticker", [""])[0] or "").strip().upper()
@@ -510,12 +543,13 @@ def main() -> int:
             if parsed.path == "/open-chart":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
+                favorite_ticker = (qs.get("favoriteTicker", [""])[0] or "").strip()
                 debug = {"command": command, "path": self.path}
                 if not command:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
                 try:
                     group_id = (qs.get("group", [""])[0] or "").strip()
-                    rc, payload = _run_chart_command(command, group_id)
+                    rc, payload = _run_chart_command(command, group_id, favorite_ticker)
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
                         self.send_response(303)
@@ -537,6 +571,14 @@ def main() -> int:
                     payload = json.loads(self.rfile.read(length) or b"{}")
                     balance = _save_current_balance(payload.get("balance"))
                     response, status = {"ok": True, "balance": balance, "currency": "PLN"}, 200
+                except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                    response, status = {"ok": False, "error": str(exc)}, 400
+                self.send_response(status); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(response).encode("utf-8")); return
+            if parsed.path == "/favorites":
+                try:
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                    payload = json.loads(self.rfile.read(length) or b"{}")
+                    response, status = {"ok": True, "favorites": _save_favorites(payload.get("favorites"))}, 200
                 except (ValueError, TypeError, json.JSONDecodeError) as exc:
                     response, status = {"ok": False, "error": str(exc)}, 400
                 self.send_response(status); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(response).encode("utf-8")); return

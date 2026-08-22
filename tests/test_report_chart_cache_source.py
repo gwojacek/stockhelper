@@ -28,3 +28,12 @@ def test_report_server_repairs_legacy_forex_and_etf_commands_before_launch():
     assert '"--instrument" not in argv' in launch
     assert "detected_instrument = detect_instrument_type(argv[3])" in launch
     assert 'argv.extend(["--instrument", detected_instrument])' in launch
+
+
+def test_report_server_preserves_report_ticker_alias_for_chart_favorites():
+    source = Path("utilities/report_server.py").read_text(encoding="utf-8")
+
+    assert 'env["STOCKHELPER_FAVORITE_TICKER"] = favorite_ticker' in source
+    assert 'for example OIL' in source
+    assert 'favorite_ticker_override.strip().upper()' in source
+    assert '_run_chart_command(command, group_id, favorite_ticker)' in source
