@@ -1099,6 +1099,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "ALLSEARCH REPORT" in text
     assert "📈 StockHelper scanner workspace" in text
+    assert "Use tabs to switch between" not in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
     assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
@@ -1150,7 +1151,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "zoom:.78" in text
     assert "id='tab-allsearch' class='tab-panel active'" in text
     assert "id='current-balance'" in text
-    assert "Used by every StockHelper chart" in text
+    assert "Jacek Gwoździewicz trading masterpiece" in text
     assert "fetch('/current-balance'" in text
     assert ".balance-card{display:grid;grid-template-columns:1.1fr .75fr 1.25fr" in text
     assert "class='balance-section balance-amount'" in text
@@ -1173,7 +1174,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📋 Cell" not in text
     assert "href='https://stooq.pl/rwe-ichi' target='_blank' title='Open stooq chart'>📈</a><button class='btn sheets-cell-btn'" in text
     assert "aria-label='Copy Google Sheets HYPERLINK formula'>📋</button>" in text
-    assert "aria-label='Open stockhelper chart'>📊</button>" in text
+    assert "target='_blank' rel='noopener'" in text
+    assert "href='/open-chart?command=" in text
+    assert "aria-label='Open stockhelper chart'>📊</a>" in text
     assert ".chart-action-cell,.chart-link-cell,.latest-data-cell{text-align:center;white-space:nowrap}" in text
     assert "<td class='latest-data-cell'>✅</td>" in text
     assert ">Open</button>" not in text
