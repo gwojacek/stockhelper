@@ -1183,7 +1183,7 @@ def _ichimoku_early_breakout_html(row: ScannerRow) -> str:
     if not valid_from or valid_from in {"-", "—"}:
         return "—"
     if _ichimoku_qualification_state(row) in {"waiting_first", "waiting_second"}:
-        return f"<strong style='color:#dc2626'>YES! NO PLAY UNTIL {html.escape(valid_from)}</strong>"
+        return f"<strong style='color:#dc2626'>NO PLAY UNTIL {html.escape(valid_from)}</strong>"
     return f"Passed {html.escape(valid_from)}"
 
 
@@ -2126,6 +2126,17 @@ def _write_trojpolowki_reports(scopes: list[str], timestamp: datetime | None = N
 
 
 def _build_html_report(scopes: list[str], output_path: Path) -> None:
+    checked_market_lists: list[tuple[str, list[str]]] = []
+    try:
+        from scanner_search import _get_members as _report_scope_members
+        for scope in scopes:
+            group, members, _source, _suffix = _report_scope_members(scope)
+            checked_market_lists.append((str(group).upper(), sorted({str(member).upper() for member in members})))
+    except (ImportError, AttributeError, ValueError, OSError):
+        # Lightweight report builds may provide result files without the
+        # scanner universe registry. Keep those reports usable.
+        checked_market_lists = []
+
     def _parse_md_tables(md_path: Path) -> dict[str, list[dict[str, str]]]:
         out: dict[str, list[dict[str, str]]] = {}
         if not md_path.exists():
@@ -3159,7 +3170,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "<select id='market' style='display:none'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
         "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>"
     )
-    html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><p>Use tabs to switch between the full allsearch report and focused Trójpolówki watchlists. Middle-click a tab to open it in another browser tab.</p><div class='tabbar'><a class='btn tabbtn active' data-tab='allsearch' href='#tab-allsearch'>ALLSEARCH REPORT</a><a class='btn tabbtn' data-tab='troj-fibo' href='#tab-troj-fibo'>3P FIBO</a><a class='btn tabbtn' data-tab='troj-ichimoku' href='#tab-troj-ichimoku'>3P ICHIMOKU</a><a class='btn tabbtn' data-tab='wedges' href='#tab-wedges'>🔻 Kliny</a><a class='btn tabbtn' data-tab='favorites' href='#tab-favorites'>⭐ Favorites <span id='favorites-count'>0</span></a><a class='btn tabbtn' href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a><button class='btn compactbtn push-right' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><p>Use tabs to switch between the full allsearch report and focused Trójpolówki watchlists. Middle-click a tab to open it in another browser tab.</p><div class='tabbar'><a class='btn tabbtn active' data-tab='allsearch' href='#tab-allsearch'>ALLSEARCH REPORT</a><a class='btn tabbtn' data-tab='troj-fibo' href='#tab-troj-fibo'>3P FIBO</a><a class='btn tabbtn' data-tab='troj-ichimoku' href='#tab-troj-ichimoku'>3P ICHIMOKU</a><a class='btn tabbtn' data-tab='wedges' href='#tab-wedges'>🔻 Kliny</a><a class='btn tabbtn' data-tab='favorites' href='#tab-favorites'>⭐ Favorites <span id='favorites-count'>0</span></a><a class='btn tabbtn' href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a><button class='btn compactbtn push-right' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button><button class='btn compactbtn' type='button' title='Show every instrument checked for this report' onclick=\"document.getElementById('checked-instruments-dialog').showModal()\">🗂 Checked</button></div></div>")
+    checked_lists_html = "".join(
+        "<section class='checked-market-list'><h3>" + html.escape(market) + f" <span>({len(members)})</span></h3><div>"
+        + "".join(f"<code>{html.escape(member)}</code>" for member in members) + "</div></section>"
+        for market, members in checked_market_lists
+    ) or "<p class='muted'>Instrument universe is unavailable for this saved report.</p>"
+    html_parts.append("<style>#checked-instruments-dialog{width:min(1000px,92vw);max-height:82vh;padding:18px;border:1px solid #475569;border-radius:14px;background:#111827;color:#d1d5db}#checked-instruments-dialog::backdrop{background:rgba(2,6,23,.72)}.checked-dialog-head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:-18px;background:#111827;padding:8px 0;z-index:1}.checked-market-list{margin:14px 0;padding:12px;border:1px solid #374151;border-radius:10px;background:#1f2937}.checked-market-list h3{margin:0 0 9px;color:#bfdbfe}.checked-market-list h3 span{color:#94a3b8;font-size:12px}.checked-market-list>div{display:flex;flex-wrap:wrap;gap:6px}.checked-market-list code{padding:4px 7px;border-radius:6px;background:#0f172a;color:#e2e8f0}</style><dialog id='checked-instruments-dialog'><div class='checked-dialog-head'><h2>🗂 Instruments checked for this report</h2><button class='btn' type='button' onclick=\"this.closest('dialog').close()\">✕ Close</button></div>" + checked_lists_html + "</dialog>")
     html_parts.append("<div class='balance-card'><div class='balance-section'><span>💰</span><label for='current-balance'>Current balance</label></div><div class='balance-section balance-amount'><input id='current-balance' type='number' min='1' step='100' inputmode='decimal' aria-label='Current balance amount'><strong>PLN</strong></div><div class='balance-section balance-note-section'><span class='balance-bars' aria-hidden='true'><i></i><i></i><i></i></span><span id='balance-status' class='balance-status'>Used by every StockHelper chart</span></div></div>")
     html_parts.append(search_toolbar_html)
     html_parts.append(_liquidity_legend_html())

@@ -24,6 +24,7 @@ def load_run_module():
     loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
+    scanner._get_members = lambda scope: (scope.upper(), ["AAA", "BBB"], "test", None)
     scanner.ETFS_MARKET = [("iShares MSCI EAFE ETF", "EFA.US")]
     sys.modules["chart_program.instrument_detector"] = detector
     sys.modules["chart_program.chart_loader"] = loader_mod
@@ -1019,7 +1020,7 @@ def test_early_rebreakout_in_position_table_is_not_playable():
 
     assert mod._ichimoku_qualification_state(row) == "waiting_first"
     assert mod._ichimoku_early_breakout_html(row) == (
-        "<strong style='color:#dc2626'>YES! NO PLAY UNTIL 2026-08-28</strong>"
+        "<strong style='color:#dc2626'>NO PLAY UNTIL 2026-08-28</strong>"
     )
 
 
@@ -1139,6 +1140,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Expected date</th><th>stockhelper_chart</th></tr>" in text
     assert "<td>2026-05-30</td><td class='chart-action-cell'>" in text
     assert "📄 PDF" in text
+    assert "🗂 Checked" in text
+    assert "id='checked-instruments-dialog'" in text
+    assert "<h3>WIG <span>(2)</span></h3>" in text
+    assert "<code>AAA</code><code>BBB</code>" in text
     assert "📄 Download PDF" not in text
     assert 'onclick="downloadPdfReport()"' in text
     assert "@media print" in text
