@@ -318,6 +318,8 @@ def main() -> int:
 
     def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
         original_command = command
+        favorite_match = re.search(r"(?:^|\s)(?:-c|chart_program)\s+['\"]?([A-Za-z0-9._-]+)", original_command, re.IGNORECASE)
+        favorite_ticker = favorite_match.group(1).upper() if favorite_match else ""
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
         if _is_journal_html_command(command):
@@ -338,6 +340,10 @@ def main() -> int:
         env["PYTHONUNBUFFERED"] = "1"
         env["STOCKHELPER_REPORT_LAUNCHED_CHART"] = "1"
         env["STOCKHELPER_REPORT_SERVER_URL"] = f"http://{args.host}:{args.port}"
+        if favorite_ticker:
+            # Keep the report-facing alias (for example OIL) rather than the
+            # provider symbol loaded by the chart (for example CL.F).
+            env["STOCKHELPER_FAVORITE_TICKER"] = favorite_ticker
         # Report buttons are viewers for data that the report scan has already
         # downloaded.  Never let opening a chart trigger Stooq/Yahoo refreshes:
         # a denied Stooq CSV can otherwise spend minutes in the paginated-table

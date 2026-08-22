@@ -1107,6 +1107,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "stockhelper.favorite-instruments.v1" in text
     assert "function toggleFavorite(ticker)" in text
     assert "fetch('/favorites',{method:'POST'" in text
+    assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
     assert "function techniqueFor(el)" in text
     assert "One favorite instrument may appear in several technique groups" in text
     assert "data-ticker='RWE.DE'" in text

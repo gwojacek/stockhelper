@@ -52,3 +52,5 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert "localStorage.setItem(FAVORITES_KEY" in source
     assert "render(); refreshFavoriteStar(); syncFavoritesFromReport();" in source
     assert "new URL('/favorites', P.reportServer)" in source
+    assert "P.favoriteTicker || P.sourceTicker || P.symbol" in source
+    assert '"favoriteTicker": os.environ.get("STOCKHELPER_FAVORITE_TICKER", "")' in source

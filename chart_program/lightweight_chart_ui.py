@@ -267,6 +267,7 @@ class LightweightChartLevelSelectorUI:
             "sourceProvider": self.source_provider,
             "reportLaunched": os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1",
             "reportServer": os.environ.get("STOCKHELPER_REPORT_SERVER_URL", ""),
+            "favoriteTicker": os.environ.get("STOCKHELPER_FAVORITE_TICKER", ""),
             "pricePrecision": self._precision_for_price(),
             "basePrecision": self.price_precision,
             "selectionSequence": SELECTION_SEQUENCE,
@@ -757,7 +758,7 @@ class LightweightChartLevelSelectorUI:
 
   const $ = id => document.getElementById(id);
   const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1';
-  const favoriteTicker = String(P.sourceTicker || P.symbol || '').toUpperCase();
+  const favoriteTicker = String(P.favoriteTicker || P.sourceTicker || P.symbol || '').toUpperCase();
   const loadFavorites = () => {{
     try {{ return new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]').map(value => String(value).toUpperCase())); }}
     catch (_error) {{ return new Set(); }}
