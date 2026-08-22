@@ -1136,7 +1136,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
     assert "function favoriteWedgeContext(host)" in text
     assert "date?'Breakout: '+date:'Unbroken'" in text
-    assert "td.chart-action-cell{text-align:right}" in text
+    assert "td.chart-action-cell{text-align:center}" in text
     assert "<th>Expected date</th><th>stockhelper_chart</th></tr>" in text
     assert "<td>2026-05-30</td><td class='chart-action-cell'>" in text
     assert "📄 PDF" in text
