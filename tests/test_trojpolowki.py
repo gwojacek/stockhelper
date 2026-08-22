@@ -1215,10 +1215,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
     assert "troj-info-slider" in text
-    assert "class='troj-info-lock'" in text
-    assert "Remember this info setting" in text
+    assert "troj-info-lock" not in text
     assert "stockhelper-troj-info-level" in text
-    assert "toggleTrojInfoLock" in text
+    assert "localStorage.setItem" in text
     assert "restoreTrojInfoPreference" in text
     assert "troj-status-info" in text
     assert "troj-detail-info" in text
