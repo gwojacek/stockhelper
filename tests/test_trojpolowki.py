@@ -1101,6 +1101,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
     assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
+    assert "href='#tab-troj-fibo'" in text
+    assert "window.addEventListener('hashchange',showReportTabFromHash)" in text
     assert "id='tab-favorites' class='tab-panel'" in text
     assert "stockhelper.favorite-instruments.v1" in text
     assert "function toggleFavorite(ticker)" in text
