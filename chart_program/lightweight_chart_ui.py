@@ -795,6 +795,8 @@ class LightweightChartLevelSelectorUI:
     await saveFavoritesToReport(favorites);
   }};
   window.addEventListener('storage', event => {{ if (event.key === FAVORITES_KEY) refreshFavoriteStar(); }});
+  window.addEventListener('focus', syncFavoritesFromReport);
+  setInterval(syncFavoritesFromReport, 1500);
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
   const roundPrice = (v) => Number(Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision));
   const dateAtIndex = (idx) => P.ohlc[Math.max(0, Math.min(P.ohlc.length - 1, idx))]?.time || P.ohlc[P.ohlc.length - 1]?.time;

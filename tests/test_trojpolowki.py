@@ -83,8 +83,8 @@ def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v21"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v22"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v22"' in server_source
 
 
 def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
@@ -1108,6 +1108,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "function toggleFavorite(ticker)" in text
     assert "fetch('/favorites',{method:'POST'" in text
     assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
+    assert "endpoint.searchParams.set('favoriteTicker',btn.dataset.favoriteTicker||favoriteTicker(btn))" in text
     assert "function techniqueFor(el)" in text
     assert "One favorite instrument may appear in several technique groups" in text
     assert "data-ticker='RWE.DE'" in text

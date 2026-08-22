@@ -35,3 +35,5 @@ def test_report_server_preserves_report_ticker_alias_for_chart_favorites():
 
     assert 'env["STOCKHELPER_FAVORITE_TICKER"] = favorite_ticker' in source
     assert 'for example OIL' in source
+    assert 'favorite_ticker_override.strip().upper()' in source
+    assert '_run_chart_command(command, group_id, favorite_ticker)' in source

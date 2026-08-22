@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import urlopen
 
-REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v21"
+REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v22"
 DEFAULT_CURRENT_BALANCE = 255000.0
 
 
@@ -316,10 +316,10 @@ def main() -> int:
         except Exception:
             return False
 
-    def _run_chart_command(command: str, group_id: str = "") -> tuple[int, dict]:
+    def _run_chart_command(command: str, group_id: str = "", favorite_ticker_override: str = "") -> tuple[int, dict]:
         original_command = command
         favorite_match = re.search(r"(?:^|\s)(?:-c|chart_program)\s+['\"]?([A-Za-z0-9._-]+)", original_command, re.IGNORECASE)
-        favorite_ticker = favorite_match.group(1).upper() if favorite_match else ""
+        favorite_ticker = favorite_ticker_override.strip().upper() or (favorite_match.group(1).upper() if favorite_match else "")
         command = _canonicalize_chart_command(command)
         argv = shlex.split(command)
         if _is_journal_html_command(command):
@@ -543,12 +543,13 @@ def main() -> int:
             if parsed.path == "/open-chart":
                 qs = parse_qs(parsed.query)
                 command = (qs.get("command", [""])[0] or "").strip()
+                favorite_ticker = (qs.get("favoriteTicker", [""])[0] or "").strip()
                 debug = {"command": command, "path": self.path}
                 if not command:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
                 try:
                     group_id = (qs.get("group", [""])[0] or "").strip()
-                    rc, payload = _run_chart_command(command, group_id)
+                    rc, payload = _run_chart_command(command, group_id, favorite_ticker)
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
                         self.send_response(303)
