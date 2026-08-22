@@ -772,11 +772,26 @@ class LightweightChartLevelSelectorUI:
     star.setAttribute('aria-label', star.title);
     star.setAttribute('aria-pressed', active ? 'true' : 'false');
   }};
-  $('favorite-star').onclick = () => {{
+  const syncFavoritesFromReport = async () => {{
+    if (!P.reportServer) return;
+    try {{
+      const response = await fetch(new URL('/favorites', P.reportServer));
+      const data = await response.json();
+      if (response.ok && Array.isArray(data.favorites)) localStorage.setItem(FAVORITES_KEY, JSON.stringify(data.favorites));
+    }} catch (error) {{ console.warn('Could not load shared favorites', error); }}
+    refreshFavoriteStar();
+  }};
+  const saveFavoritesToReport = async favorites => {{
+    if (!P.reportServer) return;
+    try {{ await fetch(new URL('/favorites', P.reportServer), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{favorites:[...favorites]}})}}); }}
+    catch (error) {{ console.warn('Could not save shared favorites', error); }}
+  }};
+  $('favorite-star').onclick = async () => {{
     const favorites = loadFavorites();
     favorites.has(favoriteTicker) ? favorites.delete(favoriteTicker) : favorites.add(favoriteTicker);
     localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites].sort()));
     refreshFavoriteStar();
+    await saveFavoritesToReport(favorites);
   }};
   window.addEventListener('storage', event => {{ if (event.key === FAVORITES_KEY) refreshFavoriteStar(); }});
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
@@ -3570,7 +3585,7 @@ class LightweightChartLevelSelectorUI:
   }});
   $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
 
-  applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render(); refreshFavoriteStar();
+  applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
 }})();
   </script>
 </body>

@@ -89,6 +89,30 @@ def main() -> int:
     settings_lock = threading.Lock()
     settings_path = project_root / "chart_program" / "data" / "user_settings.json"
 
+    def _current_favorites() -> list[str]:
+        with settings_lock:
+            try:
+                values = json.loads(settings_path.read_text(encoding="utf-8")).get("favorite_instruments", [])
+                return sorted({str(value).strip().upper() for value in values if re.fullmatch(r"[A-Za-z0-9._-]{1,25}", str(value).strip())})
+            except (OSError, TypeError, json.JSONDecodeError):
+                return []
+
+    def _save_favorites(values: object) -> list[str]:
+        if not isinstance(values, list):
+            raise ValueError("favorites must be a list")
+        favorites = sorted({str(value).strip().upper() for value in values if re.fullmatch(r"[A-Za-z0-9._-]{1,25}", str(value).strip())})
+        with settings_lock:
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                current = json.loads(settings_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                current = {}
+            current["favorite_instruments"] = favorites
+            temporary = settings_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(settings_path)
+        return favorites
+
     def _current_balance() -> float:
         with settings_lock:
             try:
@@ -450,6 +474,9 @@ def main() -> int:
             if parsed.path == "/current-balance":
                 payload = {"ok": True, "balance": _current_balance(), "currency": "PLN"}
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
+            if parsed.path == "/favorites":
+                payload = {"ok": True, "favorites": _current_favorites()}
+                self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(payload).encode("utf-8")); return
             if parsed.path == "/fibo-dropout-analysis":
                 qs = parse_qs(parsed.query)
                 ticker = (qs.get("ticker", [""])[0] or "").strip().upper()
@@ -537,6 +564,14 @@ def main() -> int:
                     payload = json.loads(self.rfile.read(length) or b"{}")
                     balance = _save_current_balance(payload.get("balance"))
                     response, status = {"ok": True, "balance": balance, "currency": "PLN"}, 200
+                except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                    response, status = {"ok": False, "error": str(exc)}, 400
+                self.send_response(status); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(response).encode("utf-8")); return
+            if parsed.path == "/favorites":
+                try:
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                    payload = json.loads(self.rfile.read(length) or b"{}")
+                    response, status = {"ok": True, "favorites": _save_favorites(payload.get("favorites"))}, 200
                 except (ValueError, TypeError, json.JSONDecodeError) as exc:
                     response, status = {"ok": False, "error": str(exc)}, 400
                 self.send_response(status); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(response).encode("utf-8")); return

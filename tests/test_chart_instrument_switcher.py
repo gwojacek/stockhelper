@@ -50,4 +50,5 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
     assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source
     assert "localStorage.setItem(FAVORITES_KEY" in source
-    assert "render(); refreshFavoriteStar();" in source
+    assert "render(); refreshFavoriteStar(); syncFavoritesFromReport();" in source
+    assert "new URL('/favorites', P.reportServer)" in source
