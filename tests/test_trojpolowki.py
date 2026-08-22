@@ -1128,7 +1128,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "No favorites" in text
     assert "favorites-wedge-table" in text
     assert "const stooqLink=o=>o.stooqUrl?" in text
-    assert "stooqLink(o)+chartButton(o)" in text
+    assert "stooqLink(o)+star(o)+chartButton(o)" in text
+    assert "<td><strong>'+escapeFavoriteHtml(o.label)" in text
     assert "const threePTickers=new Set" in text
     assert "!threePTickers.has(o.ticker)" in text
     assert "favorite-direction-long" in text and "favorite-direction-short" in text
@@ -1138,6 +1139,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "function favoriteWedgeContext(host)" in text
     assert "date?'Breakout: '+date:'Unbroken'" in text
     assert "td.chart-action-cell{text-align:center}" in text
+    assert "#tab-allsearch table.data th:not(:first-child)" in text
+    assert "#tab-wedges table.data td:not(:first-child){text-align:center}" in text
+    assert "<th>Ticker</th><th>Dir</th><th>Status</th><th>Incline</th><th>Ratio(d)</th>" in text
+    assert "<td><b>Starbucks (SBUX.US)</b></td><td>" in text
     assert "function placeStooqColumnsNextToCharts()" in text
     assert "row.insertBefore(stooq,chart)" in text
     assert "placeStooqColumnsNextToCharts();document.querySelectorAll('table.data')" in text
@@ -1216,8 +1221,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<th>Mies. respektu przed wybiciem</th><th>Early breakout</th><th>Retest count</th>" in text
     assert "Early breakout status (&lt;4m" not in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
-    assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 3
-    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span style='color:#16a34a;font-weight:700'>98.5%</span></td>" in text
+    assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 2
+    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td>" in text
+    assert "98.5%</span></td>" not in text
     fibo_one_start = text.index("WYNIKI FIBO #1 (Waiting")
     fibo_one_end = text.index("</table>", fibo_one_start)
     fibo_one_html = text[fibo_one_start:fibo_one_end]
