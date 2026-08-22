@@ -267,6 +267,7 @@ class LightweightChartLevelSelectorUI:
             "sourceProvider": self.source_provider,
             "reportLaunched": os.environ.get("STOCKHELPER_REPORT_LAUNCHED_CHART") == "1",
             "reportServer": os.environ.get("STOCKHELPER_REPORT_SERVER_URL", ""),
+            "favoriteTicker": os.environ.get("STOCKHELPER_FAVORITE_TICKER", ""),
             "pricePrecision": self._precision_for_price(),
             "basePrecision": self.price_precision,
             "selectionSequence": SELECTION_SEQUENCE,
@@ -515,10 +516,13 @@ class LightweightChartLevelSelectorUI:
     .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
     .instrument-hero {{ display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; }}
+    .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
     .section-icon {{ width:26px; height:26px; font-size:14px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
     #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
+    #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
+    #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
@@ -670,7 +674,7 @@ class LightweightChartLevelSelectorUI:
       <section class="side-card instrument-card">
         <div class="instrument-hero">
           <div class="hero-icon">↗</div>
-          <div><h2 id="identity"></h2><div class="identity-sub">Name / Ticker</div></div>
+          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
         <div class="meta-grid">
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
@@ -753,6 +757,46 @@ class LightweightChartLevelSelectorUI:
   let scannerHighlightRects = [];
 
   const $ = id => document.getElementById(id);
+  const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1';
+  const favoriteTicker = String(P.favoriteTicker || P.sourceTicker || P.symbol || '').toUpperCase();
+  const loadFavorites = () => {{
+    try {{ return new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]').map(value => String(value).toUpperCase())); }}
+    catch (_error) {{ return new Set(); }}
+  }};
+  const refreshFavoriteStar = () => {{
+    const star = $('favorite-star');
+    if (!star) return;
+    const active = loadFavorites().has(favoriteTicker);
+    star.classList.toggle('active', active);
+    star.textContent = active ? '★' : '☆';
+    star.title = `${{active ? 'Remove' : 'Add'}} ${{favoriteTicker}} ${{active ? 'from' : 'to'}} favorites`;
+    star.setAttribute('aria-label', star.title);
+    star.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }};
+  const syncFavoritesFromReport = async () => {{
+    if (!P.reportServer) return;
+    try {{
+      const response = await fetch(new URL('/favorites', P.reportServer));
+      const data = await response.json();
+      if (response.ok && Array.isArray(data.favorites)) localStorage.setItem(FAVORITES_KEY, JSON.stringify(data.favorites));
+    }} catch (error) {{ console.warn('Could not load shared favorites', error); }}
+    refreshFavoriteStar();
+  }};
+  const saveFavoritesToReport = async favorites => {{
+    if (!P.reportServer) return;
+    try {{ await fetch(new URL('/favorites', P.reportServer), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{favorites:[...favorites]}})}}); }}
+    catch (error) {{ console.warn('Could not save shared favorites', error); }}
+  }};
+  $('favorite-star').onclick = async () => {{
+    const favorites = loadFavorites();
+    favorites.has(favoriteTicker) ? favorites.delete(favoriteTicker) : favorites.add(favoriteTicker);
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites].sort()));
+    refreshFavoriteStar();
+    await saveFavoritesToReport(favorites);
+  }};
+  window.addEventListener('storage', event => {{ if (event.key === FAVORITES_KEY) refreshFavoriteStar(); }});
+  window.addEventListener('focus', syncFavoritesFromReport);
+  setInterval(syncFavoritesFromReport, 1500);
   const fmt = (v) => Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision);
   const roundPrice = (v) => Number(Number(v).toFixed(Math.abs(Number(v)) < 1 ? 4 : precision));
   const dateAtIndex = (idx) => P.ohlc[Math.max(0, Math.min(P.ohlc.length - 1, idx))]?.time || P.ohlc[P.ohlc.length - 1]?.time;
@@ -3544,7 +3588,7 @@ class LightweightChartLevelSelectorUI:
   }});
   $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
 
-  applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();
+  applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
 }})();
   </script>
 </body>

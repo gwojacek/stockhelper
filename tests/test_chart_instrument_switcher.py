@@ -42,3 +42,16 @@ def test_chart_has_save_and_save_close_actions():
     assert "$('save-btn').onclick = () => saveChart(false)" in source
     assert "$('finish-btn').onclick = () => saveChart(true)" in source
     assert '@app.route("/save", methods=["POST"])' in source
+
+
+def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
+    assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source
+    assert "localStorage.setItem(FAVORITES_KEY" in source
+    assert "render(); refreshFavoriteStar(); syncFavoritesFromReport();" in source
+    assert "new URL('/favorites', P.reportServer)" in source
+    assert "P.favoriteTicker || P.sourceTicker || P.symbol" in source
+    assert "setInterval(syncFavoritesFromReport, 1500)" in source
+    assert '"favoriteTicker": os.environ.get("STOCKHELPER_FAVORITE_TICKER", "")' in source
