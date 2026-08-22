@@ -22,6 +22,7 @@ chart_loader.has_new_remote_data = lambda *args, **kwargs: False
 chart_loader.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
 chart_loader._yahoo_download = lambda *args, **kwargs: None
 chart_loader._yahoo_download_window = lambda *args, **kwargs: None
+chart_loader._merge_yahoo_fresh_candle = lambda *args, **kwargs: None
 chart_loader._recent_high_precision_candle_count = lambda *args, **kwargs: 0
 chart_loader.YAHOO_RECENT_CANDLE_REBASE_THRESHOLD = 2
 yahoo_finance = types.ModuleType("utilities.yahoo_finance")
@@ -125,6 +126,13 @@ def test_dark_cloud_close_must_remain_inside_first_real_body():
 
     assert _is_dark_cloud_cover(first, valid, 9.5)
     assert not _is_dark_cloud_cover(first, closes_below_first_open, 9.5)
+
+
+def test_intc_dark_cloud_cover_uses_first_candles_cloud_touch():
+    first = candle(101.51, 107.57, 100.33, 104.56)
+    second = candle(104.48, 106.87, 102.05, 102.50)
+
+    assert _is_dark_cloud_cover(first, second, 103.89, zone_ceiling=121.86)
 
 
 def test_opl_tiny_bullish_body_is_not_dark_cloud_and_later_harami_is_valid():

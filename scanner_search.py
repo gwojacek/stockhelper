@@ -647,10 +647,11 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     if doji_like:
         # Provider merges can turn an apparent doji into a tiny non-zero body,
         # so classify by body/range rather than exact equality. A doji hammer's
-        # entire body must sit in the top 10% of the candle (ENT 2026-08-10 is
-        # around two-thirds up and must not qualify).
+        # entire body must sit in the top 20% of the candle (ENT 2026-08-10 is
+        # around two-thirds up and must not qualify). AXON 2026-06-18 sits just
+        # above the 80% mark and is a valid local-low doji hammer.
         body_floor = min(float(c["Open"]), float(c["Close"]))
-        return body_floor >= float(c["Low"]) + candle_range * 0.90 and lower > upper
+        return body_floor >= float(c["Low"]) + candle_range * 0.80 and lower > upper
     # Permit a small upper wick relative to the full candle range. AXON's
     # 2026-06-18 local-low hammer has a tiny real body and a 12% upper wick;
     # requiring that wick to be no larger than the tiny body rejects an
@@ -3848,8 +3849,11 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if touches_cloud and _is_bullish_hammer(candle):
                         pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
-                    lvl = float(w["cloud_top"].iloc[j])
-                    floor = float(w["cloud_bottom"].iloc[j])
+                    # Multi-candle formations may straddle a moving Kumo edge.
+                    # Test each candle against the combined two-day cloud zone
+                    # instead of applying only the confirmation day's band.
+                    lvl = max(float(w["cloud_top"].iloc[j - 1]), float(w["cloud_top"].iloc[j]))
+                    floor = min(float(w["cloud_bottom"].iloc[j - 1]), float(w["cloud_bottom"].iloc[j]))
                     if _is_bullish_engulfing(
                         w.iloc[j - 1],
                         w.iloc[j],
@@ -3885,8 +3889,8 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if touches_cloud and _is_bearish_shooting_star(candle):
                         pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
-                    lvl = float(w["cloud_bottom"].iloc[j])
-                    ceiling = float(w["cloud_top"].iloc[j])
+                    lvl = min(float(w["cloud_bottom"].iloc[j - 1]), float(w["cloud_bottom"].iloc[j]))
+                    ceiling = max(float(w["cloud_top"].iloc[j - 1]), float(w["cloud_top"].iloc[j]))
                     if _is_bearish_engulfing(
                         w.iloc[j - 1],
                         w.iloc[j],

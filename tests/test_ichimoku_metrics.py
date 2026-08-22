@@ -507,11 +507,37 @@ def test_short_retest_prefers_newer_higher_dark_cloud_cover(monkeypatch):
     )
 
     status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
-        df, flip_idx=0, current_side="below"
+        df, flip_idx=1, current_side="below"
     )
 
     assert status.endswith("_retest_pattern")
     assert count == 1
+    assert events[-1][0:2] == ("2026-08-14", "dark_cloud_cover")
+
+
+def test_intc_moving_cloud_detects_later_dark_cloud_cover():
+    raw = [
+        ("2026-08-03",88.40,91.68,85.62,91.00,101.77,124.14),
+        ("2026-08-04",95.24,101.39,94.32,100.86,101.77,124.31),
+        ("2026-08-05",99.30,102.83,97.90,101.06,102.16,124.31),
+        ("2026-08-06",98.22,103.38,95.60,99.81,103.31,125.27),
+        ("2026-08-07",102.33,103.66,98.03,101.65,103.41,125.38),
+        ("2026-08-10",98.26,100.03,96.30,97.52,103.41,125.17),
+        ("2026-08-11",96.78,98.35,95.35,97.71,103.67,125.17),
+        ("2026-08-12",101.33,103.16,100.12,100.95,103.67,122.83),
+        ("2026-08-13",101.51,107.57,100.33,104.56,103.89,121.86),
+        ("2026-08-14",104.48,106.87,102.05,102.50,110.99,121.86),
+    ]
+    df = pd.DataFrame(
+        raw, columns=["Date", "Open", "High", "Low", "Close", "cloud_bottom", "cloud_top"]
+    )
+    df["Date"] = pd.to_datetime(df["Date"])
+
+    _status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="below"
+    )
+
+    assert count >= 1
     assert events[-1][0:2] == ("2026-08-14", "dark_cloud_cover")
 
 
@@ -535,7 +561,7 @@ def test_axon_local_low_hammer_is_tagged_as_retest(monkeypatch):
     monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
 
     _status, _depth, count, _first_date, events = scanner_search._detect_ichimoku_retest(
-        df, flip_idx=0, current_side="above"
+        df, flip_idx=1, current_side="above"
     )
 
     assert count == 1
