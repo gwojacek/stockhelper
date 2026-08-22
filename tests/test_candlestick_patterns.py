@@ -22,6 +22,7 @@ chart_loader.has_new_remote_data = lambda *args, **kwargs: False
 chart_loader.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
 chart_loader._yahoo_download = lambda *args, **kwargs: None
 chart_loader._yahoo_download_window = lambda *args, **kwargs: None
+chart_loader._merge_yahoo_fresh_candle = lambda *args, **kwargs: None
 chart_loader._recent_high_precision_candle_count = lambda *args, **kwargs: 0
 chart_loader.YAHOO_RECENT_CANDLE_REBASE_THRESHOLD = 2
 yahoo_finance = types.ModuleType("utilities.yahoo_finance")
@@ -50,10 +51,11 @@ def candle(open_: float, high: float, low: float, close: float) -> dict[str, flo
     return {"Open": open_, "High": high, "Low": low, "Close": close}
 
 
-def test_bullish_hammer_requires_lower_shadow_at_least_twice_body_and_upper_shadow_at_most_body():
+def test_bullish_hammer_requires_long_lower_shadow_and_only_small_upper_wick():
     assert _is_bullish_hammer(candle(10.0, 12.0, 6.0, 11.0))
     assert not _is_bullish_hammer(candle(10.0, 12.1, 6.0, 11.0))
     assert not _is_bullish_hammer(candle(10.0, 12.0, 8.1, 11.0))
+    assert _is_bullish_hammer(candle(424.89, 428.05, 402.00, 423.40))
 
 
 def test_bullish_hammer_allows_doji_hammer_shape():
@@ -124,6 +126,13 @@ def test_dark_cloud_close_must_remain_inside_first_real_body():
 
     assert _is_dark_cloud_cover(first, valid, 9.5)
     assert not _is_dark_cloud_cover(first, closes_below_first_open, 9.5)
+
+
+def test_intc_dark_cloud_cover_uses_first_candles_cloud_touch():
+    first = candle(101.51, 107.57, 100.33, 104.56)
+    second = candle(104.48, 106.87, 102.05, 102.50)
+
+    assert _is_dark_cloud_cover(first, second, 103.89, zone_ceiling=121.86)
 
 
 def test_opl_tiny_bullish_body_is_not_dark_cloud_and_later_harami_is_valid():

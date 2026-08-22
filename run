@@ -1135,14 +1135,22 @@ def _parse_float_text(value: str, default: float = 0.0) -> float:
 
 def _ichimoku_qualification_state(row: ScannerRow) -> str:
     """Return the playable state, including compatibility with old reports."""
-    if row.scanner != "ICHIMOKU" or row.category != "retest_breakout":
+    if row.scanner != "ICHIMOKU":
         return "standard"
     explicit = str(row.metrics.get("qualification_status", "")).strip().lower()
     count = int(_parse_float_text(row.metrics.get("retest_count", "0"), 0.0))
+    if row.category == "position" and not explicit:
+        return "standard"
+    if explicit == "standard_4m_breakout":
+        return "standard"
+    if "waiting_until_4m" in explicit:
+        return "waiting_first"
     if "waiting_first" in explicit:
         return "waiting_first"
     if "waiting_second" in explicit:
         return "waiting_second"
+    if "valid_after_post_4m_retest" in explicit:
+        return "valid_after_second" if count >= 1 else "waiting_first"
     if "valid_after_second" in explicit:
         # Guard reports produced by the earlier implementation, which marked
         # two detected events as valid but wrote Retest count=1 after removing
@@ -1165,9 +1173,18 @@ def _ichimoku_qualification_label(row: ScannerRow) -> str:
     return {
         "waiting_first": "⏳ NOT PLAYABLE — waiting for first retest after 4m",
         "waiting_second": "⏳ NOT PLAYABLE — first retest after 4m; waiting for second",
-        "valid_after_second": "✅ PLAYABLE — second retest after 4m confirmed",
+        "valid_after_second": "✅ PLAYABLE — required retest after 4m confirmed",
         "standard": "—",
     }[state]
+
+
+def _ichimoku_early_breakout_html(row: ScannerRow) -> str:
+    valid_from = str(row.metrics.get("valid_retests_from_date", "") or "").strip()
+    if not valid_from or valid_from in {"-", "—"}:
+        return "—"
+    if _ichimoku_qualification_state(row) in {"waiting_first", "waiting_second"}:
+        return f"<strong style='color:#dc2626'>YES! NO PLAY UNTIL {html.escape(valid_from)}</strong>"
+    return f"Passed {html.escape(valid_from)}"
 
 
 def _wedge_slope_strength(value: str) -> str:
@@ -1289,7 +1306,9 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
                 metrics={
                     "candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")),
                     "avg10d": str(r.get("Avg10d PLN", "")), "ichimoku_status": str(r.get("Ichimoku status", "")),
-                    "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
+                    "valid_retests_from_date": str(r.get("Valid retests from", "")),
+                    "qualification_status": str(r.get("4m qualification status", "standard_4m_breakout")),
+                    "retest_count": str(r.get("Retest count", "")), "latest_retest_count": str(r.get("Retest count", "")), "latest_retest_date": str(r.get("Latest Retest date", "")),
                     "latest_retest_pattern": str(r.get("Latest Retest pattern", "")), "latest_data": str(r.get("Latest data?", "")),
                     "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")),
                     "raw_status": str(r.get("Ichimoku status", "")),
@@ -1787,7 +1806,9 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         return row.category == "retest_breakout" and _ichimoku_qualification_state(row) in {"standard", "valid_after_second"}
 
     def _is_early_breakout_waiting(row: ScannerRow) -> bool:
-        return row.category == "retest_breakout" and _ichimoku_qualification_state(row) in {"waiting_first", "waiting_second"}
+        # WYNIKI 1 position rows also carry early-rebreakout qualification.
+        # They must receive the same 3P no-play treatment as WYNIKI 2 rows.
+        return _ichimoku_qualification_state(row) in {"waiting_first", "waiting_second"}
 
     def _is_fresh_retest_window(row: ScannerRow) -> bool:
         months = _parse_float_text(row.metrics.get("months", "0"), 0.0)
@@ -1831,7 +1852,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
     def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
         row, info = item
         if _is_early_breakout_waiting(row):
-            return "waiting_retest"
+            return "skip"
         if _is_retest_under_4m(item):
             return "short_retest"
         tk_cross_signal = info["tk_cross"] not in {"-", "none"}
@@ -2006,11 +2027,6 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
             # history, when present, is rendered on the following line.
             recent_line = _current_ichi_status_line(info)
             lines.append(recent_line)
-            if _is_early_breakout_waiting(row):
-                lines.append(f"**{_ichimoku_qualification_label(row)}**")
-                valid_from = _source_metric(row, "valid_retests_from_date")
-                if valid_from != "-":
-                    lines.append(f"📅 valid retests counted from: {valid_from}")
             if latest_pattern != "-" and latest_pattern_date != "-":
                 last_label = f"retest {latest_pattern}"
                 last_date = latest_pattern_date
@@ -2058,7 +2074,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         if current is None or _dedupe_rank(item) < _dedupe_rank(current):
             unique_rows[key] = item
     prepared_rows = list(unique_rows.values())
-    prepared_rows.sort(key=lambda item: ({"cloud": 0, "waiting_retest": 1, "short_retest": 2, "watch": 3, "strong": 4}.get(bucket(item), 9), _market_sort_key(item[0])[0], 0 if bucket(item) not in {"short_retest", "waiting_retest"} or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
+    prepared_rows.sort(key=lambda item: ({"cloud": 0, "short_retest": 1, "watch": 2, "strong": 3}.get(bucket(item), 9), _market_sort_key(item[0])[0], 0 if bucket(item) != "short_retest" or _touches_cloud(item) else 1, -max(_risk_value(item[1]["risk"]), 0), -_parse_float_text(item[0].metrics.get("months", "0"), 0.0), item[0].ticker))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "ichimoku.md"
@@ -2070,7 +2086,7 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         "",
         "Legenda:",
         "- ☁️ Cloud/retest/breakout rows have priority and appear in the third column.",
-        "- 🔁 Retest <4m contains playable breakouts and clearly marked early breakouts that are NOT PLAYABLE until their second post-4m retest.",
+        "- Early breakouts are hidden from 3P Ichimoku until four months after the preceding breakout; afterward they return and are treated normally.",
         "- Risk/grading details are shown only in the ☁️ Cloud / retest / breakout and 🔁 Retest <4m columns.",
         "- Risk icons: 🟢 3%, 🟡 2%, 🔵 1%, ⚪ 0% or missing.",
         "- Chikou uses arrow-only direction: ⬆️ over price and ⬇️ under price (under price supports bearish breakout/retest context).",
@@ -2735,6 +2751,10 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         open_btn = ' <button class=\'iconbtn\' title=\'Open stooq links from top choices\' onclick="_openLinks(_tableLinks(this.closest(\'.top-choice\').querySelector(\'table\')))">🔗</button> <button class=\'iconbtn\' title=\'Open stockhelper charts from top choices\' onclick="openClosestStockhelperCharts(this)">📊</button>'
         return f"<div class='top-choice'><h3>{html.escape(title)}{open_btn}</h3><table class='troj-table top-choice-compact'><thead><tr><th>Instrument</th></tr></thead><tbody>{html_rows}</tbody></table></div>"
 
+    def _troj_cell_is_no_play(cell: str) -> bool:
+        text = str(cell or "").lower()
+        return "not playable" in text or "no play" in text
+
     def _troj_top_choices(parsed: dict[str, object], preferred_cols: list[int], limit: int | None = None) -> list[tuple[str, str, str]]:
         headers = parsed.get("headers", [])
         rows_in = parsed.get("rows", [])
@@ -2748,7 +2768,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             for row in rows_in:
                 if isinstance(row, list) and col_idx < len(row) and str(row[col_idx]).strip():
                     cell = str(row[col_idx])
-                    if "not playable" in cell.lower():
+                    if _troj_cell_is_no_play(cell):
                         continue
                     reason = _top_choice_reason(cell, source)
                     if not reason:
@@ -2770,7 +2790,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         return troj_row_by_ticker.get(ticker)
 
     def _troj_cell_recent_ichimoku_signal(cell: str, row: ScannerRow | None) -> bool:
-        if "not playable" in str(cell or "").lower():
+        if _troj_cell_is_no_play(cell):
             return False
         if row is not None and _row_has_search_day_signal(row):
             return True
@@ -3216,7 +3236,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if is_i1:
                 thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th><th>Mies.</th><th>Start</th><th>Close</th><th>Avg10d PLN</th><th>Retest count</th><th>Latest Retest date</th><th>Latest Retest pattern</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
             elif is_i2:
-                thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Valid retests counted from (early breakouts only)</th><th>Early breakout status (&lt;4m: playable after 2 retests on/after this date)</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
+                thead = "<tr><th>Ticker</th><th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th><th>Mies. od wybicia</th><th>Mies. respektu przed wybiciem</th><th>Early breakout</th><th>Retest count</th><th>Latest Retest</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
             elif is_f0:
                 thead = "<tr><th>Ticker</th><th>Dir</th><th>Near61.8</th><th>Status</th><th>Incline</th><th>Ratio(d)</th><th>Avg10d PLN</th><th>Open stooq chart</th><th>Latest data?</th><th>Latest date</th><th>Expected date</th><th>stockhelper_chart</th></tr>"
             elif is_f1:
@@ -3251,7 +3271,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 elif is_i2:
                     avg10d_fmt = _format_avg10d_value(r.metrics.get("avg10d", ""))
                     recent_retest = _is_recent_retest_date(r.metrics.get('latest_retest_date',''))
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{html.escape(r.metrics.get('valid_retests_from_date','') or '-')}</td><td><strong>{html.escape(_ichimoku_qualification_label(r))}</strong></td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_allsearch_ichi_direction_html(r)}</td><td>{_allsearch_ichi_price_to_cloud_html(r)}</td><td>{_color_ichimoku_status(r.metrics.get('ichimoku_status',''))}</td><td>{html.escape(r.dates.get('flip_date',''))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('previous_respect_months',''))}</td><td>{_ichimoku_early_breakout_html(r)}</td><td>{html.escape(r.metrics.get('retest_count',''))}</td><td>{_latest_retest_summary_html(r, recent_retest)}</td><td>{html.escape(avg10d_fmt)}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
                 elif is_f0:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":

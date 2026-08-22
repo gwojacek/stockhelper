@@ -313,6 +313,8 @@ class ScanResult:
     kumo_twist: str | None = None
     tk_plus: str | None = None
     tenkan_in_cloud: str | None = None
+    qualification_status: str = "standard_4m_breakout"
+    valid_retests_from_date: str = "-"
 
 
 @dataclass
@@ -645,11 +647,16 @@ def _is_bullish_hammer(c: pd.Series) -> bool:
     if doji_like:
         # Provider merges can turn an apparent doji into a tiny non-zero body,
         # so classify by body/range rather than exact equality. A doji hammer's
-        # entire body must sit in the top 10% of the candle (ENT 2026-08-10 is
-        # around two-thirds up and must not qualify).
+        # entire body must sit in the top 20% of the candle (ENT 2026-08-10 is
+        # around two-thirds up and must not qualify). AXON 2026-06-18 sits just
+        # above the 80% mark and is a valid local-low doji hammer.
         body_floor = min(float(c["Open"]), float(c["Close"]))
-        return body_floor >= float(c["Low"]) + candle_range * 0.90 and lower > upper
-    return lower >= 2 * body and upper <= body
+        return body_floor >= float(c["Low"]) + candle_range * 0.80 and lower > upper
+    # Permit a small upper wick relative to the full candle range. AXON's
+    # 2026-06-18 local-low hammer has a tiny real body and a 12% upper wick;
+    # requiring that wick to be no larger than the tiny body rejects an
+    # otherwise clear long lower-shadow reversal.
+    return lower >= 2 * body and upper <= max(body, candle_range * 0.15)
 
 
 def _is_bearish_shooting_star(c: pd.Series) -> bool:
@@ -764,12 +771,17 @@ def _is_doji(c: pd.Series, tol: float = 0.15) -> bool:
     rng = max(h - l, 1e-9)
     return body / rng <= tol
 
-def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_floor: float | None = None) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
     if not (cl1 < o1 and cl2 > o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
+    touches_retest = (
+        _touches_level(c1, level) or _touches_level(c2, level)
+        if zone_floor is None
+        else _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
+    )
+    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
 
 def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
@@ -792,12 +804,17 @@ def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, 
     mid1 = (o1 + cl1) / 2.0
     return cl3 > mid1 and (_touches_level(c1, level) or _touches_level(c2, level) or _touches_level(c3, level)) and cl3 > level
 
-def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_ceiling: float | None = None) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
     if not (cl1 > o1 and cl2 < o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
-    return lo1 <= lo2 and hi2 <= hi1 and (_touches_level(c1, level) or _touches_level(c2, level))
+    touches_retest = (
+        _touches_level(c1, level) or _touches_level(c2, level)
+        if zone_ceiling is None
+        else _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
+    )
+    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
 
 def _is_bearish_engulfing(
     c1: pd.Series,
@@ -825,7 +842,7 @@ def _is_bearish_engulfing(
     )
 
 
-def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
+def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float, zone_ceiling: float | None = None) -> bool:
     o1, cl1, h1, l1, b1 = _candle_parts(c1); o2, cl2, _, _, _ = _candle_parts(c2)
     c1_body_high = max(o1, cl1)
     # Futures frequently reopen a few ticks below the preceding close even when
@@ -841,7 +858,11 @@ def _is_dark_cloud_cover(c1: pd.Series, c2: pd.Series, level: float) -> bool:
         # Mirror the piercing-line rule: a close below the first candle's open
         # is bearish engulfing/continuation, not dark-cloud cover.
         and cl2 > o1
-        and (_touches_level(c1, level) or _touches_level(c2, level))
+        and (
+            _touches_level(c1, level) or _touches_level(c2, level)
+            if zone_ceiling is None
+            else _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
+        )
         and cl2 < level
     )
 
@@ -2747,6 +2768,53 @@ def _retest_meta_for_side(df: pd.DataFrame, breakout_idx: int, current_side: str
     return 0, "-", "-"
 
 
+def _qualify_retests_after_early_rebreakout(
+    df: pd.DataFrame, breakout_idx: int, current_side: str,
+    events: list[tuple[str, str, str]],
+) -> tuple[list[tuple[str, str, str]], str, str]:
+    """Mark a quick re-breakout unavailable until its four-month cutoff.
+
+    The preceding breakout may be in either direction.  In particular, CBF's
+    2026-04-28 breakdown followed by its 2026-05-21 breakout is an early
+    breakout pair; looking only for a preceding breakout in the current
+    direction incorrectly classified its 2026-08-20 retest as valid.
+    """
+    previous_idx = _find_previous_ichimoku_breakout_idx(df, breakout_idx, current_side)
+    if previous_idx is None:
+        return events, "standard_4m_breakout", "-"
+    previous_date = pd.to_datetime(df.iloc[previous_idx]["Date"])
+    breakout_date = pd.to_datetime(df.iloc[breakout_idx]["Date"])
+    cutoff = previous_date + pd.DateOffset(months=4)
+    if breakout_date >= cutoff:
+        return events, "standard_4m_breakout", "-"
+    # Retests inside the probation window still strengthen the direction and
+    # remain visible/countable. They are not an extra playability condition:
+    # once the cutoff passes, the setup is treated like every other breakout.
+    latest_date = pd.to_datetime(df.iloc[-1]["Date"])
+    if latest_date < cutoff:
+        return events, "early_breakout_waiting_until_4m", cutoff.strftime("%Y-%m-%d")
+    return events, "standard_4m_breakout", "-"
+
+
+def _find_previous_ichimoku_breakout_idx(
+    df: pd.DataFrame, before_idx: int, current_side: str,
+) -> int | None:
+    """Return the breakout that established the preceding opposite-side regime.
+
+    Merely crossing a far cloud edge again during an existing regime is a
+    retest/re-entry, not another breakout. Selecting the last raw crossing made
+    QIA use 2026-06-05 and BEI use 2026-06-19, producing October cutoffs. Search
+    the history truncated immediately before the newest breakout and require
+    the earlier regime to remain respected through that truncation instead.
+    """
+    if before_idx <= 1:
+        return None
+    previous_side = "below" if current_side == "above" else "above"
+    return _find_latest_breakout_idx(
+        df.iloc[:before_idx].reset_index(drop=True), previous_side, min_age_days=0,
+    )
+
+
 
 def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tuple[pd.DataFrame, Path, dict]:
     """Refresh newest data first, then run calculations on full cached CSV history.
@@ -2945,10 +3013,15 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
             bidx = _find_latest_breakout_idx(enriched, result.side, debug_ticker=ticker if _debug_enabled_for(ticker) else None)
             if bidx is not None:
                 result.start_date = pd.to_datetime(enriched.iloc[bidx]["Date"]).strftime("%Y-%m-%d")
-                rc, rd, rp = _retest_meta_for_side(enriched, bidx, result.side, allow_equal_third_close=(instrument == "forex"))
-                result.retest_count = rc
-                result.latest_retest_date = rd
-                result.latest_retest_pattern = rp
+                _status, _depth, _count, _first, events = _detect_ichimoku_retest(
+                    enriched, bidx, result.side, allow_equal_third_close=(instrument == "forex")
+                )
+                events, result.qualification_status, result.valid_retests_from_date = (
+                    _qualify_retests_after_early_rebreakout(enriched, bidx, result.side, events)
+                )
+                result.retest_count = len(events)
+                result.latest_retest_date = events[-1][0] if events else "-"
+                result.latest_retest_pattern = events[-1][1] if events else "-"
             else:
                 result.retest_count = 0
                 result.latest_retest_date = "-"
@@ -3647,36 +3720,18 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
         flip.first_valid_retest_pattern_date,
         flip.retest_events,
     ) = _detect_ichimoku_retest(df, flip_idx, current_side, allow_equal_third_close=allow_equal_third_close)
-    # ``min_days`` is a trading-session approximation, but the strategy's four
-    # months are calendar months. An 80-session run can break slightly early
-    # (for example after 3.8 months). After such a breakout the first patterned
-    # retest following the exact anniversary is probationary; only the second
-    # post-anniversary retest makes the setup actionable.
-    four_month_date = previous_respect_start_ts + pd.DateOffset(months=4)
-    if flip_ts < four_month_date:
-        flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
-        post_rule_events = [
-            event for event in (flip.retest_events or [])
-            if pd.to_datetime(event[0]) >= four_month_date
-        ]
-        flip.retest_events = post_rule_events
-        # Report the real number of post-anniversary retests.  Subtracting the
-        # probationary first retest made a valid two-retest setup display a
-        # count of 1, which was indistinguishable from the still-waiting state.
-        flip.valid_retests_count = len(post_rule_events)
-        flip.first_valid_retest_pattern_date = post_rule_events[1][0] if len(post_rule_events) >= 2 else "-"
-        if not post_rule_events:
-            flip.qualification_status = "early_breakout_waiting_first_post_4m_retest"
-            flip.retest_status = "waiting_for_first_post_4m_retest"
-            flip.retest_depth = "-"
-        elif len(post_rule_events) == 1:
-            flip.qualification_status = "early_breakout_waiting_second_post_4m_retest"
-            flip.retest_status = "waiting_for_second_post_4m_retest"
-            flip.retest_depth = "-"
-        else:
-            flip.qualification_status = "early_breakout_valid_after_second_post_4m_retest"
-            flip.retest_depth = post_rule_events[-1][2]
-            flip.retest_status = f"{flip.retest_depth}_retest_pattern"
+    # Early-breakout probation is measured from the actual preceding breakout,
+    # not from the beginning of the respect run. QIA's preceding breakout is
+    # 2026-02-17 (not the 2026-02-26 respect-window start), so its 2026-06-25
+    # breakout is already standard. Retests remain counted during probation;
+    # after the cutoff the instrument immediately behaves like any other setup.
+    previous_breakout_idx = _find_previous_ichimoku_breakout_idx(df, flip_idx, current_side)
+    if previous_breakout_idx is not None:
+        previous_breakout_ts = pd.to_datetime(df.iloc[previous_breakout_idx]["Date"])
+        four_month_date = previous_breakout_ts + pd.DateOffset(months=4)
+        if flip_ts < four_month_date and end_ts < four_month_date:
+            flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
+            flip.qualification_status = "early_breakout_waiting_until_4m"
     return flip
 
 
@@ -3714,14 +3769,8 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
     touch_idxs: list[int] = []
     for i in post:
         if current_side == "above":
-            # Retests may enter cloud; invalidate only when close breaks to opposite side.
-            if float(df["Close"].iloc[i]) < float(bottom.iloc[i]):
-                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["Low"].iloc[i]) <= float(top.iloc[i])
         else:
-            # Retests may enter cloud; invalidate only when close breaks to opposite side.
-            if float(df["Close"].iloc[i]) > float(top.iloc[i]):
-                return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
             touched = float(df["High"].iloc[i]) >= float(bottom.iloc[i])
         if touched:
             waiting = True
@@ -3729,6 +3778,17 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 
     if not waiting:
         return _breakout_status_for_age(), "-", 0, "-", []
+
+    # A temporary close through the far cloud edge can be the local extreme of
+    # a retest formation and must not erase the whole history when price later
+    # recovers (MDV 2026-08-20/21 and AXON June 2026). Invalidate only while the
+    # latest candle still closes on the opposite side.
+    latest_close = float(df["Close"].iloc[-1])
+    if (
+        (current_side == "above" and latest_close < float(bottom.iloc[-1]))
+        or (current_side == "below" and latest_close > float(top.iloc[-1]))
+    ):
+        return "invalidated_by_close_on_opposite_side", "-", 0, "-", []
 
     first_valid_date = "-"
     first_valid_status = "-"
@@ -3789,8 +3849,11 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if touches_cloud and _is_bullish_hammer(candle):
                         pattern_candidates.append((j, "hammer"))
                 for j in range(1, len(w)):
-                    lvl = float(w["cloud_top"].iloc[j])
-                    floor = float(w["cloud_bottom"].iloc[j])
+                    # Multi-candle formations may straddle a moving Kumo edge.
+                    # Test each candle against the combined two-day cloud zone
+                    # instead of applying only the confirmation day's band.
+                    lvl = max(float(w["cloud_top"].iloc[j - 1]), float(w["cloud_top"].iloc[j]))
+                    floor = min(float(w["cloud_bottom"].iloc[j - 1]), float(w["cloud_bottom"].iloc[j]))
                     if _is_bullish_engulfing(
                         w.iloc[j - 1],
                         w.iloc[j],
@@ -3799,7 +3862,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         zone_floor=floor,
                     ):
                         pattern_candidates.append((j, "bullish_engulfing"))
-                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_bullish_harami(w.iloc[j - 1], w.iloc[j], lvl, zone_floor=floor):
                         pattern_candidates.append((j, "bullish_harami"))
                     if _is_bullish_piercing_line(
                         w.iloc[j - 1],
@@ -3826,8 +3889,8 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                     if touches_cloud and _is_bearish_shooting_star(candle):
                         pattern_candidates.append((j, "bearish_hammer"))
                 for j in range(1, len(w)):
-                    lvl = float(w["cloud_bottom"].iloc[j])
-                    ceiling = float(w["cloud_top"].iloc[j])
+                    lvl = min(float(w["cloud_bottom"].iloc[j - 1]), float(w["cloud_bottom"].iloc[j]))
+                    ceiling = max(float(w["cloud_top"].iloc[j - 1]), float(w["cloud_top"].iloc[j]))
                     if _is_bearish_engulfing(
                         w.iloc[j - 1],
                         w.iloc[j],
@@ -3836,9 +3899,9 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                         zone_ceiling=ceiling,
                     ):
                         pattern_candidates.append((j, "bearish_engulfing"))
-                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_bearish_harami(w.iloc[j - 1], w.iloc[j], lvl, zone_ceiling=ceiling):
                         pattern_candidates.append((j, "bearish_harami"))
-                    if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl):
+                    if _is_dark_cloud_cover(w.iloc[j - 1], w.iloc[j], lvl, zone_ceiling=ceiling):
                         pattern_candidates.append((j, "dark_cloud_cover"))
                 for j in range(2, len(w)):
                     lvl = float(w["cloud_bottom"].iloc[j])
@@ -3896,14 +3959,15 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 
             # One cloud visit is one retest cycle. Select only the pattern at
             # that cycle's best reaction extreme: lowest for a long setup,
-            # highest for a short setup. Lower secondary bearish patterns (or
+            # highest for a short setup. If candidates share that extreme, the
+            # newest formation wins. Lower secondary bearish patterns (or
             # higher secondary bullish patterns) are not additional retests.
             ordered_candidates = sorted(
                 set(pattern_candidates),
                 key=lambda x: (
                     _pattern_reaction_extreme(x) if current_side == "above" else -_pattern_reaction_extreme(x),
+                    -x[0],
                     formation_priority.get(x[1], 99),
-                    x[0],
                 ),
             )
             for pattern_idx, formation in ordered_candidates:
@@ -4208,12 +4272,16 @@ def run_ichimoku_search(target: str) -> int:
     out_md = _daily_report_path("search", group_name)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
+        if row.qualification_status == "early_breakout_waiting_until_4m":
+            # Early re-breakouts belong to WYNIKI 2 while their four-month
+            # probation is active; do not duplicate/promote them in WYNIKI 1.
+            continue
         side_col = "⚪ above" if row.side == "above" else ("🔴 below" if row.side == "below" else row.side)
-        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
+        rows_md.append([row.ticker, side_col, row.respect_days, f"{row.respect_months:.1f}", row.start_date, f"{row.close:.4f}", f"{row.avg_turnover_10d_pln:.0f}" if row.avg_turnover_10d_pln is not None else "-", (row.ichimoku_status if row.ichimoku_status is not None else "-"), row.valid_retests_from_date, row.qualification_status, str(row.retest_count if row.retest_count is not None else "-"), (row.latest_retest_date if row.latest_retest_date is not None else "-"), (row.latest_retest_pattern if row.latest_retest_pattern is not None else "-"), row.ichimoku_risk or "-", row.tk_cross or "-", row.breakout_dynamic or "-", row.cloud_thickness or "-", row.chikou_confirmation or "-", row.kumo_twist or "-", row.tk_plus or "-", row.tenkan_in_cloud or "-", _stooq_chart_url(row.ticker), _build_chart_command(row.ticker, 'ichimoku'), _latest_data_marker(row.latest_candle_date, row.expected_latest_session_date), _fmt_optional_date(row.latest_candle_date), _fmt_optional_date(row.expected_latest_session_date)])
     _write_md_table(
         out_md,
         "WYNIKI",
-        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Retest count","Latest Retest date","Latest Retest pattern","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
+        ["Ticker","Pozycja","Świece","Mies.","Start","Close","Avg10d PLN","Ichimoku status","Valid retests from","4m qualification status","Retest count","Latest Retest date","Latest Retest pattern","Risk","TK cross","Dynamic","Cloud","Chikou","Twist","TK plus","Tenkan in cloud","Link","Python command","Latest data?","Latest date","Expected date"],
         rows_md,
         description="WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).",
     )
