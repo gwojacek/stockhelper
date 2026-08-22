@@ -1102,6 +1102,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "3P ICHIMOKU" in text
     assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
     assert "href='#tab-troj-fibo'" in text
+    assert "href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a>" in text
     assert "window.addEventListener('hashchange',showReportTabFromHash)" in text
     assert "id='tab-favorites' class='tab-panel'" in text
     assert "stockhelper.favorite-instruments.v1" in text
@@ -1124,6 +1125,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "favorites-3p-empty" in text
     assert "No favorites" in text
     assert "favorites-wedge-table" in text
+    assert "const stooqLink=o=>o.stooqUrl?" in text
+    assert "stooqLink(o)+chartButton(o)" in text
     assert "const threePTickers=new Set" in text
     assert "!threePTickers.has(o.ticker)" in text
     assert "favorite-direction-long" in text and "favorite-direction-short" in text
