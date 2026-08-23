@@ -2,6 +2,116 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku"
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
+  "__scanner_breakout_date__": "2026-07-01",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "11.8",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2025-08-20",
+        "2026-07-29",
+        "2028-06-09"
+      ],
+      "y": [
+        544.94,
+        410.26001,
+        131.15722
+      ],
+      "x0": "2025-08-20",
+      "x1": "2028-06-09",
+      "y0": 544.94,
+      "y1": 131.15722,
+      "anchor_x": [
+        "2025-08-20",
+        "2026-07-29"
+      ],
+      "anchor_y": [
+        544.94,
+        410.26001
+      ],
+      "price": 131.15722,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-07-22",
+        "2026-11-27"
+      ],
+      "y": [
+        335.5,
+        606.4
+      ],
+      "x0": "2026-08-04",
+      "x1": "2026-12-11",
+      "y0": 386.23001,
+      "y1": 407.35425,
+      "anchor_x": [
+        "2026-07-22",
+        "2026-08-13"
+      ],
+      "anchor_y": [
+        335.5,
+        387.82001
+      ],
+      "price": 407.35425,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true
+    }
+  ],
+  "high": 544.94,
+  "__wedge_auto_high__": true,
+  "low": 335.5,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 390.53,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "short",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 396.66,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 303500,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 544.94,
+      "plot_price": 544.94,
+      "date": "2025-08-20",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 335.5,
+      "plot_price": 335.5,
+      "date": "2026-07-22",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 390.53,
+      "plot_price": 390.53,
+      "date": "2026-08-17",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 396.66,
+      "plot_price": 396.66,
+      "date": "2026-08-17",
+      "auto_wedge": true
+    }
+  }
 }

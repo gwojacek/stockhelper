@@ -1,0 +1,86 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (8755.03027)",
+      "x0": "2026-08-07",
+      "x1": "2034-07-10",
+      "y0": 8755.03027,
+      "y1": 8755.03027,
+      "price": 8755.03027,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (8556.51226)",
+      "x0": "2026-07-28",
+      "x1": "2034-07-10",
+      "y0": 8556.51226,
+      "y1": 8556.51226,
+      "price": 8556.51226,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (8495.18994)",
+      "x0": "2026-07-23",
+      "x1": "2034-07-10",
+      "y0": 8495.18994,
+      "y1": 8495.18994,
+      "price": 8495.18994,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (8433.86762)",
+      "x0": "2026-07-20",
+      "x1": "2034-07-10",
+      "y0": 8433.86762,
+      "y1": 8433.86762,
+      "price": 8433.86762,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (8235.34961)",
+      "x0": "2026-07-08",
+      "x1": "2034-07-10",
+      "y0": 8235.34961,
+      "y1": 8235.34961,
+      "price": 8235.34961,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-07-08",
+      "x1": "2026-08-07",
+      "y0": 8235.34961,
+      "y1": 8755.03027,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 16953.2,
+  "pip_value": 42.59,
+  "spread_multiplier": 1.9,
+  "spread": 80.92
+}

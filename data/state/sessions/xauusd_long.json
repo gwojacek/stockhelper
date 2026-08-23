@@ -110,8 +110,8 @@
   "__wedge_auto_stop_loss__": true,
   "__scanner_breakout_date__": "2026-08-10",
   "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "0",
-  "__scanner_latest_retest_date__": "2026-08-06",
-  "__scanner_latest_retest_pattern__": "bearish_hammer",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-08-14",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
   "__scanner_previous_respect_months__": "4.8"
 }

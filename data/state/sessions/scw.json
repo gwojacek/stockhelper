@@ -1,11 +1,11 @@
 {
-  "high": null,
-  "low": null,
+  "high": 474,
+  "low": 241,
   "entry": 353.05,
   "stop_loss": 336.23,
   "check_zr_value_fibo_or_elevation": null,
   "line_cross_value": null,
-  "capital": 255000,
+  "capital": 303500,
   "symbol": "SCW.WA",
   "name": "SCW",
   "apply_currency_conversion_fee": false,
@@ -26,27 +26,27 @@
       "label": "Falling wedge upper",
       "x": [
         "2026-04-20",
-        "2026-05-25",
-        "2026-12-11"
+        "2026-08-10",
+        "2027-03-29"
       ],
       "y": [
-        474.0,
-        422.0,
-        112.16667
+        474,
+        306,
+        -49.38462
       ],
       "x0": "2026-04-20",
-      "x1": "2026-12-11",
-      "y0": 474.0,
-      "y1": 112.16667,
+      "x1": "2027-03-29",
+      "y0": 474,
+      "y1": -49.38462,
       "anchor_x": [
         "2026-04-20",
-        "2026-05-25"
+        "2026-08-10"
       ],
       "anchor_y": [
-        474.0,
-        422.0
+        474,
+        306
       ],
-      "price": 112.16667,
+      "price": -49.38462,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -57,27 +57,25 @@
       "label": "Falling wedge lower",
       "x": [
         "2026-05-19",
-        "2026-06-22",
-        "2026-12-11"
+        "2026-10-12"
       ],
       "y": [
-        315.0,
-        284.0,
-        116.86957
+        315,
+        169
       ],
-      "x0": "2026-05-19",
-      "x1": "2026-12-11",
-      "y0": 315.0,
-      "y1": 116.86957,
+      "x0": "2026-06-22",
+      "x1": "2027-02-01",
+      "y0": 284,
+      "y1": 40.19048,
       "anchor_x": [
         "2026-05-19",
-        "2026-06-22"
+        "2026-07-21"
       ],
       "anchor_y": [
-        315.0,
-        284.0
+        315,
+        252
       ],
-      "price": 116.86957,
+      "price": 40.19048,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -89,16 +87,26 @@
       "plot_price": 336.23,
       "date": "2026-06-01"
     },
-    "entry": {
-      "price": 353.05,
-      "plot_price": 353.05,
-      "date": "2026-06-03"
+    "high": {
+      "price": 474,
+      "plot_price": 474,
+      "date": "2026-04-20",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 241,
+      "plot_price": 241,
+      "date": "2026-07-29",
+      "auto_wedge": true
     }
   },
   "__journal_source_technique__": "Ichimoku",
+  "__wedge_auto_high__": true,
+  "__wedge_auto_low__": true,
+  "calculation_currency": "PLN",
   "__scanner_breakout_date__": "2026-05-28",
   "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "3",
+  "__scanner_retest_count__": "2",
   "__scanner_latest_retest_date__": "2026-06-12",
   "__scanner_latest_retest_pattern__": "bearish_engulfing",
   "__scanner_previous_respect_months__": "5.3"

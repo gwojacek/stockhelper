@@ -2,11 +2,75 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "__scanner_breakout_date__": "2026-04-08",
   "__scanner_breakout_direction__": "long",
   "__scanner_retest_count__": "2",
-  "__scanner_latest_retest_date__": "2026-08-10",
-  "__scanner_latest_retest_pattern__": "hammer",
-  "__journal_source_technique__": "Ichimoku"
+  "__scanner_latest_retest_date__": "2026-08-21",
+  "__scanner_latest_retest_pattern__": "bullish_engulfing",
+  "__journal_source_technique__": "Kliny",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-06-24",
+        "2026-08-05",
+        "2026-12-11"
+      ],
+      "y": [
+        128.4,
+        126.0,
+        118.64
+      ],
+      "x0": "2026-06-24",
+      "x1": "2026-12-11",
+      "y0": 128.4,
+      "y1": 118.64,
+      "anchor_x": [
+        "2026-06-24",
+        "2026-08-05"
+      ],
+      "anchor_y": [
+        128.4,
+        126.0
+      ],
+      "price": 118.64,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-06-24",
+        "2026-07-23",
+        "2026-12-11"
+      ],
+      "y": [
+        119.2,
+        119.6,
+        121.52381
+      ],
+      "x0": "2026-06-24",
+      "x1": "2026-12-11",
+      "y0": 119.2,
+      "y1": 121.52381,
+      "anchor_x": [
+        "2026-06-24",
+        "2026-07-23"
+      ],
+      "anchor_y": [
+        119.2,
+        119.6
+      ],
+      "price": 121.52381,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    }
+  ]
 }

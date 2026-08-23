@@ -2,8 +2,8 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Kliny",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -92,5 +92,9 @@
   "__wedge_auto_high__": true,
   "low": 459,
   "__wedge_auto_low__": true,
-  "position_type": "short"
+  "position_type": "short",
+  "__scanner_breakout_date__": "2026-08-06",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "3.8"
 }

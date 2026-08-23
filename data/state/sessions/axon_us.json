@@ -2,8 +2,8 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
@@ -83,9 +83,9 @@
     }
   ],
   "__scanner_breakout_date__": "2026-06-01",
-  "__scanner_retest_count__": "2",
-  "__scanner_latest_retest_date__": "2026-06-26",
-  "__scanner_latest_retest_pattern__": "bullish_piercing_line",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-06-18",
+  "__scanner_latest_retest_pattern__": "hammer",
   "__scanner_previous_respect_months__": "4.3",
   "__scanner_breakout_direction__": "long"
 }

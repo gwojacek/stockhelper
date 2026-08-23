@@ -2,10 +2,9 @@
   "high": 61.95,
   "low": 35.5,
   "entry": 39.12,
-  "stop_loss": 37.99,
   "check_zr_value_fibo_or_elevation": 52,
   "line_cross_value": null,
-  "capital": 255000,
+  "capital": 303500,
   "symbol": "TXT.WA",
   "name": "Txt",
   "apply_currency_conversion_fee": false,
@@ -18,66 +17,80 @@
   "spread": 0,
   "drawn_objects": [
     {
-      "id": "auto-wedge-upper",
-      "type": "wedge",
-      "label": "Falling wedge upper",
-      "x": [
-        "2025-10-15",
-        "2026-05-26",
-        "2027-08-30"
-      ],
-      "y": [
-        51.4255,
-        43.46,
-        25.92521
-      ],
-      "x0": "2025-10-15",
-      "x1": "2027-08-30",
-      "y0": 51.4255,
-      "y1": 25.92521,
-      "anchor_x": [
-        "2025-10-15",
-        "2026-05-26"
-      ],
-      "anchor_y": [
-        51.4255,
-        43.46
-      ],
-      "price": 25.92521,
-      "color": "#dc2626",
-      "group_id": "auto-wedge",
-      "free_extension": false
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (54.80)",
+      "x0": "2026-08-12",
+      "x1": "2034-07-10",
+      "y0": 54.8,
+      "y1": 54.8,
+      "price": 54.8,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
-      "id": "auto-wedge-lower",
-      "type": "wedge",
-      "label": "Falling wedge lower",
-      "x": [
-        "2026-02-24",
-        "2026-03-13",
-        "2026-10-28"
-      ],
-      "y": [
-        35.5,
-        35.8,
-        39.46923
-      ],
-      "x0": "2026-02-24",
-      "x1": "2026-10-28",
-      "y0": 35.5,
-      "y1": 39.46923,
-      "anchor_x": [
-        "2026-02-24",
-        "2026-03-13"
-      ],
-      "anchor_y": [
-        35.5,
-        35.8
-      ],
-      "price": 39.46923,
-      "color": "#2563eb",
-      "group_id": "auto-wedge",
-      "free_extension": false
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (48.28)",
+      "x0": "2026-07-17",
+      "x1": "2034-07-10",
+      "y0": 48.28,
+      "y1": 48.28,
+      "price": 48.28,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (46.27)",
+      "x0": "2026-07-10",
+      "x1": "2034-07-10",
+      "y0": 46.27,
+      "y1": 46.27,
+      "price": 46.27,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (44.25)",
+      "x0": "2026-07-02",
+      "x1": "2034-07-10",
+      "y0": 44.25,
+      "y1": 44.25,
+      "price": 44.25,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (37.74)",
+      "x0": "2026-06-08",
+      "x1": "2034-07-10",
+      "y0": 37.74,
+      "y1": 37.74,
+      "price": 37.74,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-08",
+      "x1": "2026-08-12",
+      "y0": 37.74,
+      "y1": 54.8,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
     }
   ],
   "level_points": {
@@ -91,11 +104,6 @@
       "plot_price": 35.45,
       "date": "2026-02-24T00:00:00"
     },
-    "stop_loss": {
-      "price": 37.99,
-      "plot_price": 37.99,
-      "date": "2026-04-24T00:00:00"
-    },
     "entry": {
       "price": 39.12,
       "plot_price": 39.12,
@@ -107,12 +115,88 @@
       "date": "2026-04-28T00:00:00"
     }
   },
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
-  "__scanner_breakout_date__": "2026-04-15",
-  "__scanner_retest_count__": "4",
-  "__scanner_latest_retest_date__": "2026-05-14",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__scanner_previous_respect_months__": "7.6",
-  "__scanner_breakout_direction__": "long"
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "__half_points__": [],
+  "calculation_currency": "PLN",
+  "position_calculations": {
+    "basics": {
+      "avg_turnover_10d": 4780201.69,
+      "entry": 39.12,
+      "max_capital": 47802.02,
+      "max_capital_currency": "PLN",
+      "max_capital_is_avg10d": true,
+      "stop_loss": 38.31
+    },
+    "currency": "PLN",
+    "fx_conversion_fee_applicable": false,
+    "fx_conversion_fee_enabled": false,
+    "fx_conversion_fee_pct": 1,
+    "instrument_type": "stock",
+    "ok": true,
+    "position_type": "long",
+    "profit": null,
+    "profit_percent": null,
+    "risk_reward": null,
+    "rows": [
+      {
+        "capital_used": 47765.52,
+        "loss_percent": 0.33,
+        "position_size": 1221,
+        "position_unit": "Shares",
+        "potential_loss": 989.01,
+        "risk": 0.005,
+        "risk_label": "0.5%"
+      },
+      {
+        "capital_used": 47765.52,
+        "loss_percent": 0.33,
+        "position_size": 1221,
+        "position_unit": "Shares",
+        "potential_loss": 989.01,
+        "risk": 0.01,
+        "risk_label": "1.0%"
+      },
+      {
+        "capital_used": 47765.52,
+        "loss_percent": 0.33,
+        "position_size": 1221,
+        "position_unit": "Shares",
+        "potential_loss": 989.01,
+        "risk": 0.015,
+        "risk_label": "1.5%"
+      },
+      {
+        "capital_used": 47765.52,
+        "loss_percent": 0.33,
+        "position_size": 1221,
+        "position_unit": "Shares",
+        "potential_loss": 989.01,
+        "risk": 0.02,
+        "risk_label": "2.0%"
+      },
+      {
+        "capital_used": 47765.52,
+        "loss_percent": 0.33,
+        "position_size": 1221,
+        "position_unit": "Shares",
+        "potential_loss": 989.01,
+        "risk": 0.025,
+        "risk_label": "2.5%"
+      },
+      {
+        "capital_used": 47765.52,
+        "loss_percent": 0.33,
+        "position_size": 1221,
+        "position_unit": "Shares",
+        "potential_loss": 989.01,
+        "risk": 0.03,
+        "risk_label": "3.0%"
+      }
+    ],
+    "take_profit": null,
+    "warnings": [],
+    "zr_ratio": 15.9
+  },
+  "spread_pips": null
 }

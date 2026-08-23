@@ -1,11 +1,10 @@
 {
-  "high": 31.76,
-  "low": 12.62,
-  "entry": 21.78,
+  "high": 25.3,
+  "low": 14.98,
   "stop_loss": 20.44,
   "check_zr_value_fibo_or_elevation": null,
   "line_cross_value": null,
-  "capital": 241000,
+  "capital": 303500,
   "symbol": "BMC.WA",
   "name": "Bumech",
   "apply_currency_conversion_fee": false,
@@ -18,28 +17,28 @@
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-04-07",
-        "2026-07-21",
-        "2027-02-18"
+        "2026-04-13",
+        "2026-08-06",
+        "2027-04-06"
       ],
       "y": [
-        29.4,
-        16.2,
-        -11.28493
+        25.3,
+        18.3,
+        3.34938
       ],
-      "x0": "2026-04-07",
-      "x1": "2027-02-18",
-      "y0": 29.4,
-      "y1": -11.28493,
+      "x0": "2026-04-13",
+      "x1": "2027-04-06",
+      "y0": 25.3,
+      "y1": 3.34938,
       "anchor_x": [
-        "2026-04-07",
-        "2026-07-21"
+        "2026-04-13",
+        "2026-08-06"
       ],
       "anchor_y": [
-        29.4,
-        16.2
+        25.3,
+        18.3
       ],
-      "price": -11.28493,
+      "price": 3.34938,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -49,28 +48,26 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-06-10",
-        "2026-06-26",
-        "2026-11-18"
+        "2026-02-06",
+        "2027-01-05"
       ],
       "y": [
-        16.02,
-        15.34,
-        9.50333
+        17.62,
+        11.84
       ],
-      "x0": "2026-06-10",
-      "x1": "2026-11-18",
-      "y0": 16.02,
-      "y1": 9.50333,
+      "x0": "2026-06-26",
+      "x1": "2027-01-05",
+      "y0": 15.34,
+      "y1": 9.175,
       "anchor_x": [
-        "2026-06-10",
-        "2026-06-26"
+        "2026-02-06",
+        "2026-07-08"
       ],
       "anchor_y": [
-        16.02,
-        15.34
+        17.62,
+        14.98
       ],
-      "price": 9.50333,
+      "price": 9.175,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -160,5 +157,20 @@
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
-  "level_points": {}
+  "level_points": {
+    "high": {
+      "price": 25.3,
+      "plot_price": 25.3,
+      "date": "2026-04-13",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 14.98,
+      "plot_price": 14.98,
+      "date": "2026-07-08",
+      "auto_wedge": true
+    }
+  },
+  "__wedge_auto_high__": true,
+  "__wedge_auto_low__": true
 }
