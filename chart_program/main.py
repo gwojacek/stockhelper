@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scanner-breakout-direction")
     parser.add_argument("--scanner-pattern-date")
     parser.add_argument("--scanner-pattern-name")
+    parser.add_argument("--scanner-pattern-direction", choices=["long", "short"])
     parser.add_argument("--scanner-retest-count")
     parser.add_argument("--scanner-latest-retest-date")
     parser.add_argument("--scanner-latest-retest-pattern")
@@ -97,6 +98,7 @@ def main() -> int:
         ("--scanner-breakout-direction", args.scanner_breakout_direction),
         ("--scanner-pattern-date", args.scanner_pattern_date),
         ("--scanner-pattern-name", args.scanner_pattern_name),
+        ("--scanner-pattern-direction", args.scanner_pattern_direction),
         ("--scanner-retest-count", args.scanner_retest_count),
         ("--scanner-latest-retest-date", args.scanner_latest_retest_date),
         ("--scanner-latest-retest-pattern", args.scanner_latest_retest_pattern),

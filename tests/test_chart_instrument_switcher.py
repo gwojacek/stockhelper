@@ -55,3 +55,13 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert "P.favoriteTicker || P.sourceTicker || P.symbol" in source
     assert "setInterval(syncFavoritesFromReport, 1500)" in source
     assert '"favoriteTicker": os.environ.get("STOCKHELPER_FAVORITE_TICKER", "")' in source
+
+
+
+def test_position_calculation_displays_one_percent_avg10d_with_market_currency():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "max_capital = avg_turnover_10d * 0.01" in source
+    assert '"max_capital_currency": _instrument_currency()' in source
+    assert "Max capital to engage (1% Avg10d)" in source
+    assert "money(b.max_capital, b.max_capital_currency || currency)" in source

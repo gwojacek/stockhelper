@@ -581,8 +581,21 @@ def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
     assert "const lowIsAuto = forceScannerLevels ||" in ui_source
     assert "const stopLossIsAuto = forceScannerLevels ||" in ui_source
     assert "const scannerWedgePreloaded = initialScannerDrawnObjects.some" in ui_source
-    assert "applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();" in ui_source
+    assert "applyWedgeDerivedLevels(scannerWedgePreloaded); applyScannerSetupStopLoss(true); applyInstrumentControls(); render();" in ui_source
     assert ui_source.count("applyWedgeDerivedLevels(true);") >= 2
+
+
+def test_scanner_chart_derives_ichimoku_and_fibo_stop_losses():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function applyScannerSetupStopLoss(forceScannerLevels = false)" in ui_source
+    assert "source = 'Ichimoku breakout cloud border'" in ui_source
+    assert "point = scannerPatternExtreme(retestDate, retestPattern, direction)" in ui_source
+    assert "point = scannerPatternExtreme(patternDate, patternName, 'long')" in ui_source
+    assert "patternDirection === 'long'" in ui_source
+    assert "__scanner_pattern_direction__" in ui_source
+    assert "levelPoints.stop_loss = {{price:point.price, plot_price:point.price, date:point.date, auto_scanner:true, source}}" in ui_source
+    assert ui_source.count("applyScannerSetupStopLoss(true);") >= 2
 
 
 def test_fibo_anchor_requires_confirmed_local_trend_bottom():

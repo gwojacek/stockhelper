@@ -120,6 +120,7 @@ def _parse_args(raw_args=None):
     parser.add_argument("--scanner-breakout-direction")
     parser.add_argument("--scanner-pattern-date")
     parser.add_argument("--scanner-pattern-name")
+    parser.add_argument("--scanner-pattern-direction", choices=["long", "short"])
     parser.add_argument("--scanner-retest-count")
     parser.add_argument("--scanner-latest-retest-date")
     parser.add_argument("--scanner-latest-retest-pattern")
@@ -593,6 +594,7 @@ def run_level_selector(raw_args=None):
         ("__scanner_breakout_direction__", args.scanner_breakout_direction),
         ("__scanner_pattern_date__", args.scanner_pattern_date),
         ("__scanner_pattern_name__", args.scanner_pattern_name),
+        ("__scanner_pattern_direction__", args.scanner_pattern_direction),
         ("__scanner_retest_count__", args.scanner_retest_count),
         ("__scanner_latest_retest_date__", args.scanner_latest_retest_date),
         ("__scanner_latest_retest_pattern__", args.scanner_latest_retest_pattern),
