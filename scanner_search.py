@@ -5450,12 +5450,32 @@ def _select_fibo_long_impulse_base(
         )
         return None
 
-    # Include the five candles immediately before the detected incline.  This
-    # captures the actual extreme under the first breakout candles without pulling the anchor
-    # back into an older month-long range (or to the second rising candle).
+    # The trend detector can wake up only after several confirmation/breakout
+    # candles.  Looking back just five bars consequently anchored fast, stair-
+    # step moves in the middle of the incline (SNT/OPN), even though their launch
+    # low was still part of the same leg.  Search one trading month before the
+    # detected start.  When the minimum lands right on the left edge, widen by
+    # one week: an edge minimum is usually a clipped bottom, not evidence that
+    # the next candle began a new impulse.  The bounded expansion deliberately
+    # remains much shorter than the sideways-reset windows above, so it cannot
+    # pull a new formation back into an obsolete base.
     orig_i_start = int(i_start)
-    pre_start_left = max(0, i_start - 5)
-    fib_start_idx = int(low.iloc[pre_start_left:i_start + 1].idxmin())
+    launch_lookback = 20
+    launch_extension = 5
+
+    def _latest_low_idx(left_idx: int, right_idx: int) -> int:
+        values = low.iloc[left_idx:right_idx + 1]
+        minimum = float(values.min())
+        # Equal printed lows occur frequently in exchange data.  The later one
+        # is the actual launch when price revisits the floor immediately before
+        # breaking out (CRI), rather than the same quote inside the old base.
+        return int(values[values == minimum].index[-1])
+
+    pre_start_left = max(0, i_start - launch_lookback)
+    initial_start_idx = _latest_low_idx(pre_start_left, i_start)
+    if initial_start_idx <= pre_start_left + 1 and pre_start_left > 0:
+        pre_start_left = max(0, pre_start_left - launch_extension)
+    fib_start_idx = _latest_low_idx(pre_start_left, i_start)
     _log(
         f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
         f"(peak_idx={i_peak}) -> idx={fib_start_idx}."

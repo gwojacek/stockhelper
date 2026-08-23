@@ -303,7 +303,7 @@ def test_long_fibo_sideways_rules_apply_to_impulse_not_correction():
     assert "rejecting any flat sub-window dropped MCHP" in source
     base_start = source.index("def _select_fibo_long_impulse_base")
     base_end = source.index("def _find_fibo_3p_steep_setup", base_start)
-    assert "pre_start_left = max(0, i_start - 5)" in source[base_start:base_end]
+    assert "launch_lookback = 20" in source[base_start:base_end]
 
 
 def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
@@ -644,6 +644,33 @@ def test_sbux_june_5_bottom_is_not_discarded_as_sideways_spike():
     ending_close = statistics.median(float(row["Close"]) for row in rows[-3:])
     assert bottom == min(local_lows)
     assert (ending_close - bottom) / bottom > 0.10
+
+
+def test_fibo_launch_search_reaches_real_bottom_before_confirmed_incline():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[
+        source.index("def _select_fibo_long_impulse_base"):
+        source.index("def _find_fibo_3p_steep_setup")
+    ]
+    assert "launch_lookback = 20" in selector
+    assert "launch_extension = 5" in selector
+    assert "initial_start_idx <= pre_start_left + 1" in selector
+
+    cases = [
+        ("data/csv/stocks/CRI_WA.csv", "2025-12-23", "2025-12-18"),
+        ("data/csv/stocks/SNT_WA.csv", "2026-06-23", "2026-06-01"),
+        ("data/csv/stocks/OPN_WA.csv", "2026-06-22", "2026-05-19"),
+    ]
+    for path, detected_start, expected_bottom in cases:
+        with Path(path).open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        detected_idx = next(idx for idx, row in enumerate(rows) if row["Date"] == detected_start)
+        left = max(0, detected_idx - 20)
+        initial_idx = min(range(left, detected_idx + 1), key=lambda idx: (float(rows[idx]["Low"]), -idx))
+        if initial_idx <= left + 1 and left > 0:
+            left = max(0, left - 5)
+        bottom_idx = min(range(left, detected_idx + 1), key=lambda idx: (float(rows[idx]["Low"]), -idx))
+        assert rows[bottom_idx]["Date"] == expected_bottom
 
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():
@@ -1504,7 +1531,7 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert '_find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)' in scanner_source
     assert "min_gain_pct = 0.025 if _mirrored_short else 0.18" in scanner_source
     assert "sideways_band_pct=0.02 if _mirrored_short else 0.08" in scanner_source
-    assert "pre_start_left = max(0, i_start - 5)" in scanner_source
+    assert "launch_lookback = 20" in scanner_source
     assert "shortest_regular_by_direction" in scanner_source
     assert "shortest_regular_by_direction[item.direction]" in scanner_source
 
