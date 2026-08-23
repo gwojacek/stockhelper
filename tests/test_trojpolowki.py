@@ -394,6 +394,7 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     command = mod._chart_command_for_row(row)
     assert "--scanner-pattern-date 2026-08-05" in command
     assert "--scanner-pattern-date 2026-08-04" not in command
+    assert "--scanner-pattern-direction long" in command
 
     commodity = mod.ScannerRow(
         market="COMMODITIES", scanner="FIBO", category="valid", ticker="OIL",
@@ -408,6 +409,7 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     assert "python run -c CL.F" in commodity_command
     assert "--scanner-pattern-date 2026-07-24" in commodity_command
     assert "--scanner-pattern-name dark_cloud_cover" in commodity_command
+    assert "--scanner-pattern-direction short" in commodity_command
 
     assert '["Ticker","Dir","Pattern","Pattern date","Incline"' in source
 
@@ -581,8 +583,43 @@ def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
     assert "const lowIsAuto = forceScannerLevels ||" in ui_source
     assert "const stopLossIsAuto = forceScannerLevels ||" in ui_source
     assert "const scannerWedgePreloaded = initialScannerDrawnObjects.some" in ui_source
-    assert "applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render();" in ui_source
+    assert "applyWedgeDerivedLevels(scannerWedgePreloaded); applyScannerSetupStopLoss(true); applyInstrumentControls(); render();" in ui_source
     assert ui_source.count("applyWedgeDerivedLevels(true);") >= 2
+
+
+def test_scanner_chart_derives_ichimoku_and_fibo_stop_losses():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function applyScannerSetupStopLoss(forceScannerLevels = false)" in ui_source
+    assert "source = 'Ichimoku breakout cloud border'" in ui_source
+    assert "point = scannerPatternExtreme(retestDate, retestPattern, direction)" in ui_source
+    assert "point = scannerPatternExtreme(patternDate, patternName, patternDirection)" in ui_source
+    assert "latestRow.idx - breakoutRow.idx <= 10" in ui_source
+    assert "latestRow.idx - retestRow.idx <= 10" in ui_source
+    assert "function scannerStopWasHit(point, direction)" in ui_source
+    assert "ohlc.slice(setupRow.idx + 1).some" in ui_source
+    assert "Number(row.high) >= stop" in ui_source
+    assert "Number(row.low) <= stop" in ui_source
+    assert "source.startsWith('Ichimoku') && scannerStopWasHit(point, direction)" in ui_source
+    assert "crossesBothBorders" in ui_source
+    assert "source = 'Ichimoku breakout candle'" in ui_source
+    assert "const pip = Math.pow(10, -Math.max(0, precision))" in ui_source
+    assert "value - (3 * pip)" in ui_source
+    assert "if (forceScannerLevels && (scannerFiboLoaded || scannerIchimokuLoaded)) clearScannerStopLoss()" in ui_source
+    assert "['long', 'short'].includes(patternDirection)" in ui_source
+    assert "value + (3 * pip)" in ui_source
+    assert "__scanner_pattern_direction__" in ui_source
+    assert "levelPoints.stop_loss = {{price:point.price, plot_price:point.price, date:point.date, auto_scanner:true, source}}" in ui_source
+    assert ui_source.count("applyScannerSetupStopLoss(true);") >= 2
+
+
+def test_scanner_chart_drops_metadata_from_the_previous_technique():
+    selector_source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+
+    assert "scanner_context_requested = bool(" in selector_source
+    assert "for key, _ in scanner_metadata:" in selector_source
+    assert "existing.pop(key, None)" in selector_source
+    assert "Never let Ichimoku scanner" in selector_source
 
 
 def test_fibo_anchor_requires_confirmed_local_trend_bottom():
@@ -1215,6 +1252,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Hide 3P info" not in text
     assert "global-hide-info" not in text
     assert "troj-info-slider" in text
+    assert "troj-info-lock" not in text
+    assert "stockhelper-troj-info-level" in text
+    assert "localStorage.setItem" in text
+    assert "restoreTrojInfoPreference" in text
     assert "troj-status-info" in text
     assert "troj-detail-info" in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Data wybicia</th>" in text

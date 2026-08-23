@@ -16,7 +16,7 @@
       ],
       "y": [
         11.2,
-        11.0,
+        11,
         10.16
       ],
       "x0": "2026-06-05",
@@ -29,7 +29,7 @@
       ],
       "anchor_y": [
         11.2,
-        11.0
+        11
       ],
       "price": 10.16,
       "color": "#dc2626",
@@ -41,31 +41,73 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-04-20",
-        "2026-05-20",
-        "2026-12-04"
+        "2026-07-28",
+        "2026-09-10"
       ],
       "y": [
-        9.99,
-        10.02,
-        10.22143
+        10.06,
+        11.17
       ],
       "x0": "2026-04-20",
       "x1": "2026-12-04",
       "y0": 9.99,
       "y1": 10.22143,
       "anchor_x": [
-        "2026-04-20",
+        "2026-07-28",
         "2026-05-20"
       ],
       "anchor_y": [
-        9.99,
+        10.06,
         10.02
       ],
       "price": 10.22143,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": false
+      "free_extension": true
     }
-  ]
+  ],
+  "high": 11.2,
+  "__wedge_auto_high__": true,
+  "low": 10.06,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 10.8,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "long",
+  "__wedge_auto_position_type__": true,
+  "stop_loss": 10.64,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "capital": 303500,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 11.2,
+      "plot_price": 11.2,
+      "date": "2026-06-05",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 10.06,
+      "plot_price": 10.06,
+      "date": "2026-07-28",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 10.8,
+      "plot_price": 10.8,
+      "date": "2026-08-14",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 10.64,
+      "plot_price": 10.64,
+      "date": "2026-08-14",
+      "auto_wedge": true
+    }
+  }
 }

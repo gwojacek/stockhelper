@@ -1,14 +1,8 @@
 {
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Kliny",
-  "lot_cost": 48275.26,
-  "pip_value": 3.73,
-  "__scanner_breakout_date__": "2026-08-06",
-  "__scanner_retest_count__": "2",
-  "__scanner_latest_retest_date__": "2026-08-12",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_previous_respect_months__": "5.3",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
+  "lot_cost": 49795.38,
+  "pip_value": 3.69,
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -95,5 +89,11 @@
       "date": "2026-06-24",
       "auto_wedge": true
     }
-  }
+  },
+  "__scanner_breakout_date__": "2026-08-06",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-08-19",
+  "__scanner_latest_retest_pattern__": "bullish_engulfing",
+  "__scanner_previous_respect_months__": "5.3"
 }

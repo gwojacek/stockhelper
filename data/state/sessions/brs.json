@@ -42,11 +42,11 @@
       "label": "Falling wedge lower",
       "x": [
         "2026-04-23",
-        "2026-12-24"
+        "2026-12-31"
       ],
       "y": [
         4.35,
-        5.64
+        5.53
       ],
       "x0": "2026-07-08",
       "x1": "2026-12-08",
@@ -70,14 +70,8 @@
   "__wedge_auto_high__": true,
   "low": 4.35,
   "__wedge_auto_low__": true,
-  "line_cross_value": 4.97,
-  "__wedge_auto_line_cross__": true,
-  "position_type": "short",
-  "__wedge_auto_position_type__": true,
-  "stop_loss": 5.11,
-  "__wedge_auto_stop_loss__": true,
   "__half_points__": [],
-  "capital": 320000,
+  "capital": 303500,
   "calculation_currency": "PLN",
   "lot_cost": 0,
   "pip_value": 0,
@@ -96,18 +90,7 @@
       "plot_price": 4.35,
       "date": "2026-04-23",
       "auto_wedge": true
-    },
-    "line_cross_value": {
-      "price": 4.97,
-      "plot_price": 4.97,
-      "date": "2026-08-18",
-      "auto_wedge": true
-    },
-    "stop_loss": {
-      "price": 5.11,
-      "plot_price": 5.11,
-      "date": "2026-08-18",
-      "auto_wedge": true
     }
-  }
+  },
+  "position_type": "short"
 }

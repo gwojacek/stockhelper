@@ -1,0 +1,88 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (126.65)",
+      "x0": "2026-07-15",
+      "x1": "2034-07-08",
+      "y0": 126.65,
+      "y1": 126.65,
+      "price": 126.65,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (124.2243)",
+      "x0": "2026-07-01",
+      "x1": "2034-07-08",
+      "y0": 124.2243,
+      "y1": 124.2243,
+      "price": 124.2243,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (123.475)",
+      "x0": "2026-06-29",
+      "x1": "2034-07-08",
+      "y0": 123.475,
+      "y1": 123.475,
+      "price": 123.475,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (122.7257)",
+      "x0": "2026-06-24",
+      "x1": "2034-07-08",
+      "y0": 122.7257,
+      "y1": 122.7257,
+      "price": 122.7257,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (120.3)",
+      "x0": "2026-06-10",
+      "x1": "2034-07-08",
+      "y0": 120.3,
+      "y1": 120.3,
+      "price": 120.3,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-10",
+      "x1": "2026-07-15",
+      "y0": 120.3,
+      "y1": 126.65,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__scanner_breakout_date__": "2026-04-14",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "0"
+}

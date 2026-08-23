@@ -2,35 +2,35 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-04-20",
-        "2026-07-06",
-        "2026-12-14"
+        "2026-04-27",
+        "2026-08-05",
+        "2028-02-01"
       ],
       "y": [
-        121.094,
-        99.0,
-        51.06019
+        114.313,
+        98.3,
+        9.31347
       ],
-      "x0": "2026-04-20",
-      "x1": "2026-12-14",
-      "y0": 121.094,
-      "y1": 51.06019,
+      "x0": "2026-04-27",
+      "x1": "2028-02-01",
+      "y0": 114.313,
+      "y1": 9.31347,
       "anchor_x": [
-        "2026-04-20",
-        "2026-07-06"
+        "2026-04-27",
+        "2026-08-05"
       ],
       "anchor_y": [
-        121.094,
-        99.0
+        114.313,
+        98.3
       ],
-      "price": 51.06019,
+      "price": 9.31347,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -41,33 +41,33 @@
       "label": "Falling wedge lower",
       "x": [
         "2026-06-12",
-        "2026-06-24",
-        "2026-11-06"
+        "2026-07-21",
+        "2028-02-01"
       ],
       "y": [
         90.0938,
-        90.3,
-        92.80017
+        85.0,
+        9.5363
       ],
       "x0": "2026-06-12",
-      "x1": "2026-11-06",
+      "x1": "2028-02-01",
       "y0": 90.0938,
-      "y1": 92.80017,
+      "y1": 9.5363,
       "anchor_x": [
         "2026-06-12",
-        "2026-06-24"
+        "2026-07-21"
       ],
       "anchor_y": [
         90.0938,
-        90.3
+        85.0
       ],
-      "price": 92.80017,
+      "price": 9.5363,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
     }
   ],
-  "__journal_source_technique__": "Ichimoku",
+  "__journal_source_technique__": "Kliny",
   "__scanner_breakout_date__": "2026-04-28",
   "__scanner_breakout_direction__": "short",
   "__scanner_retest_count__": "1",

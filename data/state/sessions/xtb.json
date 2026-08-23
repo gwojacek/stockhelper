@@ -9,7 +9,7 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
@@ -88,5 +88,10 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__journal_source_technique__": "Fibo"
+  "__journal_source_technique__": "Ichimoku",
+  "__scanner_breakout_date__": "2025-12-09",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-05-28",
+  "__scanner_latest_retest_pattern__": "bullish_harami"
 }

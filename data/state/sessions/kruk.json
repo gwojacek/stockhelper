@@ -1,9 +1,8 @@
 {
-  "high": 423.2,
-  "low": 328.9,
-  "entry": 397.15,
+  "high": 473.47,
+  "low": 392.2,
   "stop_loss": 382.495,
-  "capital": 242000,
+  "capital": 303500,
   "symbol": "KRU.WA",
   "name": "Kruk",
   "apply_currency_conversion_fee": false,
@@ -17,28 +16,28 @@
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-04-27",
-        "2026-06-30",
-        "2026-11-30"
+        "2026-04-17",
+        "2026-08-04",
+        "2027-03-19"
       ],
       "y": [
-        458.02,
-        431.3,
-        365.10727
+        473.472,
+        445.8,
+        385.65952
       ],
-      "x0": "2026-04-27",
-      "x1": "2026-11-30",
-      "y0": 458.02,
-      "y1": 365.10727,
+      "x0": "2026-04-17",
+      "x1": "2027-03-19",
+      "y0": 473.472,
+      "y1": 385.65952,
       "anchor_x": [
-        "2026-04-27",
-        "2026-06-30"
+        "2026-04-17",
+        "2026-08-04"
       ],
       "anchor_y": [
-        458.02,
-        431.3
+        473.472,
+        445.8
       ],
-      "price": 365.10727,
+      "price": 385.65952,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -48,31 +47,52 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-06-03",
         "2026-06-23",
-        "2026-11-18"
+        "2026-09-30"
       ],
       "y": [
-        386.7,
         392.2,
-        437.04615
+        436.42
       ],
-      "x0": "2026-06-03",
-      "x1": "2026-11-18",
-      "y0": 386.7,
-      "y1": 437.04615,
+      "x0": "2026-06-26",
+      "x1": "2026-12-11",
+      "y0": 398.3,
+      "y1": 444.40526,
       "anchor_x": [
-        "2026-06-03",
-        "2026-06-23"
+        "2026-06-23",
+        "2026-07-23"
       ],
       "anchor_y": [
-        386.7,
-        392.2
+        392.2,
+        405.6
       ],
-      "price": 437.04615,
+      "price": 444.40526,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
     }
-  ]
+  ],
+  "__wedge_auto_high__": true,
+  "__wedge_auto_low__": true,
+  "calculation_currency": "PLN",
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 473.47,
+      "plot_price": 473.47,
+      "date": "2026-04-17",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 392.2,
+      "plot_price": 392.2,
+      "date": "2026-06-23",
+      "auto_wedge": true
+    }
+  }
 }

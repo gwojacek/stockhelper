@@ -5,72 +5,90 @@
   "__show_ichimoku__": false,
   "drawn_objects": [
     {
-      "id": "auto-wedge-upper",
-      "type": "wedge",
-      "label": "Falling wedge upper",
-      "x": [
-        "2026-06-09",
-        "2026-08-07",
-        "2026-12-14"
-      ],
-      "y": [
-        95.1,
-        82.5,
-        55.83488
-      ],
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (95.10)",
       "x0": "2026-06-09",
-      "x1": "2026-12-14",
+      "x1": "2034-07-10",
       "y0": 95.1,
-      "y1": 55.83488,
-      "anchor_x": [
-        "2026-06-09",
-        "2026-08-07"
-      ],
-      "anchor_y": [
-        95.1,
-        82.5
-      ],
-      "price": 55.83488,
-      "color": "#dc2626",
-      "group_id": "auto-wedge",
-      "free_extension": false
+      "y1": 95.1,
+      "price": 95.1,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
-      "id": "auto-wedge-lower",
-      "type": "wedge",
-      "label": "Falling wedge lower",
-      "x": [
-        "2026-04-20",
-        "2026-06-25",
-        "2026-12-22"
-      ],
-      "y": [
-        57.4,
-        66.9,
-        93.33478
-      ],
-      "x0": "2026-04-20",
-      "x1": "2026-12-22",
-      "y0": 57.4,
-      "y1": 93.33478,
-      "anchor_x": [
-        "2026-04-20",
-        "2026-06-25"
-      ],
-      "anchor_y": [
-        57.4,
-        66.9
-      ],
-      "price": 93.33478,
-      "color": "#2563eb",
-      "group_id": "auto-wedge",
-      "free_extension": false
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (64.46)",
+      "x0": "2026-04-15",
+      "x1": "2034-07-10",
+      "y0": 64.46,
+      "y1": 64.46,
+      "price": 64.46,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (55.00)",
+      "x0": "2026-03-26",
+      "x1": "2034-07-10",
+      "y0": 55,
+      "y1": 55,
+      "price": 55,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (45.54)",
+      "x0": "2026-03-10",
+      "x1": "2034-07-10",
+      "y0": 45.54,
+      "y1": 45.54,
+      "price": 45.54,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (14.90)",
+      "x0": "2026-01-16",
+      "x1": "2034-07-10",
+      "y0": 14.9,
+      "y1": 14.9,
+      "price": 14.9,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-01-16",
+      "x1": "2026-06-09",
+      "y0": 14.9,
+      "y1": 95.1,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
     }
   ],
-  "__journal_source_technique__": "Kliny",
-  "__scanner_breakout_date__": "2026-07-17",
-  "__scanner_retest_count__": "1",
-  "__scanner_previous_respect_months__": "7.4",
-  "__scanner_latest_retest_date__": "2026-07-21",
-  "__scanner_latest_retest_pattern__": "bearish_harami"
+  "__journal_source_technique__": "Fibo",
+  "capital": 303500,
+  "calculation_currency": "PLN",
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {}
 }

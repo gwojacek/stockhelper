@@ -1,8 +1,8 @@
 {
   "__show_ichimoku__": true,
   "__journal_source_technique__": "Ichimoku",
-  "lot_cost": 98197.19,
-  "pip_value": 559.56,
+  "lot_cost": 104870.12,
+  "pip_value": 553.2,
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -67,9 +67,10 @@
       "free_extension": false
     }
   ],
-  "__scanner_breakout_date__": "2026-03-03",
-  "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "5",
+  "__scanner_breakout_date__": "2026-08-21",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "0",
   "__scanner_latest_retest_date__": "2026-08-06",
-  "__scanner_latest_retest_pattern__": "bearish_engulfing"
+  "__scanner_latest_retest_pattern__": "bearish_engulfing",
+  "__scanner_previous_respect_months__": "5.6"
 }

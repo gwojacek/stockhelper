@@ -2220,6 +2220,96 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
 
+  function scannerPatternExtreme(time, pattern, direction) {{
+    const row = ohlcByTime.get(String(time || '').slice(0, 10));
+    if (!row) return null;
+    const span = scannerPatternSpan(pattern);
+    const candles = ohlc.slice(Math.max(0, row.idx - span + 1), row.idx + 1);
+    if (!candles.length) return null;
+    const value = direction === 'short'
+      ? Math.max(...candles.map(c => Number(c.high)))
+      : Math.min(...candles.map(c => Number(c.low)));
+    if (!Number.isFinite(value)) return null;
+    const pip = Math.pow(10, -Math.max(0, precision));
+    const buffered = direction === 'short' ? value + (3 * pip) : value - (3 * pip);
+    return {{price:roundPrice(buffered), date:row.time}};
+  }}
+
+  function clearScannerStopLoss() {{
+    delete levels.stop_loss;
+    delete levels.__scanner_auto_stop_loss__;
+    delete levelPoints.stop_loss;
+  }}
+
+  function scannerStopWasHit(point, direction) {{
+    const setupRow = ohlcByTime.get(String(point?.date || '').slice(0, 10));
+    const stop = Number(point?.price);
+    if (!setupRow || !Number.isFinite(stop)) return false;
+    return ohlc.slice(setupRow.idx + 1).some(row => direction === 'short'
+      ? Number(row.high) >= stop
+      : Number(row.low) <= stop);
+  }}
+
+  function applyScannerSetupStopLoss(forceScannerLevels = false) {{
+    const retestDate = scannerMetaValue('__scanner_latest_retest_date__');
+    const retestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
+    const patternDate = scannerMetaValue('__scanner_pattern_date__');
+    const patternName = scannerMetaValue('__scanner_pattern_name__');
+    const patternDirection = scannerMetaValue('__scanner_pattern_direction__').toLowerCase();
+    const breakoutDate = ichimokuHighlightBreakoutDate();
+    const breakoutRow = ohlcByTime.get(String(breakoutDate || '').slice(0, 10));
+    const retestRow = ohlcByTime.get(String(retestDate || '').slice(0, 10));
+    const latestRow = ohlc.length ? ohlcByTime.get(ohlc[ohlc.length - 1].time) : null;
+    const breakoutIsFresh = !!(breakoutRow && latestRow && latestRow.idx - breakoutRow.idx <= 10);
+    const retestIsFresh = !!(retestRow && latestRow && latestRow.idx - retestRow.idx <= 10);
+    const validRetestCount = Math.max(0, parseInt(scannerMetaValue('__scanner_retest_count__') || '0', 10) || 0);
+    const validRetest = validRetestCount > 0 && retestIsFresh && isValidScannerPattern(retestPattern) && (!breakoutDate || compareTime(retestDate, breakoutDate) > 0);
+    const scannerFiboLoaded = initialScannerDrawnObjects.some(obj => obj.group_id === 'auto-fibo' || obj.type === 'fib' || obj.type === 'fib-boundary');
+    const scannerIchimokuLoaded = !!(breakoutDate || retestDate || scannerMetaValue('__scanner_retest_count__'));
+    const directionText = (scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate)).toLowerCase();
+    const direction = directionText.includes('below') || directionText.includes('short') ? 'short' : 'long';
+    if (breakoutDate || retestDate) {{
+      levels.position_type = direction;
+      if ($('position-type')) $('position-type').value = direction;
+    }}
+    let point = null;
+    let source = '';
+    if (validRetest) {{
+      point = scannerPatternExtreme(retestDate, retestPattern, direction);
+      source = 'Ichimoku retest';
+    }} else if (breakoutDate && breakoutIsFresh) {{
+      const spanA = Number(ichiValueAt('spanA', breakoutDate));
+      const spanB = Number(ichiValueAt('spanB', breakoutDate));
+      if (Number.isFinite(spanA) && Number.isFinite(spanB)) {{
+        const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
+        const crossesBothBorders = breakoutRow && Number(breakoutRow.low) <= bottom && Number(breakoutRow.high) >= top;
+        if (crossesBothBorders) {{
+          point = scannerPatternExtreme(breakoutDate, '', direction);
+          source = 'Ichimoku breakout candle';
+        }} else {{
+          point = {{price:roundPrice(direction === 'short' ? top : bottom), date:String(breakoutDate).slice(0, 10)}};
+          source = 'Ichimoku breakout cloud border';
+        }}
+      }}
+    }} else if (patternDate && isValidScannerPattern(patternName) && ['long', 'short'].includes(patternDirection)) {{
+      point = scannerPatternExtreme(patternDate, patternName, patternDirection);
+      source = 'Fibo 61.8 pattern';
+      levels.position_type = patternDirection;
+      if ($('position-type')) $('position-type').value = patternDirection;
+    }}
+    if (point && source.startsWith('Ichimoku') && scannerStopWasHit(point, direction)) point = null;
+    if (!point) {{
+      if (forceScannerLevels && (scannerFiboLoaded || scannerIchimokuLoaded)) clearScannerStopLoss();
+      return;
+    }}
+    const stopIsAuto = forceScannerLevels || levels.stop_loss == null || levels.__scanner_auto_stop_loss__ || levelPoints.stop_loss?.auto_scanner;
+    if (!stopIsAuto) return;
+    levels.stop_loss = point.price;
+    levels.__scanner_auto_stop_loss__ = source;
+    levelPoints.stop_loss = {{price:point.price, plot_price:point.price, date:point.date, auto_scanner:true, source}};
+    levels.__half_points__ = [];
+  }}
+
   function wedgeLineThroughExtremeObjects(candidate) {{
     const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.high)) && Number.isFinite(Number(r.low)));
     const dateForIdx = (idx) => rows[Math.max(0, Math.min(rows.length - 1, idx))]?.time;
@@ -2943,6 +3033,7 @@ class LightweightChartLevelSelectorUI:
     Object.values(wedgeRouletteSeen).forEach(s => s.clear());
     lineAnchor=fibAnchor=halfAnchor=null;
     applyWedgeDerivedLevels(true);
+    applyScannerSetupStopLoss(true);
     render();
   }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
@@ -3266,7 +3357,7 @@ class LightweightChartLevelSelectorUI:
           ['Position', String(calcData.position_type || $('position-type').value || '').toUpperCase()],
           ['Entry', Number.isFinite(Number(b.entry)) ? fmt(Number(b.entry)) : ''],
           ['Stop loss', Number.isFinite(Number(b.stop_loss)) ? fmt(Number(b.stop_loss)) : ''],
-          ['Max capital', Number.isFinite(Number(b.max_capital)) ? money(b.max_capital, currency) : ''],
+          [b.max_capital_is_avg10d ? 'Max capital (1% Avg10d)' : 'Max capital', Number.isFinite(Number(b.max_capital)) ? money(b.max_capital, b.max_capital_currency || currency) : ''],
           ['Setup', reasonText],
           ['Risk/reward', calcData.risk_reward != null ? `${{numText(calcData.risk_reward, 2)}}:1` : ''],
           ['Profit', calcData.profit != null ? `${{money(calcData.profit, currency)}} (${{numText(calcData.profit_percent, 2)}}%)` : '']
@@ -3391,7 +3482,7 @@ class LightweightChartLevelSelectorUI:
     chips.push(`<span><b>Position:</b> ${{(data.position_type || $('position-type').value || 'long').toUpperCase()}}</span>`);
     if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
     if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
-    if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>Max capital:</b> ${{money(b.max_capital, currency)}}</span>`);
+    if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>${{b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage'}}:</b> ${{money(b.max_capital, b.max_capital_currency || currency)}}</span>`);
     if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion fee ${{numText(data.fx_conversion_fee_pct || 1, 0)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
     if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
     if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
@@ -3588,7 +3679,7 @@ class LightweightChartLevelSelectorUI:
   }});
   $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
 
-  applyWedgeDerivedLevels(scannerWedgePreloaded); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
+  applyWedgeDerivedLevels(scannerWedgePreloaded); applyScannerSetupStopLoss(true); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
 }})();
   </script>
 </body>
@@ -3637,11 +3728,13 @@ class LightweightChartLevelSelectorUI:
             if effective_instrument == "stock":
                 conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
                 max_capital = capital
+                avg_turnover_10d = None
                 try:
                     if "Volume" in self.df.columns:
                         turnover = (pd.to_numeric(self.df["Close"], errors="coerce") * pd.to_numeric(self.df["Volume"], errors="coerce")).dropna()
                         if len(turnover) >= 10:
-                            max_capital = float(turnover.tail(10).mean()) * 0.01
+                            avg_turnover_10d = float(turnover.tail(10).mean())
+                            max_capital = avg_turnover_10d * 0.01
                         else:
                             warnings.append("Turnover history is short; max capital uses available capital.")
                     else:
@@ -3659,7 +3752,14 @@ class LightweightChartLevelSelectorUI:
                         "potential_loss": round(float(result.get("potential_loss", 0.0)), 2),
                         "loss_percent": round(float(result.get("risk_percent", 0.0)), 2),
                     })
-                basics = {"entry": entry, "stop_loss": stop_loss, "max_capital": round(max_capital, 2)}
+                basics = {
+                    "entry": entry,
+                    "stop_loss": stop_loss,
+                    "max_capital": round(max_capital, 2),
+                    "max_capital_currency": _instrument_currency(),
+                    "avg_turnover_10d": None if avg_turnover_10d is None else round(avg_turnover_10d, 2),
+                    "max_capital_is_avg10d": avg_turnover_10d is not None,
+                }
             else:
                 lot_cost = _num("lot_cost")
                 pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
