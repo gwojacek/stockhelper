@@ -2249,10 +2249,12 @@ class LightweightChartLevelSelectorUI:
     const patternDirection = scannerMetaValue('__scanner_pattern_direction__').toLowerCase();
     const breakoutDate = ichimokuHighlightBreakoutDate();
     const breakoutRow = ohlcByTime.get(String(breakoutDate || '').slice(0, 10));
+    const retestRow = ohlcByTime.get(String(retestDate || '').slice(0, 10));
     const latestRow = ohlc.length ? ohlcByTime.get(ohlc[ohlc.length - 1].time) : null;
     const breakoutIsFresh = !!(breakoutRow && latestRow && latestRow.idx - breakoutRow.idx <= 10);
+    const retestIsFresh = !!(retestRow && latestRow && latestRow.idx - retestRow.idx <= 10);
     const validRetestCount = Math.max(0, parseInt(scannerMetaValue('__scanner_retest_count__') || '0', 10) || 0);
-    const validRetest = validRetestCount > 0 && retestDate && isValidScannerPattern(retestPattern) && (!breakoutDate || compareTime(retestDate, breakoutDate) > 0);
+    const validRetest = validRetestCount > 0 && retestIsFresh && isValidScannerPattern(retestPattern) && (!breakoutDate || compareTime(retestDate, breakoutDate) > 0);
     const scannerFiboLoaded = initialScannerDrawnObjects.some(obj => obj.group_id === 'auto-fibo' || obj.type === 'fib' || obj.type === 'fib-boundary');
     const scannerIchimokuLoaded = !!(breakoutDate || retestDate || scannerMetaValue('__scanner_retest_count__'));
     const directionText = (scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate)).toLowerCase();

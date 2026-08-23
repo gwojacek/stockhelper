@@ -595,6 +595,7 @@ def test_scanner_chart_derives_ichimoku_and_fibo_stop_losses():
     assert "point = scannerPatternExtreme(retestDate, retestPattern, direction)" in ui_source
     assert "point = scannerPatternExtreme(patternDate, patternName, patternDirection)" in ui_source
     assert "latestRow.idx - breakoutRow.idx <= 10" in ui_source
+    assert "latestRow.idx - retestRow.idx <= 10" in ui_source
     assert "crossesBothBorders" in ui_source
     assert "source = 'Ichimoku breakout candle'" in ui_source
     assert "const pip = Math.pow(10, -Math.max(0, precision))" in ui_source
@@ -605,6 +606,15 @@ def test_scanner_chart_derives_ichimoku_and_fibo_stop_losses():
     assert "__scanner_pattern_direction__" in ui_source
     assert "levelPoints.stop_loss = {{price:point.price, plot_price:point.price, date:point.date, auto_scanner:true, source}}" in ui_source
     assert ui_source.count("applyScannerSetupStopLoss(true);") >= 2
+
+
+def test_scanner_chart_drops_metadata_from_the_previous_technique():
+    selector_source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+
+    assert "scanner_context_requested = bool(" in selector_source
+    assert "for key, _ in scanner_metadata:" in selector_source
+    assert "existing.pop(key, None)" in selector_source
+    assert "Never let Ichimoku scanner" in selector_source
 
 
 def test_fibo_anchor_requires_confirmed_local_trend_bottom():

@@ -589,7 +589,7 @@ def run_level_selector(raw_args=None):
         args.scanner_breakout_date,
         args.scanner_breakout_direction,
     )
-    for key, value in [
+    scanner_metadata = [
         ("__scanner_breakout_date__", scanner_breakout_date),
         ("__scanner_breakout_direction__", args.scanner_breakout_direction),
         ("__scanner_pattern_date__", args.scanner_pattern_date),
@@ -600,7 +600,19 @@ def run_level_selector(raw_args=None):
         ("__scanner_latest_retest_pattern__", args.scanner_latest_retest_pattern),
         ("__scanner_previous_respect_months__", args.scanner_previous_respect_months),
         ("__scanner_valid_retests_from_date__", args.scanner_valid_retests_from_date),
-    ]:
+    ]
+    scanner_context_requested = bool(
+        args.fibo_lines
+        or args.wedge_lines
+        or args.ichimoku_mode == "on"
+        or any(str(value or "").strip() for _, value in scanner_metadata)
+    )
+    if scanner_context_requested:
+        # Saved chart sessions are shared by symbol. Never let Ichimoku scanner
+        # metadata leak into a later Fibo chart (or vice versa).
+        for key, _ in scanner_metadata:
+            existing.pop(key, None)
+    for key, value in scanner_metadata:
         text = str(value or "").strip()
         if text and text != "-":
             existing[key] = text
