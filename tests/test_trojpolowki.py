@@ -394,6 +394,7 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     command = mod._chart_command_for_row(row)
     assert "--scanner-pattern-date 2026-08-05" in command
     assert "--scanner-pattern-date 2026-08-04" not in command
+    assert "--scanner-pattern-direction long" in command
 
     commodity = mod.ScannerRow(
         market="COMMODITIES", scanner="FIBO", category="valid", ticker="OIL",
@@ -408,6 +409,7 @@ def test_fibo_chart_commands_use_pattern_completion_date_not_touch_date():
     assert "python run -c CL.F" in commodity_command
     assert "--scanner-pattern-date 2026-07-24" in commodity_command
     assert "--scanner-pattern-name dark_cloud_cover" in commodity_command
+    assert "--scanner-pattern-direction short" in commodity_command
 
     assert '["Ticker","Dir","Pattern","Pattern date","Incline"' in source
 
@@ -591,14 +593,15 @@ def test_scanner_chart_derives_ichimoku_and_fibo_stop_losses():
     assert "function applyScannerSetupStopLoss(forceScannerLevels = false)" in ui_source
     assert "source = 'Ichimoku breakout cloud border'" in ui_source
     assert "point = scannerPatternExtreme(retestDate, retestPattern, direction)" in ui_source
-    assert "point = scannerPatternExtreme(patternDate, patternName, 'long')" in ui_source
+    assert "point = scannerPatternExtreme(patternDate, patternName, patternDirection)" in ui_source
     assert "latestRow.idx - breakoutRow.idx <= 10" in ui_source
     assert "crossesBothBorders" in ui_source
     assert "source = 'Ichimoku breakout candle'" in ui_source
     assert "const pip = Math.pow(10, -Math.max(0, precision))" in ui_source
     assert "value - (3 * pip)" in ui_source
     assert "if (forceScannerLevels && (scannerFiboLoaded || scannerIchimokuLoaded)) clearScannerStopLoss()" in ui_source
-    assert "patternDirection === 'long'" in ui_source
+    assert "['long', 'short'].includes(patternDirection)" in ui_source
+    assert "value + (3 * pip)" in ui_source
     assert "__scanner_pattern_direction__" in ui_source
     assert "levelPoints.stop_loss = {{price:point.price, plot_price:point.price, date:point.date, auto_scanner:true, source}}" in ui_source
     assert ui_source.count("applyScannerSetupStopLoss(true);") >= 2

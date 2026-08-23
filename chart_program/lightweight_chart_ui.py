@@ -2280,11 +2280,11 @@ class LightweightChartLevelSelectorUI:
           source = 'Ichimoku breakout cloud border';
         }}
       }}
-    }} else if (patternDate && isValidScannerPattern(patternName) && patternDirection === 'long') {{
-      point = scannerPatternExtreme(patternDate, patternName, 'long');
+    }} else if (patternDate && isValidScannerPattern(patternName) && ['long', 'short'].includes(patternDirection)) {{
+      point = scannerPatternExtreme(patternDate, patternName, patternDirection);
       source = 'Fibo 61.8 pattern';
-      levels.position_type = 'long';
-      if ($('position-type')) $('position-type').value = 'long';
+      levels.position_type = patternDirection;
+      if ($('position-type')) $('position-type').value = patternDirection;
     }}
     if (!point) {{
       if (forceScannerLevels && (scannerFiboLoaded || scannerIchimokuLoaded)) clearScannerStopLoss();
