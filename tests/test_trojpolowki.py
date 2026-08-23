@@ -596,6 +596,11 @@ def test_scanner_chart_derives_ichimoku_and_fibo_stop_losses():
     assert "point = scannerPatternExtreme(patternDate, patternName, patternDirection)" in ui_source
     assert "latestRow.idx - breakoutRow.idx <= 10" in ui_source
     assert "latestRow.idx - retestRow.idx <= 10" in ui_source
+    assert "function scannerStopWasHit(point, direction)" in ui_source
+    assert "ohlc.slice(setupRow.idx + 1).some" in ui_source
+    assert "Number(row.high) >= stop" in ui_source
+    assert "Number(row.low) <= stop" in ui_source
+    assert "source.startsWith('Ichimoku') && scannerStopWasHit(point, direction)" in ui_source
     assert "crossesBothBorders" in ui_source
     assert "source = 'Ichimoku breakout candle'" in ui_source
     assert "const pip = Math.pow(10, -Math.max(0, precision))" in ui_source

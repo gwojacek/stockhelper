@@ -2241,6 +2241,15 @@ class LightweightChartLevelSelectorUI:
     delete levelPoints.stop_loss;
   }}
 
+  function scannerStopWasHit(point, direction) {{
+    const setupRow = ohlcByTime.get(String(point?.date || '').slice(0, 10));
+    const stop = Number(point?.price);
+    if (!setupRow || !Number.isFinite(stop)) return false;
+    return ohlc.slice(setupRow.idx + 1).some(row => direction === 'short'
+      ? Number(row.high) >= stop
+      : Number(row.low) <= stop);
+  }}
+
   function applyScannerSetupStopLoss(forceScannerLevels = false) {{
     const retestDate = scannerMetaValue('__scanner_latest_retest_date__');
     const retestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
@@ -2288,6 +2297,7 @@ class LightweightChartLevelSelectorUI:
       levels.position_type = patternDirection;
       if ($('position-type')) $('position-type').value = patternDirection;
     }}
+    if (point && source.startsWith('Ichimoku') && scannerStopWasHit(point, direction)) point = null;
     if (!point) {{
       if (forceScannerLevels && (scannerFiboLoaded || scannerIchimokuLoaded)) clearScannerStopLoss();
       return;
