@@ -2229,7 +2229,16 @@ class LightweightChartLevelSelectorUI:
     const value = direction === 'short'
       ? Math.max(...candles.map(c => Number(c.high)))
       : Math.min(...candles.map(c => Number(c.low)));
-    return Number.isFinite(value) ? {{price:roundPrice(value), date:row.time}} : null;
+    if (!Number.isFinite(value)) return null;
+    const pip = Math.pow(10, -Math.max(0, precision));
+    const buffered = direction === 'short' ? value + (3 * pip) : value - (3 * pip);
+    return {{price:roundPrice(buffered), date:row.time}};
+  }}
+
+  function clearScannerStopLoss() {{
+    delete levels.stop_loss;
+    delete levels.__scanner_auto_stop_loss__;
+    delete levelPoints.stop_loss;
   }}
 
   function applyScannerSetupStopLoss(forceScannerLevels = false) {{
@@ -2239,6 +2248,13 @@ class LightweightChartLevelSelectorUI:
     const patternName = scannerMetaValue('__scanner_pattern_name__');
     const patternDirection = scannerMetaValue('__scanner_pattern_direction__').toLowerCase();
     const breakoutDate = ichimokuHighlightBreakoutDate();
+    const breakoutRow = ohlcByTime.get(String(breakoutDate || '').slice(0, 10));
+    const latestRow = ohlc.length ? ohlcByTime.get(ohlc[ohlc.length - 1].time) : null;
+    const breakoutIsFresh = !!(breakoutRow && latestRow && latestRow.idx - breakoutRow.idx <= 10);
+    const validRetestCount = Math.max(0, parseInt(scannerMetaValue('__scanner_retest_count__') || '0', 10) || 0);
+    const validRetest = validRetestCount > 0 && retestDate && isValidScannerPattern(retestPattern) && (!breakoutDate || compareTime(retestDate, breakoutDate) > 0);
+    const scannerFiboLoaded = initialScannerDrawnObjects.some(obj => obj.group_id === 'auto-fibo' || obj.type === 'fib' || obj.type === 'fib-boundary');
+    const scannerIchimokuLoaded = !!(breakoutDate || retestDate || scannerMetaValue('__scanner_retest_count__'));
     const directionText = (scannerMetaValue('__scanner_breakout_direction__') || ichimokuCloudSideForDate(breakoutDate)).toLowerCase();
     const direction = directionText.includes('below') || directionText.includes('short') ? 'short' : 'long';
     if (breakoutDate || retestDate) {{
@@ -2247,15 +2263,22 @@ class LightweightChartLevelSelectorUI:
     }}
     let point = null;
     let source = '';
-    if (retestDate && isValidScannerPattern(retestPattern)) {{
+    if (validRetest) {{
       point = scannerPatternExtreme(retestDate, retestPattern, direction);
       source = 'Ichimoku retest';
-    }} else if (breakoutDate) {{
+    }} else if (breakoutDate && breakoutIsFresh) {{
       const spanA = Number(ichiValueAt('spanA', breakoutDate));
       const spanB = Number(ichiValueAt('spanB', breakoutDate));
       if (Number.isFinite(spanA) && Number.isFinite(spanB)) {{
-        point = {{price:roundPrice(direction === 'short' ? Math.max(spanA, spanB) : Math.min(spanA, spanB)), date:String(breakoutDate).slice(0, 10)}};
-        source = 'Ichimoku breakout cloud border';
+        const top = Math.max(spanA, spanB), bottom = Math.min(spanA, spanB);
+        const crossesBothBorders = breakoutRow && Number(breakoutRow.low) <= bottom && Number(breakoutRow.high) >= top;
+        if (crossesBothBorders) {{
+          point = scannerPatternExtreme(breakoutDate, '', direction);
+          source = 'Ichimoku breakout candle';
+        }} else {{
+          point = {{price:roundPrice(direction === 'short' ? top : bottom), date:String(breakoutDate).slice(0, 10)}};
+          source = 'Ichimoku breakout cloud border';
+        }}
       }}
     }} else if (patternDate && isValidScannerPattern(patternName) && patternDirection === 'long') {{
       point = scannerPatternExtreme(patternDate, patternName, 'long');
@@ -2263,7 +2286,10 @@ class LightweightChartLevelSelectorUI:
       levels.position_type = 'long';
       if ($('position-type')) $('position-type').value = 'long';
     }}
-    if (!point) return;
+    if (!point) {{
+      if (forceScannerLevels && (scannerFiboLoaded || scannerIchimokuLoaded)) clearScannerStopLoss();
+      return;
+    }}
     const stopIsAuto = forceScannerLevels || levels.stop_loss == null || levels.__scanner_auto_stop_loss__ || levelPoints.stop_loss?.auto_scanner;
     if (!stopIsAuto) return;
     levels.stop_loss = point.price;
