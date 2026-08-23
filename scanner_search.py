@@ -1130,7 +1130,7 @@ def _select_impulse_start_long(
         return min(candidates, key=lambda idx: (float(low.iloc[idx]), idx))
 
     if reset_after_sideways:
-        sideways_end = _latest_sideways_end_offset(
+        sideways_window = _latest_sideways_window(
             w.iloc[left:peak_idx + 1].reset_index(drop=True),
             max_days=30,
             # Reset anchors only for genuinely tight bases.  The broader 12%
@@ -1140,13 +1140,26 @@ def _select_impulse_start_long(
             max_progress_pct=0.05,
             max_outlier_candles=2,
         )
-        if sideways_end is not None:
+        if sideways_window is not None:
+            _range_start, sideways_end, range_high, _range_low, _range_pct = sideways_window
             absolute_end = left + sideways_end
             # Search the complete qualifying month, not only its last few
             # candles.  A genuine trend bottom may form inside the base before
             # the visible breakout (AEP 2026-06-01); trimming to ten candles
             # incorrectly replaced it with the ordinary June 9 pullback.
-            post_range_left = max(left, absolute_end - 29)
+            breakout_probe_right = min(peak_idx, absolute_end + 5)
+            breakout_closes = close.iloc[absolute_end + 1:breakout_probe_right + 1]
+            decisive_breakout = bool(
+                not breakout_closes.empty
+                and (breakout_closes > float(range_high) * 1.03).any()
+            )
+            # A decisive move out of a completed channel starts a new impulse;
+            # its anchor cannot remain at an old low inside that channel (PUR).
+            # Gradual bases may still use their confirmed internal bottom (AEP).
+            post_range_left = (
+                absolute_end + 1 if decisive_breakout
+                else max(left, absolute_end - 29)
+            )
             if post_range_left > right:
                 return -1
             clear = _clear_bottom(post_range_left, right)
@@ -5549,7 +5562,10 @@ def _select_fibo_long_impulse_base(
                         "Impulse continuation: retained original anchor after a 61.8 pullback "
                         f"because the later extreme extended the impulse by {continuation_extension * 100:.2f}%."
                     )
-                    continue
+                    # Once the later dominant extreme proves this was one broad
+                    # continuation, do not let a still later minor swing reset
+                    # the same candidate back into its middle (SNT).
+                    return False, None
                 stale_msg_prefix = "Long: stale impulse start" if stale_cycle_mode == "reset" else "Rejected long: stale impulse start"
                 _log(
                     f"{stale_msg_prefix} (earlier large formation peak idx={p}, "
@@ -6034,6 +6050,18 @@ def _find_fibo_setup(
             )
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
+        if _has_long_sideways(
+            correction_seg,
+            max_days=22,
+            band_pct=0.10,
+            max_progress_pct=0.05,
+            max_outlier_candles=3,
+        ):
+            _log(
+                "Rejected long: correction is a month-long 10% side channel; "
+                "oscillation toward 61.8 is not an active retracement."
+            )
+            return None
         # A retracement that spends several months in overlapping flat ranges
         # is no longer the decline/recovery leg of the selected impulse. Apply
         # this symmetrically to long and short formations.

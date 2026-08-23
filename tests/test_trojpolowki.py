@@ -297,7 +297,7 @@ def test_long_fibo_sideways_rules_apply_to_impulse_not_correction():
     assert "_mirrored_short and _has_long_sideways" in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
-    assert "_latest_sideways_end_offset" in source[selector_start:selector_end]
+    assert "_latest_sideways_window" in source[selector_start:selector_end]
     assert "absolute_end - 29" in source[selector_start:selector_end]
     assert "return -1" in source[selector_start:selector_end]
     assert "rejecting any flat sub-window dropped MCHP" in source
@@ -681,6 +681,7 @@ def test_snt_continuation_keeps_june_1_anchor_and_channel_expires_3p():
     ]
     assert "continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35" in selector
     assert "if continuation_extension >= continuation_threshold" in selector
+    assert "return False, None" in selector[selector.index("if continuation_extension >= continuation_threshold"):]
 
     steep = source[
         source.index("def _find_fibo_3p_steep_setup"):
@@ -702,6 +703,39 @@ def test_snt_continuation_keeps_june_1_anchor_and_channel_expires_3p():
     first_leg = float(old_middle_anchor["High"]) - float(june_1["Low"])
     continuation = float(july_peak["High"]) - float(old_middle_anchor["High"])
     assert continuation / first_leg > 0.35
+
+
+def test_regular_long_side_channel_drops_brs_before_61_8():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _scan_fibo_one")]
+    correction = setup[setup.index("correction_seg ="):setup.index("if corr_low > fib_236")]
+    assert "max_days=22" in correction
+    assert "band_pct=0.10" in correction
+    assert "max_outlier_candles=3" in correction
+    assert "oscillation toward 61.8 is not an active retracement" in correction
+
+    with Path("data/csv/stocks/BRS_WA.csv").open(encoding="utf-8") as handle:
+        rows = [
+            row for row in csv.DictReader(handle)
+            if "2026-07-16" <= row["Date"] <= "2026-08-21"
+        ]
+    assert len(rows) >= 22
+    closes = [float(row["Close"]) for row in rows]
+    highs = sorted((float(row["High"]) for row in rows), reverse=True)
+    lows = sorted(float(row["Low"]) for row in rows)
+    # Discard the few failed wick breakouts and verify the persistent channel.
+    channel_high, channel_low = highs[3], lows[3]
+    channel_mid = (channel_high + channel_low) / 2.0
+    assert (channel_high - channel_low) / channel_mid <= 0.10
+    assert abs(sum(closes[-3:]) / 3 - sum(closes[:3]) / 3) / (sum(closes[:3]) / 3) <= 0.05
+
+
+def test_decisive_breakout_anchors_after_completed_side_channel():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_impulse_start_long"):source.index("def _select_peak_long")]
+    assert "sideways_window = _latest_sideways_window" in selector
+    assert "decisive_breakout" in selector
+    assert "absolute_end + 1 if decisive_breakout" in selector
 
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():
