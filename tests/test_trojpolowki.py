@@ -673,6 +673,37 @@ def test_fibo_launch_search_reaches_real_bottom_before_confirmed_incline():
         assert rows[bottom_idx]["Date"] == expected_bottom
 
 
+def test_snt_continuation_keeps_june_1_anchor_and_channel_expires_3p():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[
+        source.index("def _select_fibo_long_impulse_base"):
+        source.index("def _find_fibo_3p_steep_setup")
+    ]
+    assert "continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35" in selector
+    assert "if continuation_extension >= continuation_threshold" in selector
+
+    steep = source[
+        source.index("def _find_fibo_3p_steep_setup"):
+        source.index("def _find_fibo_setup", source.index("def _find_fibo_3p_steep_setup"))
+    ]
+    assert "post_peak = w.iloc[i_peak:].reset_index(drop=True)" in steep
+    assert "band_pct=0.10" in steep
+    assert "max_days=22" in steep
+    assert "max_outlier_candles=3" in steep
+    assert "interior failed breakouts do not end the side trend" in steep
+
+    with Path("data/csv/stocks/SNT_WA.csv").open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    june_1 = next(row for row in rows if row["Date"] == "2026-06-01")
+    old_middle_anchor = next(row for row in rows if row["Date"] == "2026-06-19")
+    july_peak = next(row for row in rows if row["Date"] == "2026-07-17")
+    assert float(june_1["Low"]) == 262.0
+    assert float(old_middle_anchor["Low"]) == 294.6
+    first_leg = float(old_middle_anchor["High"]) - float(june_1["Low"])
+    continuation = float(july_peak["High"]) - float(old_middle_anchor["High"])
+    assert continuation / first_leg > 0.35
+
+
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():
     with Path("data/csv/stocks/AEP_US.csv").open(encoding="utf-8") as handle:
         rows = [row for row in csv.DictReader(handle) if "2026-05-12" <= row["Date"] <= "2026-07-07"]
@@ -885,8 +916,9 @@ def test_short_fibo_keeps_dominant_top_when_later_bottom_extends_decline():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
     assert "preserve_deeper_short_continuation" in selector
-    assert "continuation_extension >= 0.15" in selector
-    assert "retained dominant original top after a 61.8 rebound" in selector
+    assert "continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35" in selector
+    assert "continuation_extension >= continuation_threshold" in selector
+    assert "retained original anchor after a 61.8 pullback" in selector
     regular = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
     assert "preserve_deeper_short_continuation=_mirrored_short" in regular
 

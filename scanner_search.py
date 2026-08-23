@@ -894,7 +894,7 @@ def _sideways_window_stats(
     max_progress_pct: float | None,
     max_outlier_candles: int,
 ) -> tuple[float, float, float, float] | None:
-    """Return a flat window's robust envelope, ignoring at most two interior spikes.
+    """Return a flat window's robust envelope, ignoring a few interior spikes.
 
     Outliers are only removable from the interior of a window.  A high/low at
     either edge can be a real breakout or breakdown and must not be hidden.  The
@@ -920,7 +920,7 @@ def _sideways_window_stats(
     }
     candidate_idxs -= protected_bottoms
     best: tuple[float, float, float, int] | None = None
-    for count in range(min(max_outlier_candles, 2, len(candidate_idxs)) + 1):
+    for count in range(min(max_outlier_candles, 3, len(candidate_idxs)) + 1):
         for excluded in combinations(sorted(candidate_idxs), count):
             excluded_set = set(excluded)
             hi = high_values[next(idx for idx in high_order if idx not in excluded_set)]
@@ -5536,16 +5536,18 @@ def _select_fibo_long_impulse_base(
             post_idx = int(post_slice.idxmin())
             post_low = float(low.iloc[post_idx])
             if post_low <= p_fib_618:
-                # In mirrored-short data, a rebound through 61.8 can be a lower
-                # high inside one broad decline rather than a completed cycle.
-                # If price subsequently extends the original decline by at least
-                # 15% of its first leg, retain the dominant original wick top
-                # (XAUUSD Jan→Jul 2026) instead of re-anchoring at the lower high.
+                # A pullback through 61.8 can be an internal correction inside
+                # one much larger impulse.  If the later peak extends the first
+                # leg materially, retain the original launch bottom instead of
+                # resetting into the middle of the move (SNT Jun→Jul 2026).
+                # Mirrored shorts use the slightly more permissive threshold
+                # needed for long, stair-step declines such as XAUUSD.
                 continuation_extension = (fib_end - p_high) / max(p_rng, 1e-9)
-                if preserve_deeper_short_continuation and continuation_extension >= 0.15:
+                continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35
+                if continuation_extension >= continuation_threshold:
                     _log(
-                        "Short continuation: retained dominant original top after a 61.8 rebound "
-                        f"because the later bottom extended the decline by {continuation_extension * 100:.2f}%."
+                        "Impulse continuation: retained original anchor after a 61.8 pullback "
+                        f"because the later extreme extended the impulse by {continuation_extension * 100:.2f}%."
                     )
                     continue
                 stale_msg_prefix = "Long: stale impulse start" if stale_cycle_mode == "reset" else "Rejected long: stale impulse start"
@@ -5769,6 +5771,26 @@ def _find_fibo_3p_steep_setup(
         return None
     if has_monthly_sideways:
         _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
+
+    # Once the post-peak price has spent a full trading month inside an
+    # approximately 10% channel, the steep impulse is no longer an active 3P
+    # candidate.  Ignore up to three interior wick excursions when price comes
+    # back into the channel; those are failed breakouts, not a new trend.  The
+    # instrument may re-enter 3P only after the peak selector finds a genuinely
+    # new impulse/anchor.
+    post_peak = w.iloc[i_peak:].reset_index(drop=True)
+    if _has_long_sideways(
+        post_peak,
+        max_days=22,
+        band_pct=0.10,
+        max_progress_pct=0.05,
+        max_outlier_candles=3,
+    ):
+        _log(
+            "Rejected 3P steep: post-peak correction is a month-long 10% channel; "
+            "interior failed breakouts do not end the side trend."
+        )
+        return None
 
     rng = fib_end - fib_start
     if rng <= 0:
