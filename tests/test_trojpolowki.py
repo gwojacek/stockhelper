@@ -332,7 +332,7 @@ def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "Rejected short 3P steep: post-bottom correction contains a month-long sideways range" in source
     assert "Rejected short: post-bottom correction contains a month-long sideways range" in source
-    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    stale = source[source.index("def _crosses_immature_channel_breakout"):source.index("def _scan_fibo_one")]
     assert 'cand.direction == "short" and _has_long_sideways' in stale
 
 
@@ -682,6 +682,8 @@ def test_snt_continuation_keeps_june_1_anchor_and_channel_expires_3p():
     assert "continuation_threshold = 0.15" in selector
     assert "if continuation_extension >= continuation_threshold" in selector
     assert "return False, None" in selector[selector.index("if continuation_extension >= continuation_threshold"):]
+    assert "strong_widened_anchor = True" in selector
+    assert "retained the earlier strong-incline bottom" in selector
 
     steep = source[
         source.index("def _find_fibo_3p_steep_setup"):
@@ -748,15 +750,17 @@ def test_decisive_breakout_anchors_after_completed_side_channel():
 
 def test_offset_scan_cannot_resurrect_brs_side_channel():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    stale = source[source.index("def _crosses_immature_channel_breakout"):source.index("def _scan_fibo_one")]
     assert 'cand.direction == "long" and _has_long_sideways' in stale
     assert "max_days=22" in stale
     assert "band_pct=0.10" in stale
     assert "max_outlier_candles=3" in stale
     assert "Historical end-offset scans" in stale
+    assert "def _crosses_immature_channel_breakout" in stale
     assert "impulse_now = df_full.loc" in stale
     assert "channel_breakout = _latest_channel_breakout_long(impulse_now)" in stale
     assert "PUR must not" in stale
+    assert "_crosses_immature_channel_breakout(df, row)" in source
 
 
 def test_lower_anchor_is_used_only_when_strong_incline_survives():
@@ -795,8 +799,9 @@ def test_latest_channel_breakout_resets_ice_anchor():
     assert "band_pct: float = 0.15" in helper
     assert "breakout_floor = max(channel_high, previous_high)" in helper
     assert "float(closes.iloc[idx]) > breakout_floor" in helper
-    assert "latest = (end, breakout)" in helper
+    assert "latest = (start, end, breakout)" in helper
     fib_base = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+    assert "if channel_start <= 3" in fib_base
     assert "structural_anchor_floor = post_channel_left" in fib_base
 
 

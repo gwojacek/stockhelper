@@ -1009,7 +1009,7 @@ def _latest_channel_breakout_long(
     window_days: int = 22,
     band_pct: float = 0.15,
     breakout_pct: float = 0.03,
-) -> tuple[int, int] | None:
+) -> tuple[int, int, int] | None:
     """Return the latest completed channel end and its first decisive breakout.
 
     Unlike ``_latest_sideways_window``, this evaluates every qualifying range.
@@ -1022,7 +1022,7 @@ def _latest_channel_breakout_long(
     highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
     lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
     closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
-    latest: tuple[int, int] | None = None
+    latest: tuple[int, int, int] | None = None
     for start in range(0, len(df_slice) - window_days):
         end = start + window_days - 1
         stats = _sideways_window_stats(
@@ -1044,7 +1044,7 @@ def _latest_channel_breakout_long(
             None,
         )
         if breakout is not None:
-            latest = (end, breakout)
+            latest = (start, end, breakout)
     return latest
 
 
@@ -5452,7 +5452,11 @@ def _select_fibo_long_impulse_base(
     impulse_slice = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
     terminal_channel = _latest_channel_breakout_long(impulse_slice)
     if terminal_channel is not None:
-        channel_end, breakout_idx = terminal_channel
+        channel_start, channel_end, breakout_idx = terminal_channel
+        if channel_start <= 3:
+            terminal_channel = None
+    if terminal_channel is not None:
+        _channel_start, channel_end, breakout_idx = terminal_channel
         channel_end_abs = i_start + channel_end
         post_channel_left = i_start + breakout_idx
         breakout_abs = post_channel_left
@@ -5575,6 +5579,7 @@ def _select_fibo_long_impulse_base(
     # This recovers ALR's March low and US30's March bottom, while still refusing
     # old lows that make the overall rise too slow to qualify as a strong leg.
     earlier_left = max(structural_anchor_floor, i_peak - max_lookback)
+    strong_widened_anchor = False
     if earlier_left < i_start:
         earlier_idx = int(low.iloc[earlier_left:i_start + 1].idxmin())
         earlier_low = float(low.iloc[earlier_idx])
@@ -5588,6 +5593,7 @@ def _select_fibo_long_impulse_base(
                 f"daily={earlier_daily_gain * 100:.3f}%."
             )
             i_start, fib_start = earlier_idx, earlier_low
+            strong_widened_anchor = True
 
     min_reset_impulse_days = 5
 
@@ -5672,6 +5678,11 @@ def _select_fibo_long_impulse_base(
         return False, None
 
     stale_cycle, stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
+    if stale_cycle and strong_widened_anchor:
+        _log(
+            "Long: retained the earlier strong-incline bottom despite internal completed swings."
+        )
+        stale_cycle, stale_reset = False, None
     if stale_cycle and stale_cycle_mode == "allow":
         _log("Long: broad candidate still rejected because a large completed formation already crossed 61.8; restart after the new bottom.")
     reset_attempts = 0
@@ -6639,6 +6650,24 @@ def run_fibo_search(target: str) -> int:
             return bool((close_after < float(cand.stop_loss)).any())
         return bool((close_after > float(cand.stop_loss)).any())
 
+    def _crosses_immature_channel_breakout(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
+        if cand.direction != "long" or not cand.incline_start_date or not cand.incline_end_date:
+            return False
+        dts = pd.to_datetime(df_full["Date"], errors="coerce")
+        try:
+            start_ts = pd.to_datetime(cand.incline_start_date)
+            end_ts = pd.to_datetime(cand.incline_end_date)
+        except Exception:
+            return False
+        impulse_now = df_full.loc[(dts >= start_ts) & (dts <= end_ts)].reset_index(drop=True)
+        channel_breakout = _latest_channel_breakout_long(impulse_now)
+        if channel_breakout is None:
+            return False
+        channel_start, _channel_end, breakout_idx = channel_breakout
+        if channel_start <= 3:
+            return False
+        return len(impulse_now) - 1 - breakout_idx < 10
+
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status not in {"returned_before_61_8", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} or not cand.incline_end_date:
             return False
@@ -6650,20 +6679,10 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > end_ts]
         if after.empty:
             return False
-        try:
-            start_ts = pd.to_datetime(cand.incline_start_date)
-        except Exception:
-            start_ts = pd.NaT
-        if pd.notna(start_ts):
-            impulse_now = df_full.loc[(dts >= start_ts) & (dts <= end_ts)].reset_index(drop=True)
-            channel_breakout = _latest_channel_breakout_long(impulse_now) if cand.direction == "long" else None
-            if channel_breakout is not None:
-                _channel_end, breakout_idx = channel_breakout
-                if len(impulse_now) - 1 - breakout_idx < 10:
-                    # Offset scans may have accepted the old anchor before the
-                    # side channel and later breakout were visible. PUR must not
-                    # survive through that historical snapshot.
-                    return True
+        if _crosses_immature_channel_breakout(df_full, cand):
+            # Offset scans may have accepted the old anchor before the side
+            # channel and later breakout were visible. PUR must not survive.
+            return True
         # Offset scans can capture a short before its later correction turns
         # into a month-long range, or either direction before a correction
         # becomes an extended side trend. Re-check against the full current
@@ -6924,6 +6943,11 @@ def run_fibo_search(target: str) -> int:
             # This removes JP225's stale broad leg while preserving stepwise
             # trends such as ROST when no actionable nested replacement exists.
             out_rows = _prune_superseded_steep_fibo_rows(out_rows)
+            out_rows = [
+                row for row in out_rows
+                if not isinstance(row, FiboScanResult)
+                or not _crosses_immature_channel_breakout(df, row)
+            ]
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:
             return idx, ticker, [], _compact_error(str(exc)), "error"
