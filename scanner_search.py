@@ -4560,6 +4560,7 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
         return set()
+    saved_fibo_enabled = state.get("__saved_fibo_by_user__") is not False
     kinds: set[str] = set()
     for obj in objects:
         if not isinstance(obj, dict):
@@ -4568,7 +4569,7 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
         group_id = str(obj.get("group_id", ""))
         if obj_type == "wedge" or group_id == "auto-wedge":
             kinds.add("wedge")
-        if obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo":
+        if saved_fibo_enabled and (obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo"):
             kinds.add("fibo")
     return kinds
 
@@ -4584,6 +4585,8 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
         return []
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
+        return []
+    if state.get("__saved_fibo_by_user__") is False:
         return []
     groups: dict[str, list[dict]] = {}
     for obj in objects:

@@ -816,15 +816,27 @@ def test_fibo_board_exposes_debug_for_every_3p_card():
     assert '"Recent dropouts" not in str(headers[col_idx])' in source
 
 
-def test_chart_fibo_information_appends_anchor_channel_debug_below_csv():
+def test_chart_fibo_information_ends_after_requested_csv_data():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     fibo = source[source.index("function fiboDebugSnapshot"):source.index("function setupDebugSnapshot")]
-    csv_idx = fibo.index("CSV candles since first anchor")
-    debug_idx = fibo.index("FIBO ANCHOR / CHANNEL DEBUG")
-    assert debug_idx > csv_idx
-    assert "lower bottom visible before anchor" in fibo
-    assert "python run -explain" in fibo
-    assert "completed 22-session channel (up to 15%)" in fibo
+    assert "CSV candles since first anchor" in fibo
+    assert "FIBO ANCHOR / CHANNEL DEBUG" not in fibo
+
+
+def test_saved_fibo_can_be_filtered_and_released_to_automatic_scanner():
+    report = Path("run").read_text(encoding="utf-8")
+    chart = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    selector = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+    scanner = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "💾 Saved by me" in report
+    assert "function toggleSavedFiboOnly" in report
+    assert "data-saved-fibo='1'" in report
+    assert "saved-fibo-only" in report
+    assert 'id="saved-fibo-status"' in chart
+    assert "Saved Fibo override removed" in chart
+    assert "__saved_fibo_by_user__: levels.__saved_fibo_by_user__ === false" in chart
+    assert 'existing.setdefault("__saved_fibo_by_user__", legacy_saved_fibo)' in selector
+    assert 'state.get("__saved_fibo_by_user__") is False' in scanner
 
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():

@@ -623,6 +623,17 @@ def run_level_selector(raw_args=None):
     elif args.ichimoku_mode == "on":
         existing["__journal_source_technique__"] = "Ichimoku"
 
+    session_objects = existing.get("drawn_objects") if isinstance(existing, dict) else None
+    legacy_saved_fibo = bool(
+        isinstance(session_objects, list)
+        and any(
+            isinstance(obj, dict)
+            and (obj.get("type") in {"fib", "fib-boundary"} or obj.get("group_id") == "auto-fibo")
+            for obj in session_objects
+        )
+    )
+    existing.setdefault("__saved_fibo_by_user__", legacy_saved_fibo)
+
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
     df = _trim_chart_window(df, max_days=548)
 

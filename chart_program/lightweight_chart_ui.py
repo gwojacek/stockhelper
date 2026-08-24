@@ -647,6 +647,7 @@ class LightweightChartLevelSelectorUI:
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
+        <button id="saved-fibo-status" style="display:none" title="Remove the saved Fibo override so the scanner calculates new anchors next time">Saved by me · use automatic</button>
         <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
         <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line">↑</button>
         <button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line">↓</button>
@@ -1388,17 +1389,6 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
     lines.push(scannerCandlesCsv(500, earliestAnchor));
-    lines.push('');
-    lines.push('FIBO ANCHOR / CHANNEL DEBUG:');
-    const firstBoundary = [...groups.values()].flat().find(obj => obj.type === 'fib-boundary') || null;
-    const selectedAnchorPrice = Number(firstBoundary?.y0);
-    const rowsBeforeAnchor = earliestAnchor ? ohlc.filter(row => String(row.time) < earliestAnchor) : [];
-    const earlierBottom = rowsBeforeAnchor.reduce((best,row) => !best || Number(row.low) < Number(best.low) ? row : best, null);
-    lines.push(`  selected first anchor: ${{earliestAnchor || '-'}} @ ${{Number.isFinite(selectedAnchorPrice) ? fmt(selectedAnchorPrice) : '-'}}`);
-    lines.push(`  lower bottom visible before anchor: ${{earlierBottom ? `${{earlierBottom.time}} @ ${{fmt(earlierBottom.low)}}` : '-'}}`);
-    lines.push('  scanner audit command:');
-    lines.push(`  python run -explain ${{P.symbol || ''}}`);
-    lines.push('  Audit checks every earlier lower low, completed 22-session channel (up to 15%), and post-channel breakout maturity.');
     return lines.join('\\n');
   }}
 
@@ -2794,6 +2784,8 @@ class LightweightChartLevelSelectorUI:
       resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
       resetScannerBtn.textContent = initialScannerDrawnObjects.some(o => o.group_id === 'auto-fibo') ? 'Reset Fibo' : 'Reset scanner';
     }}
+    const savedFiboBtn = $('saved-fibo-status');
+    if (savedFiboBtn) savedFiboBtn.style.display = levels.__saved_fibo_by_user__ ? 'block' : 'none';
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
     const setupInfoBtn = $('setup-debug-btn');
     if (setupInfoBtn) {{
@@ -3046,6 +3038,14 @@ class LightweightChartLevelSelectorUI:
     applyWedgeDerivedLevels(true);
     applyScannerSetupStopLoss(true);
     render();
+  }};
+  $('saved-fibo-status').onclick = async () => {{
+    levels.__saved_fibo_by_user__ = false;
+    drawnObjects = drawnObjects.filter(obj => !(obj.type === 'fib' || obj.type === 'fib-boundary' || obj.group_id === 'auto-fibo'));
+    render();
+    const payload = collectLevelsForSave(false);
+    await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload}})}});
+    $('result-box').textContent = 'Saved Fibo override removed. The scanner will calculate automatic anchors next time.';
   }};
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
@@ -3466,6 +3466,7 @@ class LightweightChartLevelSelectorUI:
       spread:Number((stockCfdMode ? spreadMult : spreadMult*pipValue).toFixed(4)),
       spread_pips: stockCfdMode ? Number((spreadMult/0.01).toFixed(2)) : null,
       drawn_objects:drawnObjects,
+      __saved_fibo_by_user__: levels.__saved_fibo_by_user__ === false ? false : drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary' || obj.group_id === 'auto-fibo'),
       level_points:levelPoints,
       __finished__:!!finished}};
   }}
