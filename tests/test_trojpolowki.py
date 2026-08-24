@@ -269,7 +269,7 @@ def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
 
 def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
     source = Path("run").read_text(encoding="utf-8")
-    assert "class='btn fibo-analyzer-btn'" in source
+    assert "class='btn fibo-analyzer-btn{debug_class}'" in source
     assert "data-ticker='{html.escape(ticker, quote=True)}'" in source
     assert "onclick='openFiboDropoutAnalyzer(this)'" in source
     assert "id='fibo-analyzer-sidebar'" in source
@@ -741,7 +741,7 @@ def test_decisive_breakout_anchors_after_completed_side_channel():
         source.index("def _select_fibo_long_impulse_base"):
         source.index("def _find_fibo_3p_steep_setup")
     ]
-    assert "terminal_channel = _latest_sideways_window" in fib_base
+    assert "terminal_channel = _latest_channel_breakout_long" in fib_base
     assert "post_channel_right = i_peak - min_incline_days" in fib_base
     assert "has not formed a mature new impulse yet" in fib_base
 
@@ -754,6 +754,45 @@ def test_offset_scan_cannot_resurrect_brs_side_channel():
     assert "band_pct=0.10" in stale
     assert "max_outlier_candles=3" in stale
     assert "Historical end-offset scans" in stale
+
+
+def test_lower_anchor_is_used_only_when_strong_incline_survives():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    fib_base = source[
+        source.index("def _select_fibo_long_impulse_base"):
+        source.index("def _find_fibo_3p_steep_setup")
+    ]
+    assert "earlier_gain >= 0.18" in fib_base
+    assert "earlier_daily_gain >= 0.003" in fib_base
+    assert "widened anchor to a lower bottom that preserves strong incline" in fib_base
+    assert "earlier_left = max(structural_anchor_floor" in fib_base
+
+    with Path("data/csv/stocks/ALR_WA.csv").open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    desired = next(row for row in rows if row["Date"] == "2026-03-23")
+    rejected_middle = next(row for row in rows if row["Date"] == "2026-04-27")
+    assert float(desired["Low"]) == 95.225
+    assert float(desired["Low"]) < float(rejected_middle["Low"])
+
+
+def test_latest_channel_breakout_resets_ice_anchor():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    helper = source[source.index("def _latest_channel_breakout_long"):source.index("def _has_extended_sideways")]
+    assert "for start in range" in helper
+    assert "end + 5" in helper
+    assert "latest = (end, breakout)" in helper
+    fib_base = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+    assert "structural_anchor_floor = post_channel_left" in fib_base
+
+
+def test_fibo_board_exposes_debug_for_every_3p_card():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "is_fibo_3p: bool = False" in source
+    assert '("❌" in raw or is_fibo_3p)' in source
+    assert "fibo-3p-debug-btn" in source
+    assert "🧪 Show 3P debug" in source
+    assert "function toggleFibo3pDebug" in source
+    assert "Select a Fibo instrument to analyze it." in source
 
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():

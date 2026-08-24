@@ -1004,6 +1004,48 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
 
 
+def _latest_channel_breakout_long(
+    df_slice: pd.DataFrame,
+    window_days: int = 22,
+    band_pct: float = 0.12,
+    breakout_pct: float = 0.03,
+) -> tuple[int, int] | None:
+    """Return the latest completed channel end and its first decisive breakout.
+
+    Unlike ``_latest_sideways_window``, this evaluates every qualifying range.
+    The tightest historical range is not necessarily the range that reset the
+    current impulse (ICE).  A channel only counts when a close breaks out within
+    five sessions, so ordinary pauses inside a continuing incline remain valid.
+    """
+    if len(df_slice) < window_days + 1:
+        return None
+    highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
+    lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
+    closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
+    latest: tuple[int, int] | None = None
+    for start in range(0, len(df_slice) - window_days):
+        end = start + window_days - 1
+        stats = _sideways_window_stats(
+            highs.iloc[start:end + 1].reset_index(drop=True),
+            lows.iloc[start:end + 1].reset_index(drop=True),
+            closes.iloc[start:end + 1].reset_index(drop=True),
+            band_pct,
+            0.05,
+            3,
+        )
+        if stats is None:
+            continue
+        channel_high = stats[0]
+        probe_end = min(len(df_slice) - 1, end + 5)
+        breakout = next(
+            (idx for idx in range(end + 1, probe_end + 1) if float(closes.iloc[idx]) > channel_high * (1.0 + breakout_pct)),
+            None,
+        )
+        if breakout is not None:
+            latest = (end, breakout)
+    return latest
+
+
 def _has_extended_sideways(
     df_slice: pd.DataFrame,
     window_days: int = 22,
@@ -5404,36 +5446,27 @@ def _select_fibo_long_impulse_base(
     # incline).  PUR spent July in a tight range and broke out only in August;
     # the old June low must not remain the new impulse anchor.  Wait until the
     # post-channel leg itself is mature instead of drawing a Fibo across it.
+    structural_anchor_floor = 0
     impulse_slice = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-    terminal_channel = _latest_sideways_window(
-        impulse_slice,
-        max_days=22,
-        band_pct=0.10,
-        max_progress_pct=0.05,
-        max_outlier_candles=3,
-    )
+    terminal_channel = _latest_channel_breakout_long(impulse_slice)
     if terminal_channel is not None:
-        _channel_start, channel_end, channel_high, _channel_low, _channel_pct = terminal_channel
+        channel_end, breakout_idx = terminal_channel
         channel_end_abs = i_start + channel_end
-        post_channel_close = close.iloc[channel_end_abs + 1:i_peak + 1]
-        broke_out = bool(
-            not post_channel_close.empty
-            and (post_channel_close > float(channel_high) * 1.03).any()
-        )
-        if broke_out:
-            post_channel_left = channel_end_abs + 1
-            post_channel_right = i_peak - min_incline_days
-            if post_channel_right < post_channel_left:
-                _log(
-                    "Rejected long: decisive breakout after a month-long channel "
-                    "has not formed a mature new impulse yet."
-                )
-                return None
-            i_start = int(low.iloc[post_channel_left:post_channel_right + 1].idxmin())
+        post_channel_left = i_start + breakout_idx
+        breakout_abs = post_channel_left
+        structural_anchor_floor = post_channel_left
+        post_channel_right = i_peak - min_incline_days
+        if post_channel_right < post_channel_left:
             _log(
-                "Long: reset impulse anchor after completed channel "
-                f"to idx={i_start}."
+                "Rejected long: decisive breakout after a month-long channel "
+                "has not formed a mature new impulse yet."
             )
+            return None
+        i_start = int(low.iloc[post_channel_left:post_channel_right + 1].idxmin())
+        _log(
+            "Long: reset impulse anchor after completed channel "
+            f"ending idx={channel_end_abs} to breakout idx={breakout_abs}; anchor idx={i_start}."
+        )
 
     if reset_after_extended_sideways:
         # A genuinely long base is different from the shorter pauses that can
@@ -5521,10 +5554,10 @@ def _select_fibo_long_impulse_base(
         # breaking out (CRI), rather than the same quote inside the old base.
         return int(values[values == minimum].index[-1])
 
-    pre_start_left = max(0, i_start - launch_lookback)
+    pre_start_left = max(structural_anchor_floor, i_start - launch_lookback)
     initial_start_idx = _latest_low_idx(pre_start_left, i_start)
     if initial_start_idx <= pre_start_left + 1 and pre_start_left > 0:
-        pre_start_left = max(0, pre_start_left - launch_extension)
+        pre_start_left = max(structural_anchor_floor, pre_start_left - launch_extension)
     fib_start_idx = _latest_low_idx(pre_start_left, i_start)
     _log(
         f"Long: fib start low searched in [{pre_start_left}, {i_start}] "
@@ -5533,6 +5566,26 @@ def _select_fibo_long_impulse_base(
     i_start = fib_start_idx
     fib_start = float(low.iloc[fib_start_idx])
     fib_end = float(high.iloc[i_peak])
+
+    # Before accepting a convenient recent low, test the lower bottoms in the
+    # complete impulse horizon.  Widen only when the resulting formation still
+    # meets the same strong-3P quality (>=18% total and >=0.3% per session).
+    # This recovers ALR's March low while leaving US30 at its recent June low
+    # when the much older bottom would dilute the incline below that threshold.
+    earlier_left = max(structural_anchor_floor, i_peak - max_lookback)
+    if earlier_left < i_start:
+        earlier_idx = int(low.iloc[earlier_left:i_start + 1].idxmin())
+        earlier_low = float(low.iloc[earlier_idx])
+        earlier_days = i_peak - earlier_idx
+        earlier_gain = (fib_end - earlier_low) / max(abs(earlier_low), 1e-9)
+        earlier_daily_gain = earlier_gain / max(earlier_days, 1)
+        if earlier_low < fib_start and earlier_gain >= 0.18 and earlier_daily_gain >= 0.003:
+            _log(
+                "Long: widened anchor to a lower bottom that preserves strong incline "
+                f"idx={i_start}->{earlier_idx}, gain={earlier_gain * 100:.2f}%, "
+                f"daily={earlier_daily_gain * 100:.3f}%."
+            )
+            i_start, fib_start = earlier_idx, earlier_low
 
     min_reset_impulse_days = 5
 
