@@ -5374,6 +5374,7 @@ def _select_fibo_long_impulse_base(
 
     high = pd.to_numeric(w["High"], errors="coerce")
     low = pd.to_numeric(w["Low"], errors="coerce")
+    close = pd.to_numeric(w["Close"], errors="coerce")
     i_start = _select_impulse_start_long(
         w,
         i_peak,
@@ -5397,6 +5398,42 @@ def _select_fibo_long_impulse_base(
     if i_peak <= i_start + min_incline_days:
         _log("Rejected long: invalid impulse start/peak distance.")
         return None
+
+    # A completed channel immediately before a sharp breakout is a structural
+    # reset even on the 3P path (which otherwise permits pauses inside a broad
+    # incline).  PUR spent July in a tight range and broke out only in August;
+    # the old June low must not remain the new impulse anchor.  Wait until the
+    # post-channel leg itself is mature instead of drawing a Fibo across it.
+    impulse_slice = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+    terminal_channel = _latest_sideways_window(
+        impulse_slice,
+        max_days=22,
+        band_pct=0.10,
+        max_progress_pct=0.05,
+        max_outlier_candles=3,
+    )
+    if terminal_channel is not None:
+        _channel_start, channel_end, channel_high, _channel_low, _channel_pct = terminal_channel
+        channel_end_abs = i_start + channel_end
+        post_channel_close = close.iloc[channel_end_abs + 1:i_peak + 1]
+        broke_out = bool(
+            not post_channel_close.empty
+            and (post_channel_close > float(channel_high) * 1.03).any()
+        )
+        if broke_out:
+            post_channel_left = channel_end_abs + 1
+            post_channel_right = i_peak - min_incline_days
+            if post_channel_right < post_channel_left:
+                _log(
+                    "Rejected long: decisive breakout after a month-long channel "
+                    "has not formed a mature new impulse yet."
+                )
+                return None
+            i_start = int(low.iloc[post_channel_left:post_channel_right + 1].idxmin())
+            _log(
+                "Long: reset impulse anchor after completed channel "
+                f"to idx={i_start}."
+            )
 
     if reset_after_extended_sideways:
         # A genuinely long base is different from the shorter pauses that can
@@ -6563,6 +6600,16 @@ def run_fibo_search(target: str) -> int:
         # becomes an extended side trend. Re-check against the full current
         # dataset so stale offset candidates cannot bypass the live rejection.
         if _has_extended_sideways(after.reset_index(drop=True)):
+            return True
+        if cand.direction == "long" and _has_long_sideways(
+            after.reset_index(drop=True),
+            max_days=22,
+            band_pct=0.10,
+            max_progress_pct=0.05,
+            max_outlier_candles=3,
+        ):
+            # Historical end-offset scans must not resurrect an otherwise stale
+            # long whose live correction has since settled into a channel (BRS).
             return True
         if cand.direction == "short" and _has_long_sideways(
             after.reset_index(drop=True), max_days=22, band_pct=0.12

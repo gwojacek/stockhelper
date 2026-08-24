@@ -737,6 +737,24 @@ def test_decisive_breakout_anchors_after_completed_side_channel():
     assert "decisive_breakout" in selector
     assert "absolute_end + 1 if decisive_breakout" in selector
 
+    fib_base = source[
+        source.index("def _select_fibo_long_impulse_base"):
+        source.index("def _find_fibo_3p_steep_setup")
+    ]
+    assert "terminal_channel = _latest_sideways_window" in fib_base
+    assert "post_channel_right = i_peak - min_incline_days" in fib_base
+    assert "has not formed a mature new impulse yet" in fib_base
+
+
+def test_offset_scan_cannot_resurrect_brs_side_channel():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    assert 'cand.direction == "long" and _has_long_sideways' in stale
+    assert "max_days=22" in stale
+    assert "band_pct=0.10" in stale
+    assert "max_outlier_candles=3" in stale
+    assert "Historical end-offset scans" in stale
+
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():
     with Path("data/csv/stocks/AEP_US.csv").open(encoding="utf-8") as handle:
