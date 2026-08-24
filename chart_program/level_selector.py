@@ -722,6 +722,10 @@ def run_level_selector(raw_args=None):
                     "group_id": gid,
                 })
                 existing["drawn_objects"] = objs
+                # Scanner geometry is a preview, not a manual override.  Persist
+                # this explicit false value if the chart is saved unchanged so
+                # a later scan never mistakes a preload for a user decision.
+                existing["__saved_fibo_by_user__"] = False
                 resolved_end = str(pd.to_datetime(e_ts).date())
                 print(f"[chart] auto-fibo preloaded: {len(objs) - 1} lines, anchors={args.fibo_anchor_start}->{resolved_end}, direction={'short' if is_short else 'long'}")
         except Exception as exc:

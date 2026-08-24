@@ -992,8 +992,11 @@ def _latest_sideways_window(df_slice: pd.DataFrame, max_days: int = 22, band_pct
         if stats is not None:
             hi, lo, rng_pct, _progress_pct = stats
             end = i + max_days - 1
-            # keep the tightest qualifying window as most diagnostic
-            if best is None or rng_pct < best[4]:
+            # Structural resets are chronological: a later completed channel
+            # supersedes an older, tighter one.  Choosing the historically
+            # tightest range could resurrect a pre-channel Fibo in end-offset
+            # scans even though price had since completed another base.
+            if best is None or end > best[1] or (end == best[1] and rng_pct < best[4]):
                 best = (i, end, hi, lo, rng_pct)
     return best
 
@@ -4504,6 +4507,10 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     if not isinstance(objects, list):
         return set()
     kinds: set[str] = set()
+    # ``False`` is written by new scanner preloads.  Missing is deliberately
+    # treated as saved for compatibility with sessions created before the
+    # marker existed; the next chart save migrates those sessions to ``True``.
+    saved_fibo_active = state.get("__saved_fibo_by_user__") is not False
     for obj in objects:
         if not isinstance(obj, dict):
             continue
@@ -4511,7 +4518,7 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
         group_id = str(obj.get("group_id", ""))
         if obj_type == "wedge" or group_id == "auto-wedge":
             kinds.add("wedge")
-        if obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo":
+        if saved_fibo_active and (obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo"):
             kinds.add("fibo")
     return kinds
 
@@ -4524,6 +4531,8 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        return []
+    if not isinstance(state, dict) or state.get("__saved_fibo_by_user__") is False:
         return []
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):

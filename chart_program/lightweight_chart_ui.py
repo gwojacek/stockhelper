@@ -713,6 +713,7 @@ class LightweightChartLevelSelectorUI:
           <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save</span></button>
           <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span>Save &amp; Close</span></button>
         </div>
+        <button id="saved-fibo-status" class="side-action-btn" type="button" style="display:none;background:#713f12"><span class="btn-icon">💾</span><span>Saved by me · use automatic</span></button>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
           <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
@@ -740,6 +741,9 @@ class LightweightChartLevelSelectorUI:
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
+  const initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+  let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=savedFiboByUser?'':'none'; }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -3445,7 +3449,10 @@ class LightweightChartLevelSelectorUI:
     const stockCfdMode = !!levels.__stock_cfd_mode__;
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
+    const currentFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+    if (currentFiboGeometry !== initialFiboGeometry) savedFiboByUser = currentFiboGeometry !== '[]';
     return {{...levels,
+      __saved_fibo_by_user__:savedFiboByUser,
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
@@ -3531,6 +3538,17 @@ class LightweightChartLevelSelectorUI:
   }}
   $('save-btn').onclick = () => saveChart(false);
   $('finish-btn').onclick = () => saveChart(true);
+  $('saved-fibo-status').onclick = async () => {{
+    savedFiboByUser = false;
+    levels.__saved_fibo_by_user__ = false;
+    refreshSavedFiboStatus();
+    const payload = collectLevelsForSave(false);
+    payload.__saved_fibo_by_user__ = false;
+    const resp = await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload, screenshot:null}})}});
+    const data = await resp.json().catch(() => ({{}}));
+    $('result-box').textContent = resp.ok && data.ok ? 'Saved Fibo released. The next scan will use automatic anchors.' : 'Could not release saved Fibo.';
+  }};
+  refreshSavedFiboStatus();
 
 
   function setupJournalCloseMode() {{
