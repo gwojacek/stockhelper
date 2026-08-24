@@ -1388,6 +1388,17 @@ class LightweightChartLevelSelectorUI:
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
     lines.push(scannerCandlesCsv(500, earliestAnchor));
+    lines.push('');
+    lines.push('FIBO ANCHOR / CHANNEL DEBUG:');
+    const firstBoundary = [...groups.values()].flat().find(obj => obj.type === 'fib-boundary') || null;
+    const selectedAnchorPrice = Number(firstBoundary?.y0);
+    const rowsBeforeAnchor = earliestAnchor ? ohlc.filter(row => String(row.time) < earliestAnchor) : [];
+    const earlierBottom = rowsBeforeAnchor.reduce((best,row) => !best || Number(row.low) < Number(best.low) ? row : best, null);
+    lines.push(`  selected first anchor: ${{earliestAnchor || '-'}} @ ${{Number.isFinite(selectedAnchorPrice) ? fmt(selectedAnchorPrice) : '-'}}`);
+    lines.push(`  lower bottom visible before anchor: ${{earlierBottom ? `${{earlierBottom.time}} @ ${{fmt(earlierBottom.low)}}` : '-'}}`);
+    lines.push('  scanner audit command:');
+    lines.push(`  python run -explain ${{P.symbol || ''}}`);
+    lines.push('  Audit checks every earlier lower low, completed 22-session channel (up to 15%), and post-channel breakout maturity.');
     return lines.join('\\n');
   }}
 

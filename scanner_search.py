@@ -5648,7 +5648,7 @@ def _select_fibo_long_impulse_base(
                 # Mirrored shorts use the slightly more permissive threshold
                 # needed for long, stair-step declines such as XAUUSD.
                 continuation_extension = (fib_end - p_high) / max(p_rng, 1e-9)
-                continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35
+                continuation_threshold = 0.15
                 if continuation_extension >= continuation_threshold:
                     _log(
                         "Impulse continuation: retained original anchor after a 61.8 pullback "
@@ -6650,6 +6650,20 @@ def run_fibo_search(target: str) -> int:
         after = df_full.loc[dts > end_ts]
         if after.empty:
             return False
+        try:
+            start_ts = pd.to_datetime(cand.incline_start_date)
+        except Exception:
+            start_ts = pd.NaT
+        if pd.notna(start_ts):
+            impulse_now = df_full.loc[(dts >= start_ts) & (dts <= end_ts)].reset_index(drop=True)
+            channel_breakout = _latest_channel_breakout_long(impulse_now) if cand.direction == "long" else None
+            if channel_breakout is not None:
+                _channel_end, breakout_idx = channel_breakout
+                if len(impulse_now) - 1 - breakout_idx < 10:
+                    # Offset scans may have accepted the old anchor before the
+                    # side channel and later breakout were visible. PUR must not
+                    # survive through that historical snapshot.
+                    return True
         # Offset scans can capture a short before its later correction turns
         # into a month-long range, or either direction before a correction
         # becomes an extended side trend. Re-check against the full current

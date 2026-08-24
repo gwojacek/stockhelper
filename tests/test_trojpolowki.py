@@ -679,7 +679,7 @@ def test_snt_continuation_keeps_june_1_anchor_and_channel_expires_3p():
         source.index("def _select_fibo_long_impulse_base"):
         source.index("def _find_fibo_3p_steep_setup")
     ]
-    assert "continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35" in selector
+    assert "continuation_threshold = 0.15" in selector
     assert "if continuation_extension >= continuation_threshold" in selector
     assert "return False, None" in selector[selector.index("if continuation_extension >= continuation_threshold"):]
 
@@ -754,6 +754,9 @@ def test_offset_scan_cannot_resurrect_brs_side_channel():
     assert "band_pct=0.10" in stale
     assert "max_outlier_candles=3" in stale
     assert "Historical end-offset scans" in stale
+    assert "impulse_now = df_full.loc" in stale
+    assert "channel_breakout = _latest_channel_breakout_long(impulse_now)" in stale
+    assert "PUR must not" in stale
 
 
 def test_lower_anchor_is_used_only_when_strong_incline_survives():
@@ -806,6 +809,17 @@ def test_fibo_board_exposes_debug_for_every_3p_card():
     assert "function toggleFibo3pDebug" in source
     assert "Select a Fibo instrument to analyze it." in source
     assert '"Recent dropouts" not in str(headers[col_idx])' in source
+
+
+def test_chart_fibo_information_appends_anchor_channel_debug_below_csv():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    fibo = source[source.index("function fiboDebugSnapshot"):source.index("function setupDebugSnapshot")]
+    csv_idx = fibo.index("CSV candles since first anchor")
+    debug_idx = fibo.index("FIBO ANCHOR / CHANNEL DEBUG")
+    assert debug_idx > csv_idx
+    assert "lower bottom visible before anchor" in fibo
+    assert "python run -explain" in fibo
+    assert "completed 22-session channel (up to 15%)" in fibo
 
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():
@@ -1020,7 +1034,7 @@ def test_short_fibo_keeps_dominant_top_when_later_bottom_extends_decline():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
     assert "preserve_deeper_short_continuation" in selector
-    assert "continuation_threshold = 0.15 if preserve_deeper_short_continuation else 0.35" in selector
+    assert "continuation_threshold = 0.15" in selector
     assert "continuation_extension >= continuation_threshold" in selector
     assert "retained original anchor after a 61.8 pullback" in selector
     regular = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
