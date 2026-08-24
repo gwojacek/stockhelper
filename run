@@ -2941,7 +2941,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         table_html += "<tr>"
         for col_idx, cells in enumerate(columns_for_display):
             attrs_source = next((cell for cell in cells if str(cell).strip()), "")
-            is_fibo_3p = "fibo" in section_id and "Steep incline" in str(headers[col_idx])
+            # Debug is useful for every active Fibo state, not only column one:
+            # waiting/near-61.8 cards need the same anchor and filter trace.
+            is_fibo_3p = "fibo" in section_id and "Recent dropouts" not in str(headers[col_idx])
             stack = "".join(f"<div{_troj_card_attrs(str(cell), section_id)}>{_troj_cell_to_html(str(cell), section_id, is_fibo_3p=is_fibo_3p)}</div>" for cell in cells)
             dropout_class = " fibo-dropout-column" if "fibo" in section_id and "Recent dropouts" in str(headers[col_idx]) else ""
             attrs = _troj_cell_attrs(str(attrs_source), section_id)

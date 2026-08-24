@@ -763,7 +763,7 @@ def test_lower_anchor_is_used_only_when_strong_incline_survives():
         source.index("def _find_fibo_3p_steep_setup")
     ]
     assert "earlier_gain >= 0.18" in fib_base
-    assert "earlier_daily_gain >= 0.003" in fib_base
+    assert "earlier_daily_gain >= 0.002" in fib_base
     assert "widened anchor to a lower bottom that preserves strong incline" in fib_base
     assert "earlier_left = max(structural_anchor_floor" in fib_base
 
@@ -774,12 +774,24 @@ def test_lower_anchor_is_used_only_when_strong_incline_survives():
     assert float(desired["Low"]) == 95.225
     assert float(desired["Low"]) < float(rejected_middle["Low"])
 
+    with Path("data/csv/indexes/US30.csv").open(encoding="utf-8") as handle:
+        us30 = list(csv.DictReader(handle))
+    bottom_idx = next(idx for idx, row in enumerate(us30) if row["Date"] == "2026-03-30")
+    peak_idx = next(idx for idx, row in enumerate(us30) if row["Date"] == "2026-08-05")
+    bottom = float(us30[bottom_idx]["Low"])
+    peak = float(us30[peak_idx]["High"])
+    assert bottom == 45057.28125
+    assert ((peak - bottom) / bottom) / (peak_idx - bottom_idx) >= 0.002
+
 
 def test_latest_channel_breakout_resets_ice_anchor():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     helper = source[source.index("def _latest_channel_breakout_long"):source.index("def _has_extended_sideways")]
     assert "for start in range" in helper
     assert "end + 5" in helper
+    assert "band_pct: float = 0.15" in helper
+    assert "breakout_floor = max(channel_high, previous_high)" in helper
+    assert "float(closes.iloc[idx]) > breakout_floor" in helper
     assert "latest = (end, breakout)" in helper
     fib_base = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
     assert "structural_anchor_floor = post_channel_left" in fib_base
@@ -793,6 +805,7 @@ def test_fibo_board_exposes_debug_for_every_3p_card():
     assert "🧪 Show 3P debug" in source
     assert "function toggleFibo3pDebug" in source
     assert "Select a Fibo instrument to analyze it." in source
+    assert '"Recent dropouts" not in str(headers[col_idx])' in source
 
 
 def test_aep_june_1_is_clear_bottom_of_full_monthly_base():

@@ -1007,7 +1007,7 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
 def _latest_channel_breakout_long(
     df_slice: pd.DataFrame,
     window_days: int = 22,
-    band_pct: float = 0.12,
+    band_pct: float = 0.15,
     breakout_pct: float = 0.03,
 ) -> tuple[int, int] | None:
     """Return the latest completed channel end and its first decisive breakout.
@@ -1037,8 +1037,10 @@ def _latest_channel_breakout_long(
             continue
         channel_high = stats[0]
         probe_end = min(len(df_slice) - 1, end + 5)
+        previous_high = float(highs.iloc[:start].max()) if start > 0 else channel_high
+        breakout_floor = max(channel_high, previous_high) * (1.0 + breakout_pct)
         breakout = next(
-            (idx for idx in range(end + 1, probe_end + 1) if float(closes.iloc[idx]) > channel_high * (1.0 + breakout_pct)),
+            (idx for idx in range(end + 1, probe_end + 1) if float(closes.iloc[idx]) > breakout_floor),
             None,
         )
         if breakout is not None:
@@ -5569,9 +5571,9 @@ def _select_fibo_long_impulse_base(
 
     # Before accepting a convenient recent low, test the lower bottoms in the
     # complete impulse horizon.  Widen only when the resulting formation still
-    # meets the same strong-3P quality (>=18% total and >=0.3% per session).
-    # This recovers ALR's March low while leaving US30 at its recent June low
-    # when the much older bottom would dilute the incline below that threshold.
+    # meets strong-impulse quality (>=18% total and >=0.2% per session).
+    # This recovers ALR's March low and US30's March bottom, while still refusing
+    # old lows that make the overall rise too slow to qualify as a strong leg.
     earlier_left = max(structural_anchor_floor, i_peak - max_lookback)
     if earlier_left < i_start:
         earlier_idx = int(low.iloc[earlier_left:i_start + 1].idxmin())
@@ -5579,7 +5581,7 @@ def _select_fibo_long_impulse_base(
         earlier_days = i_peak - earlier_idx
         earlier_gain = (fib_end - earlier_low) / max(abs(earlier_low), 1e-9)
         earlier_daily_gain = earlier_gain / max(earlier_days, 1)
-        if earlier_low < fib_start and earlier_gain >= 0.18 and earlier_daily_gain >= 0.003:
+        if earlier_low < fib_start and earlier_gain >= 0.18 and earlier_daily_gain >= 0.002:
             _log(
                 "Long: widened anchor to a lower bottom that preserves strong incline "
                 f"idx={i_start}->{earlier_idx}, gain={earlier_gain * 100:.2f}%, "
