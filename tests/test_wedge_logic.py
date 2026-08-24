@@ -71,6 +71,23 @@ def test_saved_fibo_anchors_are_read_from_boundary_group(tmp_path, monkeypatch):
     ]
 
 
+def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkeypatch):
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    monkeypatch.setattr(scanner, "SCANNER_SESSION_DIR", sessions)
+    objects = [
+        {"type": "fib", "group_id": "auto-fibo", "ratio": 0.618},
+        {"type": "fib-boundary", "group_id": "auto-fibo", "x0": "2026-01-02", "x1": "2026-03-03"},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({
+        "drawn_objects": objects,
+        "__saved_fibo_by_user__": False,
+    }), encoding="utf-8")
+
+    assert scanner._saved_fibo_anchors_for_ticker("KLIN") == []
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN") == set()
+
+
 def test_invalid_saved_fibo_is_deleted_after_two_weeks(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"

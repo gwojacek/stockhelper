@@ -741,7 +741,7 @@ class LightweightChartLevelSelectorUI:
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
-  const initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+  let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
   let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=savedFiboByUser?'':'none'; }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
@@ -3540,6 +3540,10 @@ class LightweightChartLevelSelectorUI:
   $('finish-btn').onclick = () => saveChart(true);
   $('saved-fibo-status').onclick = async () => {{
     savedFiboByUser = false;
+    // The visible lines may remain as a reference, but from this point their
+    // current geometry is the non-authoritative baseline. A later ordinary
+    // save must not silently promote the released override back to saved.
+    initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
     levels.__saved_fibo_by_user__ = false;
     refreshSavedFiboStatus();
     const payload = collectLevelsForSave(false);

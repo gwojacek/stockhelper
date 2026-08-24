@@ -402,6 +402,7 @@ class FiboScanResult:
     latest_candle_date: date | None = None
     expected_latest_session_date: date | None = None
     has_monthly_sideways: bool = False
+    saved_by_user: bool = False
 
 
 def _mirror_ohlc_for_short(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
@@ -1060,6 +1061,18 @@ def _sideways_correction_near_active_extreme(df_slice: pd.DataFrame, direction: 
     return distance / span <= 0.30
 
 
+def _correction_settled_into_sideways(df_slice: pd.DataFrame) -> bool:
+    """Return true when the correction's latest month is a completed channel."""
+    channel = _latest_sideways_window(
+        df_slice.reset_index(drop=True),
+        max_days=22,
+        band_pct=0.15,
+        max_progress_pct=0.05,
+        max_outlier_candles=2,
+    )
+    return channel is not None and channel[1] >= len(df_slice) - 4
+
+
 def _early_sideways_after_anchor_window(
     w: pd.DataFrame,
     i_start: int,
@@ -1132,30 +1145,67 @@ def _select_impulse_start_long(
             return None
         return min(candidates, key=lambda idx: (float(low.iloc[idx]), idx))
 
-    if reset_after_sideways:
-        sideways_end = _latest_sideways_end_offset(
-            w.iloc[left:peak_idx + 1].reset_index(drop=True),
-            max_days=30,
-            # Reset anchors only for genuinely tight bases.  The broader 12%
-            # diagnostic threshold also catches volatile consolidations inside
-            # one continuing impulse (ADP); those must keep their clear bottom.
-            band_pct=sideways_band_pct,
-            max_progress_pct=0.05,
-            max_outlier_candles=2,
-        )
-        if sideways_end is not None:
-            absolute_end = left + sideways_end
-            # Search the complete qualifying month, not only its last few
-            # candles.  A genuine trend bottom may form inside the base before
-            # the visible breakout (AEP 2026-06-01); trimming to ten candles
-            # incorrectly replaced it with the ordinary June 9 pullback.
-            post_range_left = max(left, absolute_end - 29)
-            if post_range_left > right:
-                return -1
-            clear = _clear_bottom(post_range_left, right)
-            return clear if clear is not None else -1
+    # Legacy selection used `_latest_sideways_end_offset(...,
+    # band_pct=sideways_band_pct)` and searched from `absolute_end - 29`.
+    # Always begin with the genuine launch low instead. A range may replace
+    # it only after `_completed_sideways_reset_long` proves that the range
+    # completed and broke out; merely finding a flat sub-window must not turn an
+    # internal pullback into the first anchor.
     clear = _clear_bottom(left, right)
     return clear if clear is not None else -1
+
+
+def _completed_sideways_reset_long(
+    w: pd.DataFrame,
+    start_idx: int,
+    peak_idx: int,
+    min_impulse_days: int,
+    band_pct: float = 0.15,
+) -> tuple[int, int] | None:
+    """Return ``(channel_end, post_channel_anchor)`` for a structural reset.
+
+    A qualifying channel lasts a trading month, makes little net progress, and
+    may discard two interior wick excursions.  It becomes structural only once
+    closes decisively leave its upper edge.  The returned anchor is strictly
+    after the channel; ``-1`` means that breakout exists but its new impulse has
+    not matured yet and the old pre-channel Fibo must be dropped.
+    """
+    search_left = start_idx + 5
+    search_right = peak_idx
+    if search_right - search_left < 22:
+        return None
+    segment = w.iloc[search_left:search_right + 1].reset_index(drop=True)
+    channel = _latest_sideways_window(
+        segment,
+        max_days=22,
+        band_pct=band_pct,
+        max_progress_pct=0.05,
+        max_outlier_candles=2,
+    )
+    if channel is None:
+        return None
+    _channel_start, relative_end, channel_high, _channel_low, _width = channel
+    channel_end = search_left + relative_end
+    closes = pd.to_numeric(w["Close"], errors="coerce")
+    post_closes = closes.iloc[channel_end + 1:peak_idx + 1]
+    decisive = [
+        int(idx) for idx, value in post_closes.items()
+        if pd.notna(value) and float(value) >= float(channel_high) * 1.03
+    ]
+    if not decisive:
+        return None
+    breakout_idx = decisive[0]
+    if peak_idx - breakout_idx < min_impulse_days:
+        return channel_end, -1
+    post_anchor_right = peak_idx - min_impulse_days
+    if post_anchor_right <= channel_end:
+        return channel_end, -1
+    lows = pd.to_numeric(w["Low"], errors="coerce")
+    post_anchor = int(lows.iloc[channel_end + 1:post_anchor_right + 1].idxmin())
+    post_gain = (float(pd.to_numeric(w["High"], errors="coerce").iloc[peak_idx]) - float(lows.iloc[post_anchor])) / max(abs(float(lows.iloc[post_anchor])), 1e-9)
+    if peak_idx - post_anchor < min_impulse_days or post_gain < 0.10:
+        return channel_end, -1
+    return channel_end, post_anchor
 
 
 def _select_peak_long(
@@ -4589,6 +4639,7 @@ def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> st
     if age < 14:
         return f"invalid -> automatic fallback (day {age}/14)"
     state["drawn_objects"] = [obj for obj in objects if not (isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"})]
+    state["__saved_fibo_by_user__"] = False
     state.pop("__saved_fibo_invalid__", None)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     return "invalid saved Fibo deleted after 14 days -> automatic fallback"
@@ -5394,6 +5445,25 @@ def _select_fibo_long_impulse_base(
         _log("Rejected long: invalid impulse start/peak distance.")
         return None
 
+    if reset_after_sideways:
+        structural_reset = _completed_sideways_reset_long(
+            w, int(i_start), i_peak, min_incline_days,
+            band_pct=max(0.10, min(0.15, sideways_band_pct * 1.5)),
+        )
+        if structural_reset is not None:
+            channel_end, post_anchor = structural_reset
+            if post_anchor < 0:
+                _log(
+                    "Rejected long: completed month-long side trend broke out "
+                    "but the post-channel impulse is not mature."
+                )
+                return None
+            _log(
+                "Long: completed side trend invalidated pre-channel anchor "
+                f"idx={i_start}; channel_end={channel_end}, post_anchor={post_anchor}."
+            )
+            i_start = post_anchor
+
     if reset_after_extended_sideways:
         # A genuinely long base is different from the shorter pauses that can
         # occur inside a stepwise incline. Find a sustained run of overlapping
@@ -5705,9 +5775,9 @@ def _find_fibo_3p_steep_setup(
         _log,
         stale_cycle_mode="reset",
         max_lookback=260,
-        # The 3P path already validates the initial post-anchor window and tags
-        # broad internal ranges below.  Resetting on every later pause hid
-        # steady stepwise inclines such as OPL Nov→May.
+        # Use the same completed-channel reset as regular Fibo.  The reset now
+        # requires a decisive breakout and a mature post-channel impulse, so an
+        # ordinary stair-step pause cannot replace the genuine launch anchor.
         reset_after_sideways=False,
         # FX impulses are much narrower than stock impulses.  Keep the same
         # month-long range rule, normalized to a genuinely flat 2% FX band.
@@ -5722,6 +5792,22 @@ def _find_fibo_3p_steep_setup(
     if base is None:
         return None
     i_start, fib_start, fib_end = base
+
+    structural_reset = _completed_sideways_reset_long(
+        w, i_start, i_peak, min_incline_days,
+        band_pct=0.10 if _mirrored_short else 0.15,
+    )
+    if structural_reset is not None:
+        channel_end, post_anchor = structural_reset
+        if post_anchor < 0:
+            _log("Rejected 3P steep: completed side trend has no mature post-channel impulse.")
+            return None
+        _log(
+            "3P steep: completed side trend invalidated pre-channel anchor "
+            f"idx={i_start}; channel_end={channel_end}, post_anchor={post_anchor}."
+        )
+        i_start = post_anchor
+        fib_start = float(low.iloc[i_start])
 
     incline_days = i_peak - i_start
     if incline_days < min_incline_days:
@@ -6006,6 +6092,9 @@ def _find_fibo_setup(
         # this symmetrically to long and short formations.
         if _has_extended_sideways(correction_seg):
             _log(f"Rejected {direction}: correction is dominated by an extended side trend.")
+            return None
+        if not _mirrored_short and _correction_settled_into_sideways(correction_seg):
+            _log("Rejected long: correction settled into a completed month-long side trend.")
             return None
         if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
             newest_near_recovery_extreme = _sideways_correction_near_active_extreme(correction_seg, "long")
@@ -6503,6 +6592,8 @@ def run_fibo_search(target: str) -> int:
         # dataset so stale offset candidates cannot bypass the live rejection.
         if _has_extended_sideways(after.reset_index(drop=True)):
             return True
+        if cand.direction == "long" and _correction_settled_into_sideways(after.reset_index(drop=True)):
+            return True
         if cand.direction == "short" and _has_long_sideways(
             after.reset_index(drop=True), max_days=22, band_pct=0.12
         ):
@@ -6626,6 +6717,7 @@ def run_fibo_search(target: str) -> int:
                     cand.current_close = latest_close if pd.notna(latest_close) else cand.current_close
                     cand.latest_candle_date = latest_candle_date
                     cand.expected_latest_session_date = expected_latest_session_date
+                    cand.saved_by_user = True
                     saved_fibo_rows.append(cand)
                     out_rows.append(cand)
             # A valid saved Fibo owns the ticker and is reclassified from its
@@ -6649,15 +6741,16 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
             short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "NDX100"}
-            if short_fibo_enabled and not manual_fibo:
-                steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
-                if steep_3p_short:
-                    steep_3p_short.ticker = ticker
-                    if pd.notna(latest_close):
-                        steep_3p_short.current_close = latest_close
-                    steep_3p_short.latest_candle_date = latest_candle_date
-                    steep_3p_short.expected_latest_session_date = expected_latest_session_date
-                    out_rows.append(steep_3p_short)
+            if short_fibo_enabled:
+                if not manual_fibo:
+                    steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
+                    if steep_3p_short:
+                        steep_3p_short.ticker = ticker
+                        if pd.notna(latest_close):
+                            steep_3p_short.current_close = latest_close
+                        steep_3p_short.latest_candle_date = latest_candle_date
+                        steep_3p_short.expected_latest_session_date = expected_latest_session_date
+                        out_rows.append(steep_3p_short)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
@@ -7009,14 +7102,14 @@ def run_fibo_search(target: str) -> int:
         (r.ticker, r.direction, r.incline_start_date, r.incline_end_date)
         for r in sorted(rows1 + rows2, key=lambda x: float(x.incline_decline_duration_ratio), reverse=True)[:3]
     }
-    rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
-    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,r.reversal_pattern_date,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
-    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,r.reversal_pattern_date,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
+    rows0_md=[[r.ticker,r.direction,("↩️ returned_above_23_6" if r.status=="returned_before_61_8" and r.direction=="long" else ("↩️ returned_below_23_6" if r.status=="returned_before_61_8" else "🚀 3p_steep_incline")),f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)","-",(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),("yes" if r.saved_by_user else "no"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows0]
+    rows1_md=[[r.ticker,r.direction,("🟢 valid_reversal" if r.status=="valid_reversal" else ("🟡 touched_61_8_no_pattern" if r.status=="touched_61_8_no_pattern" else r.status)),r.reversal_pattern_name,r.reversal_pattern_date,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),(_format_fibo_progress_pct(r) if r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} else "-"),("yes" if r.saved_by_user else "no"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows1]
+    rows2_md=[[r.ticker,r.direction,r.reversal_pattern_name,r.reversal_pattern_date,f"{r.incline_start_date}->{r.incline_end_date}",f"{r.incline_duration_days}/{max(r.decline_duration_days,1)} ({r.incline_decline_duration_ratio:.2f}:1)",r.first_61_8_touch_date,(f"{avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date), 0.0):.0f}" if avg_turnover_10d_by_key and avg_turnover_10d_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date)) is not None else "-"),("yes" if r.saved_by_user else "no"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'fibo', r.incline_start_date, r.incline_end_date, pattern_date=r.reversal_pattern_date, pattern_name=r.reversal_pattern_name),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in rows2]
     wedge_rows = sorted(wedge_rows, key=lambda r: (float(r.score), float(r.width_start_pct), float(r.slope_pct_per_day)), reverse=True)
     rows_wedge_md=[[r.ticker,("🚀 breakout" if r.breakout_direction in {"long", "short"} else "⏳ unbroken"),f"{r.start_date}->{r.end_date}",r.duration_days,f"{(r.duration_days / 21.0):.1f}",f"{r.upper_start_date}@{r.upper_start_price}->{r.upper_end_date}@{r.upper_end_price}",f"{r.lower_start_date}@{r.lower_start_price}->{r.lower_end_date}@{r.lower_end_price}",r.upper_touches,r.lower_touches,f"{r.width_start_pct:.2f}%",f"{r.width_end_pct:.2f}%",r.slope_strength,(r.breakout_date or "-"),(r.breakout_direction or "-"),f"{r.score:.2f}",(f"{r.avg_turnover_10d_pln:.0f}" if r.avg_turnover_10d_pln is not None else "-"),_stooq_chart_url(r.ticker),_build_chart_command(r.ticker, 'wedge', wedge=r),_latest_data_marker(r.latest_candle_date, r.expected_latest_session_date),_fmt_optional_date(r.latest_candle_date),_fmt_optional_date(r.expected_latest_session_date)] for r in wedge_rows]
-    _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
-    _write_md_table(out_md,"WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)",["Ticker","Dir","Status","Pattern","Pattern date","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
-    _write_md_table(out_md,"WYNIKI FIBO #2 (valid pattern up to 2 weeks)",["Ticker","Dir","Pattern","Pattern date","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
+    _write_md_table(out_md,"WYNIKI FIBO #0 (3P steep incline)",["Ticker","Dir","Status","Incline","Ratio(d)","Near61.8","Avg10d PLN","Saved by user","Link","Python command","Latest data?","Latest date","Expected date"],rows0_md)
+    _write_md_table(out_md,"WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)",["Ticker","Dir","Status","Pattern","Pattern date","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Near61.8","Saved by user","Link","Python command","Latest data?","Latest date","Expected date"],rows1_md, append=True)
+    _write_md_table(out_md,"WYNIKI FIBO #2 (valid pattern up to 2 weeks)",["Ticker","Dir","Pattern","Pattern date","Incline","Ratio(d)","Touched_61.8_date","Avg10d PLN","Saved by user","Link","Python command","Latest data?","Latest date","Expected date"],rows2_md, append=True)
     _write_md_table(out_md,"WYNIKI KLINY OPADAJĄCE (unbroken falling wedges)",["Ticker","Status","Wedge","Days","Months","Upper line","Lower line","Upper touches","Lower touches","Start width","End width","Slope","Breakout date","Breakout direction","Score","Avg10d PLN","Link","Python command","Latest data?","Latest date","Expected date"],rows_wedge_md, append=True)
 
     links = _print_fibo_results(rows1, rows2, avg_turnover_10d_by_key=avg_turnover_10d_by_key, ichimoku_retest_by_key=ichimoku_retest_by_key)
