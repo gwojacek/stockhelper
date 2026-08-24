@@ -21,6 +21,7 @@ def _fixture(path: str):
     [
         ("data/csv/stocks/TXT_WA.csv", "2026-08-12", "2026-06-08", 37.74),
         ("data/csv/indexes/US30.csv", "2026-08-05", "2026-03-30", 45057.28),
+        ("data/csv/stocks/TXN_US.csv", "2026-06-22", "2026-03-30", 184.95),
     ],
 )
 def test_long_anchor_retains_genuine_broad_incline_launch(path, peak_date, expected_date, expected_low):
@@ -34,6 +35,7 @@ def test_long_anchor_retains_genuine_broad_incline_launch(path, peak_date, expec
         stale_cycle_mode="reject",
         max_lookback=260,
         reset_after_sideways=True,
+        reset_after_extended_sideways=True,
     )
 
     assert base is not None

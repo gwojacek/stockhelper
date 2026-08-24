@@ -5510,12 +5510,27 @@ def _select_fibo_long_impulse_base(
             breakout_search_end = min(i_peak - min_incline_days, base_end + 35)
             if breakout_search_end > base_end:
                 post_base_idx = int(low.iloc[base_end + 1:breakout_search_end + 1].idxmin())
-                if post_base_idx > i_start:
+                post_base_low = float(low.iloc[post_base_idx])
+                selected_start_low = float(low.iloc[i_start])
+                # Never replace a valid, deeper launch bottom with a later
+                # higher low merely because a broad rolling window makes the
+                # shortened leg look steeper. Completed 10–15% channels are
+                # already handled by `_completed_sideways_reset_long`; this
+                # wider legacy-base rule is allowed to move the anchor only
+                # when price actually establishes an equal/deeper bottom.
+                materially_not_higher = post_base_low <= selected_start_low * 1.002
+                if post_base_idx > i_start and materially_not_higher:
                     _log(
                         "Long: reset fib start after extended sideways base "
                         f"idx={i_start} -> {post_base_idx}."
                     )
                     i_start = post_base_idx
+                elif post_base_idx > i_start:
+                    _log(
+                        "Long: retained deeper genuine incline launch across broad base "
+                        f"idx={i_start} low={selected_start_low:.4f}; ignored later higher low "
+                        f"idx={post_base_idx} low={post_base_low:.4f}."
+                    )
 
     i_end = len(w) - 1
     # Guard: selected impulse peak should be the dominant high in analyzed window.
