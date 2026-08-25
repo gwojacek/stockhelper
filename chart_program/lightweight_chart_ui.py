@@ -156,6 +156,7 @@ class LightweightChartLevelSelectorUI:
                     "high": float(row["High"]),
                     "low": float(row["Low"]),
                     "close": float(row["Close"]),
+                    "volume": float(row["Volume"]) if "Volume" in row.index and pd.notna(row["Volume"]) else None,
                 }
             )
         return rows
@@ -701,6 +702,7 @@ class LightweightChartLevelSelectorUI:
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
         <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
+        <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
@@ -769,15 +771,25 @@ class LightweightChartLevelSelectorUI:
     if(symbol.endsWith('.L'))return 'GBP'; return 'PLN';
   }};
   const avg10Turnover = (() => {{
-    const values=ohlc.map(row=>Number(row.close)*Number(row.volume)).filter(Number.isFinite);
+    const values=ohlc.filter(row=>row.volume!=null&&Number.isFinite(Number(row.volume))).map(row=>Number(row.close)*Number(row.volume)).filter(Number.isFinite);
     return values.length>=10 ? values.slice(-10).reduce((sum,value)=>sum+value,0)/10 : null;
   }})();
   const maxCapitalEngagement = P.instrumentType === 'stock' && Number.isFinite(avg10Turnover) ? avg10Turnover*0.01 : null;
+  function maxCapitalInSelectedCurrency() {{
+    if(!Number.isFinite(maxCapitalEngagement))return null;
+    const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
+    const native=chartInstrumentCurrency();
+    return maxCapitalEngagement*(FX_TO_PLN[native]||1)/(FX_TO_PLN[selected]||1);
+  }}
   function refreshChartContextInfo() {{
     const info=$('chart-context-info'); if(!info)return;
     const saved=savedFiboByUser ? '<div><strong>💾 Fibo:</strong> This formation is saved by you.</div>' : '';
-    const capital=Number.isFinite(maxCapitalEngagement) ? `<div><strong>Max capital engagement:</strong> ${{money(maxCapitalEngagement,chartInstrumentCurrency())}} (1% of 10-day average turnover)</div>` : '';
-    info.innerHTML=saved+capital; info.style.display=(saved||capital)?'':'none';
+    const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
+    const converted=maxCapitalInSelectedCurrency();
+    const capital=Number.isFinite(converted) ? `<div><strong>Max capital engagement:</strong> ${{money(converted,selected)}} (1% of 10-day average turnover)</div>` : '';
+    info.innerHTML=saved; info.style.display=saved?'':'none';
+    const capitalInfo=$('max-capital-info');
+    if(capitalInfo){{capitalInfo.innerHTML=capital;capitalInfo.style.display=capital?'':'none';}}
   }}
 
   const $ = id => document.getElementById(id);
@@ -2880,6 +2892,7 @@ class LightweightChartLevelSelectorUI:
     $('calculation-currency').value = to;
     levels.calculation_currency = to;
     setCalculationCurrencyButtons(to);
+    refreshChartContextInfo();
     applyInstrumentControls();
     if ($('calc-drawer').classList.contains('open')) calculatePosition(true);
   }}
@@ -3289,7 +3302,7 @@ class LightweightChartLevelSelectorUI:
       ['Balance', money(Number($('capital')?.value || levels.capital || 0), currency)],
       ['Position', position],
       ...(savedFiboByUser ? [['Fibo', '💾 SAVED BY USER']] : []),
-      ...(Number.isFinite(maxCapitalEngagement) ? [['Max capital (1% Avg10d)', money(maxCapitalEngagement, chartInstrumentCurrency())]] : []),
+      ...(Number.isFinite(maxCapitalInSelectedCurrency()) ? [['Max capital (1% Avg10d)', money(maxCapitalInSelectedCurrency(), currency)]] : []),
       ...selectedValues,
       ['Drawings', String(drawnObjects.length)],
     ].filter(([, value]) => value !== '');

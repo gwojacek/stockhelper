@@ -47,11 +47,16 @@ def test_chart_has_save_and_save_close_actions():
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
+    assert 'id="max-capital-info"' in source
     assert "This Fibo formation is saved by you" in source
     assert "Max capital engagement:" in source
     assert "1% of 10-day average turnover" in source
     assert "['Fibo', '💾 SAVED BY USER']" in source
     assert "['Max capital (1% Avg10d)'" in source
+    assert '"volume": float(row["Volume"])' in source
+    assert "maxCapitalInSelectedCurrency" in source
+    assert "FX_TO_PLN[native]" in source
+    assert "money(converted,selected)" in source
 
 
 def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
