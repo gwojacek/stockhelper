@@ -48,7 +48,7 @@ def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
     assert 'id="max-capital-info"' in source
-    assert "This Fibo formation is saved by you" in source
+    assert "💾 Saved by user:" in source
     assert "Max capital engagement:" in source
     assert "1% of 10-day average turnover" in source
     assert "['Fibo', '💾 SAVED BY USER']" in source
@@ -66,6 +66,11 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert '<button id="saved-fibo-status" type="button" style="display:none"' in source
     assert '💾 Saved by user' in source
     assert 'class="saved-remove"' in source
+    toolbar = source[source.index('<div class="toolbar">'):source.index('<div id="cursor-box">')]
+    assert toolbar.index('id="download-chart-png"') < toolbar.index('id="saved-fibo-status"')
+    assert "savedWedgeByUser" in source
+    assert "type:'stockhelper-saved-setup'" in source
+    assert "__saved_wedge_by_user__:savedWedgeByUser" in source
     assert "!levels.__saved_fibo_invalid__" in source
     assert "delete levels.__saved_fibo_invalid__" in source
     assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source

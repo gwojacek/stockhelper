@@ -524,7 +524,7 @@ class LightweightChartLevelSelectorUI:
     #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
-    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0 0 0 auto; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
     #saved-fibo-status .saved-remove {{ margin-left:5px; color:#fecaca; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
@@ -660,6 +660,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
         <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
+        <button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
@@ -679,7 +680,7 @@ class LightweightChartLevelSelectorUI:
       <section class="side-card instrument-card">
         <div class="instrument-hero">
           <div class="hero-icon">↗</div>
-          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button><button id="saved-fibo-status" type="button" style="display:none" title="Remove saved Fibo and use automatic scanner anchors"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button></div><div class="identity-sub">Name / Ticker</div></div>
+          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
         <div class="meta-grid">
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
@@ -749,7 +750,9 @@ class LightweightChartLevelSelectorUI:
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
   let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
-  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=savedFiboByUser?'':'none'; refreshChartContextInfo(); }};
+  let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
+  let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=(savedFiboByUser||savedWedgeByUser)?'':'none'; refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -784,7 +787,7 @@ class LightweightChartLevelSelectorUI:
   }}
   function refreshChartContextInfo() {{
     const info=$('chart-context-info'); if(!info)return;
-    const saved=savedFiboByUser ? '<div><strong>💾 Fibo:</strong> This Fibo formation is saved by you.</div>' : '';
+    const saved=(savedFiboByUser||savedWedgeByUser) ? `<div><strong>💾 Saved by user:</strong> ${{savedFiboByUser?'Fibo':'Kliny'}} configuration.</div>` : '';
     const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
     const converted=maxCapitalInSelectedCurrency();
     const capital=Number.isFinite(converted) ? `<div><strong>Max capital engagement:</strong> ${{money(converted,selected)}} (1% of 10-day average turnover)</div>` : '';
@@ -3486,12 +3489,15 @@ class LightweightChartLevelSelectorUI:
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
     const currentFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+    const currentWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
     if (currentFiboGeometry !== initialFiboGeometry) {{
       savedFiboByUser = currentFiboGeometry !== '[]';
       if (savedFiboByUser) delete levels.__saved_fibo_invalid__;
     }}
+    if (currentWedgeGeometry !== initialWedgeGeometry) savedWedgeByUser = currentWedgeGeometry !== '[]';
     return {{...levels,
       __saved_fibo_by_user__:savedFiboByUser,
+      __saved_wedge_by_user__:savedWedgeByUser,
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
@@ -3563,6 +3569,8 @@ class LightweightChartLevelSelectorUI:
   $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); window.dispatchEvent(new Event('resize')); }};
 
   async function saveChart(closeAfterSave) {{
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) {{ savedFiboByUser = true; delete levels.__saved_fibo_invalid__; }}
+    if (drawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge')) savedWedgeByUser = true;
     const calc = await calculatePosition(false);
     levels = collectLevelsForSave(closeAfterSave);
     if (calc && calc.ok) levels.position_calculations = calc;
@@ -3571,6 +3579,7 @@ class LightweightChartLevelSelectorUI:
     const resp = await fetch(endpoint, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels, screenshot}})}});
     const data = await resp.json().catch(() => ({{}}));
     if (!resp.ok || !data.ok) {{ $('result-box').textContent = 'Save failed: ' + (data.error || resp.status); return; }}
+    try {{ window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:savedWedgeByUser}}, '*'); }} catch(e) {{}}
     if (!closeAfterSave) {{ $('result-box').textContent = 'Saved. You can continue editing.'; return; }}
     $('result-box').textContent = 'Saved. Closing app...';
     setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250);
@@ -3579,17 +3588,22 @@ class LightweightChartLevelSelectorUI:
   $('finish-btn').onclick = () => saveChart(true);
   $('saved-fibo-status').onclick = async () => {{
     savedFiboByUser = false;
+    savedWedgeByUser = false;
     // The visible lines may remain as a reference, but from this point their
     // current geometry is the non-authoritative baseline. A later ordinary
     // save must not silently promote the released override back to saved.
     initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+    initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
     levels.__saved_fibo_by_user__ = false;
+    levels.__saved_wedge_by_user__ = false;
     refreshSavedFiboStatus();
     const payload = collectLevelsForSave(false);
     payload.__saved_fibo_by_user__ = false;
+    payload.__saved_wedge_by_user__ = false;
     const resp = await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload, screenshot:null}})}});
     const data = await resp.json().catch(() => ({{}}));
-    $('result-box').textContent = resp.ok && data.ok ? 'Saved Fibo released. The next scan will use automatic anchors.' : 'Could not release saved Fibo.';
+    if(resp.ok&&data.ok){{try{{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:false,wedge:false}},'*');}}catch(e){{}}}}
+    $('result-box').textContent = resp.ok && data.ok ? 'Saved scanner configuration released. The next scan will use automatic geometry.' : 'Could not release saved configuration.';
   }};
   refreshSavedFiboStatus();
 

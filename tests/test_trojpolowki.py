@@ -298,6 +298,11 @@ def test_all_fibo_cards_have_debug_and_saved_filter_controls():
     toggle = source[source.index("function toggleSavedFibos"):source.index("function trojInfoPreference")]
     assert "f();" in toggle
     assert "querySelectorAll" not in toggle
+    assert "stockhelper-saved-setup" in source
+    assert "cell.dataset.originalHtml=cell.innerHTML" in source
+    assert "data-ticker='{html.escape(row.ticker.upper())}'" in source
+    stockhelper_link = source[source.index("def _stockhelper_chart_button"):source.index("def _google_sheets_hyperlink_formula")]
+    assert "rel='noopener'" not in stockhelper_link
 
 
 def test_wedge_cards_have_saved_icon_and_saved_only_filter():
@@ -1335,13 +1340,13 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📈 Show" in text
     assert "td.dataset.originalHtml" in text
     assert "dataset.cellHit" in text
-    assert "<div class='troj-cell-card' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'>" in text
+    assert "<div class='troj-cell-card' data-ticker='SBUX.US' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'>" in text
     assert "data-scanner='ICHIMOKU'" in text
     assert "data-ichi-trend='long'" in text
     assert re.search(r"data-ichi-trend='long'[^>]*><strong>🇺🇸 Linde \(LIN\.US\)", text)
     assert "data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long' class='today-signal'" in text
-    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE (RWE.DE)" in text
-    assert "<div class='troj-cell-card today-signal' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'><strong>🇺🇸 VAL.US" in text
+    assert "<div class='troj-cell-card today-signal' data-ticker='RWE.DE' data-market='WIG' data-scanner='ICHIMOKU' data-ichi-trend='long' data-troj-direction='long'><strong>🇩🇪 RWE (RWE.DE)" in text
+    assert "<div class='troj-cell-card today-signal' data-ticker='VAL.US' data-market='WIG' data-scanner='FIBO' data-troj-direction='long'><strong>🇺🇸 VAL.US" in text
     assert "data-scanner='FIBO' data-troj-direction='long' class='today-signal'" in text
     assert "AEP.US" in text and "bullish_hammer" in text
     assert "troj-ichi-trend-filter" not in text

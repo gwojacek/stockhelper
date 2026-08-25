@@ -56,6 +56,18 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
     assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
 
 
+def test_explicitly_released_wedge_geometry_is_not_authoritative(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "KLIN.json").write_text(json.dumps({
+        "drawn_objects": [{"type": "wedge", "group_id": "auto-wedge"}],
+        "__saved_wedge_by_user__": False,
+    }), encoding="utf-8")
+
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == set()
+
+
 def test_saved_fibo_anchors_are_read_from_boundary_group(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"

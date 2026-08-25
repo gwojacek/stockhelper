@@ -4642,12 +4642,13 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     # treated as saved for compatibility with sessions created before the
     # marker existed; the next chart save migrates those sessions to ``True``.
     saved_fibo_active = state.get("__saved_fibo_by_user__") is not False
+    saved_wedge_active = state.get("__saved_wedge_by_user__") is not False
     for obj in objects:
         if not isinstance(obj, dict):
             continue
         obj_type = str(obj.get("type", ""))
         group_id = str(obj.get("group_id", ""))
-        if obj_type == "wedge" or group_id == "auto-wedge":
+        if saved_wedge_active and (obj_type == "wedge" or group_id == "auto-wedge"):
             kinds.add("wedge")
         if saved_fibo_active and (obj_type in {"fib", "fib-boundary"} or group_id == "auto-fibo"):
             kinds.add("fibo")
