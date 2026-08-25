@@ -379,7 +379,8 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
 
-    assert "covered.update(range(start, end))" in helper
+    assert "qualifying_starts.append(start)" in helper
+    assert "longest_covered" in helper
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
     assert "Rejected short 3P steep: decline is dominated by an extended side trend." in steep
     assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")

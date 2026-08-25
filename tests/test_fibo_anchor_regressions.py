@@ -45,6 +45,26 @@ def test_long_anchor_retains_genuine_broad_incline_launch(path, peak_date, expec
     assert start_low == pytest.approx(expected_low, abs=0.01)
 
 
+def test_bft_stair_step_shelves_do_not_replace_march_launch_bottom():
+    frame = _fixture("data/csv/stocks/BFT_WA.csv").tail(220).reset_index(drop=True)
+    peak_idx = int(frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == "2026-08-14"][0])
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=10,
+        stale_cycle_mode="reset",
+        reset_after_sideways=True,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None
+    start_idx, start_low, peak = base
+    assert frame.iloc[start_idx]["Date"].strftime("%Y-%m-%d") == "2026-03-23"
+    assert start_low == pytest.approx(3265.00, abs=0.01)
+    assert peak == pytest.approx(5695.00, abs=0.01)
+
+
 def test_pur_completed_channel_drops_immature_post_channel_impulse():
     frame = _fixture("data/csv/stocks/PUR_WA.csv").tail(320).reset_index(drop=True)
     peak_idx = int(frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == "2026-08-10"][0])

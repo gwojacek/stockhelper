@@ -1020,16 +1020,15 @@ def _has_extended_sideways(
 
     One ordinary monthly pause is allowed in an otherwise active Fibo move.
     A chain of overlapping flat windows covering several months is different:
-    it is a side trend, not a live impulse/correction.  Counting the union of
-    covered candles prevents a long cluster of overlapping windows from being
-    mistaken for many independent signals.
+    it is a side trend, not a live impulse/correction. Only a continuous chain
+    counts, so unrelated higher shelves are not merged into a false reset.
     """
     if len(df_slice) < max(window_days, min_covered_days):
         return False
     highs = pd.to_numeric(df_slice["High"], errors="coerce").reset_index(drop=True)
     lows = pd.to_numeric(df_slice["Low"], errors="coerce").reset_index(drop=True)
     closes = pd.to_numeric(df_slice["Close"], errors="coerce").reset_index(drop=True)
-    covered: set[int] = set()
+    qualifying_starts: list[int] = []
     for start in range(0, len(df_slice) - window_days + 1):
         end = start + window_days
         if _sideways_window_stats(
@@ -1040,9 +1039,22 @@ def _has_extended_sideways(
             0.05,
             2,
         ) is not None:
-            covered.update(range(start, end))
+            qualifying_starts.append(start)
     required = max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))
-    return len(covered) >= required
+    # Count one continuous sideways structure, not the union of unrelated
+    # stair-step pauses spread across an otherwise strong incline.  The old
+    # union rule incorrectly classified BFT's successive higher shelves as one
+    # enormous channel and moved its March launch anchor into May.
+    longest_covered = 0
+    run_start: int | None = None
+    previous: int | None = None
+    for start in qualifying_starts:
+        if previous is None or start != previous + 1:
+            run_start = start
+        previous = start
+        if run_start is not None:
+            longest_covered = max(longest_covered, start - run_start + window_days)
+    return longest_covered >= required
 
 
 def _sideways_correction_near_active_extreme(df_slice: pd.DataFrame, direction: str) -> bool:
@@ -1228,7 +1240,14 @@ def _completed_sideways_reset_long(
         min_coverage_ratio=0.40,
     )
     if original_is_strong and not sustained_channel:
-        return None
+        # A single monthly shelf inside a strong advance is not a structural
+        # reset unless it followed a material correction.  This preserves
+        # BFT/PCO-style stair-step inclines, while PUR's deep selloff followed
+        # by a month-long base can still invalidate the old impulse.
+        pre_channel_high = float(highs.iloc[start_idx:channel_start + 1].max())
+        channel_drawdown = (pre_channel_high - channel_low) / max(abs(pre_channel_high), 1e-9)
+        if channel_drawdown < 0.15:
+            return None
 
     # A rolling window can look flat because most of it precedes the move even
     # though its final candles contain the actual launch bottom.  In that case

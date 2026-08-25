@@ -63,6 +63,11 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
+    assert '<button id="saved-fibo-status" type="button" style="display:none"' in source
+    assert '💾 Saved by user' in source
+    assert 'class="saved-remove"' in source
+    assert "!levels.__saved_fibo_invalid__" in source
+    assert "delete levels.__saved_fibo_invalid__" in source
     assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source
     assert "localStorage.setItem(FAVORITES_KEY" in source
     assert "render(); refreshFavoriteStar(); syncFavoritesFromReport();" in source

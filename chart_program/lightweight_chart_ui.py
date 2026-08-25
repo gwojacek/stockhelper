@@ -524,6 +524,8 @@ class LightweightChartLevelSelectorUI:
     #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
+    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0 0 0 auto; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status .saved-remove {{ margin-left:5px; color:#fecaca; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
@@ -677,7 +679,7 @@ class LightweightChartLevelSelectorUI:
       <section class="side-card instrument-card">
         <div class="instrument-hero">
           <div class="hero-icon">↗</div>
-          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button></div><div class="identity-sub">Name / Ticker</div></div>
+          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button><button id="saved-fibo-status" type="button" style="display:none" title="Remove saved Fibo and use automatic scanner anchors"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
         <div class="meta-grid">
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
@@ -718,7 +720,6 @@ class LightweightChartLevelSelectorUI:
           <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save</span></button>
           <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span>Save &amp; Close</span></button>
         </div>
-        <button id="saved-fibo-status" class="side-action-btn" type="button" style="display:none;background:#713f12"><span class="btn-icon">💾</span><span>This Fibo formation is saved by you · use automatic</span></button>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
           <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
@@ -747,7 +748,7 @@ class LightweightChartLevelSelectorUI:
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
-  let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
+  let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
   const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=savedFiboByUser?'':'none'; refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
@@ -783,7 +784,7 @@ class LightweightChartLevelSelectorUI:
   }}
   function refreshChartContextInfo() {{
     const info=$('chart-context-info'); if(!info)return;
-    const saved=savedFiboByUser ? '<div><strong>💾 Fibo:</strong> This formation is saved by you.</div>' : '';
+    const saved=savedFiboByUser ? '<div><strong>💾 Fibo:</strong> This Fibo formation is saved by you.</div>' : '';
     const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
     const converted=maxCapitalInSelectedCurrency();
     const capital=Number.isFinite(converted) ? `<div><strong>Max capital engagement:</strong> ${{money(converted,selected)}} (1% of 10-day average turnover)</div>` : '';
@@ -3485,7 +3486,10 @@ class LightweightChartLevelSelectorUI:
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
     const currentFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
-    if (currentFiboGeometry !== initialFiboGeometry) savedFiboByUser = currentFiboGeometry !== '[]';
+    if (currentFiboGeometry !== initialFiboGeometry) {{
+      savedFiboByUser = currentFiboGeometry !== '[]';
+      if (savedFiboByUser) delete levels.__saved_fibo_invalid__;
+    }}
     return {{...levels,
       __saved_fibo_by_user__:savedFiboByUser,
       position_type:$('position-type').value,
