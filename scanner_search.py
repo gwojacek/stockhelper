@@ -1166,9 +1166,10 @@ def _completed_sideways_reset_long(
 
     A qualifying channel lasts a trading month, makes little net progress, and
     may discard two interior wick excursions.  It becomes structural only once
-    closes decisively leave its upper edge.  The returned anchor is strictly
-    after the channel; ``-1`` means that breakout exists but its new impulse has
-    not matured yet and the old pre-channel Fibo must be dropped.
+    closes decisively leave its upper edge. The returned anchor is normally
+    after the channel, except when a low in its final week is itself the proven
+    strong-incline launch. ``-1`` means that a breakout exists but its new
+    impulse has not matured yet and the old pre-channel Fibo must be dropped.
     """
     search_left = start_idx + 5
     search_right = peak_idx
@@ -1184,8 +1185,31 @@ def _completed_sideways_reset_long(
     )
     if channel is None:
         return None
-    _channel_start, relative_end, channel_high, _channel_low, _width = channel
+    relative_start, relative_end, channel_high, _channel_low, _width = channel
+    channel_start = search_left + relative_start
     channel_end = search_left + relative_end
+    lows = pd.to_numeric(w["Low"], errors="coerce")
+    highs = pd.to_numeric(w["High"], errors="coerce")
+
+    # A rolling window can look flat because most of it precedes the move even
+    # though its final candles contain the actual launch bottom.  In that case
+    # the channel did not finish *before* the impulse: the low inside its last
+    # week is precisely the first Fibo anchor (TXN 2026-03-30), and moving to
+    # the first candle after the window creates a middle-of-incline anchor.
+    channel_launch_idx = int(lows.iloc[channel_start:channel_end + 1].idxmin())
+    launch_days = peak_idx - channel_launch_idx
+    launch_low = float(lows.iloc[channel_launch_idx])
+    launch_gain = (float(highs.iloc[peak_idx]) - launch_low) / max(abs(launch_low), 1e-9)
+    launch_daily_gain = launch_gain / max(launch_days, 1)
+    launch_is_late_and_strong = (
+        channel_launch_idx >= channel_end - 7
+        and launch_days >= min_impulse_days
+        and launch_gain >= 0.18
+        and launch_daily_gain >= 0.003
+    )
+    if launch_is_late_and_strong:
+        return channel_end, channel_launch_idx
+
     closes = pd.to_numeric(w["Close"], errors="coerce")
     post_closes = closes.iloc[channel_end + 1:peak_idx + 1]
     decisive = [
@@ -1200,9 +1224,8 @@ def _completed_sideways_reset_long(
     post_anchor_right = peak_idx - min_impulse_days
     if post_anchor_right <= channel_end:
         return channel_end, -1
-    lows = pd.to_numeric(w["Low"], errors="coerce")
     post_anchor = int(lows.iloc[channel_end + 1:post_anchor_right + 1].idxmin())
-    post_gain = (float(pd.to_numeric(w["High"], errors="coerce").iloc[peak_idx]) - float(lows.iloc[post_anchor])) / max(abs(float(lows.iloc[post_anchor])), 1e-9)
+    post_gain = (float(highs.iloc[peak_idx]) - float(lows.iloc[post_anchor])) / max(abs(float(lows.iloc[post_anchor])), 1e-9)
     if peak_idx - post_anchor < min_impulse_days or post_gain < 0.10:
         return channel_end, -1
     return channel_end, post_anchor
@@ -5458,10 +5481,16 @@ def _select_fibo_long_impulse_base(
                     "but the post-channel impulse is not mature."
                 )
                 return None
-            _log(
-                "Long: completed side trend invalidated pre-channel anchor "
-                f"idx={i_start}; channel_end={channel_end}, post_anchor={post_anchor}."
-            )
+            if post_anchor <= channel_end:
+                _log(
+                    "Long: retained late channel low as genuine strong-incline launch "
+                    f"idx={post_anchor}; channel_end={channel_end}."
+                )
+            else:
+                _log(
+                    "Long: completed side trend invalidated pre-channel anchor "
+                    f"idx={i_start}; channel_end={channel_end}, post_anchor={post_anchor}."
+                )
             i_start = post_anchor
 
     if reset_after_extended_sideways:
@@ -5817,10 +5846,16 @@ def _find_fibo_3p_steep_setup(
         if post_anchor < 0:
             _log("Rejected 3P steep: completed side trend has no mature post-channel impulse.")
             return None
-        _log(
-            "3P steep: completed side trend invalidated pre-channel anchor "
-            f"idx={i_start}; channel_end={channel_end}, post_anchor={post_anchor}."
-        )
+        if post_anchor <= channel_end:
+            _log(
+                "3P steep: retained late channel low as genuine strong-incline launch "
+                f"idx={post_anchor}; channel_end={channel_end}."
+            )
+        else:
+            _log(
+                "3P steep: completed side trend invalidated pre-channel anchor "
+                f"idx={i_start}; channel_end={channel_end}, post_anchor={post_anchor}."
+            )
         i_start = post_anchor
         fib_start = float(low.iloc[i_start])
 
