@@ -297,6 +297,18 @@ def test_all_fibo_cards_have_debug_and_saved_filter_controls():
     assert ".troj-cell-card[data-saved-fibo='1']{border-color" not in source
 
 
+def test_wedge_cards_have_saved_icon_and_saved_only_filter():
+    source = Path("run").read_text(encoding="utf-8")
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "Wedge saved by me" in source
+    assert "saved-filter-section" in source
+    assert "toggleSavedSetups(this)" in source
+    assert "saved-setup-only" in source
+    assert "data-saved-by-user='1'" in source
+    assert '"Saved by user"' in scanner_source
+    assert "wedge.saved_by_user = manual_wedge is not None" in scanner_source
+
+
 def test_chart_fibo_debug_ends_with_requested_csv_data():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     snapshot = source[source.index("function fiboDebugSnapshot"):source.index("function setupDebugSnapshot")]
@@ -1366,7 +1378,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert ".today-signal td{background:#14532d!important}" in text
     assert ".troj-cell-card.today-signal{background:#14532d!important" in text
     assert "data-scanner='WEDGE' data-status='🚀 breakout' data-breakout-date='2026-05-30' data-troj-direction='long' class='today-signal'" in text
-    assert "class='market direction-filter-section' id='wedge-report'" in text
+    assert "class='market direction-filter-section saved-filter-section' id='wedge-report'" in text
     assert "setTrojDirection('wedge-report','long',this)" in text
     assert "setTrojDirection('wedge-report','short',this)" in text
     assert "const okDirection=directionFilter==='all'||r.dataset.trojDirection===directionFilter" in text
