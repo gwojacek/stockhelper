@@ -44,10 +44,35 @@ def test_chart_has_save_and_save_close_actions():
     assert '@app.route("/save", methods=["POST"])' in source
 
 
+def test_chart_shows_saved_fibo_and_max_capital_context():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert 'id="chart-context-info"' in source
+    assert 'id="max-capital-info"' in source
+    assert "💾 Saved by user:" in source
+    assert "Max capital engagement:" in source
+    assert "1% of 10-day average turnover" in source
+    assert "['Fibo', '💾 SAVED BY USER']" in source
+    assert "['Max capital (1% Avg10d)'" in source
+    assert '"volume": float(row["Volume"])' in source
+    assert "maxCapitalInSelectedCurrency" in source
+    assert "FX_TO_PLN[native]" in source
+    assert "money(converted,selected)" in source
+
+
 def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
+    assert '<button id="saved-fibo-status" type="button" style="display:none"' in source
+    assert '💾 Saved by user' in source
+    assert 'class="saved-remove"' in source
+    toolbar = source[source.index('<div class="toolbar">'):source.index('<div id="cursor-box">')]
+    assert toolbar.index('id="download-chart-png"') < toolbar.index('id="saved-fibo-status"')
+    assert "savedWedgeByUser" in source
+    assert "type:'stockhelper-saved-setup'" in source
+    assert "__saved_wedge_by_user__:savedWedgeByUser" in source
+    assert "!levels.__saved_fibo_invalid__" in source
+    assert "delete levels.__saved_fibo_invalid__" in source
     assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source
     assert "localStorage.setItem(FAVORITES_KEY" in source
     assert "render(); refreshFavoriteStar(); syncFavoritesFromReport();" in source

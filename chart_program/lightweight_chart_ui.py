@@ -156,6 +156,7 @@ class LightweightChartLevelSelectorUI:
                     "high": float(row["High"]),
                     "low": float(row["Low"]),
                     "close": float(row["Close"]),
+                    "volume": float(row["Volume"]) if "Volume" in row.index and pd.notna(row["Volume"]) else None,
                 }
             )
         return rows
@@ -523,6 +524,8 @@ class LightweightChartLevelSelectorUI:
     #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
+    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status .saved-remove {{ margin-left:5px; color:#fecaca; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
@@ -633,6 +636,8 @@ class LightweightChartLevelSelectorUI:
     #wedge-debug-panel.open {{ display:block; }}
     #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
     #wedge-debug-panel .muted {{ color:#94a3b8; }}
+    #chart-context-info {{ margin:0 0 10px;padding:9px 11px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.5; }}
+    #chart-context-info strong {{ color:#f8fafc; }}
   </style>
 </head>
 <body>
@@ -655,6 +660,7 @@ class LightweightChartLevelSelectorUI:
         <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
         <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
         <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
+        <button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
@@ -693,11 +699,13 @@ class LightweightChartLevelSelectorUI:
         </div>
       </section>
       <section class="side-card manual-card">
+        <div id="chart-context-info"></div>
         <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
         <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
+        <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
@@ -740,6 +748,11 @@ class LightweightChartLevelSelectorUI:
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
+  let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+  let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
+  let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
+  let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=(savedFiboByUser||savedWedgeByUser)?'':'none'; refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -755,6 +768,33 @@ class LightweightChartLevelSelectorUI:
   const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
   let scannerHighlightRects = [];
+
+  const chartInstrumentCurrency = () => {{
+    const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();
+    if(symbol.endsWith('.US'))return 'USD'; if(symbol.endsWith('.DE'))return 'EUR';
+    if(symbol.endsWith('.L'))return 'GBP'; return 'PLN';
+  }};
+  const avg10Turnover = (() => {{
+    const values=ohlc.filter(row=>row.volume!=null&&Number.isFinite(Number(row.volume))).map(row=>Number(row.close)*Number(row.volume)).filter(Number.isFinite);
+    return values.length>=10 ? values.slice(-10).reduce((sum,value)=>sum+value,0)/10 : null;
+  }})();
+  const maxCapitalEngagement = P.instrumentType === 'stock' && Number.isFinite(avg10Turnover) ? avg10Turnover*0.01 : null;
+  function maxCapitalInSelectedCurrency() {{
+    if(!Number.isFinite(maxCapitalEngagement))return null;
+    const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
+    const native=chartInstrumentCurrency();
+    return maxCapitalEngagement*(FX_TO_PLN[native]||1)/(FX_TO_PLN[selected]||1);
+  }}
+  function refreshChartContextInfo() {{
+    const info=$('chart-context-info'); if(!info)return;
+    const saved=(savedFiboByUser||savedWedgeByUser) ? `<div><strong>💾 Saved by user:</strong> ${{savedFiboByUser?'Fibo':'Kliny'}} configuration.</div>` : '';
+    const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
+    const converted=maxCapitalInSelectedCurrency();
+    const capital=Number.isFinite(converted) ? `<div><strong>Max capital engagement:</strong> ${{money(converted,selected)}} (1% of 10-day average turnover)</div>` : '';
+    info.innerHTML=saved; info.style.display=saved?'':'none';
+    const capitalInfo=$('max-capital-info');
+    if(capitalInfo){{capitalInfo.innerHTML=capital;capitalInfo.style.display=capital?'':'none';}}
+  }}
 
   const $ = id => document.getElementById(id);
   const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1';
@@ -2856,6 +2896,7 @@ class LightweightChartLevelSelectorUI:
     $('calculation-currency').value = to;
     levels.calculation_currency = to;
     setCalculationCurrencyButtons(to);
+    refreshChartContextInfo();
     applyInstrumentControls();
     if ($('calc-drawer').classList.contains('open')) calculatePosition(true);
   }}
@@ -3264,6 +3305,8 @@ class LightweightChartLevelSelectorUI:
     const values = [
       ['Balance', money(Number($('capital')?.value || levels.capital || 0), currency)],
       ['Position', position],
+      ...(savedFiboByUser ? [['Fibo', '💾 SAVED BY USER']] : []),
+      ...(Number.isFinite(maxCapitalInSelectedCurrency()) ? [['Max capital (1% Avg10d)', money(maxCapitalInSelectedCurrency(), currency)]] : []),
       ...selectedValues,
       ['Drawings', String(drawnObjects.length)],
     ].filter(([, value]) => value !== '');
@@ -3445,7 +3488,16 @@ class LightweightChartLevelSelectorUI:
     const stockCfdMode = !!levels.__stock_cfd_mode__;
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
+    const currentFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+    const currentWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
+    if (currentFiboGeometry !== initialFiboGeometry) {{
+      savedFiboByUser = currentFiboGeometry !== '[]';
+      if (savedFiboByUser) delete levels.__saved_fibo_invalid__;
+    }}
+    if (currentWedgeGeometry !== initialWedgeGeometry) savedWedgeByUser = currentWedgeGeometry !== '[]';
     return {{...levels,
+      __saved_fibo_by_user__:savedFiboByUser,
+      __saved_wedge_by_user__:savedWedgeByUser,
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
@@ -3517,6 +3569,8 @@ class LightweightChartLevelSelectorUI:
   $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); window.dispatchEvent(new Event('resize')); }};
 
   async function saveChart(closeAfterSave) {{
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) {{ savedFiboByUser = true; delete levels.__saved_fibo_invalid__; }}
+    if (drawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge')) savedWedgeByUser = true;
     const calc = await calculatePosition(false);
     levels = collectLevelsForSave(closeAfterSave);
     if (calc && calc.ok) levels.position_calculations = calc;
@@ -3525,12 +3579,33 @@ class LightweightChartLevelSelectorUI:
     const resp = await fetch(endpoint, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels, screenshot}})}});
     const data = await resp.json().catch(() => ({{}}));
     if (!resp.ok || !data.ok) {{ $('result-box').textContent = 'Save failed: ' + (data.error || resp.status); return; }}
+    try {{ window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:savedWedgeByUser}}, '*'); }} catch(e) {{}}
     if (!closeAfterSave) {{ $('result-box').textContent = 'Saved. You can continue editing.'; return; }}
     $('result-box').textContent = 'Saved. Closing app...';
     setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250);
   }}
   $('save-btn').onclick = () => saveChart(false);
   $('finish-btn').onclick = () => saveChart(true);
+  $('saved-fibo-status').onclick = async () => {{
+    savedFiboByUser = false;
+    savedWedgeByUser = false;
+    // The visible lines may remain as a reference, but from this point their
+    // current geometry is the non-authoritative baseline. A later ordinary
+    // save must not silently promote the released override back to saved.
+    initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+    initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
+    levels.__saved_fibo_by_user__ = false;
+    levels.__saved_wedge_by_user__ = false;
+    refreshSavedFiboStatus();
+    const payload = collectLevelsForSave(false);
+    payload.__saved_fibo_by_user__ = false;
+    payload.__saved_wedge_by_user__ = false;
+    const resp = await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload, screenshot:null}})}});
+    const data = await resp.json().catch(() => ({{}}));
+    if(resp.ok&&data.ok){{try{{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:false,wedge:false}},'*');}}catch(e){{}}}}
+    $('result-box').textContent = resp.ok && data.ok ? 'Saved scanner configuration released. The next scan will use automatic geometry.' : 'Could not release saved configuration.';
+  }};
+  refreshSavedFiboStatus();
 
 
   function setupJournalCloseMode() {{
