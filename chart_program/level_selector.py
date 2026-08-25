@@ -626,7 +626,16 @@ def run_level_selector(raw_args=None):
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
     df = _trim_chart_window(df, max_days=548)
 
-    if args.fibo_lines and args.fibo_anchor_start:
+    existing_fibo_objects = [
+        obj for obj in existing.get("drawn_objects", [])
+        if isinstance(obj, dict) and (obj.get("type") in {"fib", "fib-boundary"} or obj.get("group_id") == "auto-fibo")
+    ] if isinstance(existing.get("drawn_objects"), list) else []
+    saved_fibo_active = bool(existing_fibo_objects) and not existing.get("__saved_fibo_invalid__") and existing.get("__saved_fibo_by_user__") is not False
+
+    # Report links carry automatic anchors for preview, but those anchors must
+    # never overwrite an authoritative saved formation. That overwrite also
+    # wrote the marker False, which made a saved card open without its badge.
+    if args.fibo_lines and args.fibo_anchor_start and not saved_fibo_active:
         try:
             s_ts = pd.to_datetime(args.fibo_anchor_start, errors="coerce")
             e_ts = pd.to_datetime(args.fibo_anchor_end, errors="coerce") if args.fibo_anchor_end else pd.NaT
@@ -730,6 +739,8 @@ def run_level_selector(raw_args=None):
                 print(f"[chart] auto-fibo preloaded: {len(objs) - 1} lines, anchors={args.fibo_anchor_start}->{resolved_end}, direction={'short' if is_short else 'long'}")
         except Exception as exc:
             print(f"[chart] auto-fibo preload failed: {exc}")
+    elif args.fibo_lines and args.fibo_anchor_start and saved_fibo_active:
+        print("[chart] retained authoritative user-saved Fibo; scanner preload ignored")
 
 
     def _saved_wedge_is_active() -> bool:

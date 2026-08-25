@@ -295,6 +295,9 @@ def test_all_fibo_cards_have_debug_and_saved_filter_controls():
     assert "class='saved-fibo-icon'" in source
     assert "Fibo saved by me" in source
     assert ".troj-cell-card[data-saved-fibo='1']{border-color" not in source
+    toggle = source[source.index("function toggleSavedFibos"):source.index("function trojInfoPreference")]
+    assert "f();" in toggle
+    assert "querySelectorAll" not in toggle
 
 
 def test_wedge_cards_have_saved_icon_and_saved_only_filter():
@@ -741,9 +744,16 @@ def test_supplied_small_long_formations_are_in_waiting_band():
 
 def test_fibo_chart_recovers_missing_dropout_end_anchor():
     source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
-    assert "if args.fibo_lines and args.fibo_anchor_start:" in source
+    assert "if args.fibo_lines and args.fibo_anchor_start and not saved_fibo_active:" in source
     assert 'after_start = df.loc[all_dts >= s_ts]' in source
     assert 'peak_idx = pd.to_numeric(after_start["High"], errors="coerce").idxmax()' in source
+
+
+def test_fibo_chart_preload_keeps_authoritative_saved_geometry():
+    source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+    assert 'existing.get("__saved_fibo_by_user__") is not False' in source
+    assert 'not existing.get("__saved_fibo_invalid__")' in source
+    assert "retained authoritative user-saved Fibo; scanner preload ignored" in source
 
 
 def test_broad_sideways_steep_needs_a_smaller_regular_replacement():
