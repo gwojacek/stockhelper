@@ -292,6 +292,9 @@ def test_all_fibo_cards_have_debug_and_saved_filter_controls():
     assert "💾 Saved by me" in source
     assert "savedOnly" in source
     assert "card.dataset.savedFibo==='1'" in source
+    assert "class='saved-fibo-icon'" in source
+    assert "Fibo saved by me" in source
+    assert ".troj-cell-card[data-saved-fibo='1']{border-color" not in source
 
 
 def test_chart_fibo_debug_ends_with_requested_csv_data():

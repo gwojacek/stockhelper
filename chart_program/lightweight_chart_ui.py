@@ -633,6 +633,8 @@ class LightweightChartLevelSelectorUI:
     #wedge-debug-panel.open {{ display:block; }}
     #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
     #wedge-debug-panel .muted {{ color:#94a3b8; }}
+    #chart-context-info {{ margin:0 0 10px;padding:9px 11px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.5; }}
+    #chart-context-info strong {{ color:#f8fafc; }}
   </style>
 </head>
 <body>
@@ -693,6 +695,7 @@ class LightweightChartLevelSelectorUI:
         </div>
       </section>
       <section class="side-card manual-card">
+        <div id="chart-context-info"></div>
         <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
@@ -713,7 +716,7 @@ class LightweightChartLevelSelectorUI:
           <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save</span></button>
           <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span>Save &amp; Close</span></button>
         </div>
-        <button id="saved-fibo-status" class="side-action-btn" type="button" style="display:none;background:#713f12"><span class="btn-icon">💾</span><span>Saved by me · use automatic</span></button>
+        <button id="saved-fibo-status" class="side-action-btn" type="button" style="display:none;background:#713f12"><span class="btn-icon">💾</span><span>This Fibo formation is saved by you · use automatic</span></button>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
           <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
@@ -743,7 +746,7 @@ class LightweightChartLevelSelectorUI:
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
   let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
-  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=savedFiboByUser?'':'none'; }};
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=savedFiboByUser?'':'none'; refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -759,6 +762,23 @@ class LightweightChartLevelSelectorUI:
   const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
   let scannerHighlightRects = [];
+
+  const chartInstrumentCurrency = () => {{
+    const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();
+    if(symbol.endsWith('.US'))return 'USD'; if(symbol.endsWith('.DE'))return 'EUR';
+    if(symbol.endsWith('.L'))return 'GBP'; return 'PLN';
+  }};
+  const avg10Turnover = (() => {{
+    const values=ohlc.map(row=>Number(row.close)*Number(row.volume)).filter(Number.isFinite);
+    return values.length>=10 ? values.slice(-10).reduce((sum,value)=>sum+value,0)/10 : null;
+  }})();
+  const maxCapitalEngagement = P.instrumentType === 'stock' && Number.isFinite(avg10Turnover) ? avg10Turnover*0.01 : null;
+  function refreshChartContextInfo() {{
+    const info=$('chart-context-info'); if(!info)return;
+    const saved=savedFiboByUser ? '<div><strong>💾 Fibo:</strong> This formation is saved by you.</div>' : '';
+    const capital=Number.isFinite(maxCapitalEngagement) ? `<div><strong>Max capital engagement:</strong> ${{money(maxCapitalEngagement,chartInstrumentCurrency())}} (1% of 10-day average turnover)</div>` : '';
+    info.innerHTML=saved+capital; info.style.display=(saved||capital)?'':'none';
+  }}
 
   const $ = id => document.getElementById(id);
   const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1';
@@ -3268,6 +3288,8 @@ class LightweightChartLevelSelectorUI:
     const values = [
       ['Balance', money(Number($('capital')?.value || levels.capital || 0), currency)],
       ['Position', position],
+      ...(savedFiboByUser ? [['Fibo', '💾 SAVED BY USER']] : []),
+      ...(Number.isFinite(maxCapitalEngagement) ? [['Max capital (1% Avg10d)', money(maxCapitalEngagement, chartInstrumentCurrency())]] : []),
       ...selectedValues,
       ['Drawings', String(drawnObjects.length)],
     ].filter(([, value]) => value !== '');

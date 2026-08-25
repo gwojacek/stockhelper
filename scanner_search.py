@@ -1191,6 +1191,44 @@ def _completed_sideways_reset_long(
     lows = pd.to_numeric(w["Low"], errors="coerce")
     highs = pd.to_numeric(w["High"], errors="coerce")
 
+    # Keep failed breakouts/ordinary interior candles attached to the detected
+    # range until price actually leaves its envelope. This makes the LIN range
+    # run through June 3 instead of ending a few candles early merely because
+    # the tightest 22-session sub-window ended first.
+    channel_low = float(lows.iloc[channel_start:channel_end + 1].min())
+    extended_high = float(channel_high)
+    while channel_end + 1 < peak_idx:
+        next_high = float(highs.iloc[channel_end + 1])
+        next_low = float(lows.iloc[channel_end + 1])
+        if next_high > extended_high * 1.03 or next_low < channel_low * 0.97:
+            break
+        channel_end += 1
+        extended_high = max(extended_high, next_high)
+        channel_low = min(channel_low, next_low)
+    channel_high = extended_high
+
+    # Do not let one ordinary rolling pause cut a valid strong incline in half.
+    # A structural reset inside such a move needs sustained overlapping ranges,
+    # not merely one qualifying 22-session window (PCO 2026-03-23 -> Aug).
+    original_days = peak_idx - start_idx
+    original_low = float(lows.iloc[start_idx])
+    original_gain = (float(highs.iloc[peak_idx]) - original_low) / max(abs(original_low), 1e-9)
+    original_daily_gain = original_gain / max(original_days, 1)
+    original_is_strong = (
+        original_days >= min_impulse_days
+        and original_gain >= 0.18
+        and original_daily_gain >= 0.003
+    )
+    sustained_channel = _has_extended_sideways(
+        w.iloc[start_idx:peak_idx + 1].reset_index(drop=True),
+        window_days=22,
+        band_pct=band_pct,
+        min_covered_days=44,
+        min_coverage_ratio=0.40,
+    )
+    if original_is_strong and not sustained_channel:
+        return None
+
     # A rolling window can look flat because most of it precedes the move even
     # though its final candles contain the actual launch bottom.  In that case
     # the channel did not finish *before* the impulse: the low inside its last
