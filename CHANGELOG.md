@@ -6,14 +6,46 @@ The project currently documents release tags `1.0` through `7.5`, plus unrelease
 
 ## [Unreleased]
 
-- Added a 50-instrument ETF scanner market to allsearch, using Stooq-compatible report symbols with Yahoo Finance downloads, a distinct basket icon, and separate candle storage under `data/csv/etfs/`.
+No unreleased changes are documented yet.
 
 Compare: [`7.5...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.5...HEAD)
 
-## [7.4] - 2026-08-14
+## [7.5] - 2026-08-25
 
 Tag: `7.5`
 Compare: [`7.4...7.5`](https://github.com/gwojacek/stockhelper/compare/7.4...7.5)
+
+### Added
+
+- Added a 50-instrument ETF scanner market to allsearch, using Stooq-compatible report symbols, Yahoo Finance candles, a dedicated basket icon, and separate storage under `data/csv/etfs/`.
+- Added persistent favorites shared bidirectionally between charts, scanner reports, and a dedicated report tab, with tagging, alias-aware deduplication, direction labels, and direct chart/Stooq actions.
+- Added checked-instrument lists and linkable chart, Stooq, journal, favorite, and report-tab controls to make report review and navigation faster.
+- Added scanner-derived automatic stop losses for Ichimoku, Fibonacci, and wedge setups, including short-Fibo support, triggered-stop expiry, scanner-context isolation, and liquidity-aware maximum-capital guidance in the chart.
+- Added persistent report information-slider choices and automatic saving of slider-lock state.
+- Added detected setup reasons to transaction-journal entries and simplified the journal review presentation.
+- Added saved Fibo/wedge status icons and filtering to reports, synchronized with the latest chart session.
+
+### Changed
+
+- Refined Fibonacci anchor selection across extended sideways ranges, late channel lows, genuine incline bottoms, and broad structural moves, while preserving valid saved state and recalculating results from edited drawings.
+- Refined Ichimoku early-breakout probation and 3P routing, requiring two visible post-four-month retests, qualifying retests at local extremes against the moving cloud, and preferring the newest valid pattern without double-counting exit candles.
+- Improved Fibo stale-side-trend rejection, report-chart cache isolation, ETF cache resolution, and cache-only commodity snapshots.
+- Refreshed allsearch markets from Yahoo probes, persisted same-day Yahoo candles, rebased WIG history from Stooq, and targeted Stooq repairs to missing older candles instead of repeatedly refreshing live data.
+- Expanded scanner display-name coverage, report-table layout, favorites layout, and chart action placement; report tabs and chart icons are now directly clickable.
+- Synchronized saved Fibonacci and wedge state between chart sessions, scanner filters, and generated reports.
+
+### Fixed
+
+- Fixed favorites becoming inconsistent across market aliases, reports, charts, and 3P cards, including duplicate cards and misaligned actions.
+- Fixed automatic stops leaking between scanner contexts or remaining active after their setup had triggered or expired.
+- Fixed early/opposite-side Ichimoku rebreakouts, probation dates, local-extreme retest qualification, and non-playable retest status handling.
+- Fixed Fibonacci anchors being replaced by late or sideways lows, saved Fibo state disappearing under chart filters, and saved wedge visibility/status diverging between charts and reports.
+- Fixed repeated Stooq UI refreshes and report charts reading the wrong or missing ETF/commodity cache.
+
+## [7.4] - 2026-08-14
+
+Tag: `7.4`
+Compare: [`7.3...7.4`](https://github.com/gwojacek/stockhelper/compare/7.3...7.4)
 
 ### Added
 
