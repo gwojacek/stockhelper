@@ -1829,7 +1829,13 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         # they wait for a retest/pattern. They must not fall back to the
         # long-respect continuation/watch columns until four months after the
         # breakout.
-        return _is_fresh_retest_window(row) or (_is_valid_breakout(row) and active_pattern)
+        # WYNIKI 1 position rows carry the same breakout qualification and
+        # latest valid retest metadata as their WYNIKI 2 counterparts.  Do not
+        # require the row to originate in WYNIKI 2 here: doing so demoted a
+        # current pattern (for example CPS) to the Kijun/watch column during
+        # deduplication, even though it is an actionable qualified retest.
+        qualified_retest = _ichimoku_qualification_state(row) in {"standard", "valid_after_second"}
+        return _is_fresh_retest_window(row) or (qualified_retest and active_pattern)
 
     def _touches_cloud(item: tuple[ScannerRow, dict[str, str]]) -> bool:
         _row, info = item

@@ -1102,6 +1102,31 @@ def test_early_ichimoku_is_hidden_from_3p_until_cutoff(tmp_path: Path):
     assert "WAITING FOR DIRECTION RETEST" not in text
 
 
+def test_qualified_position_row_with_valid_retest_uses_fourth_column(tmp_path: Path):
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="position", ticker="CPS", status="above",
+        dates={"start_date": "2026-04-21"},
+        metrics={
+            "months": "4.2", "qualification_status": "standard_4m_breakout",
+            "latest_retest_date": "2026-08-25", "latest_retest_pattern": "bullish_piercing_line",
+            "raw_status": "above", "current_side": "above",
+            "ichimoku_status": "Over Kijun-sen", "risk": "3%",
+        },
+    )
+
+    out = mod._write_trojpolowki_ichimoku([row], tmp_path, datetime(2026, 8, 25, 12, 0, 0))
+    data_row = next(
+        line for line in out.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| ") and "CYFRPLSAT (CPS)" in line
+    )
+    cells = data_row.split(" | ")[1:-1]
+
+    assert len(cells) == 4
+    assert all("CYFRPLSAT (CPS)" not in cell for cell in cells[:3])
+    assert "CYFRPLSAT (CPS)" in cells[3]
+
+
 def test_early_rebreakout_in_position_table_is_not_playable():
     mod = load_run_module()
     row = mod.ScannerRow(
