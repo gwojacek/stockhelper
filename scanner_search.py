@@ -5947,10 +5947,13 @@ def _find_fibo_3p_steep_setup(
     has_monthly_sideways = _has_long_sideways(
         w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.12, max_progress_pct=0.05
     )
-    if _mirrored_short and _has_extended_sideways(
-        w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+    if _mirrored_short and _has_long_sideways(
+        w.iloc[i_start:i_peak + 1].reset_index(drop=True),
+        max_days=22,
+        band_pct=0.20,
+        max_progress_pct=0.08,
     ):
-        _log("Rejected short 3P steep: decline is dominated by an extended side trend.")
+        _log("Rejected short 3P steep: decline contains a completed month-long side trend.")
         return None
     if has_monthly_sideways:
         _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
@@ -5975,16 +5978,16 @@ def _find_fibo_3p_steep_setup(
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
     if _mirrored_short and _has_long_sideways(
-        w.iloc[i_peak:].reset_index(drop=True), max_days=22, band_pct=0.12
+        w.iloc[i_peak:].reset_index(drop=True),
+        max_days=22,
+        band_pct=0.20,
+        max_progress_pct=0.08,
     ):
-        short_correction = w.iloc[i_peak:].reset_index(drop=True)
-        if not _sideways_correction_near_active_extreme(short_correction, "long"):
-            _log("Rejected short 3P steep: post-bottom correction contains a month-long sideways range.")
-            return None
-        _log(
-            "Short 3P steep: retained the broad decline because the current correction "
-            "is still pressing its recovery extreme."
-        )
+        # A completed month-long base ends the old short cycle even when price
+        # subsequently breaks upward and is currently near the recovery high.
+        # MSTR's July-August shelf must not preserve its October-June decline.
+        _log("Rejected short 3P steep: post-bottom correction contains a completed month-long side trend.")
+        return None
     crossed_23_6 = progress_to_618 >= 0.0
 
     gain_pct = rng / max(abs(fib_start), 1e-9)

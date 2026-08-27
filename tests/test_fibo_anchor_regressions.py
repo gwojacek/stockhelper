@@ -16,6 +16,16 @@ def _fixture(path: str):
     return frame.reset_index(drop=True)
 
 
+def test_mstr_broad_short_is_rejected_by_month_side_trends():
+    frame = _fixture("data/csv/stocks/MSTR_US.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short", explain)
+
+    assert result is None
+    assert any("completed month-long side trend" in message for message in explain)
+
+
 @pytest.mark.parametrize(
     ("path", "peak_date", "expected_date", "expected_low"),
     [

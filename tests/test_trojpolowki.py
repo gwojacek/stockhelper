@@ -405,7 +405,7 @@ def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
 
 def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert "Rejected short 3P steep: post-bottom correction contains a month-long sideways range" in source
+    assert "Rejected short 3P steep: post-bottom correction contains a completed month-long side trend" in source
     assert "Rejected short: post-bottom correction contains a month-long sideways range" in source
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
     assert 'cand.direction == "short" and _has_long_sideways' in stale
@@ -420,7 +420,10 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "qualifying_starts.append(start)" in helper
     assert "longest_covered" in helper
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
-    assert "Rejected short 3P steep: decline is dominated by an extended side trend." in steep
+    assert "Rejected short 3P steep: decline contains a completed month-long side trend." in steep
+    assert "max_days=22" in steep
+    assert "band_pct=0.20" in steep
+    assert "max_progress_pct=0.08" in steep
     assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
     assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
 
@@ -614,7 +617,7 @@ def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection
     assert "retained sideways correction because the newest close" in setup
     assert "_sideways_correction_near_active_extreme" in setup
     assert "adjusted the top anchor" in setup
-    assert "Short 3P steep: retained the broad decline" in steep
+    assert "Short 3P steep: retained the broad decline" not in steep
 
 
 def test_manual_fibo_drawing_does_not_rescale_chart_viewport():
