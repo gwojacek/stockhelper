@@ -657,7 +657,7 @@ def test_chart_png_includes_position_table_after_calculation():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     capture = ui_source[ui_source.index("async function captureChartPng()") : ui_source.index("function journalScreenshotRange()")]
 
-    assert "const calculation = levels.position_calculations;" in capture
+    assert "$('calc-drawer')?.classList.contains('open') ? levels.position_calculations : null" in capture
     assert "calculation?.ok && Array.isArray(calculation.rows)" in capture
     assert "canvas.height = base.height + headerHeight + calculationHeight" in capture
     assert "'Position calculation'" in capture

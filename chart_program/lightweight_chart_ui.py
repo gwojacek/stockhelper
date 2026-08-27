@@ -3312,7 +3312,10 @@ class LightweightChartLevelSelectorUI:
     ].filter(([, value]) => value !== '');
     const columns = Math.max(2, Math.min(4, Math.floor(base.width / 190)));
     const headerHeight = 70 + Math.ceil(values.length / columns) * 43;
-    const calculation = levels.position_calculations;
+    // Mirror the visible UI: closing the calculation drawer also removes the
+    // calculation table from subsequent PNG downloads without discarding the
+    // saved calculation itself.
+    const calculation = $('calc-drawer')?.classList.contains('open') ? levels.position_calculations : null;
     const calculationRows = calculation?.ok && Array.isArray(calculation.rows) ? calculation.rows : [];
     const calculationHeight = calculationRows.length ? 68 + calculationRows.length * 36 : 0;
     const canvas = document.createElement('canvas');
