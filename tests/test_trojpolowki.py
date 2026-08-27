@@ -6,6 +6,7 @@ import importlib.machinery
 import importlib.util
 import itertools
 import json
+import os
 import re
 import statistics
 import sys
@@ -84,8 +85,24 @@ def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v22"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v22"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v24"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v24"' in server_source
+
+
+def test_latest_scope_report_uses_filename_date_when_mtimes_tie(tmp_path):
+    mod = load_run_module()
+    search_dir = tmp_path / "fibo"
+    search_dir.mkdir()
+    old = search_dir / "fibo_search_ndx100_20260813.md"
+    current = search_dir / "fibo_search_ndx100_20260827.md"
+    old.write_text("obsolete DASH short", encoding="utf-8")
+    current.write_text("current DASH long", encoding="utf-8")
+    tied_mtime = 1_787_814_930
+    os.utime(old, (tied_mtime, tied_mtime))
+    os.utime(current, (tied_mtime, tied_mtime))
+
+    with mock.patch.object(mod, "FIBO_SEARCH_OUTPUT_DIR", search_dir):
+        assert mod._latest_scope_md("fibo_search", "us100") == current
 
 
 def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
@@ -281,6 +298,19 @@ def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
     assert '"STOCKHELPER_CACHE_ONLY"] = "1"' in server
     assert '"-explain", ticker' in server
     assert "FULL SCANNER REJECTION TRACE" in server
+    assert "fetchFiboDropoutAnalysis(ticker,context)" in source
+    assert "for(let port=8765;port<8795;port++)" in source
+    assert "StockHelper report server unavailable; reopen the report from StockHelper" in source
+
+
+def test_saved_fibo_past_second_anchor_is_deleted_and_opposite_stale_setup_is_pruned():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    forced_guard = source[source.index("later_high_slice ="):source.index("early_sideways", source.index("later_high_slice ="))]
+    assert "if forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:" in forced_guard
+    assert "Rejected saved long Fibo: price exceeded its second anchor" in forced_guard
+    assert "live_steep_directions" in source
+    assert "_fibo_retracement_progress_pct(r) >= 100.0" in source
+    assert 'r.status != "valid_reversal"' in source
 
 
 def test_all_fibo_cards_have_debug_and_saved_filter_controls():
@@ -328,18 +358,16 @@ def test_chart_fibo_debug_ends_with_requested_csv_data():
     assert "scanner audit command" not in snapshot
 
 
-def test_long_fibo_sideways_rules_apply_to_impulse_not_correction():
+def test_month_side_trends_invalidate_both_fibo_impulse_and_correction():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "max_days=30, band_pct=0.12" in steep_source
-    assert "max_progress_pct=0.05" in steep_source
-    assert "keep only when no materially smaller regular setup replaces it" in steep_source
+    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep_source
+    assert "_has_completed_month_side_trend(w.iloc[i_peak:])" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
-    assert "_latest_sideways_window" not in source[correction_start:correction_end]
-    assert "_mirrored_short and _has_long_sideways" in source[correction_start:correction_end]
+    assert "_has_completed_month_side_trend(correction_seg)" in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "_completed_sideways_reset_long" in source[selector_start:selector_end]
@@ -375,8 +403,9 @@ def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
 
 def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert "Rejected short 3P steep: post-bottom correction contains a month-long sideways range" in source
-    assert "Rejected short: post-bottom correction contains a month-long sideways range" in source
+    assert "post-bottom recovery" in source
+    assert "short recovery" in source
+    assert "correction contains a completed month-long side trend" in source
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
     assert 'cand.direction == "short" and _has_long_sideways' in stale
 
@@ -390,7 +419,12 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "qualifying_starts.append(start)" in helper
     assert "longest_covered" in helper
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
-    assert "Rejected short 3P steep: decline is dominated by an extended side trend." in steep
+    helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
+    assert "short decline" in steep
+    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep
+    assert "max_days=22" in helper
+    assert "band_pct=0.20" in helper
+    assert "max_progress_pct=0.08" in helper
     assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
     assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
 
@@ -580,11 +614,11 @@ def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection
     assert "(44, 0.22, 0.08, 1)" in source
     assert "reset fib start after extended sideways base" in source
     assert "base_end + 35" in source
-    assert "newest_near_recovery_extreme" in setup
-    assert "retained sideways correction because the newest close" in setup
-    assert "_sideways_correction_near_active_extreme" in setup
+    assert "newest_near_recovery_extreme" not in setup
+    assert "retained sideways correction because the newest close" not in setup
+    assert "_has_completed_month_side_trend(correction_seg)" in setup
     assert "adjusted the top anchor" in setup
-    assert "Short 3P steep: retained the broad decline" in steep
+    assert "Short 3P steep: retained the broad decline" not in steep
 
 
 def test_manual_fibo_drawing_does_not_rescale_chart_viewport():
@@ -868,8 +902,10 @@ def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
     assert "Long: price returned above 23.6 without touching 61.8" in source
     assert "Short: correction returned below 23.6 without touching 61.8" in source
     assert 'if r.status == "returned_before_61_8":\n            rows0.append(r)' in source[routing_start:]
-    assert 'if made_higher_high and cand.status != "returned_before_61_8"' in source
-    assert 'if made_lower_low and cand.status != "returned_before_61_8"' in source
+    assert "if made_higher_high:" in source
+    assert "if made_lower_low:" in source
+    assert 'made_higher_high and cand.status != "returned_before_61_8"' not in source
+    assert 'made_lower_low and cand.status != "returned_before_61_8"' not in source
     assert 'r.status == "3p_steep_incline" or r.status == "returned_before_61_8"' in source
 
 
@@ -962,9 +998,10 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
 
     assert "if _has_extended_sideways(correction_seg):" in setup
     assert "correction is dominated by an extended side trend" in setup
-    assert "if _mirrored_short and _has_extended_sideways(impulse_seg):" in setup
-    assert "decline is dominated by an extended side trend" in setup
+    assert "if _impulse_has_disqualifying_month_side_trend(impulse_seg):" in setup
+    assert "contains a completed month-long side trend" in setup
     assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
+    assert "if _has_completed_month_side_trend(after):" in stale
 
 
 def test_fibo_rejects_correction_through_original_anchor():
@@ -1100,6 +1137,31 @@ def test_early_ichimoku_is_hidden_from_3p_until_cutoff(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "JSW" not in text
     assert "WAITING FOR DIRECTION RETEST" not in text
+
+
+def test_qualified_position_row_with_valid_retest_uses_fourth_column(tmp_path: Path):
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="position", ticker="CPS", status="above",
+        dates={"start_date": "2026-04-21"},
+        metrics={
+            "months": "4.2", "qualification_status": "standard_4m_breakout",
+            "latest_retest_date": "2026-08-25", "latest_retest_pattern": "bullish_piercing_line",
+            "raw_status": "above", "current_side": "above",
+            "ichimoku_status": "Over Kijun-sen", "risk": "3%",
+        },
+    )
+
+    out = mod._write_trojpolowki_ichimoku([row], tmp_path, datetime(2026, 8, 25, 12, 0, 0))
+    data_row = next(
+        line for line in out.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| ") and "CYFRPLSAT (CPS)" in line
+    )
+    cells = [cell.strip() for cell in data_row.strip().strip("|").split("|")]
+
+    assert len(cells) == 4
+    assert all("CYFRPLSAT (CPS)" not in cell for cell in cells[:3])
+    assert "CYFRPLSAT (CPS)" in cells[3]
 
 
 def test_early_rebreakout_in_position_table_is_not_playable():

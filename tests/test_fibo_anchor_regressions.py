@@ -16,6 +16,42 @@ def _fixture(path: str):
     return frame.reset_index(drop=True)
 
 
+def test_mstr_broad_short_is_rejected_by_month_side_trends():
+    frame = _fixture("data/csv/stocks/MSTR_US.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short", explain)
+
+    assert result is None
+    assert any("completed month-long side trend" in message for message in explain)
+
+
+def test_ftnt_exceptional_post_base_impulse_survives_loose_month_window():
+    frame = _fixture("data/csv/stocks/FTNT_US.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None
+    assert result.incline_start_date == "2026-04-13"
+    assert result.incline_end_date == "2026-08-05"
+    assert result.status == "3p_steep_incline"
+    assert any("monthly pause absorbed" in message for message in explain)
+
+
+def test_corn_continuation_moves_second_anchor_to_latest_higher_high():
+    frame = _fixture("data/csv/commodities/ZC_F.csv")
+
+    result = scanner._find_fibo_setup(frame, "long", end_offset=0)
+
+    assert result is not None
+    assert result.status == "3p_steep_incline"
+    assert result.incline_end_date == "2026-08-21"
+    implied_second_anchor = (float(result.fib_23_6) - 0.236 * float(result.stop_loss)) / 0.764
+    assert implied_second_anchor == pytest.approx(509.0)
+    assert float(result.fib_23_6) > float(result.fib_61_8)
+
+
 @pytest.mark.parametrize(
     ("path", "peak_date", "expected_date", "expected_low"),
     [

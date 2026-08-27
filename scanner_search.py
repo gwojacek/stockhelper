@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import random
@@ -691,9 +690,16 @@ def _is_bullish_engulfing(
 ) -> bool:
     c1_open = float(c1["Open"])
     c1_close = float(c1["Close"])
+    c1_range = float(c1["High"] - c1["Low"])
     c2_open = float(c2["Open"])
     c2_close = float(c2["Close"])
     if not (c1_close < c1_open and c2_close > c2_open):
+        return False
+    # An engulfing formation must reverse a real first candle, not a doji that
+    # happens to finish a few ticks on the required side of its open.  Without
+    # this guard AMAT 2026-08-12 (0.15 body in an 8.85 range) was labelled as
+    # the bullish first leg of a bearish engulfing pair on the next day.
+    if abs(c1_close - c1_open) / max(c1_range, 1e-9) <= 0.10:
         return False
     close_floor = level if close_floor is None else close_floor
     if zone_floor is None:
@@ -825,9 +831,11 @@ def _is_bearish_engulfing(
     close_ceiling: float | None = None,
     zone_ceiling: float | None = None,
 ) -> bool:
-    o1, cl1, _, _, _ = _candle_parts(c1)
+    o1, cl1, h1, l1, _ = _candle_parts(c1)
     o2, cl2, _, _, _ = _candle_parts(c2)
     if not (cl1 > o1 and cl2 < o2):
+        return False
+    if abs(cl1 - o1) / max(h1 - l1, 1e-9) <= 0.10:
         return False
     close_ceiling = level if close_ceiling is None else close_ceiling
     if zone_ceiling is None:
@@ -1007,6 +1015,47 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     if len(df_slice) < max_days:
         return False
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
+
+
+def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
+    """Return whether a leg contains a completed month-scale price channel.
+
+    Fibo legs may pause briefly, but a full 22-session channel with no more
+    than 8% endpoint progress is a separate market phase.  The wider 20% band
+    intentionally supports volatile instruments such as MSTR, whose February-
+    April and July-August shelves are visually clear side trends despite their
+    larger absolute ranges.
+    """
+    return _has_long_sideways(
+        df_slice.reset_index(drop=True),
+        max_days=22,
+        band_pct=0.20,
+        max_progress_pct=0.08,
+    )
+
+
+def _impulse_has_disqualifying_month_side_trend(df_slice: pd.DataFrame) -> bool:
+    """Reject a monthly shelf unless it is absorbed by an exceptional impulse.
+
+    Anchor selection already moves a pre-impulse base to the first durable low
+    after that base.  Once that has happened, a single loose 22-session window
+    can also be produced by a stair-step pause inside a very strong move.  Such
+    a pause must not turn FTNT-like 65%+ impulses into dropouts.  Correction-side
+    shelves remain strict because they end the completed impulse cycle.
+    """
+    leg = df_slice.reset_index(drop=True)
+    if not _has_completed_month_side_trend(leg):
+        return False
+    if len(leg) < 2:
+        return True
+    lows = pd.to_numeric(leg["Low"], errors="coerce")
+    highs = pd.to_numeric(leg["High"], errors="coerce")
+    launch = float(lows.iloc[: min(5, len(lows))].min())
+    peak = float(highs.max())
+    gain_pct = (peak - launch) / max(abs(launch), 1e-9)
+    average_daily_gain = gain_pct / max(len(leg) - 1, 1)
+    exceptional_continuation = gain_pct >= 0.65 and average_daily_gain >= 0.006
+    return not exceptional_continuation
 
 
 def _has_extended_sideways(
@@ -4516,6 +4565,32 @@ def _post_anchor_touch_tolerance_static(price: float) -> float:
     return max(pip * 5, abs(float(price)) * 0.0005)
 
 
+def _wedge_lower_boundary_structure(
+    upper_span: int,
+    lower_span: int,
+    lower_move_pct: float,
+) -> tuple[bool, float]:
+    """Grade whether the lower line is substantial beside the upper line."""
+    span_ratio = lower_span / max(upper_span, 1)
+    is_token_shelf = (
+        upper_span >= 60
+        and lower_span < 10
+        and span_ratio < 0.12
+        and lower_move_pct < 0.05
+    )
+    quality = min(1.0, max(span_ratio / 0.22, lower_move_pct / 0.10))
+    return not is_token_shelf, quality
+
+
+def _wedge_breakout_is_continuation(
+    breakout_direction: str,
+    outside_direction: str,
+    reentered: bool,
+) -> bool:
+    """Allow an outside-close cluster only until price re-enters the wedge."""
+    return breakout_direction == outside_direction and not reentered
+
+
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     # Touches separated only by glued/adjacent candles count as one contact;
     # a new contact requires at least one full non-touching candle between them.
@@ -4555,6 +4630,13 @@ def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
     raw = str(ticker).strip()
     canonical = re.sub(r"\.(WA|PL)$", "", raw, flags=re.IGNORECASE)
     stems = [canonical]
+    # Stock config/session names are normalized by resolve_config_path(), which
+    # replaces dots with underscores (DASH.US -> dash_us.json).  Scanner rows
+    # retain the market suffix, so without the same normalized alias the saved
+    # chart Fibo was never found or deleted even after price passed its second
+    # anchor.
+    config_stem = canonical.lower().replace("/", "").replace(".", "_")
+    stems.extend((config_stem, config_stem.upper()))
     # Level selector configs for commodities/forex are direction-qualified
     # (``aluminium_long.py`` / ``aluminium_short.py``), and session state uses
     # that config stem even though scanner rows only contain ``ALUMINIUM``.
@@ -4687,7 +4769,7 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
-    """Track invalid saved Fibos and delete them after a 14-day grace period."""
+    """Remove saved Fibos as soon as their edited anchors become invalid."""
     path = _scanner_session_path_for_ticker(ticker)
     if not path.exists():
         return None
@@ -4702,29 +4784,15 @@ def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> st
     if not fib_objects:
         state.pop("__saved_fibo_invalid__", None)
         return None
-    fingerprint = hashlib.sha256(json.dumps(fib_objects, sort_keys=True, default=str).encode("utf-8")).hexdigest()
     if valid:
         if state.pop("__saved_fibo_invalid__", None) is not None:
             path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         return None
-    marker = state.get("__saved_fibo_invalid__")
-    if not isinstance(marker, dict) or marker.get("fingerprint") != fingerprint:
-        marker = {"since": as_of.isoformat(), "fingerprint": fingerprint}
-        state["__saved_fibo_invalid__"] = marker
-        path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        return "invalid -> automatic fallback (day 0/14)"
-    try:
-        invalid_since = date.fromisoformat(str(marker.get("since")))
-    except ValueError:
-        invalid_since = as_of
-    age = max(0, (as_of - invalid_since).days)
-    if age < 14:
-        return f"invalid -> automatic fallback (day {age}/14)"
     state["drawn_objects"] = [obj for obj in objects if not (isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"})]
     state["__saved_fibo_by_user__"] = False
     state.pop("__saved_fibo_invalid__", None)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    return "invalid saved Fibo deleted after 14 days -> automatic fallback"
+    return "invalid saved Fibo deleted -> automatic fallback"
 
 
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:
@@ -5042,6 +5110,24 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_a = (lh1, float(lows[lh1]))
                 lower_b = (lh2, float(lows[lh2]))
                 lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
+                upper_anchor_span = abs(uh2 - uh1)
+                lower_anchor_span = abs(lh2 - lh1)
+                lower_anchor_move_pct = abs(lower_b[1] - lower_a[1]) / max(
+                    (abs(lower_a[1]) + abs(lower_b[1])) / 2.0,
+                    1e-9,
+                )
+                # Do not pair a months-long upper boundary with a token lower
+                # line made from two nearby, virtually level candles.  Such a
+                # pair is not a wedge: it merely attaches a tiny recent shelf to
+                # an old trendline.  A short lower line remains eligible when it
+                # has a material rise/fall (a steep local-low boundary).
+                lower_structure_valid, lower_structure_quality = _wedge_lower_boundary_structure(
+                    upper_anchor_span,
+                    lower_anchor_span,
+                    lower_anchor_move_pct,
+                )
+                if not lower_structure_valid:
+                    continue
                 # Falling wedges must converge. The lower boundary is allowed to
                 # be flat or rising when that best describes current price
                 # compression (triangle-like wedges). Reject only lower lines
@@ -5084,6 +5170,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_contacts = [lh1, lh2]
                 breakout_idx: int | None = None
                 breakout_direction = "-"
+                breakout_reentered = False
                 invalid = False
                 width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
                 width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
@@ -5109,7 +5196,15 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         breakout_idx = i
                         breakout_direction = direction
                         return True
-                    return breakout_direction == direction
+                    # Consecutive outside closes are continuation of one
+                    # breakout. Once price has closed back inside the wedge,
+                    # another outside close is a second breakout and this old
+                    # anchor set is burnt; the scanner must find newer anchors.
+                    return _wedge_breakout_is_continuation(
+                        breakout_direction,
+                        direction,
+                        breakout_reentered,
+                    )
 
                 def _breakout_stop_loss_touched(i: int) -> bool:
                     return _wedge_probable_stop_touched_after_breakout(
@@ -5159,6 +5254,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         if _accept_or_reject_breakout(i, direction):
                             continue
                         if breakout_idx is not None:
+                            if breakout_reentered:
+                                invalid = True
+                                break
                             if breakout_direction == "long" and closes[i] >= lo - close_eps:
                                 continue
                             if breakout_direction == "short" and closes[i] <= up + close_eps:
@@ -5172,6 +5270,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             # keep searching so later/leaner adjusted lines can win.
                             invalid = True
                             break
+                        breakout_reentered = True
                         continue
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
@@ -5341,6 +5440,11 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         # A flat/rising lower boundary uses the same bottom but
                         # tightens the probable stop after a long breakout.
                         lower_line_shape_bonus = 1.18
+                # Among otherwise valid candidates, prefer a lower boundary
+                # that represents a comparable piece of market structure.  A
+                # large move between recent local lows may compensate for a
+                # shorter time span, so steep adjusted lines remain competitive.
+                lower_structure_bonus = 0.72 + 0.48 * lower_structure_quality
                 exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
                 proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
                 compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
@@ -5360,7 +5464,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # scanner match than a steeper line that only wins because of slope.
                 slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus * lower_structure_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the selected
@@ -5943,16 +6047,13 @@ def _find_fibo_3p_steep_setup(
     # A month-long flat block splits the structure into separate impulses.  Do
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
-    has_monthly_sideways = _has_long_sideways(
-        w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.12, max_progress_pct=0.05
-    )
-    if _mirrored_short and _has_extended_sideways(
-        w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-    ):
-        _log("Rejected short 3P steep: decline is dominated by an extended side trend.")
+    impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+    if _impulse_has_disqualifying_month_side_trend(impulse_seg):
+        side = "short decline" if _mirrored_short else "long incline"
+        _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
         return None
-    if has_monthly_sideways:
-        _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
+    if _has_completed_month_side_trend(impulse_seg):
+        _log("3P steep: monthly pause absorbed by an exceptional post-base impulse.")
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -5973,17 +6074,13 @@ def _find_fibo_3p_steep_setup(
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
-    if _mirrored_short and _has_long_sideways(
-        w.iloc[i_peak:].reset_index(drop=True), max_days=22, band_pct=0.12
-    ):
-        short_correction = w.iloc[i_peak:].reset_index(drop=True)
-        if not _sideways_correction_near_active_extreme(short_correction, "long"):
-            _log("Rejected short 3P steep: post-bottom correction contains a month-long sideways range.")
-            return None
-        _log(
-            "Short 3P steep: retained the broad decline because the current correction "
-            "is still pressing its recovery extreme."
-        )
+    if _has_completed_month_side_trend(w.iloc[i_peak:]):
+        # A completed month-long base ends the old short cycle even when price
+        # subsequently breaks upward and is currently near the recovery high.
+        # MSTR's July-August shelf must not preserve its October-June decline.
+        side = "post-bottom recovery" if _mirrored_short else "post-peak pullback"
+        _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
+        return None
     crossed_23_6 = progress_to_618 >= 0.0
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
@@ -6014,7 +6111,7 @@ def _find_fibo_3p_steep_setup(
         reversal_pattern_name="none",
         stop_loss=fib_start,
         current_close=current_close,
-        has_monthly_sideways=has_monthly_sideways,
+        has_monthly_sideways=False,
     )
 
 def _find_fibo_setup(
@@ -6138,6 +6235,12 @@ def _find_fibo_setup(
         i_end = len(w) - 1
         later_high_slice = pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce") if i_peak + 1 <= i_end else pd.Series(dtype=float)
         later_high = float(later_high_slice.max()) if not later_high_slice.empty else float("nan")
+        if forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:
+            _log(
+                "Rejected saved long Fibo: price exceeded its second anchor "
+                f"({later_high:.4f} > {fib_end:.4f})."
+            )
+            return None
         if not forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:
             previous_peak = fib_end
             i_peak = int(later_high_slice.idxmax())
@@ -6196,6 +6299,10 @@ def _find_fibo_setup(
             )
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
+        if _has_completed_month_side_trend(correction_seg):
+            side = "short recovery" if _mirrored_short else "long pullback"
+            _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
+            return None
         # A retracement that spends several months in overlapping flat ranges
         # is no longer the decline/recovery leg of the selected impulse. Apply
         # this symmetrically to long and short formations.
@@ -6205,18 +6312,6 @@ def _find_fibo_setup(
         if not _mirrored_short and _correction_settled_into_sideways(correction_seg):
             _log("Rejected long: correction settled into a completed month-long side trend.")
             return None
-        if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
-            newest_near_recovery_extreme = _sideways_correction_near_active_extreme(correction_seg, "long")
-            if not newest_near_recovery_extreme:
-                _log(
-                    "Rejected short: post-bottom correction contains a month-long sideways range; "
-                    "the decline is no longer an active Fibo formation."
-                )
-                return None
-            _log(
-                "Short: retained sideways correction because the newest close is still near "
-                "the recovery extreme."
-            )
         # A correction may consolidate while progressing from 23.6 toward 61.8;
         # that does not invalidate its anchors.  Sideways resets belong to the
         # impulse leg checks below, not to the post-peak waiting leg.  This keeps
@@ -6232,9 +6327,12 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-        if _mirrored_short and _has_extended_sideways(impulse_seg):
-            _log("Rejected short: decline is dominated by an extended side trend.")
+        if _impulse_has_disqualifying_month_side_trend(impulse_seg):
+            side = "short decline" if _mirrored_short else "long incline"
+            _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
             return None
+        if _has_completed_month_side_trend(impulse_seg):
+            _log("Long: monthly pause absorbed by an exceptional post-base impulse.")
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
         if all_touch_idxs:
@@ -6442,8 +6540,8 @@ def _find_fibo_setup(
         )
         return None
     short_correction_seg = w.iloc[i_bottom:i_end + 1].reset_index(drop=True)
-    if _has_long_sideways(short_correction_seg, max_days=22, band_pct=0.12):
-        _log("Rejected short: correction is sideways/flat.")
+    if _has_completed_month_side_trend(short_correction_seg):
+        _log("Rejected short: correction contains a completed month-long side trend.")
         return None
     short_sideways_month = _latest_sideways_window(short_correction_seg, max_days=30, band_pct=0.20)
     if short_sideways_month is not None:
@@ -6701,6 +6799,8 @@ def run_fibo_search(target: str) -> int:
         # dataset so stale offset candidates cannot bypass the live rejection.
         if _has_extended_sideways(after.reset_index(drop=True)):
             return True
+        if _has_completed_month_side_trend(after):
+            return True
         if cand.direction == "long" and _correction_settled_into_sideways(after.reset_index(drop=True)):
             return True
         if cand.direction == "short" and _has_long_sideways(
@@ -6730,7 +6830,7 @@ def run_fibo_search(target: str) -> int:
             end_high = pd.to_numeric(end_rows["High"], errors="coerce").max() if not end_rows.empty else float("nan")
             after_high = pd.to_numeric(after["High"], errors="coerce")
             made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
-            if made_higher_high and cand.status != "returned_before_61_8":
+            if made_higher_high:
                 return True
             after_low = pd.to_numeric(after["Low"], errors="coerce")
             return bool((after_low <= float(cand.fib_61_8)).any())
@@ -6739,7 +6839,7 @@ def run_fibo_search(target: str) -> int:
         end_low = pd.to_numeric(end_rows["Low"], errors="coerce").min() if not end_rows.empty else float("nan")
         after_low = pd.to_numeric(after["Low"], errors="coerce")
         made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
-        if made_lower_low and cand.status != "returned_before_61_8":
+        if made_lower_low:
             return True
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())
@@ -7145,6 +7245,24 @@ def run_fibo_search(target: str) -> int:
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows2_ids = {id(r) for r in rows2_liquid}
     deduped_fibo_rows = _limit_fibo_formations_per_ticker(_dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid))
+    # A live newest-candle incline supersedes an unconfirmed, opposite-direction
+    # historical pullback once that old setup has already crossed 61.8. Keeping
+    # both produced DASH as a 110.6% short in column three while its active move
+    # was the June long incline in column one. Confirmed opposite reversals still
+    # remain eligible.
+    live_steep_directions = {
+        (r.ticker, r.direction)
+        for r in deduped_fibo_rows
+        if r.status == "3p_steep_incline"
+    }
+    deduped_fibo_rows = [
+        r for r in deduped_fibo_rows
+        if not (
+            r.status != "valid_reversal"
+            and _fibo_retracement_progress_pct(r) >= 100.0
+            and any(ticker == r.ticker and direction != r.direction for ticker, direction in live_steep_directions)
+        )
+    ]
     rows0 = [r for r in deduped_fibo_rows if r.status == "3p_steep_incline" or r.status == "returned_before_61_8"]
     rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
     rows1 = [
