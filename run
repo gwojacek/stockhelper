@@ -626,7 +626,16 @@ def _latest_scope_md(prefix: str, scope: str) -> Path | None:
         candidates.extend([p for p in search_dir.glob(f"{prefix}_{key}_*.md") if p.is_file()])
     if not candidates:
         return None
-    return max(candidates, key=lambda p: p.stat().st_mtime)
+    # Git checkout/extraction commonly gives a whole batch of historical
+    # reports the same mtime. Selecting only by mtime can then feed 3P an old
+    # report (DASH's obsolete 2025-10 short won over its current 2026-06 long
+    # incline). The YYYYMMDD suffix is the authoritative report date; mtime is
+    # only a tie-breaker for duplicate aliases generated on the same day.
+    def report_recency(path: Path) -> tuple[str, float]:
+        match = re.search(r"_(\d{8})\.md$", path.name)
+        return (match.group(1) if match else "00000000", path.stat().st_mtime)
+
+    return max(candidates, key=report_recency)
 
 def _scope_file_keys(scope: str) -> list[str]:
     key = (scope or "").strip().lower()
@@ -917,7 +926,7 @@ def _wait_for_report_server(report_url: str | None) -> int:
         return 0
 
 def _serve_report_locally(path: Path) -> str | None:
-    report_server_protocol = "stockhelper-report-server-v22"
+    report_server_protocol = "stockhelper-report-server-v23"
     rel = path.resolve().relative_to(PROJECT_ROOT.resolve())
     report_url_path = "/".join(rel.parts)
     host = "127.0.0.1"

@@ -6,6 +6,7 @@ import importlib.machinery
 import importlib.util
 import itertools
 import json
+import os
 import re
 import statistics
 import sys
@@ -84,8 +85,24 @@ def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v22"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v22"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v23"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v23"' in server_source
+
+
+def test_latest_scope_report_uses_filename_date_when_mtimes_tie(tmp_path):
+    mod = load_run_module()
+    search_dir = tmp_path / "fibo"
+    search_dir.mkdir()
+    old = search_dir / "fibo_search_ndx100_20260813.md"
+    current = search_dir / "fibo_search_ndx100_20260827.md"
+    old.write_text("obsolete DASH short", encoding="utf-8")
+    current.write_text("current DASH long", encoding="utf-8")
+    tied_mtime = 1_787_814_930
+    os.utime(old, (tied_mtime, tied_mtime))
+    os.utime(current, (tied_mtime, tied_mtime))
+
+    with mock.patch.object(mod, "FIBO_SEARCH_OUTPUT_DIR", search_dir):
+        assert mod._latest_scope_md("fibo_search", "us100") == current
 
 
 def test_allsearch_cleanup_removes_stooq_debug_directory(tmp_path, capsys):
@@ -1120,7 +1137,7 @@ def test_qualified_position_row_with_valid_retest_uses_fourth_column(tmp_path: P
         line for line in out.read_text(encoding="utf-8").splitlines()
         if line.startswith("| ") and "CYFRPLSAT (CPS)" in line
     )
-    cells = data_row.split(" | ")[1:-1]
+    cells = [cell.strip() for cell in data_row.strip().strip("|").split("|")]
 
     assert len(cells) == 4
     assert all("CYFRPLSAT (CPS)" not in cell for cell in cells[:3])
