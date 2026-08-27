@@ -6,6 +6,20 @@ pd = pytest.importorskip("pandas")
 scanner_search = pytest.importorskip("scanner_search")
 
 
+def test_bearish_engulfing_rejects_doji_like_first_candle():
+    first = pd.Series({"Open": 548.00, "High": 553.75, "Low": 544.90, "Close": 548.15})
+    second = pd.Series({"Open": 548.81, "High": 563.76, "Low": 531.79, "Close": 534.54})
+
+    assert not scanner_search._is_bearish_engulfing(first, second, level=548.0)
+
+
+def test_bearish_engulfing_accepts_meaningful_bullish_first_candle():
+    first = pd.Series({"Open": 540.00, "High": 554.00, "Low": 538.00, "Close": 550.00})
+    second = pd.Series({"Open": 552.00, "High": 553.00, "Low": 536.00, "Close": 539.00})
+
+    assert scanner_search._is_bearish_engulfing(first, second, level=548.0)
+
+
 def test_ichimoku_builds_cloud_without_row_wise_nan_reductions(monkeypatch):
     rows = 120
     prices = pd.Series(range(rows), dtype=float) + 100.0

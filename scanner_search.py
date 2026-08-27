@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import random
@@ -691,9 +690,16 @@ def _is_bullish_engulfing(
 ) -> bool:
     c1_open = float(c1["Open"])
     c1_close = float(c1["Close"])
+    c1_range = float(c1["High"] - c1["Low"])
     c2_open = float(c2["Open"])
     c2_close = float(c2["Close"])
     if not (c1_close < c1_open and c2_close > c2_open):
+        return False
+    # An engulfing formation must reverse a real first candle, not a doji that
+    # happens to finish a few ticks on the required side of its open.  Without
+    # this guard AMAT 2026-08-12 (0.15 body in an 8.85 range) was labelled as
+    # the bullish first leg of a bearish engulfing pair on the next day.
+    if abs(c1_close - c1_open) / max(c1_range, 1e-9) <= 0.10:
         return False
     close_floor = level if close_floor is None else close_floor
     if zone_floor is None:
@@ -825,9 +831,11 @@ def _is_bearish_engulfing(
     close_ceiling: float | None = None,
     zone_ceiling: float | None = None,
 ) -> bool:
-    o1, cl1, _, _, _ = _candle_parts(c1)
+    o1, cl1, h1, l1, _ = _candle_parts(c1)
     o2, cl2, _, _, _ = _candle_parts(c2)
     if not (cl1 > o1 and cl2 < o2):
+        return False
+    if abs(cl1 - o1) / max(h1 - l1, 1e-9) <= 0.10:
         return False
     close_ceiling = level if close_ceiling is None else close_ceiling
     if zone_ceiling is None:
@@ -4687,7 +4695,7 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
-    """Track invalid saved Fibos and delete them after a 14-day grace period."""
+    """Remove saved Fibos as soon as their edited anchors become invalid."""
     path = _scanner_session_path_for_ticker(ticker)
     if not path.exists():
         return None
@@ -4702,29 +4710,15 @@ def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> st
     if not fib_objects:
         state.pop("__saved_fibo_invalid__", None)
         return None
-    fingerprint = hashlib.sha256(json.dumps(fib_objects, sort_keys=True, default=str).encode("utf-8")).hexdigest()
     if valid:
         if state.pop("__saved_fibo_invalid__", None) is not None:
             path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         return None
-    marker = state.get("__saved_fibo_invalid__")
-    if not isinstance(marker, dict) or marker.get("fingerprint") != fingerprint:
-        marker = {"since": as_of.isoformat(), "fingerprint": fingerprint}
-        state["__saved_fibo_invalid__"] = marker
-        path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        return "invalid -> automatic fallback (day 0/14)"
-    try:
-        invalid_since = date.fromisoformat(str(marker.get("since")))
-    except ValueError:
-        invalid_since = as_of
-    age = max(0, (as_of - invalid_since).days)
-    if age < 14:
-        return f"invalid -> automatic fallback (day {age}/14)"
     state["drawn_objects"] = [obj for obj in objects if not (isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"})]
     state["__saved_fibo_by_user__"] = False
     state.pop("__saved_fibo_invalid__", None)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    return "invalid saved Fibo deleted after 14 days -> automatic fallback"
+    return "invalid saved Fibo deleted -> automatic fallback"
 
 
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:

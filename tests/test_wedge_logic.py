@@ -100,7 +100,7 @@ def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkey
     assert scanner._saved_drawing_kinds_for_ticker("KLIN") == set()
 
 
-def test_invalid_saved_fibo_is_deleted_after_two_weeks(tmp_path, monkeypatch):
+def test_invalid_saved_fibo_is_deleted_immediately(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
     sessions.mkdir()
@@ -108,27 +108,25 @@ def test_invalid_saved_fibo_is_deleted_after_two_weeks(tmp_path, monkeypatch):
     fib = {"type": "fib-boundary", "group_id": "edited", "x0": "2026-02-02", "x1": "2026-06-05"}
     path.write_text(json.dumps({"drawn_objects": [fib, {"type": "line"}]}), encoding="utf-8")
 
-    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1)) == "invalid -> automatic fallback (day 0/14)"
-    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 14)) == "invalid -> automatic fallback (day 13/14)"
-    assert "deleted after 14 days" in scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 15))
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1)) == "invalid saved Fibo deleted -> automatic fallback"
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["drawn_objects"] == [{"type": "line"}]
     assert "__saved_fibo_invalid__" not in saved
 
 
-def test_editing_invalid_saved_fibo_restarts_grace_period(tmp_path, monkeypatch):
+def test_valid_saved_fibo_clears_legacy_invalid_marker(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
     sessions.mkdir()
     path = sessions / "KLIN.json"
     fib = {"type": "fib-boundary", "x0": "2026-02-02", "x1": "2026-06-05"}
     path.write_text(json.dumps({"drawn_objects": [fib]}), encoding="utf-8")
-    scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1))
     state = json.loads(path.read_text(encoding="utf-8"))
-    state["drawn_objects"][0]["x0"] = "2026-02-03"
+    state["__saved_fibo_invalid__"] = {"since": "2026-08-01", "fingerprint": "legacy"}
     path.write_text(json.dumps(state), encoding="utf-8")
 
-    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 20)) == "invalid -> automatic fallback (day 0/14)"
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=True, as_of=date(2026, 8, 20)) is None
+    assert "__saved_fibo_invalid__" not in json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monkeypatch):
