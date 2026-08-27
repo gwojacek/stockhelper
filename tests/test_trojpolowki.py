@@ -653,6 +653,19 @@ def test_chart_png_includes_drawings_and_context_header():
     assert "const canvas = await captureChartPng();" in ui_source
 
 
+def test_chart_png_includes_position_table_after_calculation():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    capture = ui_source[ui_source.index("async function captureChartPng()") : ui_source.index("function journalScreenshotRange()")]
+
+    assert "const calculation = levels.position_calculations;" in capture
+    assert "calculation?.ok && Array.isArray(calculation.rows)" in capture
+    assert "canvas.height = base.height + headerHeight + calculationHeight" in capture
+    assert "'Position calculation'" in capture
+    assert "'Potential loss with spread'" in capture
+    assert "row.position_size" in capture
+    assert "row.potential_loss" in capture
+
+
 def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function applyWedgeDerivedLevels(forceScannerLevels = false)" in ui_source

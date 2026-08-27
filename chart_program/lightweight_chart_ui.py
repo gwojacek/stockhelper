@@ -3312,9 +3312,12 @@ class LightweightChartLevelSelectorUI:
     ].filter(([, value]) => value !== '');
     const columns = Math.max(2, Math.min(4, Math.floor(base.width / 190)));
     const headerHeight = 70 + Math.ceil(values.length / columns) * 43;
+    const calculation = levels.position_calculations;
+    const calculationRows = calculation?.ok && Array.isArray(calculation.rows) ? calculation.rows : [];
+    const calculationHeight = calculationRows.length ? 68 + calculationRows.length * 36 : 0;
     const canvas = document.createElement('canvas');
     canvas.width = base.width;
-    canvas.height = base.height + headerHeight;
+    canvas.height = base.height + headerHeight + calculationHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(base, 0, headerHeight);
     if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, headerHeight, base.width, base.height);
@@ -3343,6 +3346,45 @@ class LightweightChartLevelSelectorUI:
       ctx.font = 'bold 14px ui-monospace, Menlo, monospace';
       ctx.fillText(String(value).slice(0, 26), x, y + 19);
     }});
+    if (calculationHeight) {{
+      const y0 = headerHeight + base.height;
+      const calculationCurrency = calculation.currency || currency;
+      const headings = ['Risk level', 'Position size', 'Engaged capital', 'Potential loss with spread', 'Loss %'];
+      const widths = [.18, .2, .2, .27, .15];
+      const padding = 18;
+      const usableWidth = canvas.width - padding * 2;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, y0, canvas.width, calculationHeight);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 18px Inter, Arial, sans-serif';
+      ctx.fillText('Position calculation', padding, y0 + 27);
+      let x = padding;
+      ctx.font = 'bold 11px Inter, Arial, sans-serif';
+      headings.forEach((heading, index) => {{
+        ctx.fillStyle = '#93c5fd';
+        ctx.fillText(heading.toUpperCase(), x + 6, y0 + 52);
+        x += usableWidth * widths[index];
+      }});
+      calculationRows.forEach((row, rowIndex) => {{
+        const rowY = y0 + 60 + rowIndex * 36;
+        ctx.fillStyle = rowIndex % 2 ? '#111827' : '#1e293b';
+        ctx.fillRect(padding, rowY, usableWidth, 34);
+        const cells = [
+          row.risk_label || '',
+          `${{numText(row.position_size, row.position_unit === 'Shares' ? 0 : 3)}} ${{row.position_unit || ''}}`,
+          money(row.capital_used, calculationCurrency),
+          money(row.potential_loss, calculationCurrency),
+          `${{numText(row.loss_percent, 2)}}%`,
+        ];
+        let cellX = padding;
+        ctx.font = 'bold 12px ui-monospace, Menlo, monospace';
+        cells.forEach((value, index) => {{
+          ctx.fillStyle = '#e5e7eb';
+          ctx.fillText(String(value).slice(0, 32), cellX + 6, rowY + 22);
+          cellX += usableWidth * widths[index];
+        }});
+      }});
+    }}
     return canvas;
   }}
   function journalScreenshotRange() {{
