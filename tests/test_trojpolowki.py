@@ -358,18 +358,16 @@ def test_chart_fibo_debug_ends_with_requested_csv_data():
     assert "scanner audit command" not in snapshot
 
 
-def test_long_fibo_sideways_rules_apply_to_impulse_not_correction():
+def test_month_side_trends_invalidate_both_fibo_impulse_and_correction():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "max_days=30, band_pct=0.12" in steep_source
-    assert "max_progress_pct=0.05" in steep_source
-    assert "keep only when no materially smaller regular setup replaces it" in steep_source
+    assert "_has_completed_month_side_trend(impulse_seg)" in steep_source
+    assert "_has_completed_month_side_trend(w.iloc[i_peak:])" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
-    assert "_latest_sideways_window" not in source[correction_start:correction_end]
-    assert "_mirrored_short and _has_long_sideways" in source[correction_start:correction_end]
+    assert "_has_completed_month_side_trend(correction_seg)" in source[correction_start:correction_end]
     selector_start = source.index("def _select_impulse_start_long")
     selector_end = source.index("def _select_peak_long", selector_start)
     assert "_completed_sideways_reset_long" in source[selector_start:selector_end]
@@ -405,8 +403,9 @@ def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
 
 def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    assert "Rejected short 3P steep: post-bottom correction contains a completed month-long side trend" in source
-    assert "Rejected short: post-bottom correction contains a month-long sideways range" in source
+    assert "post-bottom recovery" in source
+    assert "short recovery" in source
+    assert "correction contains a completed month-long side trend" in source
     stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
     assert 'cand.direction == "short" and _has_long_sideways' in stale
 
@@ -420,10 +419,12 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "qualifying_starts.append(start)" in helper
     assert "longest_covered" in helper
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
-    assert "Rejected short 3P steep: decline contains a completed month-long side trend." in steep
-    assert "max_days=22" in steep
-    assert "band_pct=0.20" in steep
-    assert "max_progress_pct=0.08" in steep
+    helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
+    assert "short decline" in steep
+    assert "_has_completed_month_side_trend(impulse_seg)" in steep
+    assert "max_days=22" in helper
+    assert "band_pct=0.20" in helper
+    assert "max_progress_pct=0.08" in helper
     assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
     assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
 
@@ -613,9 +614,9 @@ def test_live_broad_and_independent_inclines_survive_peak_and_sideways_selection
     assert "(44, 0.22, 0.08, 1)" in source
     assert "reset fib start after extended sideways base" in source
     assert "base_end + 35" in source
-    assert "newest_near_recovery_extreme" in setup
-    assert "retained sideways correction because the newest close" in setup
-    assert "_sideways_correction_near_active_extreme" in setup
+    assert "newest_near_recovery_extreme" not in setup
+    assert "retained sideways correction because the newest close" not in setup
+    assert "_has_completed_month_side_trend(correction_seg)" in setup
     assert "adjusted the top anchor" in setup
     assert "Short 3P steep: retained the broad decline" not in steep
 
@@ -995,9 +996,10 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
 
     assert "if _has_extended_sideways(correction_seg):" in setup
     assert "correction is dominated by an extended side trend" in setup
-    assert "if _mirrored_short and _has_extended_sideways(impulse_seg):" in setup
-    assert "decline is dominated by an extended side trend" in setup
+    assert "if _has_completed_month_side_trend(impulse_seg):" in setup
+    assert "contains a completed month-long side trend" in setup
     assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
+    assert "if _has_completed_month_side_trend(after):" in stale
 
 
 def test_fibo_rejects_correction_through_original_anchor():

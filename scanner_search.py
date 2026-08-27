@@ -1017,6 +1017,23 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
     return _latest_sideways_end_offset(df_slice, max_days=max_days, band_pct=band_pct, max_progress_pct=max_progress_pct, max_outlier_candles=max_outlier_candles) is not None
 
 
+def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
+    """Return whether a leg contains a completed month-scale price channel.
+
+    Fibo legs may pause briefly, but a full 22-session channel with no more
+    than 8% endpoint progress is a separate market phase.  The wider 20% band
+    intentionally supports volatile instruments such as MSTR, whose February-
+    April and July-August shelves are visually clear side trends despite their
+    larger absolute ranges.
+    """
+    return _has_long_sideways(
+        df_slice.reset_index(drop=True),
+        max_days=22,
+        band_pct=0.20,
+        max_progress_pct=0.08,
+    )
+
+
 def _has_extended_sideways(
     df_slice: pd.DataFrame,
     window_days: int = 22,
@@ -5944,19 +5961,11 @@ def _find_fibo_3p_steep_setup(
     # A month-long flat block splits the structure into separate impulses.  Do
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
-    has_monthly_sideways = _has_long_sideways(
-        w.iloc[i_start:i_peak + 1], max_days=30, band_pct=0.12, max_progress_pct=0.05
-    )
-    if _mirrored_short and _has_long_sideways(
-        w.iloc[i_start:i_peak + 1].reset_index(drop=True),
-        max_days=22,
-        band_pct=0.20,
-        max_progress_pct=0.08,
-    ):
-        _log("Rejected short 3P steep: decline contains a completed month-long side trend.")
+    impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+    if _has_completed_month_side_trend(impulse_seg):
+        side = "short decline" if _mirrored_short else "long incline"
+        _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
         return None
-    if has_monthly_sideways:
-        _log("3P steep: broad impulse contains a month-long range; keep only when no materially smaller regular setup replaces it.")
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -5977,16 +5986,12 @@ def _find_fibo_3p_steep_setup(
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
-    if _mirrored_short and _has_long_sideways(
-        w.iloc[i_peak:].reset_index(drop=True),
-        max_days=22,
-        band_pct=0.20,
-        max_progress_pct=0.08,
-    ):
+    if _has_completed_month_side_trend(w.iloc[i_peak:]):
         # A completed month-long base ends the old short cycle even when price
         # subsequently breaks upward and is currently near the recovery high.
         # MSTR's July-August shelf must not preserve its October-June decline.
-        _log("Rejected short 3P steep: post-bottom correction contains a completed month-long side trend.")
+        side = "post-bottom recovery" if _mirrored_short else "post-peak pullback"
+        _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
         return None
     crossed_23_6 = progress_to_618 >= 0.0
 
@@ -6018,7 +6023,7 @@ def _find_fibo_3p_steep_setup(
         reversal_pattern_name="none",
         stop_loss=fib_start,
         current_close=current_close,
-        has_monthly_sideways=has_monthly_sideways,
+        has_monthly_sideways=False,
     )
 
 def _find_fibo_setup(
@@ -6206,6 +6211,10 @@ def _find_fibo_setup(
             )
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
+        if _has_completed_month_side_trend(correction_seg):
+            side = "short recovery" if _mirrored_short else "long pullback"
+            _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
+            return None
         # A retracement that spends several months in overlapping flat ranges
         # is no longer the decline/recovery leg of the selected impulse. Apply
         # this symmetrically to long and short formations.
@@ -6215,18 +6224,6 @@ def _find_fibo_setup(
         if not _mirrored_short and _correction_settled_into_sideways(correction_seg):
             _log("Rejected long: correction settled into a completed month-long side trend.")
             return None
-        if _mirrored_short and _has_long_sideways(correction_seg, max_days=22, band_pct=0.12):
-            newest_near_recovery_extreme = _sideways_correction_near_active_extreme(correction_seg, "long")
-            if not newest_near_recovery_extreme:
-                _log(
-                    "Rejected short: post-bottom correction contains a month-long sideways range; "
-                    "the decline is no longer an active Fibo formation."
-                )
-                return None
-            _log(
-                "Short: retained sideways correction because the newest close is still near "
-                "the recovery extreme."
-            )
         # A correction may consolidate while progressing from 23.6 toward 61.8;
         # that does not invalidate its anchors.  Sideways resets belong to the
         # impulse leg checks below, not to the post-peak waiting leg.  This keeps
@@ -6242,8 +6239,9 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-        if _mirrored_short and _has_extended_sideways(impulse_seg):
-            _log("Rejected short: decline is dominated by an extended side trend.")
+        if _has_completed_month_side_trend(impulse_seg):
+            side = "short decline" if _mirrored_short else "long incline"
+            _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
             return None
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
@@ -6452,8 +6450,8 @@ def _find_fibo_setup(
         )
         return None
     short_correction_seg = w.iloc[i_bottom:i_end + 1].reset_index(drop=True)
-    if _has_long_sideways(short_correction_seg, max_days=22, band_pct=0.12):
-        _log("Rejected short: correction is sideways/flat.")
+    if _has_completed_month_side_trend(short_correction_seg):
+        _log("Rejected short: correction contains a completed month-long side trend.")
         return None
     short_sideways_month = _latest_sideways_window(short_correction_seg, max_days=30, band_pct=0.20)
     if short_sideways_month is not None:
@@ -6710,6 +6708,8 @@ def run_fibo_search(target: str) -> int:
         # becomes an extended side trend. Re-check against the full current
         # dataset so stale offset candidates cannot bypass the live rejection.
         if _has_extended_sideways(after.reset_index(drop=True)):
+            return True
+        if _has_completed_month_side_trend(after):
             return True
         if cand.direction == "long" and _correction_settled_into_sideways(after.reset_index(drop=True)):
             return True
