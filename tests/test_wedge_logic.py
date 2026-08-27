@@ -143,6 +143,33 @@ def test_saved_drawing_kinds_resolves_commodity_provider_session(tmp_path, monke
     assert scanner._saved_drawing_kinds_for_ticker("ALUMINIUM") == {"wedge"}
 
 
+def test_saved_fibo_resolves_stock_config_session_with_market_suffix(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "dash_us.json"
+    path.write_text(json.dumps({
+        "drawn_objects": [
+            {"type": "fib", "group_id": "auto-fibo", "direction": "long"},
+            {
+                "type": "fib-boundary", "group_id": "auto-fibo",
+                "x0": "2026-06-11", "x1": "2026-07-07",
+            },
+        ],
+        "__saved_fibo_by_user__": True,
+    }), encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("DASH.US") == path
+    assert scanner._saved_fibo_anchors_for_ticker("DASH.US") == [
+        ("long", "2026-06-11", "2026-07-07")
+    ]
+
+    scanner._update_saved_fibo_lifecycle("DASH.US", valid=False, as_of=date(2026, 8, 27))
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["drawn_objects"] == []
+    assert saved["__saved_fibo_by_user__"] is False
+
+
 def test_commodity_session_resolution_keeps_legacy_short_stem_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"

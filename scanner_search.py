@@ -4563,6 +4563,13 @@ def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
     raw = str(ticker).strip()
     canonical = re.sub(r"\.(WA|PL)$", "", raw, flags=re.IGNORECASE)
     stems = [canonical]
+    # Stock config/session names are normalized by resolve_config_path(), which
+    # replaces dots with underscores (DASH.US -> dash_us.json).  Scanner rows
+    # retain the market suffix, so without the same normalized alias the saved
+    # chart Fibo was never found or deleted even after price passed its second
+    # anchor.
+    config_stem = canonical.lower().replace("/", "").replace(".", "_")
+    stems.extend((config_stem, config_stem.upper()))
     # Level selector configs for commodities/forex are direction-qualified
     # (``aluminium_long.py`` / ``aluminium_short.py``), and session state uses
     # that config stem even though scanner rows only contain ``ALUMINIUM``.
