@@ -1034,6 +1034,30 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     )
 
 
+def _impulse_has_disqualifying_month_side_trend(df_slice: pd.DataFrame) -> bool:
+    """Reject a monthly shelf unless it is absorbed by an exceptional impulse.
+
+    Anchor selection already moves a pre-impulse base to the first durable low
+    after that base.  Once that has happened, a single loose 22-session window
+    can also be produced by a stair-step pause inside a very strong move.  Such
+    a pause must not turn FTNT-like 65%+ impulses into dropouts.  Correction-side
+    shelves remain strict because they end the completed impulse cycle.
+    """
+    leg = df_slice.reset_index(drop=True)
+    if not _has_completed_month_side_trend(leg):
+        return False
+    if len(leg) < 2:
+        return True
+    lows = pd.to_numeric(leg["Low"], errors="coerce")
+    highs = pd.to_numeric(leg["High"], errors="coerce")
+    launch = float(lows.iloc[: min(5, len(lows))].min())
+    peak = float(highs.max())
+    gain_pct = (peak - launch) / max(abs(launch), 1e-9)
+    average_daily_gain = gain_pct / max(len(leg) - 1, 1)
+    exceptional_continuation = gain_pct >= 0.65 and average_daily_gain >= 0.006
+    return not exceptional_continuation
+
+
 def _has_extended_sideways(
     df_slice: pd.DataFrame,
     window_days: int = 22,
@@ -6024,10 +6048,12 @@ def _find_fibo_3p_steep_setup(
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
     impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-    if _has_completed_month_side_trend(impulse_seg):
+    if _impulse_has_disqualifying_month_side_trend(impulse_seg):
         side = "short decline" if _mirrored_short else "long incline"
         _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
         return None
+    if _has_completed_month_side_trend(impulse_seg):
+        _log("3P steep: monthly pause absorbed by an exceptional post-base impulse.")
 
     rng = fib_end - fib_start
     if rng <= 0:
@@ -6301,10 +6327,12 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-        if _has_completed_month_side_trend(impulse_seg):
+        if _impulse_has_disqualifying_month_side_trend(impulse_seg):
             side = "short decline" if _mirrored_short else "long incline"
             _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
             return None
+        if _has_completed_month_side_trend(impulse_seg):
+            _log("Long: monthly pause absorbed by an exceptional post-base impulse.")
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []
         if all_touch_idxs:

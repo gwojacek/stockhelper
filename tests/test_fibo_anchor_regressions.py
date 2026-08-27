@@ -26,6 +26,19 @@ def test_mstr_broad_short_is_rejected_by_month_side_trends():
     assert any("completed month-long side trend" in message for message in explain)
 
 
+def test_ftnt_exceptional_post_base_impulse_survives_loose_month_window():
+    frame = _fixture("data/csv/stocks/FTNT_US.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None
+    assert result.incline_start_date == "2026-04-13"
+    assert result.incline_end_date == "2026-08-05"
+    assert result.status == "3p_steep_incline"
+    assert any("monthly pause absorbed" in message for message in explain)
+
+
 def test_corn_continuation_moves_second_anchor_to_latest_higher_high():
     frame = _fixture("data/csv/commodities/ZC_F.csv")
 

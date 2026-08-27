@@ -363,7 +363,7 @@ def test_month_side_trends_invalidate_both_fibo_impulse_and_correction():
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "_has_completed_month_side_trend(impulse_seg)" in steep_source
+    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep_source
     assert "_has_completed_month_side_trend(w.iloc[i_peak:])" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
@@ -421,7 +421,7 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
     helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
     assert "short decline" in steep
-    assert "_has_completed_month_side_trend(impulse_seg)" in steep
+    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep
     assert "max_days=22" in helper
     assert "band_pct=0.20" in helper
     assert "max_progress_pct=0.08" in helper
@@ -998,7 +998,7 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
 
     assert "if _has_extended_sideways(correction_seg):" in setup
     assert "correction is dominated by an extended side trend" in setup
-    assert "if _has_completed_month_side_trend(impulse_seg):" in setup
+    assert "if _impulse_has_disqualifying_month_side_trend(impulse_seg):" in setup
     assert "contains a completed month-long side trend" in setup
     assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
     assert "if _has_completed_month_side_trend(after):" in stale
