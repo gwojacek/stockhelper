@@ -26,6 +26,19 @@ def test_mstr_broad_short_is_rejected_by_month_side_trends():
     assert any("completed month-long side trend" in message for message in explain)
 
 
+def test_corn_continuation_moves_second_anchor_to_latest_higher_high():
+    frame = _fixture("data/csv/commodities/ZC_F.csv")
+
+    result = scanner._find_fibo_setup(frame, "long", end_offset=0)
+
+    assert result is not None
+    assert result.status == "3p_steep_incline"
+    assert result.incline_end_date == "2026-08-21"
+    implied_second_anchor = (float(result.fib_23_6) - 0.236 * float(result.stop_loss)) / 0.764
+    assert implied_second_anchor == pytest.approx(509.0)
+    assert float(result.fib_23_6) > float(result.fib_61_8)
+
+
 @pytest.mark.parametrize(
     ("path", "peak_date", "expected_date", "expected_low"),
     [

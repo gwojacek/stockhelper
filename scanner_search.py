@@ -6740,7 +6740,7 @@ def run_fibo_search(target: str) -> int:
             end_high = pd.to_numeric(end_rows["High"], errors="coerce").max() if not end_rows.empty else float("nan")
             after_high = pd.to_numeric(after["High"], errors="coerce")
             made_higher_high = pd.notna(end_high) and bool((after_high > float(end_high)).any())
-            if made_higher_high and cand.status != "returned_before_61_8":
+            if made_higher_high:
                 return True
             after_low = pd.to_numeric(after["Low"], errors="coerce")
             return bool((after_low <= float(cand.fib_61_8)).any())
@@ -6749,7 +6749,7 @@ def run_fibo_search(target: str) -> int:
         end_low = pd.to_numeric(end_rows["Low"], errors="coerce").min() if not end_rows.empty else float("nan")
         after_low = pd.to_numeric(after["Low"], errors="coerce")
         made_lower_low = pd.notna(end_low) and bool((after_low < float(end_low)).any())
-        if made_lower_low and cand.status != "returned_before_61_8":
+        if made_lower_low:
             return True
         after_high = pd.to_numeric(after["High"], errors="coerce")
         return bool((after_high >= float(cand.fib_61_8)).any())

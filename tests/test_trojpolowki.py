@@ -902,8 +902,10 @@ def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
     assert "Long: price returned above 23.6 without touching 61.8" in source
     assert "Short: correction returned below 23.6 without touching 61.8" in source
     assert 'if r.status == "returned_before_61_8":\n            rows0.append(r)' in source[routing_start:]
-    assert 'if made_higher_high and cand.status != "returned_before_61_8"' in source
-    assert 'if made_lower_low and cand.status != "returned_before_61_8"' in source
+    assert "if made_higher_high:" in source
+    assert "if made_lower_low:" in source
+    assert 'made_higher_high and cand.status != "returned_before_61_8"' not in source
+    assert 'made_lower_low and cand.status != "returned_before_61_8"' not in source
     assert 'r.status == "3p_steep_incline" or r.status == "returned_before_61_8"' in source
 
 
