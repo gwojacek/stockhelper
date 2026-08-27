@@ -6132,6 +6132,12 @@ def _find_fibo_setup(
         i_end = len(w) - 1
         later_high_slice = pd.to_numeric(high.iloc[i_peak + 1:i_end + 1], errors="coerce") if i_peak + 1 <= i_end else pd.Series(dtype=float)
         later_high = float(later_high_slice.max()) if not later_high_slice.empty else float("nan")
+        if forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:
+            _log(
+                "Rejected saved long Fibo: price exceeded its second anchor "
+                f"({later_high:.4f} > {fib_end:.4f})."
+            )
+            return None
         if not forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:
             previous_peak = fib_end
             i_peak = int(later_high_slice.idxmax())
@@ -7139,6 +7145,24 @@ def run_fibo_search(target: str) -> int:
     rows2_liquid = [r for r in rows2 if _passes_fibo_liquidity(r)]
     rows2_ids = {id(r) for r in rows2_liquid}
     deduped_fibo_rows = _limit_fibo_formations_per_ticker(_dedupe_same_scale_fibo_formations(rows0_liquid + rows1_liquid + rows2_liquid))
+    # A live newest-candle incline supersedes an unconfirmed, opposite-direction
+    # historical pullback once that old setup has already crossed 61.8. Keeping
+    # both produced DASH as a 110.6% short in column three while its active move
+    # was the June long incline in column one. Confirmed opposite reversals still
+    # remain eligible.
+    live_steep_directions = {
+        (r.ticker, r.direction)
+        for r in deduped_fibo_rows
+        if r.status == "3p_steep_incline"
+    }
+    deduped_fibo_rows = [
+        r for r in deduped_fibo_rows
+        if not (
+            r.status != "valid_reversal"
+            and _fibo_retracement_progress_pct(r) >= 100.0
+            and any(ticker == r.ticker and direction != r.direction for ticker, direction in live_steep_directions)
+        )
+    ]
     rows0 = [r for r in deduped_fibo_rows if r.status == "3p_steep_incline" or r.status == "returned_before_61_8"]
     rows2 = [r for r in deduped_fibo_rows if id(r) in rows2_ids and not r.status.startswith("3p_steep")]
     rows1 = [

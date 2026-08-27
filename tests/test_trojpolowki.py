@@ -85,8 +85,8 @@ def test_instrument_name_registry_covers_every_scanned_stock_and_etf():
 def test_report_launcher_protocol_matches_report_server():
     run_source = Path("run").read_text(encoding="utf-8")
     server_source = Path("utilities/report_server.py").read_text(encoding="utf-8")
-    assert 'report_server_protocol = "stockhelper-report-server-v23"' in run_source
-    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v23"' in server_source
+    assert 'report_server_protocol = "stockhelper-report-server-v24"' in run_source
+    assert 'REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v24"' in server_source
 
 
 def test_latest_scope_report_uses_filename_date_when_mtimes_tie(tmp_path):
@@ -298,6 +298,19 @@ def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
     assert '"STOCKHELPER_CACHE_ONLY"] = "1"' in server
     assert '"-explain", ticker' in server
     assert "FULL SCANNER REJECTION TRACE" in server
+    assert "fetchFiboDropoutAnalysis(ticker,context)" in source
+    assert "for(let port=8765;port<8795;port++)" in source
+    assert "StockHelper report server unavailable; reopen the report from StockHelper" in source
+
+
+def test_saved_fibo_past_second_anchor_is_deleted_and_opposite_stale_setup_is_pruned():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    forced_guard = source[source.index("later_high_slice ="):source.index("early_sideways", source.index("later_high_slice ="))]
+    assert "if forced_anchor_dates and pd.notna(later_high) and later_high > fib_end * 1.005:" in forced_guard
+    assert "Rejected saved long Fibo: price exceeded its second anchor" in forced_guard
+    assert "live_steep_directions" in source
+    assert "_fibo_retracement_progress_pct(r) >= 100.0" in source
+    assert 'r.status != "valid_reversal"' in source
 
 
 def test_all_fibo_cards_have_debug_and_saved_filter_controls():
