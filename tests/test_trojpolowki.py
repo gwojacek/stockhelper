@@ -1282,7 +1282,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
     assert "endpoint.searchParams.set('favoriteTicker',btn.dataset.favoriteTicker||favoriteTicker(btn))" in text
     assert "function techniqueFor(el)" in text
-    assert "One favorite instrument may appear in several technique groups" in text
+    assert "Each favorite instrument appears once" in text
     assert "data-ticker='RWE.DE'" in text
     assert "⚠️ Names still needed" not in text
     assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
@@ -1301,8 +1301,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<td><strong>'+escapeFavoriteHtml(o.label)" in text
     assert "const threePTickers=new Set" in text
     assert "!threePTickers.has(o.ticker)" in text
-    assert "favorite-direction-long" in text and "favorite-direction-short" in text
-    assert "↗ Long" in text and "↘ Short" in text
+    assert "const favoriteOccurrenceRank=" in text
+    assert "const byTicker=new Map()" in text
+    assert "byTicker.set(o.ticker,o)" in text
+    assert '<span class="fibo-arrow fibo-arrow-long" title="Long" aria-label="Long">↗</span>' in text
+    assert '<span class="fibo-arrow fibo-arrow-short" title="Short" aria-label="Short">↘</span>' in text
     assert "<th>Instrument</th><th>Market</th><th>Direction</th><th>Status</th><th>Chart</th>" in text
     assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
     assert "function favoriteWedgeContext(host)" in text
@@ -1338,8 +1341,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "class='choice-reason'" in text
     assert "class='choice-reason-kind'" in text
     assert ".fibo-arrow{display:inline-grid;place-items:center;width:18px;height:18px" in text
-    assert "class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long" in text
-    assert "class='ichi-status-chip fibo-direction ichi-bad'>↘&nbsp;Short" in text
+    assert "class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span>" in text
+    assert "class='fibo-arrow fibo-arrow-short' title='Short' aria-label='Short'>↘</span>" in text
+    assert "<col class='top-choice-direction'>" in text
+    assert "<th>Instrument</th><th>Dir</th><th>Why top choice</th>" in text
     assert ".fibo-direction{display:inline-flex;align-items:center;white-space:nowrap}" in text
     assert "class='choice-reason-sep'>|</span>" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
@@ -1395,7 +1400,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Early breakout status (&lt;4m" not in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 2
-    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td>" in text
+    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td>" in text
     assert "98.5%</span></td>" not in text
     fibo_one_start = text.index("WYNIKI FIBO #1 (Waiting")
     fibo_one_end = text.index("</table>", fibo_one_start)
@@ -1441,8 +1446,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
-    assert "<b>CREOTECH (CRI)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
-    assert "<b>Siemens Energy (ENR.DE)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
+    assert "<b>CREOTECH (CRI)</b></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
+    assert "<b>Siemens Energy (ENR.DE)</b></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
     assert "<span class='ichi-status-label'>last:</span>" not in text
@@ -1451,7 +1456,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-info-default" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
-    assert "<col class='top-choice-instrument'><col class='top-choice-reason'>" in text
+    assert "<col class='top-choice-instrument'><col class='top-choice-direction'><col class='top-choice-reason'>" in text
     assert ".top-choice-compact .top-choice-instrument{width:24%}" in text
     assert ".stooq-links-hidden col.top-choice-stooq{display:none}" in text
     assert "<time class='choice-reason-date' datetime='2026-07-22'><i>▦</i>2026-07-22</time>" in text
@@ -1495,7 +1500,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 Starbucks (SBUX.US)</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
+    assert "<strong>🇺🇸 Starbucks (SBUX.US)</strong></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
     assert "class='choice-reason choice-reason-wedge'" in text
     assert "<i>◆</i>Falling wedge" in text
