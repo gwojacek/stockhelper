@@ -4541,6 +4541,32 @@ def _post_anchor_touch_tolerance_static(price: float) -> float:
     return max(pip * 5, abs(float(price)) * 0.0005)
 
 
+def _wedge_lower_boundary_structure(
+    upper_span: int,
+    lower_span: int,
+    lower_move_pct: float,
+) -> tuple[bool, float]:
+    """Grade whether the lower line is substantial beside the upper line."""
+    span_ratio = lower_span / max(upper_span, 1)
+    is_token_shelf = (
+        upper_span >= 60
+        and lower_span < 10
+        and span_ratio < 0.12
+        and lower_move_pct < 0.05
+    )
+    quality = min(1.0, max(span_ratio / 0.22, lower_move_pct / 0.10))
+    return not is_token_shelf, quality
+
+
+def _wedge_breakout_is_continuation(
+    breakout_direction: str,
+    outside_direction: str,
+    reentered: bool,
+) -> bool:
+    """Allow an outside-close cluster only until price re-enters the wedge."""
+    return breakout_direction == outside_direction and not reentered
+
+
 def _clustered_contact_count(indices: list[int], max_gap: int = 1) -> int:
     # Touches separated only by glued/adjacent candles count as one contact;
     # a new contact requires at least one full non-touching candle between them.
@@ -5060,6 +5086,24 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_a = (lh1, float(lows[lh1]))
                 lower_b = (lh2, float(lows[lh2]))
                 lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
+                upper_anchor_span = abs(uh2 - uh1)
+                lower_anchor_span = abs(lh2 - lh1)
+                lower_anchor_move_pct = abs(lower_b[1] - lower_a[1]) / max(
+                    (abs(lower_a[1]) + abs(lower_b[1])) / 2.0,
+                    1e-9,
+                )
+                # Do not pair a months-long upper boundary with a token lower
+                # line made from two nearby, virtually level candles.  Such a
+                # pair is not a wedge: it merely attaches a tiny recent shelf to
+                # an old trendline.  A short lower line remains eligible when it
+                # has a material rise/fall (a steep local-low boundary).
+                lower_structure_valid, lower_structure_quality = _wedge_lower_boundary_structure(
+                    upper_anchor_span,
+                    lower_anchor_span,
+                    lower_anchor_move_pct,
+                )
+                if not lower_structure_valid:
+                    continue
                 # Falling wedges must converge. The lower boundary is allowed to
                 # be flat or rising when that best describes current price
                 # compression (triangle-like wedges). Reject only lower lines
@@ -5102,6 +5146,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 lower_contacts = [lh1, lh2]
                 breakout_idx: int | None = None
                 breakout_direction = "-"
+                breakout_reentered = False
                 invalid = False
                 width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
                 width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
@@ -5127,7 +5172,15 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         breakout_idx = i
                         breakout_direction = direction
                         return True
-                    return breakout_direction == direction
+                    # Consecutive outside closes are continuation of one
+                    # breakout. Once price has closed back inside the wedge,
+                    # another outside close is a second breakout and this old
+                    # anchor set is burnt; the scanner must find newer anchors.
+                    return _wedge_breakout_is_continuation(
+                        breakout_direction,
+                        direction,
+                        breakout_reentered,
+                    )
 
                 def _breakout_stop_loss_touched(i: int) -> bool:
                     return _wedge_probable_stop_touched_after_breakout(
@@ -5177,6 +5230,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         if _accept_or_reject_breakout(i, direction):
                             continue
                         if breakout_idx is not None:
+                            if breakout_reentered:
+                                invalid = True
+                                break
                             if breakout_direction == "long" and closes[i] >= lo - close_eps:
                                 continue
                             if breakout_direction == "short" and closes[i] <= up + close_eps:
@@ -5190,6 +5246,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                             # keep searching so later/leaner adjusted lines can win.
                             invalid = True
                             break
+                        breakout_reentered = True
                         continue
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
@@ -5359,6 +5416,11 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         # A flat/rising lower boundary uses the same bottom but
                         # tightens the probable stop after a long breakout.
                         lower_line_shape_bonus = 1.18
+                # Among otherwise valid candidates, prefer a lower boundary
+                # that represents a comparable piece of market structure.  A
+                # large move between recent local lows may compensate for a
+                # shorter time span, so steep adjusted lines remain competitive.
+                lower_structure_bonus = 0.72 + 0.48 * lower_structure_quality
                 exact_anchor_bonus = 1.0 + min(0.18, max(0, lower_exact_count - 2) * 0.06 + max(0, upper_exact_count - 2) * 0.03)
                 proximity_quality = max(0.0, 1.0 - (median_upper_gap * 0.55 + median_lower_gap * 0.30 + median_min_gap * 0.15))
                 compression_quality = max(0.0, min(1.0, compression_pct / 65.0))
@@ -5378,7 +5440,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # scanner match than a steeper line that only wins because of slope.
                 slope_bonus = {"mild": 1.05, "moderate": 1.00, "strong": 0.95, "very strong": 0.90}[slope_strength]
                 breakout_bonus = 1.0 + breakout_recent_bonus * 4.0
-                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus
+                score = (duration_months * 18.0 + width_start_pct * 3.0) * touch_quality * exact_anchor_bonus * proximity_quality * (0.70 + compression_quality) * slope_bonus * breakout_bonus * (0.45 + 0.75 * breakout_potential_quality) * size_preference * upper_anchor_height_bonus * economical_width_penalty * lower_line_shape_bonus * lower_structure_bonus
                 recent_proximity_pct = max(0.0, min(100.0, proximity_quality * 100.0))
                 # The first two anchors for each line are exact candle extremes,
                 # not tolerance contacts. For display/export, keep the selected

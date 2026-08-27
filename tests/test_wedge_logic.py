@@ -347,6 +347,36 @@ def test_wedge_midpoint_stop_ignores_breakout_candle_and_non_touches():
     )
 
 
+def test_wedge_reentry_burns_anchor_set_before_another_breakout():
+    assert scanner._wedge_breakout_is_continuation("long", "long", reentered=False)
+    assert not scanner._wedge_breakout_is_continuation("long", "long", reentered=True)
+    assert not scanner._wedge_breakout_is_continuation("long", "short", reentered=False)
+
+
+def test_wedge_rejects_token_lower_shelf_but_allows_steep_short_line():
+    token_valid, token_quality = scanner._wedge_lower_boundary_structure(
+        upper_span=180,
+        lower_span=6,
+        lower_move_pct=0.01,
+    )
+    steep_valid, steep_quality = scanner._wedge_lower_boundary_structure(
+        upper_span=180,
+        lower_span=8,
+        lower_move_pct=0.12,
+    )
+    broad_valid, broad_quality = scanner._wedge_lower_boundary_structure(
+        upper_span=180,
+        lower_span=45,
+        lower_move_pct=0.02,
+    )
+
+    assert not token_valid
+    assert steep_valid
+    assert broad_valid
+    assert steep_quality > token_quality
+    assert broad_quality > token_quality
+
+
 def test_dat_wa_falling_wedge_uses_adjusted_anchors_after_burnt_line():
     df = pd.read_csv(DATA_DIR / "DAT_WA.csv")
     latest_rows = pd.read_csv(StringIO(
