@@ -1304,6 +1304,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "const favoriteOccurrenceRank=" in text
     assert "const byTicker=new Map()" in text
     assert "byTicker.set(o.ticker,o)" in text
+    assert "Favorites not classified anywhere now" in text
+    assert "const classifiedTickers=new Set(unique.map(o=>o.ticker))" in text
+    assert "const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
+    assert "cmd:'python run -c '+ticker" in text
     assert '<span class="fibo-arrow fibo-arrow-long" title="Long" aria-label="Long">↗</span>' in text
     assert '<span class="fibo-arrow fibo-arrow-short" title="Short" aria-label="Short">↘</span>' in text
     assert "<th>Instrument</th><th>Market</th><th>Direction</th><th>Status</th><th>Chart</th>" in text
