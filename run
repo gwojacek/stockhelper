@@ -3345,6 +3345,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div><div id='tab-favorites' class='tab-panel'><section class='market favorites-panel'><h2>⭐ Favorite instruments</h2><p class='muted'>Stars are saved in this browser. Each favorite instrument appears once, using its most specific available setup.</p><div id='favorites-content'></div></section></div>")
+    favorite_instrument_names = dict(instrument_names)
+    favorite_instrument_names.update({ticker.removesuffix(".WA"): name for ticker, name in instrument_names.items() if ticker.endswith(".WA")})
+    html_parts.append("<script>const FAVORITE_INSTRUMENT_NAMES=" + json.dumps(favorite_instrument_names, ensure_ascii=False) + ";</script>")
     html_parts.append(r"""<script>
 const FAVORITES_STORAGE_KEY='stockhelper.favorite-instruments.v1';
 function favoriteTicker(el){const row=el.closest('[data-ticker]');if(row?.dataset?.ticker)return row.dataset.ticker.toUpperCase();const command=el.dataset.cmd||'';const commandMatch=command.toUpperCase().match(/(?:-C|CHART_PROGRAM)\s+['\"]?([A-Z0-9._-]+)/);if(commandMatch)return commandMatch[1];const label=el.dataset.groupLabel||el.closest('.troj-cell-card')?.innerText||'';const match=label.toUpperCase().match(/(?:\(|\s|^)([A-Z0-9][A-Z0-9._]{1,14})(?:\)|\s|$)/g);return match?.length?match[match.length-1].replace(/[()\s]/g,''):'';}
@@ -3356,6 +3359,7 @@ function decorateFavoriteStars(){saveFavorites(loadFavorites());document.querySe
 function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const on=fav.has(star.dataset.ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove ':'Add ')+star.dataset.ticker+(on?' from':' to')+' favorites';star.setAttribute('aria-pressed',on?'true':'false');});const count=document.getElementById('favorites-count');if(count)count.textContent=String(fav.size);renderFavorites();}
 function toggleFavorite(ticker){const fav=loadFavorites();fav.has(ticker)?fav.delete(ticker):fav.add(ticker);saveFavorites(fav);refreshFavoriteStars();}
 function escapeFavoriteHtml(value){return String(value||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function favoriteInstrumentLabel(ticker){const normalized=String(ticker||'').toUpperCase();const name=FAVORITE_INSTRUMENT_NAMES[normalized]||FAVORITE_INSTRUMENT_NAMES[normalized+'.WA']||'';return name?name+' ('+normalized+')':normalized;}
 function favoriteWedgeContext(host){if(host?.dataset?.scanner!=='WEDGE')return '';const date=host.dataset.breakoutDate||'';return date?'Breakout: '+date:'Unbroken';}
 function renderFavorites(){
   const root=document.getElementById('favorites-content');if(!root)return;
@@ -3395,7 +3399,7 @@ function renderFavorites(){
   const groups={};regular.filter(o=>o.technique!=='Kliny').forEach(o=>(((groups[o.technique]??={})[o.market]??=[])).push(o));
   ['Fibo','Ichimoku','Other'].filter(t=>groups[t]).forEach(t=>parts.push('<section class="favorites-technique"><h3>'+({Fibo:'📐 Fibo',Ichimoku:'☁️ Ichimoku',Other:'Other'}[t])+'</h3>'+Object.keys(groups[t]).sort().map(m=>'<div class="favorites-market"><h4>'+escapeFavoriteHtml(m)+'</h4><div class="favorites-grid">'+groups[t][m].sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(card).join('')+'</div></div>').join('')+'</section>'));
   const classifiedTickers=new Set(unique.map(o=>o.ticker));
-  const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker)).sort().map(ticker=>({ticker,label:ticker,cmd:'python run -c '+ticker}));
+  const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker)).sort().map(ticker=>({ticker,label:favoriteInstrumentLabel(ticker),cmd:'python run -c '+ticker}));
   if(unclassified.length)parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted">Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join('')+'</tbody></table></div></section>');
   root.innerHTML=parts.join('')||'<p class="muted">Favorites are saved, but none occur in this report.</p>';
 }

@@ -6327,11 +6327,25 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+        fresh_touch_window = False
         if _impulse_has_disqualifying_month_side_trend(impulse_seg):
-            side = "short decline" if _mirrored_short else "long incline"
-            _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
-            return None
-        if _has_completed_month_side_trend(impulse_seg):
+            # A first 61.8 touch is an active, incomplete reversal event. Keep
+            # its original anchors during the three-candle confirmation window
+            # even when the impulse contained a monthly shelf; otherwise the
+            # scanner drops the setup on the exact candle where it becomes most
+            # actionable (for example CDR on 2026-08-27).
+            current_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
+            fresh_touch_window = bool(current_touch_idxs) and i_end <= current_touch_idxs[0] + 2
+            if fresh_touch_window:
+                _log(
+                    f"{direction.capitalize()}: retained original impulse anchors because the first "
+                    "61.8 touch is still inside its three-candle pattern window."
+                )
+            else:
+                side = "short decline" if _mirrored_short else "long incline"
+                _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
+                return None
+        if _has_completed_month_side_trend(impulse_seg) and not fresh_touch_window:
             _log("Long: monthly pause absorbed by an exceptional post-base impulse.")
         all_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
         touch_idxs: list[int] = []

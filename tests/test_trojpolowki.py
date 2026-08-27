@@ -895,6 +895,10 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+    assert "fresh_touch_window = bool(current_touch_idxs) and i_end <= current_touch_idxs[0] + 2" in setup
+    assert "retained original impulse anchors because the first" in setup
+    assert setup.index("if fresh_touch_window:") < setup.index("contains a completed month-long side trend", setup.index("if fresh_touch_window:"))
     run_source = Path("run").read_text(encoding="utf-8")
     touched = run_source[run_source.index('if "touched_61_8_no_pattern"'):run_source.index("def _fibo_touch_date")]
     assert "return near >= 75.0" in touched
@@ -1307,6 +1311,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Favorites not classified anywhere now" in text
     assert "const classifiedTickers=new Set(unique.map(o=>o.ticker))" in text
     assert "const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
+    assert "const FAVORITE_INSTRUMENT_NAMES=" in text
+    assert "function favoriteInstrumentLabel(ticker)" in text
+    assert "label:favoriteInstrumentLabel(ticker)" in text
+    assert '"CDR": "CDPROJEKT"' in text
     assert "cmd:'python run -c '+ticker" in text
     assert '<span class="fibo-arrow fibo-arrow-long" title="Long" aria-label="Long">↗</span>' in text
     assert '<span class="fibo-arrow fibo-arrow-short" title="Short" aria-label="Short">↘</span>' in text
