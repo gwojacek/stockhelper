@@ -2654,6 +2654,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         except Exception:
             return None
 
+    def _latest_date_from_text(value: str) -> date | None:
+        parsed: list[date] = []
+        for raw in re.findall(r"\d{4}-\d{2}-\d{2}", str(value or "")):
+            try:
+                parsed.append(datetime.strptime(raw, "%Y-%m-%d").date())
+            except ValueError:
+                continue
+        return max(parsed) if parsed else None
+
     def _is_recent_choice_date(value: str | None, reference: str | None = None, max_days: int = 3) -> bool:
         d = _date_from_text(value or "")
         if d is None:
@@ -2664,15 +2673,16 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     def _top_choice_rank(cell: str, source: str = "") -> tuple[int, int, float, str]:
         text = f"{source} {cell}"
         low = text.lower()
+        d = _latest_date_from_text(text)
+        freshness = -d.toordinal() if d is not None else 0
         pct_values = [float(v) for v in re.findall(r"(\d+(?:\.\d+)?)%", low)]
         pct_value = max(pct_values) if pct_values else None
         if "pattern" in low and not re.search(r"pattern\s*[:=]?\s*-", low):
-            return (0, 0, 0.0, text)
+            return (0, freshness, 0.0, text)
         if "61.8" in low and any(token in low for token in ("reached", "touched", "valid")):
-            return (1, 0, 0.0, text)
+            return (1, freshness, 0.0, text)
         if pct_value is not None and pct_value >= 75.0:
-            return (2, 0, -pct_value, text)
-        d = _date_from_text(text)
+            return (2, freshness, -pct_value, text)
         today = datetime.now().date()
         if d is not None:
             days = (today - d).days
@@ -2965,6 +2975,20 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 raw_cell = str(cell)
                 if raw_cell.strip():
                     columns_for_display[col_idx].append(raw_cell)
+        def troj_card_freshness_key(item: tuple[int, str]) -> tuple[int, int, int]:
+            original_index, cell = item
+            row = _troj_row_for_cell(cell, section_id)
+            highlighted = bool(
+                (row is not None and _row_has_search_day_signal(row))
+                or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row))
+                or ("fibo" in section_id and _troj_cell_recent_fibo_signal(cell, row))
+            )
+            signal_date = _latest_date_from_text(cell)
+            return (0 if highlighted else 1, -(signal_date.toordinal() if signal_date else 0), original_index)
+        columns_for_display = [
+            [cell for _idx, cell in sorted(enumerate(cells), key=troj_card_freshness_key)]
+            for cells in columns_for_display
+        ]
         table_html += "<tr>"
         for col_idx, cells in enumerate(columns_for_display):
             attrs_source = next((cell for cell in cells if str(cell).strip()), "")
@@ -3000,7 +3024,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             breakout_date = (row.metrics.get("breakout_date", "-") or "-").strip()
             breakout_direction = (row.metrics.get("breakout_direction", "-") or "-").strip()
             breakout_rank = 1 if breakout_direction in {"long", "short"} and breakout_date not in {"", "-"} else 0
-            return ((0, -breakout_rank, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}")
+            freshness = -(_date_from_text(breakout_date).toordinal()) if _date_from_text(breakout_date) else 0
+            return ((0, freshness if breakout_rank else 0, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}")
         if row.scanner == "FIBO":
             if row.category == "valid":
                 return None
@@ -3301,13 +3326,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 html_parts.append("<div class='muted empty-table-msg'>Brak wyników.</div></div>")
                 continue
             html_parts.append(f"<table class='data'><thead>{thead}</thead><tbody>")
-            def default_row_key(item: tuple[int, ScannerRow]) -> tuple[int, int, float, int]:
+            def default_row_key(item: tuple[int, ScannerRow]) -> tuple[int, int, int, float, int]:
                 original_index, row = item
                 signal_rank = 0 if _row_has_search_day_signal(row) else 1
+                signal_dates = _row_signal_dates(row)
+                freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)
                 ichi_status = str(row.metrics.get("ichimoku_status", "") or "").lower()
                 ichi_attention_rank = 0 if row.scanner == "ICHIMOKU" and ("inside the cloud" in ichi_status or "pattern" in ichi_status) else 1
                 near_rank = -_parse_float_text(row.metrics.get("near61_raw", row.metrics.get("near61", "-1")), -1.0) if is_f1 else 0.0
-                return signal_rank, ichi_attention_rank, near_rank, original_index
+                return signal_rank, freshness_rank, ichi_attention_rank, near_rank, original_index
 
             # Keep actionable green rows first in every Allsearch table. FIBO #1
             # then defaults to nearest-to-61.8 first; Ichimoku cloud/pattern
@@ -3344,7 +3371,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div><div id='tab-favorites' class='tab-panel'><section class='market favorites-panel'><h2>⭐ Favorite instruments</h2><p class='muted'>Stars are saved in this browser. Each favorite instrument appears once, using its most specific available setup.</p><div id='favorites-content'></div></section></div>")
+    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div><div id='tab-favorites' class='tab-panel'><section class='market favorites-panel'><h2>⭐ Favorite setups</h2><p class='muted'>Each matching setup appears once. One favorite instrument can appear in multiple 3P columns when it has separate long/short setups.</p><div id='favorites-content'></div></section></div>")
     favorite_instrument_names = dict(instrument_names)
     favorite_instrument_names.update({ticker.removesuffix(".WA"): name for ticker, name in instrument_names.items() if ticker.endswith(".WA")})
     html_parts.append("<script>const FAVORITE_INSTRUMENT_NAMES=" + json.dumps(favorite_instrument_names, ensure_ascii=False) + ";</script>")
@@ -3357,7 +3384,7 @@ function saveFavorites(items){const favorites=[...new Set([...items].map(canonic
 async function syncFavoritesFromServer(){try{const response=await fetch('/favorites');const data=await response.json();if(response.ok&&Array.isArray(data.favorites)){const favorites=[...new Set(data.favorites.map(canonicalFavoriteTicker).filter(Boolean))].sort();localStorage.setItem(FAVORITES_STORAGE_KEY,JSON.stringify(favorites));refreshFavoriteStars();}}catch(e){}}
 function techniqueFor(el){const scanner=el.closest('[data-scanner]')?.dataset?.scanner;if(scanner==='WEDGE')return 'Kliny';if(scanner==='FIBO')return 'Fibo';if(scanner==='ICHIMOKU')return 'Ichimoku';if(el.closest('#tab-wedges'))return 'Kliny';if(el.closest('#tab-troj-fibo'))return 'Fibo';if(el.closest('#tab-troj-ichimoku'))return 'Ichimoku';const cmd=(el.dataset.cmd||'').toLowerCase();return cmd.includes('wedge')?'Kliny':cmd.includes('fibo')?'Fibo':cmd.includes('ichimoku')?'Ichimoku':'Other';}
 function decorateFavoriteStars(){saveFavorites(loadFavorites());document.querySelectorAll('.stockhelper-chart-btn[data-cmd]:not([data-favorite-ready])').forEach(chart=>{const ticker=favoriteTicker(chart);if(!ticker)return;chart.dataset.favoriteReady='1';chart.dataset.favoriteTicker=ticker;const chartUrl=new URL(chart.getAttribute('href')||'/open-chart',window.location.href);chartUrl.searchParams.set('favoriteTicker',ticker);chart.setAttribute('href',chartUrl.pathname+chartUrl.search);const star=document.createElement('button');star.type='button';star.className='favorite-star';star.dataset.ticker=ticker;star.title='Add '+ticker+' to favorites';star.setAttribute('aria-label',star.title);star.onclick=()=>toggleFavorite(ticker);chart.insertAdjacentElement('beforebegin',star);});refreshFavoriteStars();}
-function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const ticker=canonicalFavoriteTicker(star.dataset.ticker);const on=fav.has(ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove ':'Add ')+ticker+(on?' from':' to')+' favorites';star.setAttribute('aria-pressed',on?'true':'false');});const count=document.getElementById('favorites-count');if(count)count.textContent=String(fav.size);renderFavorites();}
+function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const ticker=canonicalFavoriteTicker(star.dataset.ticker);const on=fav.has(ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove ':'Add ')+ticker+(on?' from':' to')+' favorites';star.setAttribute('aria-pressed',on?'true':'false');});renderFavorites();}
 function toggleFavorite(ticker){ticker=canonicalFavoriteTicker(ticker);const fav=loadFavorites();fav.has(ticker)?fav.delete(ticker):fav.add(ticker);saveFavorites(fav);refreshFavoriteStars();}
 function escapeFavoriteHtml(value){return String(value||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function favoriteInstrumentLabel(ticker){const normalized=String(ticker||'').toUpperCase();const name=FAVORITE_INSTRUMENT_NAMES[normalized]||FAVORITE_INSTRUMENT_NAMES[normalized+'.WA']||'';return name?name+' ('+normalized+')':normalized;}
@@ -3381,8 +3408,8 @@ function renderFavorites(){
   });
   const favoriteOccurrenceRank=o=>o.is3p&&o.technique==='Fibo'?0:o.is3p&&o.technique==='Ichimoku'?1:o.technique==='Kliny'?2:o.technique==='Fibo'?3:o.technique==='Ichimoku'?4:5;
   const byTicker=new Map();
-  occurrences.forEach(o=>{const current=byTicker.get(o.ticker);if(!current||favoriteOccurrenceRank(o)<favoriteOccurrenceRank(current))byTicker.set(o.ticker,o);});
-  const unique=[...byTicker.values()];
+  occurrences.forEach(o=>{const rank=favoriteOccurrenceRank(o),current=byTicker.get(o.ticker);if(!current||rank<current.rank){byTicker.set(o.ticker,{rank,items:new Map()});}const selected=byTicker.get(o.ticker);if(rank===selected.rank){const setupKey=o.is3p?[o.technique,o.columnIndex,o.direction].join('|'):'regular';if(!selected.items.has(setupKey))selected.items.set(setupKey,o);}});
+  const unique=[...byTicker.values()].flatMap(group=>[...group.items.values()]);
   const chartButton=o=>'<a class="btn stockhelper-chart-btn" href="/open-chart?command='+encodeURIComponent(o.cmd)+'&amp;favoriteTicker='+encodeURIComponent(o.ticker)+'" target="_blank" rel="noopener" data-favorite-ticker="'+escapeFavoriteHtml(o.ticker)+'" data-cmd="'+String(o.cmd).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">📊</a>';
   const stooqLink=o=>o.stooqUrl?'<a class="btn stooq-chart-link" href="'+escapeFavoriteHtml(o.stooqUrl)+'" target="_blank" rel="noopener" title="Open stooq chart">📈</a>':'';
   const star=o=>'<button class="favorite-star active" data-ticker="'+o.ticker+'" onclick="toggleFavorite(\''+o.ticker+'\')" title="Remove from favorites">★</button>';
@@ -3403,6 +3430,7 @@ function renderFavorites(){
   const classifiedTickers=new Set(unique.map(o=>o.ticker));
   const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker)).sort().map(ticker=>({ticker,label:favoriteInstrumentLabel(ticker),cmd:'python run -c '+ticker}));
   if(unclassified.length)parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted">Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join('')+'</tbody></table></div></section>');
+  const count=document.getElementById('favorites-count');if(count)count.textContent=String(unique.length+unclassified.length);
   root.innerHTML=parts.join('')||'<p class="muted">Favorites are saved, but none occur in this report.</p>';
 }
 document.addEventListener('DOMContentLoaded',decorateFavoriteStars);

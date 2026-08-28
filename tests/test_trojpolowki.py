@@ -1291,7 +1291,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
     assert "endpoint.searchParams.set('favoriteTicker',btn.dataset.favoriteTicker||favoriteTicker(btn))" in text
     assert "function techniqueFor(el)" in text
-    assert "Each favorite instrument appears once" in text
+    assert "One favorite instrument can appear in multiple 3P columns" in text
     assert "data-ticker='RWE.DE'" in text
     assert "⚠️ Names still needed" not in text
     assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
@@ -1312,7 +1312,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "!threePTickers.has(o.ticker)" in text
     assert "const favoriteOccurrenceRank=" in text
     assert "const byTicker=new Map()" in text
-    assert "byTicker.set(o.ticker,o)" in text
+    assert "byTicker.set(o.ticker,{rank,items:new Map()})" in text
+    assert "const setupKey=o.is3p?[o.technique,o.columnIndex,o.direction].join('|'):'regular'" in text
+    assert "flatMap(group=>[...group.items.values()])" in text
+    assert "String(unique.length+unclassified.length)" in text
     assert "Favorites not classified anywhere now" in text
     assert "const classifiedTickers=new Set(unique.map(o=>o.ticker))" in text
     assert "const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
@@ -1456,6 +1459,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "card.style.display=cardHit?'':'none'" in text
     assert "const visible=[];const hidden=[]" in text
     assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
+    run_source = Path("run").read_text(encoding="utf-8")
+    assert "def troj_card_freshness_key" in run_source
+    assert "-(signal_date.toordinal() if signal_date else 0)" in run_source
+    assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
     assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
