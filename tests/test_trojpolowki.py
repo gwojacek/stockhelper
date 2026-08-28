@@ -1281,7 +1281,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "window.addEventListener('hashchange',showReportTabFromHash)" in text
     assert "id='tab-favorites' class='tab-panel'" in text
     assert "stockhelper.favorite-instruments.v1" in text
+    assert "function canonicalFavoriteTicker(ticker)" in text
+    assert ".replace(/\\.WA$/,'')" in text
+    assert "new Set([...items].map(canonicalFavoriteTicker).filter(Boolean))" in text
+    assert "data.favorites.map(canonicalFavoriteTicker).filter(Boolean)" in text
     assert "function toggleFavorite(ticker)" in text
+    assert "ticker=canonicalFavoriteTicker(ticker)" in text
     assert "fetch('/favorites',{method:'POST'" in text
     assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
     assert "endpoint.searchParams.set('favoriteTicker',btn.dataset.favoriteTicker||favoriteTicker(btn))" in text

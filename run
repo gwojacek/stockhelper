@@ -3350,14 +3350,15 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
     html_parts.append("<script>const FAVORITE_INSTRUMENT_NAMES=" + json.dumps(favorite_instrument_names, ensure_ascii=False) + ";</script>")
     html_parts.append(r"""<script>
 const FAVORITES_STORAGE_KEY='stockhelper.favorite-instruments.v1';
+function canonicalFavoriteTicker(ticker){return String(ticker||'').trim().toUpperCase().replace(/\.WA$/,'');}
 function favoriteTicker(el){const row=el.closest('[data-ticker]');if(row?.dataset?.ticker)return row.dataset.ticker.toUpperCase();const command=el.dataset.cmd||'';const commandMatch=command.toUpperCase().match(/(?:-C|CHART_PROGRAM)\s+['\"]?([A-Z0-9._-]+)/);if(commandMatch)return commandMatch[1];const label=el.dataset.groupLabel||el.closest('.troj-cell-card')?.innerText||'';const match=label.toUpperCase().match(/(?:\(|\s|^)([A-Z0-9][A-Z0-9._]{1,14})(?:\)|\s|$)/g);return match?.length?match[match.length-1].replace(/[()\s]/g,''):'';}
-function loadFavorites(){try{return new Set(JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY)||'[]').map(x=>String(x).toUpperCase()));}catch(e){return new Set();}}
-function saveFavorites(items){const favorites=[...items].sort();localStorage.setItem(FAVORITES_STORAGE_KEY,JSON.stringify(favorites));fetch('/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({favorites})}).catch(()=>{});}
-async function syncFavoritesFromServer(){try{const response=await fetch('/favorites');const data=await response.json();if(response.ok&&Array.isArray(data.favorites)){localStorage.setItem(FAVORITES_STORAGE_KEY,JSON.stringify(data.favorites));refreshFavoriteStars();}}catch(e){}}
+function loadFavorites(){try{return new Set(JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY)||'[]').map(canonicalFavoriteTicker).filter(Boolean));}catch(e){return new Set();}}
+function saveFavorites(items){const favorites=[...new Set([...items].map(canonicalFavoriteTicker).filter(Boolean))].sort();localStorage.setItem(FAVORITES_STORAGE_KEY,JSON.stringify(favorites));fetch('/favorites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({favorites})}).catch(()=>{});}
+async function syncFavoritesFromServer(){try{const response=await fetch('/favorites');const data=await response.json();if(response.ok&&Array.isArray(data.favorites)){const favorites=[...new Set(data.favorites.map(canonicalFavoriteTicker).filter(Boolean))].sort();localStorage.setItem(FAVORITES_STORAGE_KEY,JSON.stringify(favorites));refreshFavoriteStars();}}catch(e){}}
 function techniqueFor(el){const scanner=el.closest('[data-scanner]')?.dataset?.scanner;if(scanner==='WEDGE')return 'Kliny';if(scanner==='FIBO')return 'Fibo';if(scanner==='ICHIMOKU')return 'Ichimoku';if(el.closest('#tab-wedges'))return 'Kliny';if(el.closest('#tab-troj-fibo'))return 'Fibo';if(el.closest('#tab-troj-ichimoku'))return 'Ichimoku';const cmd=(el.dataset.cmd||'').toLowerCase();return cmd.includes('wedge')?'Kliny':cmd.includes('fibo')?'Fibo':cmd.includes('ichimoku')?'Ichimoku':'Other';}
 function decorateFavoriteStars(){saveFavorites(loadFavorites());document.querySelectorAll('.stockhelper-chart-btn[data-cmd]:not([data-favorite-ready])').forEach(chart=>{const ticker=favoriteTicker(chart);if(!ticker)return;chart.dataset.favoriteReady='1';chart.dataset.favoriteTicker=ticker;const chartUrl=new URL(chart.getAttribute('href')||'/open-chart',window.location.href);chartUrl.searchParams.set('favoriteTicker',ticker);chart.setAttribute('href',chartUrl.pathname+chartUrl.search);const star=document.createElement('button');star.type='button';star.className='favorite-star';star.dataset.ticker=ticker;star.title='Add '+ticker+' to favorites';star.setAttribute('aria-label',star.title);star.onclick=()=>toggleFavorite(ticker);chart.insertAdjacentElement('beforebegin',star);});refreshFavoriteStars();}
-function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const on=fav.has(star.dataset.ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove ':'Add ')+star.dataset.ticker+(on?' from':' to')+' favorites';star.setAttribute('aria-pressed',on?'true':'false');});const count=document.getElementById('favorites-count');if(count)count.textContent=String(fav.size);renderFavorites();}
-function toggleFavorite(ticker){const fav=loadFavorites();fav.has(ticker)?fav.delete(ticker):fav.add(ticker);saveFavorites(fav);refreshFavoriteStars();}
+function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const ticker=canonicalFavoriteTicker(star.dataset.ticker);const on=fav.has(ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove ':'Add ')+ticker+(on?' from':' to')+' favorites';star.setAttribute('aria-pressed',on?'true':'false');});const count=document.getElementById('favorites-count');if(count)count.textContent=String(fav.size);renderFavorites();}
+function toggleFavorite(ticker){ticker=canonicalFavoriteTicker(ticker);const fav=loadFavorites();fav.has(ticker)?fav.delete(ticker):fav.add(ticker);saveFavorites(fav);refreshFavoriteStars();}
 function escapeFavoriteHtml(value){return String(value||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function favoriteInstrumentLabel(ticker){const normalized=String(ticker||'').toUpperCase();const name=FAVORITE_INSTRUMENT_NAMES[normalized]||FAVORITE_INSTRUMENT_NAMES[normalized+'.WA']||'';return name?name+' ('+normalized+')':normalized;}
 function favoriteWedgeContext(host){if(host?.dataset?.scanner!=='WEDGE')return '';const date=host.dataset.breakoutDate||'';return date?'Breakout: '+date:'Unbroken';}
@@ -3366,7 +3367,8 @@ function renderFavorites(){
   const fav=loadFavorites();if(!fav.size){root.innerHTML='<p class="muted">No favorites yet. Select an empty ☆ beside any instrument.</p>';return;}
   const occurrences=[];
   document.querySelectorAll('.stockhelper-chart-btn[data-favorite-ticker]').forEach(btn=>{
-    if(btn.closest('#tab-favorites')||!fav.has(btn.dataset.favoriteTicker))return;
+    const ticker=canonicalFavoriteTicker(btn.dataset.favoriteTicker);
+    if(btn.closest('#tab-favorites')||!fav.has(ticker))return;
     const card=btn.closest('.troj-cell-card'),host=card||btn.closest('tr');
     const market=host?.dataset?.market||btn.closest('[data-market-block]')?.dataset?.marketBlock||'OTHER';
     const sourceTable=card?.closest('table.troj-table'),sourceCell=card?.closest('td');
@@ -3375,7 +3377,7 @@ function renderFavorites(){
     const wedgeContext=favoriteWedgeContext(host);
     const context=wedgeContext||btn.dataset.groupSection||btn.closest('.subhead')?.childNodes?.[0]?.textContent?.trim()||'';
     const stooqUrl=host?.querySelector('a.stooq-chart-link')?.href||btn.closest('td')?.querySelector('a.stooq-chart-link')?.href||'';
-    occurrences.push({ticker:btn.dataset.favoriteTicker,technique:techniqueFor(btn),market,label:(btn.dataset.groupLabel||btn.dataset.favoriteTicker).trim(),context,cmd:btn.dataset.cmd,stooqUrl,direction:(host?.dataset?.trojDirection||'').toLowerCase(),is3p:!!sourceTable,columnIndex,columnHeader});
+    occurrences.push({ticker,technique:techniqueFor(btn),market,label:(btn.dataset.groupLabel||ticker).trim(),context,cmd:btn.dataset.cmd,stooqUrl,direction:(host?.dataset?.trojDirection||'').toLowerCase(),is3p:!!sourceTable,columnIndex,columnHeader});
   });
   const favoriteOccurrenceRank=o=>o.is3p&&o.technique==='Fibo'?0:o.is3p&&o.technique==='Ichimoku'?1:o.technique==='Kliny'?2:o.technique==='Fibo'?3:o.technique==='Ichimoku'?4:5;
   const byTicker=new Map();
