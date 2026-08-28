@@ -1275,7 +1275,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Use tabs to switch between" not in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
-    assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
+    assert ">⭐ Favorites</a>" in text
+    assert "favorites-count" not in text
     assert "href='#tab-troj-fibo'" in text
     assert "href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a>" in text
     assert "window.addEventListener('hashchange',showReportTabFromHash)" in text
@@ -1315,8 +1316,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "byTicker.set(o.ticker,{rank,items:new Map()})" in text
     assert "const setupKey=o.is3p?[o.technique,o.columnIndex,o.direction].join('|'):'regular'" in text
     assert "flatMap(group=>[...group.items.values()])" in text
-    assert "String(unique.length+unclassified.length)" in text
     assert "Favorites not classified anywhere now" in text
+    assert "No unclassified favorites" in text
+    assert "parts.push('<section class=\"favorites-technique favorites-unclassified\"" in text
     assert "const classifiedTickers=new Set(unique.map(o=>o.ticker))" in text
     assert "const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
     assert "const FAVORITE_INSTRUMENT_NAMES=" in text
@@ -1463,6 +1465,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "def troj_card_freshness_key" in run_source
     assert "-(signal_date.toordinal() if signal_date else 0)" in run_source
     assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
+    assert "def wedge_freshness_rank" in run_source
+    assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source
+    assert '_top_choice_rank(f"breakout {d.isoformat() if d else \'\'}"' in run_source
+    assert '_top_choice_rank(f"pattern {d.isoformat() if d else \'\'}"' in run_source
     assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text

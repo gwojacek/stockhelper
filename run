@@ -3031,7 +3031,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 return None
             pattern = str(row.pattern or "").strip()
             if pattern and pattern.lower() not in {"-", "none"}:
-                return ((0, 0, 0.0, row.ticker), f"Fibo pattern: {pattern}")
+                pattern_date = row.dates.get("touch_61", "") or row.metrics.get("latest_date", "")
+                return (_top_choice_rank(f"pattern {pattern} {pattern_date}", row.category), f"Fibo pattern: {pattern}")
             if row.dates.get("touch_61") and row.dates.get("touch_61") != "-":
                 touch_date = row.dates.get("touch_61", "")
                 return (_top_choice_rank(f"61.8 reached {touch_date}", row.category), f"61.8 reached ({touch_date})")
@@ -3052,7 +3053,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date):
                 return None
             suffix = f" ({d.isoformat()})" if d else ""
-            return (_top_choice_rank(status_text, row.category), f"breakout / recent breakout{suffix}")
+            return (_top_choice_rank(f"breakout {d.isoformat() if d else ''}", row.category), f"breakout / recent breakout{suffix}")
         if "pattern" in text_low and not re.search(r"pattern\s*[:=]?\s*-", text_low):
             pattern = row.metrics.get("latest_retest_pattern") or row.status or "retest pattern"
             d = _date_from_text(row.metrics.get("latest_retest_date", ""))
@@ -3060,11 +3061,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             if d is not None and not _is_recent_choice_date(d.isoformat(), latest_date) and not cloud_context:
                 return None
             suffix = f" ({d.isoformat()})" if d else ""
-            return (_top_choice_rank(status_text, row.category), f"pattern/retest: {pattern}{suffix}")
+            return (_top_choice_rank(f"pattern {d.isoformat() if d else ''}", row.category), f"pattern/retest: {pattern}{suffix}")
         if "returned_to_cloud_waiting_for_pattern" in text_low or "returned to cloud" in text_low:
             d = _date_from_text(row.dates.get("flip_date", "") or row.metrics.get("latest_date", ""))
             suffix = f" ({d.isoformat()})" if d else ""
-            return (_top_choice_rank(f"returned to cloud {status_text}", row.category), f"returned to cloud, waiting{suffix}")
+            return (_top_choice_rank(f"returned to cloud {d.isoformat() if d else ''}", row.category), f"returned to cloud, waiting{suffix}")
         if "inside cloud" in text_low or "inside the cloud" in text_low:
             return (_top_choice_rank(status_text, row.category), "candle deep/inside cloud")
         if recent_date is not None and _is_recent_choice_date(recent_date.isoformat(), latest_date) and row.category == "retest_breakout":
@@ -3101,7 +3102,11 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 return "🚀 breakout"
             return "⏳ unbroken"
 
-        wedge = sorted([r for r in rows if r.scanner == "WEDGE"], key=lambda r: (_market_order(r.market, r.ticker), -_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))
+        def wedge_freshness_rank(row: ScannerRow) -> int:
+            breakout_date = _date_from_text(row.metrics.get("breakout_date", ""))
+            return -(breakout_date.toordinal() if breakout_date else 0)
+
+        wedge = sorted([r for r in rows if r.scanner == "WEDGE"], key=lambda r: (_market_order(r.market, r.ticker), -_wedge_breakout_rank(r), wedge_freshness_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))
         if not wedge:
             return "<section class='market'><h2>🔻 Kliny opadające</h2><p class='muted'>Brak niewybitych klinów opadających.</p></section>"
         parts = [
@@ -3113,7 +3118,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             f"<button class='btn compactbtn troj-direction-btn' type='button' data-direction='short' title='Short' aria-label='Filter short' onclick=\"setTrojDirection('wedge-report','short',this)\">{_direction_arrow_html('short')}</button>"
             "</span> <button class='btn compactbtn' type='button' aria-pressed='false' onclick='toggleSavedSetups(this)'>💾 Saved by me</button></div>"
         ]
-        top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:5]
+        top = sorted(wedge, key=lambda r: (-_wedge_breakout_rank(r), wedge_freshness_rank(r), -_parse_float_text(r.metrics.get("score", "0"), 0.0)))[:5]
         top_rows = "".join(
             f"<tr{_row_attrs(r)}><td><strong>{html.escape(_market_icon(r.market, r.ticker))} {html.escape(_instrument_label(r))}{_wedge_saved_icon(r)}</strong></td><td>{html.escape(r.market)}</td><td>{html.escape(_wedge_status_label(r))}</td><td>{html.escape(r.metrics.get('months',''))}</td><td>{html.escape(r.metrics.get('upper_touches','?') + '/' + r.metrics.get('lower_touches','?'))}</td><td>{html.escape(_wedge_slope_strength(r.metrics.get('slope','')))}</td><td>{html.escape(r.metrics.get('breakout_date','-'))}</td><td>{_direction_arrow_html(r.metrics.get('breakout_direction','')) if r.metrics.get('breakout_direction','') in {'long','short'} else '-'}</td><td>{html.escape(r.metrics.get('start_width',''))}</td><td>{html.escape(r.metrics.get('end_width',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{_stooq_link_with_cell_button(r.chart_url, r.ticker)}</td><td class='chart-action-cell'>{_stockhelper_chart_button(html.escape(_chart_command_for_row(r)), f"{_market_icon(r.market, r.ticker)} {r.ticker} {_wedge_status_label(r).split()[0]} {r.metrics.get('months','')}m")}</td></tr>"
             for r in top
@@ -3234,7 +3239,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "<select id='market' style='display:none'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
         "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>"
     )
-    html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><div class='tabbar'><a class='btn tabbtn active' data-tab='allsearch' href='#tab-allsearch'>ALLSEARCH REPORT</a><a class='btn tabbtn' data-tab='troj-fibo' href='#tab-troj-fibo'>3P FIBO</a><a class='btn tabbtn' data-tab='troj-ichimoku' href='#tab-troj-ichimoku'>3P ICHIMOKU</a><a class='btn tabbtn' data-tab='wedges' href='#tab-wedges'>🔻 Kliny</a><a class='btn tabbtn' data-tab='favorites' href='#tab-favorites'>⭐ Favorites <span id='favorites-count'>0</span></a><a class='btn tabbtn' href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a><button class='btn compactbtn push-right' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button><button class='btn compactbtn' type='button' title='Show every instrument checked for this report' onclick=\"document.getElementById('checked-instruments-dialog').showModal()\">🗂 Checked</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><div class='tabbar'><a class='btn tabbtn active' data-tab='allsearch' href='#tab-allsearch'>ALLSEARCH REPORT</a><a class='btn tabbtn' data-tab='troj-fibo' href='#tab-troj-fibo'>3P FIBO</a><a class='btn tabbtn' data-tab='troj-ichimoku' href='#tab-troj-ichimoku'>3P ICHIMOKU</a><a class='btn tabbtn' data-tab='wedges' href='#tab-wedges'>🔻 Kliny</a><a class='btn tabbtn' data-tab='favorites' href='#tab-favorites'>⭐ Favorites</a><a class='btn tabbtn' href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a><button class='btn compactbtn push-right' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button><button class='btn compactbtn' type='button' title='Show every instrument checked for this report' onclick=\"document.getElementById('checked-instruments-dialog').showModal()\">🗂 Checked</button></div></div>")
     checked_lists_html = "".join(
         "<section class='checked-market-list'><h3>" + html.escape(market) + f" <span>({len(members)})</span></h3><div>"
         + "".join(f"<code>{html.escape(member)}</code>" for member in members) + "</div></section>"
@@ -3429,8 +3434,7 @@ function renderFavorites(){
   ['Fibo','Ichimoku','Other'].filter(t=>groups[t]).forEach(t=>parts.push('<section class="favorites-technique"><h3>'+({Fibo:'📐 Fibo',Ichimoku:'☁️ Ichimoku',Other:'Other'}[t])+'</h3>'+Object.keys(groups[t]).sort().map(m=>'<div class="favorites-market"><h4>'+escapeFavoriteHtml(m)+'</h4><div class="favorites-grid">'+groups[t][m].sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(card).join('')+'</div></div>').join('')+'</section>'));
   const classifiedTickers=new Set(unique.map(o=>o.ticker));
   const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker)).sort().map(ticker=>({ticker,label:favoriteInstrumentLabel(ticker),cmd:'python run -c '+ticker}));
-  if(unclassified.length)parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted">Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join('')+'</tbody></table></div></section>');
-  const count=document.getElementById('favorites-count');if(count)count.textContent=String(unique.length+unclassified.length);
+  parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted">Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+(unclassified.length?unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join(''):'<tr><td colspan="2" class="muted">No unclassified favorites</td></tr>')+'</tbody></table></div></section>');
   root.innerHTML=parts.join('')||'<p class="muted">Favorites are saved, but none occur in this report.</p>';
 }
 document.addEventListener('DOMContentLoaded',decorateFavoriteStars);
