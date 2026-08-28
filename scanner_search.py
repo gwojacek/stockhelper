@@ -4215,6 +4215,39 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
         # looking for the next independent return to the cloud.
         i = detect_until + 1
 
+    # Recover a fresh two-candle shallow retest at the end of the data when a
+    # moving cloud edge split the touch and confirmation across cycle bounds.
+    # The strict prior-outside/touch/confirm sequence prevents this fallback
+    # from inheriting an older cloud visit or manufacturing an extra retest.
+    if valid_count == 0 and current_side == "above" and len(df) >= 3:
+        first_idx, confirm_idx, prior_idx = len(df) - 2, len(df) - 1, len(df) - 3
+        first, confirm = df.iloc[first_idx], df.iloc[confirm_idx]
+        prior_outside = float(df["Close"].iloc[prior_idx]) > float(top.iloc[prior_idx])
+        first_touched = _overlaps_price_zone(first, float(bottom.iloc[first_idx]), float(top.iloc[first_idx]))
+        confirm_outside = float(confirm["Close"]) > float(top.iloc[confirm_idx])
+        combined_top = max(float(top.iloc[first_idx]), float(top.iloc[confirm_idx]))
+        combined_bottom = min(float(bottom.iloc[first_idx]), float(bottom.iloc[confirm_idx]))
+        if (
+            first_idx > flip_idx
+            and prior_outside
+            and first_touched
+            and confirm_outside
+            and _is_bullish_engulfing(
+                first,
+                confirm,
+                combined_top,
+                close_floor=float(top.iloc[confirm_idx]),
+                zone_floor=combined_bottom,
+            )
+        ):
+            ev_date = pd.to_datetime(confirm["Date"]).strftime("%Y-%m-%d")
+            valid_count = 1
+            first_valid_date = ev_date
+            first_valid_depth = "shallow"
+            first_valid_status = "shallow_retest_pattern"
+            events = [(ev_date, "bullish_engulfing", "shallow")]
+            last_pattern_abs = confirm_idx
+
     if valid_count > 0:
         # If after a valid retest pattern price returned to cloud and then broke
         # the last pattern candle extreme in the opposite direction, downgrade

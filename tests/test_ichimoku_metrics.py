@@ -821,3 +821,21 @@ def test_ichimoku_retest_reports_bullish_engulfing_before_piercing_line():
     assert count == 1
     assert first_date == "2026-06-10"
     assert events == [("2026-06-10", "bullish_engulfing", "deep")]
+
+
+def test_latest_two_candle_shallow_bullish_engulfing_is_recovered():
+    rows = [
+        {"Date": "2026-08-25", "Open": 360.0, "High": 362.0, "Low": 356.0, "Close": 359.0, "cloud_top": 340.0, "cloud_bottom": 330.0},
+        {"Date": "2026-08-26", "Open": 358.0, "High": 360.0, "Low": 354.0, "Close": 357.0, "cloud_top": 341.0, "cloud_bottom": 331.0},
+        {"Date": "2026-08-27", "Open": 353.54, "High": 355.50, "Low": 335.50, "Close": 348.00, "cloud_top": 342.0, "cloud_bottom": 332.0},
+        {"Date": "2026-08-28", "Open": 347.82, "High": 358.43, "Low": 345.25, "Close": 358.06, "cloud_top": 343.0, "cloud_bottom": 333.0},
+    ]
+    df = pd.DataFrame(rows)
+
+    status, depth, count, first_date, events = scanner_search._detect_ichimoku_retest(df, 0, "above")
+
+    assert status == "shallow_retest_pattern"
+    assert depth == "shallow"
+    assert count == 1
+    assert first_date == "2026-08-28"
+    assert events == [("2026-08-28", "bullish_engulfing", "shallow")]

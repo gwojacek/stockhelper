@@ -904,6 +904,16 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert "return near >= 75.0" in touched
 
 
+def test_latest_shallow_engulfing_has_cycle_boundary_fallback():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    retest = source[source.index("def _detect_ichimoku_retest"):source.index("def run_ichimoku_search")]
+
+    assert 'valid_count == 0 and current_side == "above" and len(df) >= 3' in retest
+    assert "first_idx, confirm_idx, prior_idx = len(df) - 2, len(df) - 1, len(df) - 3" in retest
+    assert 'first_valid_status = "shallow_retest_pattern"' in retest
+    assert 'events = [(ev_date, "bullish_engulfing", "shallow")]' in retest
+
+
 def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     long_start = source.index("def _find_fibo_setup")
@@ -1472,6 +1482,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert 'if has_pattern or has_breakout:' in run_source
     assert 'return (0, freshness, signal_kind_rank, text)' in run_source
     assert 'Pattern and breakout signals compete in one freshness queue.' in run_source
+    assert 'selected = (must + [item for item in ranked if item not in must])[:limit_per_group]' in run_source
+    assert 'pattern_date = row.dates.get("pattern_date", "")' in run_source
     assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
@@ -1527,7 +1539,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "breakout / recent breakout (2026-05-29)" in text
     assert "Ichimoku continuation</td><td><strong>🇩🇪 ENR.DE</strong></td><td>breakout / recent breakout" not in text
     assert "Unsuccessful breakout to the other side" in text
-    assert "returned to cloud, waiting (2026-05-28)" in text
+    assert "returned to cloud, waiting (2026-05-28)" not in text
     assert "Mies. respektu przed wybiciem" in text
     assert "pattern/retest: bullish_harami (2026-07-22)" in text
     assert "near 61.8: 90.0%" in text

@@ -3033,11 +3033,9 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             freshness = -(_date_from_text(breakout_date).toordinal()) if _date_from_text(breakout_date) else 0
             return ((0, freshness if breakout_rank else 0, -(score + width * 4.0 + months * 8.0), row.ticker), f"klin opadający: {months:.1f}m, kontakty U/D {contacts}, nachylenie {slope_label}")
         if row.scanner == "FIBO":
-            if row.category == "valid":
-                return None
             pattern = str(row.pattern or "").strip()
             if pattern and pattern.lower() not in {"-", "none"}:
-                pattern_date = row.dates.get("touch_61", "") or row.metrics.get("latest_date", "")
+                pattern_date = row.dates.get("pattern_date", "") or row.dates.get("touch_61", "") or row.metrics.get("latest_date", "")
                 return (_top_choice_rank(f"pattern {pattern} {pattern_date}", row.category), f"Fibo pattern: {pattern}")
             if row.dates.get("touch_61") and row.dates.get("touch_61") != "-":
                 touch_date = row.dates.get("touch_61", "")
@@ -3204,7 +3202,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     qualified.append((rank, r, reason))
             ranked = sorted(qualified, key=lambda item: item[0])
             must = [item for item in ranked if _must_include_top_choice(item[0], item[2])]
-            selected = must + [item for item in ranked if item not in must][:max(0, limit_per_group - len(must))]
+            selected = (must + [item for item in ranked if item not in must])[:limit_per_group]
             if label == "🔻 Kliny":
                 selected = selected[:5]
             rows_html = ""
