@@ -2677,8 +2677,14 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         freshness = -d.toordinal() if d is not None else 0
         pct_values = [float(v) for v in re.findall(r"(\d+(?:\.\d+)?)%", low)]
         pct_value = max(pct_values) if pct_values else None
-        if "pattern" in low and not re.search(r"pattern\s*[:=]?\s*-", low):
-            return (0, freshness, 0.0, text)
+        has_pattern = "pattern" in low and not re.search(r"pattern\s*[:=]?\s*-", low)
+        has_breakout = "breakout" in low
+        if has_pattern or has_breakout:
+            # Pattern and breakout signals compete in one freshness queue.
+            # Keeping separate primary ranks put weeks-old patterns above a
+            # breakout from yesterday in the combined Allsearch top choices.
+            signal_kind_rank = 0.0 if has_pattern else 1.0
+            return (0, freshness, signal_kind_rank, text)
         if "61.8" in low and any(token in low for token in ("reached", "touched", "valid")):
             return (1, freshness, 0.0, text)
         if pct_value is not None and pct_value >= 75.0:

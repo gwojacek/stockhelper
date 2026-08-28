@@ -1469,6 +1469,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source
     assert '_top_choice_rank(f"breakout {d.isoformat() if d else \'\'}"' in run_source
     assert '_top_choice_rank(f"pattern {d.isoformat() if d else \'\'}"' in run_source
+    assert 'if has_pattern or has_breakout:' in run_source
+    assert 'return (0, freshness, signal_kind_rank, text)' in run_source
+    assert 'Pattern and breakout signals compete in one freshness queue.' in run_source
     assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
