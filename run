@@ -3140,7 +3140,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         parts.append("</section>")
         return "".join(parts)
 
-    def _allsearch_top_choices(limit_per_group: int = 2) -> str:
+    def _allsearch_top_choices(limit_per_group: int = 5) -> str:
         groups = [
             ("☁️ Ichimoku retest", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "retest_breakout"]),
             ("☁️ Ichimoku continuation", [r for r in rows if r.scanner == "ICHIMOKU" and r.category == "position"]),

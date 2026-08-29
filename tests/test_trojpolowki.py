@@ -1483,6 +1483,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert 'return (0, freshness, signal_kind_rank, text)' in run_source
     assert 'Pattern and breakout signals compete in one freshness queue.' in run_source
     assert 'selected = (must + [item for item in ranked if item not in must])[:limit_per_group]' in run_source
+    assert 'def _allsearch_top_choices(limit_per_group: int = 5)' in run_source
     assert 'pattern_date = row.dates.get("pattern_date", "")' in run_source
     assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
@@ -1539,7 +1540,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "breakout / recent breakout (2026-05-29)" in text
     assert "Ichimoku continuation</td><td><strong>🇩🇪 ENR.DE</strong></td><td>breakout / recent breakout" not in text
     assert "Unsuccessful breakout to the other side" in text
-    assert "returned to cloud, waiting (2026-05-28)" not in text
+    assert "returned to cloud, waiting (2026-05-28)" in text
     assert "Mies. respektu przed wybiciem" in text
     assert "pattern/retest: bullish_harami (2026-07-22)" in text
     assert "near 61.8: 90.0%" in text
