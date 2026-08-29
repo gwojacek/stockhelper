@@ -363,7 +363,8 @@ def test_month_side_trends_invalidate_both_fibo_impulse_and_correction():
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep_source
+    assert "continuation_min_gain=steep_min_gain" in steep_source
+    assert "continuation_min_daily_gain=steep_min_daily_gain" in steep_source
     assert "_has_completed_month_side_trend(w.iloc[i_peak:])" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
@@ -421,7 +422,7 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
     helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
     assert "short decline" in steep
-    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep
+    assert "continuation_min_gain=steep_min_gain" in steep
     assert "max_days=22" in helper
     assert "band_pct=0.20" in helper
     assert "max_progress_pct=0.08" in helper
@@ -1685,7 +1686,7 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert "def _mirror_ohlc_for_short(" in scanner_source
     assert '_find_fibo_setup(\n            mirrored,\n            direction="long"' in scanner_source
     assert '_find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)' in scanner_source
-    assert "min_gain_pct = 0.025 if _mirrored_short else 0.18" in scanner_source
+    assert "steep_min_gain = 0.025 if _mirrored_short else 0.15" in scanner_source
     assert "sideways_band_pct=0.02 if _mirrored_short else 0.08" in scanner_source
     assert "pre_start_left = max(0, i_start - 5)" in scanner_source
     assert "shortest_regular_by_direction" in scanner_source

@@ -1034,7 +1034,12 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     )
 
 
-def _impulse_has_disqualifying_month_side_trend(df_slice: pd.DataFrame) -> bool:
+def _impulse_has_disqualifying_month_side_trend(
+    df_slice: pd.DataFrame,
+    *,
+    continuation_min_gain: float = 0.65,
+    continuation_min_daily_gain: float = 0.006,
+) -> bool:
     """Reject a monthly shelf unless it is absorbed by an exceptional impulse.
 
     Anchor selection already moves a pre-impulse base to the first durable low
@@ -1054,7 +1059,10 @@ def _impulse_has_disqualifying_month_side_trend(df_slice: pd.DataFrame) -> bool:
     peak = float(highs.max())
     gain_pct = (peak - launch) / max(abs(launch), 1e-9)
     average_daily_gain = gain_pct / max(len(leg) - 1, 1)
-    exceptional_continuation = gain_pct >= 0.65 and average_daily_gain >= 0.006
+    exceptional_continuation = (
+        gain_pct >= continuation_min_gain
+        and average_daily_gain >= continuation_min_daily_gain
+    )
     return not exceptional_continuation
 
 
@@ -6081,7 +6089,21 @@ def _find_fibo_3p_steep_setup(
     # not keep a broad 3P leg across that reset (for example JP225's Nov-Dec
     # range); the newer post-range impulse can still be found independently.
     impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
-    if _impulse_has_disqualifying_month_side_trend(impulse_seg):
+    # Column one is specifically the steep-impulse watchlist.  A monthly pause
+    # inside the leg is therefore not a stale-cycle signal when the complete
+    # post-base move still clears the same gain and daily-velocity thresholds
+    # used below to qualify the row.  Keeping the stricter helper defaults for
+    # regular Fibo setups avoids reviving slow historical formations.
+    # A 15% move delivered at >=0.3% per session is already a genuinely steep
+    # equity/commodity impulse.  Requiring 18% excluded compact accelerations
+    # such as CORN after its stale-cycle anchor was correctly moved forward.
+    steep_min_gain = 0.025 if _mirrored_short else 0.15
+    steep_min_daily_gain = 0.0004 if _mirrored_short else 0.003
+    if _impulse_has_disqualifying_month_side_trend(
+        impulse_seg,
+        continuation_min_gain=steep_min_gain,
+        continuation_min_daily_gain=steep_min_daily_gain,
+    ):
         side = "short decline" if _mirrored_short else "long incline"
         _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
         return None
@@ -6118,8 +6140,8 @@ def _find_fibo_3p_steep_setup(
 
     gain_pct = rng / max(abs(fib_start), 1e-9)
     avg_daily_gain = gain_pct / max(incline_days, 1)
-    min_gain_pct = 0.025 if _mirrored_short else 0.18
-    min_daily_gain = 0.0004 if _mirrored_short else 0.003
+    min_gain_pct = steep_min_gain
+    min_daily_gain = steep_min_daily_gain
     if gain_pct < min_gain_pct or avg_daily_gain < min_daily_gain:
         _log(
             "Rejected 3P steep: incline not steep enough "

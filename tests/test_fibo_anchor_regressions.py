@@ -39,6 +39,25 @@ def test_ftnt_exceptional_post_base_impulse_survives_loose_month_window():
     assert any("monthly pause absorbed" in message for message in explain)
 
 
+@pytest.mark.parametrize(
+    ("path", "direction"),
+    [
+        ("data/csv/commodities/ZC_F.csv", "long"),
+        ("data/csv/forex/USDCAD.csv", "short"),
+        ("data/csv/stocks/REGN_US.csv", "long"),
+    ],
+)
+def test_current_steep_moves_survive_an_internal_monthly_pause(path, direction):
+    frame = _fixture(path)
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, direction, explain)
+
+    assert result is not None, "\n".join(explain)
+    assert result.direction == direction
+    assert result.status in {"3p_steep_incline", "3p_steep_23_6_zone"}
+
+
 def test_corn_continuation_moves_second_anchor_to_latest_higher_high():
     frame = _fixture("data/csv/commodities/ZC_F.csv")
 
