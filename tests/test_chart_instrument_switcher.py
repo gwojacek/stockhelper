@@ -119,5 +119,9 @@ def test_quick_chart_filters_persist_and_are_visually_separated():
     assert "chartGroup?.marketFilter" in ui
     assert '"marketFilter": group_market_filter' in server
     assert 'qs.get("groupMarket"' in server
+    assert 'group_market_filter = _clean_group_text(payload.get("marketFilter")' in server
+    assert 'first_query["groupMarket"] = group_market_filter' in server
     assert "def _troj_market_from_card_text" in report
     assert '("🇵🇱", "WIG")' in report
+    assert "marketFilter:(typeof m!=='undefined'&&m?m.value:'')" in report
+    assert "(!card||card.style.display!=='none')" in report

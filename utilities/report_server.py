@@ -17,7 +17,7 @@ import time
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import urlopen
 
 REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v24"
@@ -624,6 +624,10 @@ def main() -> int:
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
                     payload = json.loads(raw or "{}")
                     group_label = _clean_group_text(payload.get("label") or "Quick charts from group btn")
+                    group_market_filter = _clean_group_text(payload.get("marketFilter") or "")
+                    group_direction_filter = _clean_group_text(payload.get("directionFilter") or "").lower()
+                    if group_direction_filter not in {"long", "short"}:
+                        group_direction_filter = ""
                     raw_items = payload.get("items") or []
                     items = []
                     for item in raw_items:
@@ -647,9 +651,22 @@ def main() -> int:
                         self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing commands"}).encode("utf-8")); return
                     group_id = uuid.uuid4().hex
                     with chart_group_lock:
-                        chart_groups[group_id] = {"label": group_label, "items": items}
+                        chart_groups[group_id] = {
+                            "label": group_label,
+                            "items": items,
+                            "marketFilter": group_market_filter,
+                            "directionFilter": group_direction_filter,
+                        }
                     first_command = items[0]["command"]
-                    first_url = f"/open-chart?command={quote(first_command, safe="")}&group={quote(group_id, safe="")}"
+                    first_query = {
+                        "command": first_command,
+                        "group": group_id,
+                    }
+                    if group_market_filter:
+                        first_query["groupMarket"] = group_market_filter
+                    if group_direction_filter:
+                        first_query["groupDirection"] = group_direction_filter
+                    first_url = "/open-chart?" + urlencode(first_query)
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "group": group_id, "url": first_url}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))

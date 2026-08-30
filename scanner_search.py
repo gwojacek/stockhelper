@@ -5944,21 +5944,23 @@ def _select_fibo_long_impulse_base(
     if stale_cycle:
         return None
 
-    # Multiple completed ranges split a broad move into separate market
-    # phases. Do not discard a strong post-range acceleration merely because
-    # the originally selected bottom predates those ranges; move the first Fibo
-    # anchor to the launch immediately after the final range instead. Include
-    # its last week because the breakout launch low often forms just before the
-    # rolling channel window ends (STX Mar/Apr 2026).
+    # A range beginning at the selected anchor means that candle started a
+    # base, not the later impulse. Multiple completed ranges likewise split a
+    # broad move into separate market phases. In either case, do not discard a
+    # strong post-range acceleration: move the first Fibo anchor to the launch
+    # immediately after the final range. Include its last week because the
+    # breakout launch low often forms just before the rolling window ends
+    # (XAUUSD Jul/Aug and STX Mar/Apr 2026).
     impulse_view = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
     side_phases = _completed_month_side_trend_phases(impulse_view)
-    if len(side_phases) >= 2:
+    anchor_begins_side_trend = bool(side_phases) and side_phases[0][0] <= 5
+    if len(side_phases) >= 2 or anchor_begins_side_trend:
         _last_phase_start, last_phase_end = side_phases[-1]
         absolute_phase_end = i_start + last_phase_end
         launch_left = max(i_start, absolute_phase_end - 5)
         launch_right = i_peak - min_incline_days
         if launch_right < launch_left:
-            _log("Rejected long: repeated side trends leave no mature post-range impulse.")
+            _log("Rejected long: anchor-side range leaves no mature post-range impulse.")
             return None
         post_range_idx = int(low.iloc[launch_left:launch_right + 1].idxmin())
         post_range_low = float(low.iloc[post_range_idx])
@@ -5972,13 +5974,13 @@ def _select_fibo_long_impulse_base(
             or post_range_daily_gain < min_post_range_daily_gain
         ):
             _log(
-                "Rejected long: repeated side trends are not followed by a qualifying "
+                "Rejected long: anchor-side range is not followed by a qualifying "
                 f"post-range impulse ({post_range_gain * 100:.2f}%, "
                 f"daily={post_range_daily_gain * 100:.2f}%)."
             )
             return None
         _log(
-            "Long: moved fib start after repeated side trends "
+            "Long: moved fib start after completed anchor-side trend "
             f"idx={i_start} -> {post_range_idx} (last_channel_end={absolute_phase_end})."
         )
         i_start = post_range_idx

@@ -1775,7 +1775,8 @@ def test_repeated_side_trends_move_the_automatic_anchor_to_the_final_launch():
     selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
 
     assert "side_phases = _completed_month_side_trend_phases(impulse_view)" in selector
-    assert "if len(side_phases) >= 2:" in selector
+    assert "anchor_begins_side_trend = bool(side_phases) and side_phases[0][0] <= 5" in selector
+    assert "if len(side_phases) >= 2 or anchor_begins_side_trend:" in selector
     assert "launch_left = max(i_start, absolute_phase_end - 5)" in selector
-    assert "Long: moved fib start after repeated side trends" in selector
+    assert "Long: moved fib start after completed anchor-side trend" in selector
     assert "i_start = post_range_idx" in selector
