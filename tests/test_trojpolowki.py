@@ -1762,9 +1762,20 @@ def test_3p_accepts_a_fresh_independent_peak_below_an_old_cycle_high():
 
 def test_multiple_monthly_side_trends_cannot_be_absorbed_as_one_steep_impulse():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
-    helper = source[source.index("def _completed_month_side_trend_count"):source.index("def _has_extended_sideways")]
+    helper = source[source.index("def _completed_month_side_trend_phases"):source.index("def _has_extended_sideways")]
 
     assert "side_trend_count = _completed_month_side_trend_count(leg)" in helper
     assert "if side_trend_count >= 2:" in helper
     assert "return True" in helper
     assert "start > phases[-1][1] + 3" in helper
+
+
+def test_repeated_side_trends_move_the_automatic_anchor_to_the_final_launch():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+
+    assert "side_phases = _completed_month_side_trend_phases(impulse_view)" in selector
+    assert "if len(side_phases) >= 2:" in selector
+    assert "launch_left = max(i_start, absolute_phase_end - 5)" in selector
+    assert "Long: moved fib start after repeated side trends" in selector
+    assert "i_start = post_range_idx" in selector

@@ -1039,8 +1039,8 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     )
 
 
-def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
-    """Count distinct four-week channels inside a leg.
+def _completed_month_side_trend_phases(df_slice: pd.DataFrame) -> list[tuple[int, int]]:
+    """Return distinct four-week channels inside a leg.
 
     Rolling windows from the same consolidation overlap heavily, so merge
     adjacent qualifying windows into one phase. Separate ranges divided by a
@@ -1050,7 +1050,7 @@ def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
     leg = df_slice.reset_index(drop=True)
     window_days = 19
     if len(leg) < window_days:
-        return 0
+        return []
     highs = pd.to_numeric(leg["High"], errors="coerce").reset_index(drop=True)
     lows = pd.to_numeric(leg["Low"], errors="coerce").reset_index(drop=True)
     closes = pd.to_numeric(leg["Close"], errors="coerce").reset_index(drop=True)
@@ -1073,7 +1073,11 @@ def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
             phases.append([start, end])
         else:
             phases[-1][1] = max(phases[-1][1], end)
-    return len(phases)
+    return [(start, end) for start, end in phases]
+
+
+def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
+    return len(_completed_month_side_trend_phases(df_slice))
 
 
 def _impulse_has_disqualifying_month_side_trend(
@@ -5939,6 +5943,46 @@ def _select_fibo_long_impulse_base(
         stale_cycle, _stale_reset = _stale_cycle_reset_candidate(i_start, fib_start)
     if stale_cycle:
         return None
+
+    # Multiple completed ranges split a broad move into separate market
+    # phases. Do not discard a strong post-range acceleration merely because
+    # the originally selected bottom predates those ranges; move the first Fibo
+    # anchor to the launch immediately after the final range instead. Include
+    # its last week because the breakout launch low often forms just before the
+    # rolling channel window ends (STX Mar/Apr 2026).
+    impulse_view = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+    side_phases = _completed_month_side_trend_phases(impulse_view)
+    if len(side_phases) >= 2:
+        _last_phase_start, last_phase_end = side_phases[-1]
+        absolute_phase_end = i_start + last_phase_end
+        launch_left = max(i_start, absolute_phase_end - 5)
+        launch_right = i_peak - min_incline_days
+        if launch_right < launch_left:
+            _log("Rejected long: repeated side trends leave no mature post-range impulse.")
+            return None
+        post_range_idx = int(low.iloc[launch_left:launch_right + 1].idxmin())
+        post_range_low = float(low.iloc[post_range_idx])
+        post_range_days = i_peak - post_range_idx
+        post_range_gain = (fib_end - post_range_low) / max(abs(post_range_low), 1e-9)
+        post_range_daily_gain = post_range_gain / max(post_range_days, 1)
+        min_post_range_gain = 0.025 if preserve_deeper_short_continuation else 0.15
+        min_post_range_daily_gain = 0.0004 if preserve_deeper_short_continuation else 0.003
+        if (
+            post_range_gain < min_post_range_gain
+            or post_range_daily_gain < min_post_range_daily_gain
+        ):
+            _log(
+                "Rejected long: repeated side trends are not followed by a qualifying "
+                f"post-range impulse ({post_range_gain * 100:.2f}%, "
+                f"daily={post_range_daily_gain * 100:.2f}%)."
+            )
+            return None
+        _log(
+            "Long: moved fib start after repeated side trends "
+            f"idx={i_start} -> {post_range_idx} (last_channel_end={absolute_phase_end})."
+        )
+        i_start = post_range_idx
+        fib_start = post_range_low
 
     return int(i_start), float(fib_start), float(fib_end)
 
