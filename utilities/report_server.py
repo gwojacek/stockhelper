@@ -621,7 +621,15 @@ def main() -> int:
                             continue
                         label = _clean_group_text(item.get("label") or command)
                         section = _clean_group_text(item.get("section") or "")
-                        items.append({"command": command, "label": label, "section": section})
+                        market = _clean_group_text(item.get("market") or "")
+                        direction = _clean_group_text(item.get("direction") or "").lower()
+                        items.append({
+                            "command": command,
+                            "label": label,
+                            "section": section,
+                            "market": market,
+                            "direction": direction if direction in {"long", "short"} else "",
+                        })
                     if not items:
                         self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing commands"}).encode("utf-8")); return
                     group_id = uuid.uuid4().hex

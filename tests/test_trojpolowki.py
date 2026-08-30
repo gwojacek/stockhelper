@@ -423,7 +423,7 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
     assert "short decline" in steep
     assert "continuation_min_gain=steep_min_gain" in steep
-    assert "max_days=22" in helper
+    assert "max_days=19" in helper
     assert "band_pct=0.20" in helper
     assert "max_progress_pct=0.08" in helper
     assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
@@ -1729,3 +1729,22 @@ def test_checkavg_accepts_case_insensitive_stooq_bulk_cache_sources():
     assert 'if not source.startswith("stooq"):' in checkavg
     assert 'source != "stooq"' not in checkavg
     assert 'cache={cache_path}' in checkavg
+
+
+def test_saved_drawings_do_not_disable_automatic_fibo_discovery():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    scan = source[source.index("def _scan_fibo_one"):source.index("def run_fibo_explain", source.index("def _scan_fibo_one"))]
+
+    assert 'steep_3p = _find_fibo_3p_steep_setup(df, "long")' in scan
+    assert "steep_3p = None if manual_fibo" not in scan
+    assert "if manual_fibo:\n                    break" not in scan
+    assert "if short_fibo_enabled and not manual_fibo" not in scan
+    assert "saved_fibo_keys" in scan
+
+
+def test_fresh_23_6_retracement_is_enough_for_a_short_correction_leg():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "reached_early_236 = early_rng > 0 and corr_low_early <= early_fib_236" in setup
+    assert "early_decline_pct >= 0.05 or reached_early_236" in setup

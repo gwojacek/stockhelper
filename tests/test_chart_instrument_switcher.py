@@ -90,3 +90,18 @@ def test_position_calculation_displays_one_percent_avg10d_with_market_currency()
     assert '"max_capital_currency": _instrument_currency()' in source
     assert "Max capital to engage (1% Avg10d)" in source
     assert "money(b.max_capital, b.max_capital_currency || currency)" in source
+
+
+def test_quick_chart_group_has_market_and_direction_filters():
+    ui = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    server = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    report = Path("run").read_text(encoding="utf-8")
+
+    assert 'id="chart-group-filters"' in ui
+    assert "marketIcons = {{WIG:'🇵🇱',DAX:'🇩🇪',US100:'🇺🇸',FOREX:'💱',COMMODITIES:'🛢️',INDEXES:'📊',ETFS:'🧺'}}" in ui
+    assert "addFilter('↗', 'direction', 'long'" in ui
+    assert "addFilter('↘', 'direction', 'short'" in ui
+    assert '"market": market' in server
+    assert '"direction": direction if direction in {"long", "short"} else ""' in server
+    assert "b.closest('[data-market]')?.dataset.market" in report
+    assert "b.closest('[data-troj-direction]')?.dataset.trojDirection" in report

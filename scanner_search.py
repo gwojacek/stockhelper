@@ -1020,15 +1020,20 @@ def _has_long_sideways(df_slice: pd.DataFrame, max_days: int = 22, band_pct: flo
 def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     """Return whether a leg contains a completed month-scale price channel.
 
-    Fibo legs may pause briefly, but a full 22-session channel with no more
-    than 8% endpoint progress is a separate market phase.  The wider 20% band
+    Fibo legs may pause briefly, but a full four-week (at least 19-session)
+    channel with no more than 8% endpoint progress is a separate market phase.
+    The wider 20% band
     intentionally supports volatile instruments such as MSTR, whose February-
     April and July-August shelves are visually clear side trends despite their
     larger absolute ranges.
     """
+    # Four calendar weeks contain only 19 trading sessions around common
+    # market holidays.  Requiring 22 observations missed complete February
+    # ranges such as STX 2026-02-02..27 and allowed an obsolete impulse to span
+    # that separate market phase.
     return _has_long_sideways(
         df_slice.reset_index(drop=True),
-        max_days=22,
+        max_days=19,
         band_pct=0.20,
         max_progress_pct=0.08,
     )
@@ -6329,11 +6334,15 @@ def _find_fibo_setup(
             corr_low_early = float(low.iloc[i_peak:i_end + 1].min())
             peak_high = float(high.iloc[i_peak])
             early_decline_pct = (peak_high - corr_low_early) / max(peak_high, 1e-9)
-            if corr_bars >= min_correction_days and early_decline_pct >= 0.05:
+            early_rng = peak_high - fib_start
+            early_fib_236 = peak_high - early_rng * 0.236
+            reached_early_236 = early_rng > 0 and corr_low_early <= early_fib_236
+            if corr_bars >= min_correction_days and (early_decline_pct >= 0.05 or reached_early_236):
                 early_correction_accepted = True
                 _log(
                     "Long: accepting early correction leg "
-                    f"({corr_bars} bars, decline={early_decline_pct * 100:.2f}%)."
+                    f"({corr_bars} bars, decline={early_decline_pct * 100:.2f}%, "
+                    f"reached_23_6={reached_early_236})."
                 )
             else:
                 _log("Rejected long: correction leg too short (<8 bars).")
@@ -6999,10 +7008,16 @@ def run_fibo_search(target: str) -> int:
                     cand.saved_by_user = True
                     saved_fibo_rows.append(cand)
                     out_rows.append(cand)
-            # A valid saved Fibo owns the ticker and is reclassified from its
-            # edited anchors on every scan. If it becomes invalid, automatic
-            # discovery resumes instead of keeping a dead manual formation.
+            # Saved geometry is an additional user-authored formation, not an
+            # instruction to disable automatic discovery.  In particular a
+            # saved Fibo (or an unrelated saved wedge) must not hide a current
+            # automatic 3P incline such as XAUUSD.  Result de-duplication later
+            # keeps identical saved/automatic anchors from appearing twice.
             manual_fibo = bool(saved_fibo_rows)
+            saved_fibo_keys = {
+                (row.direction, row.incline_start_date, row.incline_end_date)
+                for row in saved_fibo_rows
+            }
             if saved_fibo_anchors:
                 lifecycle_status = _update_saved_fibo_lifecycle(
                     ticker,
@@ -7011,7 +7026,7 @@ def run_fibo_search(target: str) -> int:
                 )
                 status = ", ".join(f"{r.direction}:{r.status}" for r in saved_fibo_rows) or lifecycle_status or "invalid -> automatic fallback"
                 print(f"[fibo-saved-anchors] {ticker}: {status}", flush=True)
-            steep_3p = None if manual_fibo else _find_fibo_3p_steep_setup(df, "long")
+            steep_3p = _find_fibo_3p_steep_setup(df, "long")
             if steep_3p:
                 steep_3p.ticker = ticker
                 if pd.notna(latest_close):
@@ -7021,20 +7036,17 @@ def run_fibo_search(target: str) -> int:
                 out_rows.append(steep_3p)
             short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "NDX100"}
             if short_fibo_enabled:
-                if not manual_fibo:
-                    steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
-                    if steep_3p_short:
-                        steep_3p_short.ticker = ticker
-                        if pd.notna(latest_close):
-                            steep_3p_short.current_close = latest_close
-                        steep_3p_short.latest_candle_date = latest_candle_date
-                        steep_3p_short.expected_latest_session_date = expected_latest_session_date
-                        out_rows.append(steep_3p_short)
+                steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
+                if steep_3p_short:
+                    steep_3p_short.ticker = ticker
+                    if pd.notna(latest_close):
+                        steep_3p_short.current_close = latest_close
+                    steep_3p_short.latest_candle_date = latest_candle_date
+                    steep_3p_short.expected_latest_session_date = expected_latest_session_date
+                    out_rows.append(steep_3p_short)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
-                if manual_fibo:
-                    break
                 cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                 if cand:
                     long_candidates.append(cand)
@@ -7075,13 +7087,15 @@ def run_fibo_search(target: str) -> int:
                     if len(picked_long) >= 3:
                         break
                 for c in picked_long:
+                    if (c.direction, c.incline_start_date, c.incline_end_date) in saved_fibo_keys:
+                        continue
                     c.ticker = ticker
                     if pd.notna(latest_close):
                         c.current_close = latest_close
                     c.latest_candle_date = latest_candle_date
                     c.expected_latest_session_date = expected_latest_session_date
                     out_rows.append(c)
-            if short_fibo_enabled and not manual_fibo:
+            if short_fibo_enabled:
                 short_candidates: list[FiboScanResult] = []
                 short_offset0 = _find_fibo_setup(df, "short", end_offset=0, allow_equal_third_close=(instrument == "forex"))
                 for off in [0, 5, 10, 15, 20, 30, 40]:
@@ -7108,6 +7122,8 @@ def run_fibo_search(target: str) -> int:
                         if len(picked_short) >= 3:
                             break
                     for c in picked_short:
+                        if (c.direction, c.incline_start_date, c.incline_end_date) in saved_fibo_keys:
+                            continue
                         c.ticker = ticker
                         if pd.notna(latest_close):
                             c.current_close = latest_close

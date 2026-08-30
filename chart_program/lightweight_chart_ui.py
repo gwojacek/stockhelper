@@ -233,7 +233,15 @@ class LightweightChartLevelSelectorUI:
                 continue
             label = str(item.get("label") or command).strip()
             section = str(item.get("section") or "").strip()
-            items.append({"command": command, "label": label, "section": section})
+            market = str(item.get("market") or "").strip()
+            direction = str(item.get("direction") or "").strip().lower()
+            items.append({
+                "command": command,
+                "label": label,
+                "section": section,
+                "market": market,
+                "direction": direction if direction in {"long", "short"} else "",
+            })
         if not items:
             return None
         return {
@@ -555,6 +563,11 @@ class LightweightChartLevelSelectorUI:
     .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
     .chart-group-nav h4 {{ margin:0 0 8px 0; color:#fde68a; font-size:15px; }}
     .chart-group-label {{ margin:0 0 8px 0; color:#bfdbfe; font-weight:800; font-size:13px; }}
+    .chart-group-filters {{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 9px; }}
+    .chart-group-filter {{ padding:5px 9px; border-radius:999px; background:#1f2937; border:1px solid #475569; color:#e5e7eb; font-size:12px; font-weight:800; }}
+    .chart-group-filter.active {{ background:#1d4ed8; border-color:#93c5fd; }}
+    .chart-group-direction-long {{ background:#dcfce7; border-color:#22c55e; color:#166534; }}
+    .chart-group-direction-short {{ background:#fee2e2; border-color:#ef4444; color:#991b1b; }}
     .chart-group-section {{ margin-top:8px; }}
     .chart-group-section-title {{ color:#cbd5e1; font-size:12px; font-weight:800; margin:5px 0; }}
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
@@ -695,6 +708,7 @@ class LightweightChartLevelSelectorUI:
         <div id="chart-group-nav" class="chart-group-nav">
           <h4>⭐ Quick charts from 📊</h4>
           <div id="chart-group-label" class="chart-group-label"></div>
+          <div id="chart-group-filters" class="chart-group-filters"></div>
           <div id="chart-group-buttons" class="chart-group-buttons"></div>
         </div>
       </section>
@@ -2955,12 +2969,46 @@ class LightweightChartLevelSelectorUI:
   function setupChartGroupNav() {{
     const wrap = $('chart-group-nav');
     const label = $('chart-group-label');
+    const filters = $('chart-group-filters');
     const buttons = $('chart-group-buttons');
     if (!wrap || !buttons || !chartGroup || !Array.isArray(chartGroup.items) || chartGroup.items.length < 2 || !chartGroup.reportServer) return;
     wrap.style.display = 'block';
     if (label) label.textContent = chartGroup.label || 'Group charts';
     buttons.innerHTML = '';
     const current = String(chartGroup.current || '');
+    let marketFilter = '';
+    let directionFilter = '';
+    const marketIcons = {{WIG:'🇵🇱',DAX:'🇩🇪',US100:'🇺🇸',FOREX:'💱',COMMODITIES:'🛢️',INDEXES:'📊',ETFS:'🧺'}};
+    const applyFilters = () => {{
+      buttons.querySelectorAll('button[data-command]').forEach(btn => {{
+        btn.style.display = (!marketFilter || btn.dataset.market === marketFilter) && (!directionFilter || btn.dataset.direction === directionFilter) ? '' : 'none';
+      }});
+      buttons.querySelectorAll('.chart-group-section').forEach(section => {{
+        section.style.display = [...section.querySelectorAll('button[data-command]')].some(btn => btn.style.display !== 'none') ? '' : 'none';
+      }});
+    }};
+    const addFilter = (text, kind, value, className='') => {{
+      if (!filters) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `chart-group-filter ${{className}}`;
+      btn.textContent = text;
+      btn.onclick = () => {{
+        if (kind === 'market') marketFilter = marketFilter === value ? '' : value;
+        else directionFilter = directionFilter === value ? '' : value;
+        filters.querySelectorAll(`[data-filter-kind="${{kind}}"]`).forEach(item => item.classList.toggle('active', item.dataset.filterValue === (kind === 'market' ? marketFilter : directionFilter)));
+        applyFilters();
+      }};
+      btn.dataset.filterKind = kind;
+      btn.dataset.filterValue = value;
+      filters.appendChild(btn);
+    }};
+    if (filters) {{
+      filters.innerHTML = '';
+      [...new Set(chartGroup.items.map(item => item.market).filter(Boolean))].forEach(market => addFilter(`${{marketIcons[market.toUpperCase()] || '🌐'}} ${{market}}`, 'market', market));
+      if (chartGroup.items.some(item => item.direction === 'long')) addFilter('↗', 'direction', 'long', 'chart-group-direction-long');
+      if (chartGroup.items.some(item => item.direction === 'short')) addFilter('↘', 'direction', 'short', 'chart-group-direction-short');
+    }}
     const go = (command, clickedButton=null) => {{
       if (!command || command === current) return;
       if (clickedButton) clickedButton.textContent = 'Loading…';
@@ -2991,6 +3039,9 @@ class LightweightChartLevelSelectorUI:
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = item.label || command || 'Chart';
+        btn.dataset.command = command;
+        btn.dataset.market = item.market || '';
+        btn.dataset.direction = item.direction || '';
         btn.classList.toggle('active', !!current && command === current);
         btn.onclick = () => go(command, btn);
         target.appendChild(btn);
