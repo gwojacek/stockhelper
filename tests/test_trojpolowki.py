@@ -1748,3 +1748,23 @@ def test_fresh_23_6_retracement_is_enough_for_a_short_correction_leg():
 
     assert "reached_early_236 = early_rng > 0 and corr_low_early <= early_fib_236" in setup
     assert "early_decline_pct >= 0.05 or reached_early_236" in setup
+
+
+def test_3p_accepts_a_fresh_independent_peak_below_an_old_cycle_high():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+
+    assert "independent_min_gain = 0.025 if _mirrored_short else 0.15" in steep
+    assert "independent_min_daily_gain = 0.0004 if _mirrored_short else 0.003" in steep
+    assert "independent_gain >= independent_min_gain" in steep
+    assert "independent_daily_gain >= independent_min_daily_gain" in steep
+
+
+def test_multiple_monthly_side_trends_cannot_be_absorbed_as_one_steep_impulse():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    helper = source[source.index("def _completed_month_side_trend_count"):source.index("def _has_extended_sideways")]
+
+    assert "side_trend_count = _completed_month_side_trend_count(leg)" in helper
+    assert "if side_trend_count >= 2:" in helper
+    assert "return True" in helper
+    assert "start > phases[-1][1] + 3" in helper

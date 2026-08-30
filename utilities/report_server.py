@@ -316,7 +316,13 @@ def main() -> int:
         except Exception:
             return False
 
-    def _run_chart_command(command: str, group_id: str = "", favorite_ticker_override: str = "") -> tuple[int, dict]:
+    def _run_chart_command(
+        command: str,
+        group_id: str = "",
+        favorite_ticker_override: str = "",
+        group_market_filter: str = "",
+        group_direction_filter: str = "",
+    ) -> tuple[int, dict]:
         original_command = command
         favorite_match = re.search(r"(?:^|\s)(?:-c|chart_program)\s+['\"]?([A-Za-z0-9._-]+)", original_command, re.IGNORECASE)
         favorite_ticker = favorite_ticker_override.strip().upper() or (favorite_match.group(1).upper() if favorite_match else "")
@@ -362,6 +368,8 @@ def main() -> int:
                         "items": group_items,
                         "current": original_command,
                         "reportServer": f"http://{args.host}:{args.port}",
+                        "marketFilter": group_market_filter,
+                        "directionFilter": group_direction_filter if group_direction_filter in {"long", "short"} else "",
                     },
                     ensure_ascii=False,
                 )
@@ -549,7 +557,12 @@ def main() -> int:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
                 try:
                     group_id = (qs.get("group", [""])[0] or "").strip()
-                    rc, payload = _run_chart_command(command, group_id, favorite_ticker)
+                    group_market_filter = (qs.get("groupMarket", [""])[0] or "").strip()
+                    group_direction_filter = (qs.get("groupDirection", [""])[0] or "").strip().lower()
+                    rc, payload = _run_chart_command(
+                        command, group_id, favorite_ticker,
+                        group_market_filter, group_direction_filter,
+                    )
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
                         self.send_response(303)

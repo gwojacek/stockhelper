@@ -105,3 +105,19 @@ def test_quick_chart_group_has_market_and_direction_filters():
     assert '"direction": direction if direction in {"long", "short"} else ""' in server
     assert "b.closest('[data-market]')?.dataset.market" in report
     assert "b.closest('[data-troj-direction]')?.dataset.trojDirection" in report
+
+
+def test_quick_chart_filters_persist_and_are_visually_separated():
+    ui = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    server = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    report = Path("run").read_text(encoding="utf-8")
+
+    assert "chart-group-filter-label" in ui
+    assert ">Filter charts</span>" in ui
+    assert "url.searchParams.set('groupMarket', chartGroupMarketFilter)" in ui
+    assert "url.searchParams.set('groupDirection', chartGroupDirectionFilter)" in ui
+    assert "chartGroup?.marketFilter" in ui
+    assert '"marketFilter": group_market_filter' in server
+    assert 'qs.get("groupMarket"' in server
+    assert "def _troj_market_from_card_text" in report
+    assert '("🇵🇱", "WIG")' in report

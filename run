@@ -2868,14 +2868,29 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             return False
         return _row_has_search_day_signal(row)
 
+    def _troj_market_from_card_text(cell: str) -> str:
+        """Recover the market for historical/dropout cards without live rows."""
+        text = str(cell or "")
+        for icon, market in (
+            ("🇵🇱", "WIG"), ("🇩🇪", "DAX"), ("🇺🇸", "US100"),
+            ("💱", "FOREX"), ("🛢️", "COMMODITIES"), ("🛢", "COMMODITIES"),
+            ("📊", "INDEXES"), ("🧺", "ETFS"),
+        ):
+            if icon in text:
+                return market
+        return ""
+
     def _troj_cell_attrs(cell: str, section_id: str = "") -> str:
         row = _troj_row_for_cell(cell, section_id)
         if not row:
+            raw = str(cell)
+            market = _troj_market_from_card_text(raw)
+            attrs = f" data-market='{html.escape(market)}'" if market else ""
             if "fibo" in section_id:
-                raw = str(cell)
                 direction = "short" if "↘️" in raw else ("long" if "↗️" in raw else "")
-                return f" data-troj-direction='{direction}'" if direction else ""
-            return ""
+                if direction:
+                    attrs += f" data-troj-direction='{direction}'"
+            return attrs
         attrs = f" data-ticker='{html.escape(row.ticker.upper())}' data-market='{html.escape(row.market)}' data-scanner='{html.escape(row.scanner)}'"
         classes: list[str] = []
         if (

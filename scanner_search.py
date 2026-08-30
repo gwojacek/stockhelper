@@ -1039,6 +1039,43 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     )
 
 
+def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
+    """Count distinct four-week channels inside a leg.
+
+    Rolling windows from the same consolidation overlap heavily, so merge
+    adjacent qualifying windows into one phase. Separate ranges divided by a
+    directional leg remain distinct and must not both be absorbed merely
+    because the complete move eventually became very large (STX).
+    """
+    leg = df_slice.reset_index(drop=True)
+    window_days = 19
+    if len(leg) < window_days:
+        return 0
+    highs = pd.to_numeric(leg["High"], errors="coerce").reset_index(drop=True)
+    lows = pd.to_numeric(leg["Low"], errors="coerce").reset_index(drop=True)
+    closes = pd.to_numeric(leg["Close"], errors="coerce").reset_index(drop=True)
+    qualifying: list[tuple[int, int]] = []
+    for start in range(0, len(leg) - window_days + 1):
+        end = start + window_days
+        stats = _sideways_window_stats(
+            highs.iloc[start:end].reset_index(drop=True),
+            lows.iloc[start:end].reset_index(drop=True),
+            closes.iloc[start:end].reset_index(drop=True),
+            band_pct=0.20,
+            max_progress_pct=0.08,
+            max_outlier_candles=2,
+        )
+        if stats is not None:
+            qualifying.append((start, end - 1))
+    phases: list[list[int]] = []
+    for start, end in qualifying:
+        if not phases or start > phases[-1][1] + 3:
+            phases.append([start, end])
+        else:
+            phases[-1][1] = max(phases[-1][1], end)
+    return len(phases)
+
+
 def _impulse_has_disqualifying_month_side_trend(
     df_slice: pd.DataFrame,
     *,
@@ -1054,8 +1091,11 @@ def _impulse_has_disqualifying_month_side_trend(
     shelves remain strict because they end the completed impulse cycle.
     """
     leg = df_slice.reset_index(drop=True)
-    if not _has_completed_month_side_trend(leg):
+    side_trend_count = _completed_month_side_trend_count(leg)
+    if side_trend_count == 0:
         return False
+    if side_trend_count >= 2:
+        return True
     if len(leg) < 2:
         return True
     lows = pd.to_numeric(leg["Low"], errors="coerce")
@@ -6014,9 +6054,22 @@ def _find_fibo_3p_steep_setup(
         independent_lookback = 260 if _mirrored_short else 80
         independent_base_left = max(0, i_peak - independent_lookback)
         if independent_base_right >= independent_base_left:
-            independent_base = float(low.iloc[independent_base_left:independent_base_right + 1].min())
+            independent_base_slice = low.iloc[independent_base_left:independent_base_right + 1]
+            independent_base_idx = int(independent_base_slice.idxmin())
+            independent_base = float(low.iloc[independent_base_idx])
             independent_gain = (peak_high - independent_base) / max(abs(independent_base), 1e-9)
-            independent_recent_peak = independent_gain >= 0.25
+            independent_days = i_peak - independent_base_idx
+            independent_daily_gain = independent_gain / max(independent_days, 1)
+            # A completed current impulse can be independent even while its
+            # absolute high remains below an old cycle's historic extreme.
+            # Apply the same steepness floor used for the final 3P row instead
+            # of an unrelated 25% requirement (XAUUSD Jul-Aug 2026).
+            independent_min_gain = 0.025 if _mirrored_short else 0.15
+            independent_min_daily_gain = 0.0004 if _mirrored_short else 0.003
+            independent_recent_peak = (
+                independent_gain >= independent_min_gain
+                and independent_daily_gain >= independent_min_daily_gain
+            )
     if global_high <= 0 or (peak_high < global_high * 0.94 and not independent_recent_peak):
         _log("Rejected 3P steep: recent high is not near the dominant high.")
         return None

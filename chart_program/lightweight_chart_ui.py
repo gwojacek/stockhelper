@@ -250,6 +250,8 @@ class LightweightChartLevelSelectorUI:
             "items": items,
             "current": str(payload.get("current") or ""),
             "reportServer": str(payload.get("reportServer") or ""),
+            "marketFilter": str(payload.get("marketFilter") or ""),
+            "directionFilter": str(payload.get("directionFilter") or "").lower(),
         }
 
     @staticmethod
@@ -563,7 +565,8 @@ class LightweightChartLevelSelectorUI:
     .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
     .chart-group-nav h4 {{ margin:0 0 8px 0; color:#fde68a; font-size:15px; }}
     .chart-group-label {{ margin:0 0 8px 0; color:#bfdbfe; font-weight:800; font-size:13px; }}
-    .chart-group-filters {{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 9px; }}
+    .chart-group-filters {{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 12px; padding:9px 8px 10px; border:1px solid #334155; border-radius:8px; background:#0b1220; box-shadow:inset 0 -1px 0 rgba(148,163,184,.12); }}
+    .chart-group-filter-label {{ flex:0 0 100%; color:#94a3b8; font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }}
     .chart-group-filter {{ padding:5px 9px; border-radius:999px; background:#1f2937; border:1px solid #475569; color:#e5e7eb; font-size:12px; font-weight:800; }}
     .chart-group-filter.active {{ background:#1d4ed8; border-color:#93c5fd; }}
     .chart-group-direction-long {{ background:#dcfce7; border-color:#22c55e; color:#166534; }}
@@ -708,7 +711,7 @@ class LightweightChartLevelSelectorUI:
         <div id="chart-group-nav" class="chart-group-nav">
           <h4>⭐ Quick charts from 📊</h4>
           <div id="chart-group-label" class="chart-group-label"></div>
-          <div id="chart-group-filters" class="chart-group-filters"></div>
+          <div id="chart-group-filters" class="chart-group-filters"><span class="chart-group-filter-label">Filter charts</span></div>
           <div id="chart-group-buttons" class="chart-group-buttons"></div>
         </div>
       </section>
@@ -2963,8 +2966,13 @@ class LightweightChartLevelSelectorUI:
     const url = new URL('/open-chart', chartGroup.reportServer);
     url.searchParams.set('command', command);
     if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
+    if (chartGroupMarketFilter) url.searchParams.set('groupMarket', chartGroupMarketFilter);
+    if (chartGroupDirectionFilter) url.searchParams.set('groupDirection', chartGroupDirectionFilter);
     return url.href;
   }}
+
+  let chartGroupMarketFilter = chartGroup?.marketFilter || new URLSearchParams(window.location.search).get('groupMarket') || '';
+  let chartGroupDirectionFilter = chartGroup?.directionFilter || new URLSearchParams(window.location.search).get('groupDirection') || '';
 
   function setupChartGroupNav() {{
     const wrap = $('chart-group-nav');
@@ -2976,8 +2984,8 @@ class LightweightChartLevelSelectorUI:
     if (label) label.textContent = chartGroup.label || 'Group charts';
     buttons.innerHTML = '';
     const current = String(chartGroup.current || '');
-    let marketFilter = '';
-    let directionFilter = '';
+    let marketFilter = chartGroupMarketFilter;
+    let directionFilter = chartGroupDirectionFilter;
     const marketIcons = {{WIG:'🇵🇱',DAX:'🇩🇪',US100:'🇺🇸',FOREX:'💱',COMMODITIES:'🛢️',INDEXES:'📊',ETFS:'🧺'}};
     const applyFilters = () => {{
       buttons.querySelectorAll('button[data-command]').forEach(btn => {{
@@ -2996,6 +3004,8 @@ class LightweightChartLevelSelectorUI:
       btn.onclick = () => {{
         if (kind === 'market') marketFilter = marketFilter === value ? '' : value;
         else directionFilter = directionFilter === value ? '' : value;
+        chartGroupMarketFilter = marketFilter;
+        chartGroupDirectionFilter = directionFilter;
         filters.querySelectorAll(`[data-filter-kind="${{kind}}"]`).forEach(item => item.classList.toggle('active', item.dataset.filterValue === (kind === 'market' ? marketFilter : directionFilter)));
         applyFilters();
       }};
@@ -3004,7 +3014,7 @@ class LightweightChartLevelSelectorUI:
       filters.appendChild(btn);
     }};
     if (filters) {{
-      filters.innerHTML = '';
+      filters.innerHTML = '<span class="chart-group-filter-label">Filter charts</span>';
       [...new Set(chartGroup.items.map(item => item.market).filter(Boolean))].forEach(market => addFilter(`${{marketIcons[market.toUpperCase()] || '🌐'}} ${{market}}`, 'market', market));
       if (chartGroup.items.some(item => item.direction === 'long')) addFilter('↗', 'direction', 'long', 'chart-group-direction-long');
       if (chartGroup.items.some(item => item.direction === 'short')) addFilter('↘', 'direction', 'short', 'chart-group-direction-short');
@@ -3047,6 +3057,9 @@ class LightweightChartLevelSelectorUI:
         target.appendChild(btn);
       }});
     }});
+    filters?.querySelectorAll('[data-filter-kind="market"]').forEach(item => item.classList.toggle('active', item.dataset.filterValue === marketFilter));
+    filters?.querySelectorAll('[data-filter-kind="direction"]').forEach(item => item.classList.toggle('active', item.dataset.filterValue === directionFilter));
+    applyFilters();
   }}
 
   function setupInstrumentSwitcher() {{
