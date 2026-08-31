@@ -1775,7 +1775,7 @@ def test_repeated_side_trends_move_the_automatic_anchor_to_the_final_launch():
     selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
 
     assert "side_phases = _completed_month_side_trend_phases(impulse_view)" in selector
-    assert "anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.12)" in selector
+    assert "anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.08)" in selector
     assert "anchor_begins_side_trend = bool(anchor_side_phases) and anchor_side_phases[0][0] <= 5" in selector
     assert "if len(side_phases) >= 2 or anchor_begins_side_trend:" in selector
     assert "if len(side_phases) >= 2" in selector
@@ -1785,6 +1785,15 @@ def test_repeated_side_trends_move_the_automatic_anchor_to_the_final_launch():
     assert ") = max(launch_candidates)" in selector
     assert "Long: moved fib start after completed anchor-side trend" in selector
     assert "i_start = post_range_idx" in selector
+
+
+def test_opl_broad_incline_keeps_deep_launch_and_directional_correction():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "max_lookback=140 if _mirrored_short else 200" in setup
+    assert "if _mirrored_short and _has_completed_month_side_trend(correction_seg):" in setup
+    assert "Do not reject a directional correction" in setup
 
 
 def test_exceptional_nine_day_gold_incline_is_not_rejected_as_too_short():

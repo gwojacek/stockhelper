@@ -780,7 +780,7 @@ def _is_doji(c: pd.Series, tol: float = 0.15) -> bool:
     return body / rng <= tol
 
 def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_floor: float | None = None) -> bool:
-    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
+    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, l2, b2 = _candle_parts(c2)
     if not (cl1 < o1 and cl2 > o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
@@ -789,7 +789,19 @@ def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_floor: f
         if zone_floor is None
         else _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
     )
-    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
+    # Provider rounding can put a small harami body a few ticks outside the
+    # first real body.  Permit only a tiny (0.2%) containment tolerance, and
+    # require the confirming candle to retain a lower wick when that tolerance
+    # is used.  This recognizes CDR's 2026-08-27/28 reversal at 61.8 without
+    # turning ordinary overlapping candles into haramis.
+    containment_tolerance = max(abs(o1), abs(cl1), 1e-9) * 0.002
+    strictly_contained = lo1 <= lo2 and hi2 <= hi1
+    nearly_contained = (
+        lo1 - containment_tolerance <= lo2
+        and hi2 <= hi1 + containment_tolerance
+        and min(o2, cl2) - l2 >= b2
+    )
+    return (strictly_contained or nearly_contained) and touches_retest
 
 def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)
@@ -5960,7 +5972,13 @@ def _select_fibo_long_impulse_base(
     # Anchor relocation needs a tighter channel than stale-formation rejection.
     # A loose 20% rolling window can walk forward through XAUUSD's actual
     # July/August incline and incorrectly call most of that rise a base.
-    anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.12)
+    # Anchor-side resets must describe a genuinely tight base.  A 12% channel
+    # is too wide for steadily appreciating, lower-priced shares: OPL's
+    # November-to-December advance was incorrectly treated as a base and its
+    # real 8.45 launch low was replaced by a candle in the middle of the move.
+    # Eight percent still recognizes Gold's compact July base while preserving
+    # broad, orderly stair-step inclines.
+    anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.08)
     anchor_begins_side_trend = bool(anchor_side_phases) and anchor_side_phases[0][0] <= 5
     if len(side_phases) >= 2 or anchor_begins_side_trend:
         selected_phases = side_phases if len(side_phases) >= 2 else anchor_side_phases
@@ -6419,6 +6437,11 @@ def _find_fibo_setup(
             if i_start_forced is not None and i_start_forced < i_peak
             else _select_fibo_long_impulse_base(
                 w, i_peak, min_incline_days, _log, stale_cycle_mode=stale_cycle_mode,
+                # Keep enough history for broad, still-active stock impulses.
+                # OPL's genuine 2025-11-21 bottom is roughly 170 sessions
+                # before its July peak; the old 140-session horizon started the
+                # Fibo halfway up that same uninterrupted incline.
+                max_lookback=140 if _mirrored_short else 200,
                 reset_after_sideways=True, sideways_band_pct=0.02 if _mirrored_short else 0.08,
                 preserve_deeper_short_continuation=_mirrored_short,
                 reset_after_extended_sideways=not _mirrored_short,
@@ -6538,9 +6561,14 @@ def _find_fibo_setup(
             )
             return None
         correction_seg = w.iloc[i_peak:i_end + 1].reset_index(drop=True)
-        if _has_completed_month_side_trend(correction_seg):
-            side = "short recovery" if _mirrored_short else "long pullback"
-            _log(f"Rejected {direction}: {side} contains a completed month-long side trend.")
+        # Do not reject a directional correction merely because *some* rolling
+        # four-week window inside it happens to fit the loose 20% channel band.
+        # OPL's orderly July-August retracement contains such an intermediate
+        # window, but price continues to make material downside progress.  The
+        # extended/latest-channel guards below still reject corrections which
+        # actually finish as a side trend.
+        if _mirrored_short and _has_completed_month_side_trend(correction_seg):
+            _log(f"Rejected {direction}: short recovery contains a completed month-long side trend.")
             return None
         # A retracement that spends several months in overlapping flat ranges
         # is no longer the decline/recovery leg of the selected impulse. Apply
