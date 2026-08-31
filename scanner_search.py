@@ -5966,31 +5966,54 @@ def _select_fibo_long_impulse_base(
         selected_phases = side_phases if len(side_phases) >= 2 else anchor_side_phases
         _last_phase_start, last_phase_end = selected_phases[-1]
         absolute_phase_end = i_start + last_phase_end
-        launch_left = max(i_start, absolute_phase_end - 5)
+        # For repeated phases the launch must follow the final one. For a
+        # single anchor-side base, rolling windows can overlap forward into the
+        # real advance; search the whole base and rank local lows by the
+        # velocity of the completed move instead of trusting that late endpoint.
+        launch_left = (
+            max(i_start, absolute_phase_end - 5)
+            if len(side_phases) >= 2
+            else i_start
+        )
         launch_right = i_peak - min_incline_days
         if launch_right < launch_left:
             _log("Rejected long: anchor-side range leaves no mature post-range impulse.")
             return None
-        post_range_idx = int(low.iloc[launch_left:launch_right + 1].idxmin())
-        post_range_low = float(low.iloc[post_range_idx])
-        post_range_days = i_peak - post_range_idx
-        post_range_gain = (fib_end - post_range_low) / max(abs(post_range_low), 1e-9)
-        post_range_daily_gain = post_range_gain / max(post_range_days, 1)
         min_post_range_gain = 0.025 if preserve_deeper_short_continuation else 0.15
         min_post_range_daily_gain = 0.0004 if preserve_deeper_short_continuation else 0.003
-        if (
-            post_range_gain < min_post_range_gain
-            or post_range_daily_gain < min_post_range_daily_gain
-        ):
+        launch_candidates: list[tuple[float, float, int, float, float]] = []
+        for candidate_idx in range(launch_left, launch_right + 1):
+            local_left = max(launch_left, candidate_idx - 2)
+            local_right = min(launch_right, candidate_idx + 2)
+            candidate_low = float(low.iloc[candidate_idx])
+            if candidate_low > float(low.iloc[local_left:local_right + 1].min()) * 1.002:
+                continue
+            candidate_days = i_peak - candidate_idx
+            candidate_gain = (fib_end - candidate_low) / max(abs(candidate_low), 1e-9)
+            candidate_daily_gain = candidate_gain / max(candidate_days, 1)
+            if (
+                candidate_gain >= min_post_range_gain
+                and candidate_daily_gain >= min_post_range_daily_gain
+            ):
+                launch_candidates.append(
+                    (candidate_daily_gain, candidate_gain, candidate_idx, candidate_low, candidate_days)
+                )
+        if not launch_candidates:
             _log(
-                "Rejected long: anchor-side range is not followed by a qualifying "
-                f"post-range impulse ({post_range_gain * 100:.2f}%, "
-                f"daily={post_range_daily_gain * 100:.2f}%)."
+                "Rejected long: anchor-side range is not followed by a qualifying post-range impulse."
             )
             return None
+        (
+            post_range_daily_gain,
+            post_range_gain,
+            post_range_idx,
+            post_range_low,
+            post_range_days,
+        ) = max(launch_candidates)
         _log(
             "Long: moved fib start after completed anchor-side trend "
-            f"idx={i_start} -> {post_range_idx} (last_channel_end={absolute_phase_end})."
+            f"idx={i_start} -> {post_range_idx} (last_channel_end={absolute_phase_end}, "
+            f"gain={post_range_gain * 100:.2f}%, daily={post_range_daily_gain * 100:.2f}%)."
         )
         i_start = post_range_idx
         fib_start = post_range_low
