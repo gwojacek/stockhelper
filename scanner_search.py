@@ -1039,7 +1039,11 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     )
 
 
-def _completed_month_side_trend_phases(df_slice: pd.DataFrame) -> list[tuple[int, int]]:
+def _completed_month_side_trend_phases(
+    df_slice: pd.DataFrame,
+    *,
+    band_pct: float = 0.20,
+) -> list[tuple[int, int]]:
     """Return distinct four-week channels inside a leg.
 
     Rolling windows from the same consolidation overlap heavily, so merge
@@ -1061,7 +1065,7 @@ def _completed_month_side_trend_phases(df_slice: pd.DataFrame) -> list[tuple[int
             highs.iloc[start:end].reset_index(drop=True),
             lows.iloc[start:end].reset_index(drop=True),
             closes.iloc[start:end].reset_index(drop=True),
-            band_pct=0.20,
+            band_pct=band_pct,
             max_progress_pct=0.08,
             max_outlier_candles=2,
         )
@@ -5953,9 +5957,14 @@ def _select_fibo_long_impulse_base(
     # (XAUUSD Jul/Aug and STX Mar/Apr 2026).
     impulse_view = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
     side_phases = _completed_month_side_trend_phases(impulse_view)
-    anchor_begins_side_trend = bool(side_phases) and side_phases[0][0] <= 5
+    # Anchor relocation needs a tighter channel than stale-formation rejection.
+    # A loose 20% rolling window can walk forward through XAUUSD's actual
+    # July/August incline and incorrectly call most of that rise a base.
+    anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.12)
+    anchor_begins_side_trend = bool(anchor_side_phases) and anchor_side_phases[0][0] <= 5
     if len(side_phases) >= 2 or anchor_begins_side_trend:
-        _last_phase_start, last_phase_end = side_phases[-1]
+        selected_phases = side_phases if len(side_phases) >= 2 else anchor_side_phases
+        _last_phase_start, last_phase_end = selected_phases[-1]
         absolute_phase_end = i_start + last_phase_end
         launch_left = max(i_start, absolute_phase_end - 5)
         launch_right = i_peak - min_incline_days
@@ -6364,12 +6373,18 @@ def _find_fibo_setup(
             if newer_low < fib_start:
                 newer_days = i_peak - newer_low_idx
                 newer_gain = (fib_end - newer_low) / max(abs(newer_low), 1e-9)
-                if newer_days < min_incline_days and newer_gain < 0.30:
+                exceptional_short_incline = newer_days >= 8 and newer_gain >= 0.18
+                if newer_days < min_incline_days and newer_gain < 0.30 and not exceptional_short_incline:
                     _log(
                         "Rejected long: newer lower low would be the correct small-Fibo anchor, "
                         f"but the resulting incline is too short/small ({newer_days}d, {newer_gain * 100:.2f}%)."
                     )
                     return None
+                if newer_days < min_incline_days:
+                    _log(
+                        "Long: accepted exceptional compact incline from newer low "
+                        f"({newer_days}d, {newer_gain * 100:.2f}%)."
+                    )
                 _log(
                     "Long: reset fib anchor to newer lower low before peak "
                     f"idx={i_start} low={fib_start:.4f} -> idx={newer_low_idx} low={newer_low:.4f}."

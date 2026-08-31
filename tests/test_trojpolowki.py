@@ -1330,8 +1330,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Favorites not classified anywhere now" in text
     assert "No unclassified favorites" in text
     assert "parts.push('<section class=\"favorites-technique favorites-unclassified\"" in text
-    assert "const classifiedTickers=new Set(unique.map(o=>o.ticker))" in text
-    assert "const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
+    assert "const classifiedTickers=new Set(uniqueAll.map(o=>o.ticker))" in text
+    assert "const unclassified=activeMarket?[]:[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
     assert "const FAVORITE_INSTRUMENT_NAMES=" in text
     assert "function favoriteInstrumentLabel(ticker)" in text
     assert "label:favoriteInstrumentLabel(ticker)" in text
@@ -1775,8 +1775,27 @@ def test_repeated_side_trends_move_the_automatic_anchor_to_the_final_launch():
     selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
 
     assert "side_phases = _completed_month_side_trend_phases(impulse_view)" in selector
-    assert "anchor_begins_side_trend = bool(side_phases) and side_phases[0][0] <= 5" in selector
+    assert "anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.12)" in selector
+    assert "anchor_begins_side_trend = bool(anchor_side_phases) and anchor_side_phases[0][0] <= 5" in selector
     assert "if len(side_phases) >= 2 or anchor_begins_side_trend:" in selector
     assert "launch_left = max(i_start, absolute_phase_end - 5)" in selector
     assert "Long: moved fib start after completed anchor-side trend" in selector
     assert "i_start = post_range_idx" in selector
+
+
+def test_exceptional_nine_day_gold_incline_is_not_rejected_as_too_short():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "exceptional_short_incline = newer_days >= 8 and newer_gain >= 0.18" in setup
+    assert "and not exceptional_short_incline" in setup
+    assert "accepted exceptional compact incline from newer low" in setup
+
+
+def test_market_filter_is_applied_to_favorite_occurrences():
+    source = Path("run").read_text(encoding="utf-8")
+
+    assert "const activeMarket=(document.getElementById('market')?.value||'').trim();" in source
+    assert "const unique=activeMarket?uniqueAll.filter(o=>o.market===activeMarket):uniqueAll;" in source
+    assert "const unclassified=activeMarket?[]:" in source
+    assert "if(typeof renderFavorites==='function')renderFavorites()" in source
