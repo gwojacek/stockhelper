@@ -1796,6 +1796,18 @@ def test_exceptional_nine_day_gold_incline_is_not_rejected_as_too_short():
     assert "accepted exceptional compact incline from newer low" in setup
 
 
+def test_3p_prefers_the_faster_local_gold_acceleration_anchor():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+
+    assert "compact_candidates: list[tuple[float, float, int, float, int]]" in steep
+    assert "candidate_low > float(low.iloc[local_left:local_right + 1].min()) * 1.002" in steep
+    assert "best_compact = min(compact_candidates, key=lambda item: (item[3], -item[0]))" in steep
+    assert "if best_compact[3] < fib_start and best_compact[0] > current_daily_gain:" in steep
+    assert "3P steep: moved anchor to faster local acceleration" in steep
+    assert "if incline_days < min_incline_days and not compact_acceleration:" in steep
+
+
 def test_market_filter_is_applied_to_favorite_occurrences():
     source = Path("run").read_text(encoding="utf-8")
 

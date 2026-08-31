@@ -99,8 +99,8 @@ def test_quick_chart_group_has_market_and_direction_filters():
 
     assert 'id="chart-group-filters"' in ui
     assert "marketIcons = {{WIG:'🇵🇱',DAX:'🇩🇪',US100:'🇺🇸',FOREX:'💱',COMMODITIES:'🛢️',INDEXES:'📊',ETFS:'🧺'}}" in ui
-    assert "addFilter('↗', 'direction', 'long'" in ui
-    assert "addFilter('↘', 'direction', 'short'" in ui
+    assert "addFilter('↗  BULLISH', 'direction', 'long'" in ui
+    assert "addFilter('↘  BEARISH', 'direction', 'short'" in ui
     assert '"market": market' in server
     assert '"direction": direction if direction in {"long", "short"} else ""' in server
     assert "b.closest('[data-market]')?.dataset.market" in report
@@ -113,6 +113,8 @@ def test_quick_chart_filters_persist_and_are_visually_separated():
     report = Path("run").read_text(encoding="utf-8")
 
     assert "chart-group-filter-label" in ui
+    assert "chart-group-market-filters" in ui
+    assert "chart-group-direction-filters" in ui
     assert ">Filter charts</span>" in ui
     assert "url.searchParams.set('groupMarket', chartGroupMarketFilter)" in ui
     assert "url.searchParams.set('groupDirection', chartGroupDirectionFilter)" in ui

@@ -565,12 +565,17 @@ class LightweightChartLevelSelectorUI:
     .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
     .chart-group-nav h4 {{ margin:0 0 8px 0; color:#fde68a; font-size:15px; }}
     .chart-group-label {{ margin:0 0 8px 0; color:#bfdbfe; font-weight:800; font-size:13px; }}
-    .chart-group-filters {{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 12px; padding:9px 8px 10px; border:1px solid #334155; border-radius:8px; background:#0b1220; box-shadow:inset 0 -1px 0 rgba(148,163,184,.12); }}
-    .chart-group-filter-label {{ flex:0 0 100%; color:#94a3b8; font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }}
-    .chart-group-filter {{ padding:5px 9px; border-radius:999px; background:#1f2937; border:1px solid #475569; color:#e5e7eb; font-size:12px; font-weight:800; }}
-    .chart-group-filter.active {{ background:#1d4ed8; border-color:#93c5fd; }}
-    .chart-group-direction-long {{ background:#dcfce7; border-color:#22c55e; color:#166534; }}
-    .chart-group-direction-short {{ background:#fee2e2; border-color:#ef4444; color:#991b1b; }}
+    .chart-group-filters {{ margin:0 0 14px; padding:12px; border:1px solid #334155; border-radius:12px; background:linear-gradient(145deg,#0b1424,#0a101d); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
+    .chart-group-filter-label {{ display:block; margin-bottom:9px; color:#93c5fd; font-size:11px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }}
+    .chart-group-market-filters {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; }}
+    .chart-group-direction-filters {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid #243247; }}
+    .chart-group-filter {{ min-height:38px; padding:7px 10px; border-radius:10px; background:#172235; border:1px solid #40516a; color:#e5e7eb; font-size:12px; font-weight:800; box-shadow:0 4px 12px rgba(0,0,0,.14); }}
+    .chart-group-filter:hover {{ border-color:#60a5fa; transform:translateY(-1px); }}
+    .chart-group-filter.active {{ background:linear-gradient(135deg,#1d4ed8,#1e40af); border-color:#60a5fa; box-shadow:0 0 0 2px rgba(96,165,250,.18); }}
+    .chart-group-direction-filters .chart-group-filter {{ min-height:52px; font-size:14px; letter-spacing:.03em; }}
+    .chart-group-direction-long {{ background:rgba(6,78,59,.38); border-color:#15803d; color:#86efac; }}
+    .chart-group-direction-short {{ background:rgba(127,29,29,.34); border-color:#b91c1c; color:#fca5a5; }}
+    @media(max-width:520px) {{ .chart-group-market-filters {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
     .chart-group-section {{ margin-top:8px; }}
     .chart-group-section-title {{ color:#cbd5e1; font-size:12px; font-weight:800; margin:5px 0; }}
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
@@ -711,7 +716,7 @@ class LightweightChartLevelSelectorUI:
         <div id="chart-group-nav" class="chart-group-nav">
           <h4>⭐ Quick charts from 📊</h4>
           <div id="chart-group-label" class="chart-group-label"></div>
-          <div id="chart-group-filters" class="chart-group-filters"><span class="chart-group-filter-label">Filter charts</span></div>
+          <div id="chart-group-filters" class="chart-group-filters"><span class="chart-group-filter-label">Filter charts</span><div class="chart-group-market-filters"></div><div class="chart-group-direction-filters"></div></div>
           <div id="chart-group-buttons" class="chart-group-buttons"></div>
         </div>
       </section>
@@ -3011,13 +3016,14 @@ class LightweightChartLevelSelectorUI:
       }};
       btn.dataset.filterKind = kind;
       btn.dataset.filterValue = value;
-      filters.appendChild(btn);
+      const target = filters.querySelector(kind === 'market' ? '.chart-group-market-filters' : '.chart-group-direction-filters') || filters;
+      target.appendChild(btn);
     }};
     if (filters) {{
-      filters.innerHTML = '<span class="chart-group-filter-label">Filter charts</span>';
+      filters.innerHTML = '<span class="chart-group-filter-label">Filter charts</span><div class="chart-group-market-filters"></div><div class="chart-group-direction-filters"></div>';
       [...new Set(chartGroup.items.map(item => item.market).filter(Boolean))].forEach(market => addFilter(`${{marketIcons[market.toUpperCase()] || '🌐'}} ${{market}}`, 'market', market));
-      if (chartGroup.items.some(item => item.direction === 'long')) addFilter('↗', 'direction', 'long', 'chart-group-direction-long');
-      if (chartGroup.items.some(item => item.direction === 'short')) addFilter('↘', 'direction', 'short', 'chart-group-direction-short');
+      if (chartGroup.items.some(item => item.direction === 'long')) addFilter('↗  BULLISH', 'direction', 'long', 'chart-group-direction-long');
+      if (chartGroup.items.some(item => item.direction === 'short')) addFilter('↘  BEARISH', 'direction', 'short', 'chart-group-direction-short');
     }}
     const go = (command, clickedButton=null) => {{
       if (!command || command === current) return;

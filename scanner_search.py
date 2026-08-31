@@ -6200,7 +6200,45 @@ def _find_fibo_3p_steep_setup(
         fib_start = float(low.iloc[i_start])
 
     incline_days = i_peak - i_start
-    if incline_days < min_incline_days:
+    # A very fast current impulse can begin at a later local low than the
+    # ordinary 21-session 3P horizon. Prefer that genuine acceleration launch
+    # when it still clears the same total-gain and daily-velocity requirements
+    # (XAUUSD 2026-07-29 -> 2026-08-25).
+    compact_min_days = 10
+    compact_min_gain = 0.025 if _mirrored_short else 0.15
+    compact_min_daily_gain = 0.0004 if _mirrored_short else 0.003
+    compact_candidates: list[tuple[float, float, int, float, int]] = []
+    for candidate_idx in range(i_start + 1, i_peak - compact_min_days + 1):
+        local_left = max(i_start + 1, candidate_idx - 2)
+        local_right = min(i_peak - compact_min_days, candidate_idx + 2)
+        candidate_low = float(low.iloc[candidate_idx])
+        if candidate_low > float(low.iloc[local_left:local_right + 1].min()) * 1.002:
+            continue
+        candidate_days = i_peak - candidate_idx
+        candidate_gain = (fib_end - candidate_low) / max(abs(candidate_low), 1e-9)
+        candidate_daily_gain = candidate_gain / max(candidate_days, 1)
+        if candidate_gain >= compact_min_gain and candidate_daily_gain >= compact_min_daily_gain:
+            compact_candidates.append(
+                (candidate_daily_gain, candidate_gain, candidate_idx, candidate_low, candidate_days)
+            )
+    compact_acceleration = False
+    if compact_candidates:
+        current_gain = (fib_end - fib_start) / max(abs(fib_start), 1e-9)
+        current_daily_gain = current_gain / max(incline_days, 1)
+        # Within the compact acceleration horizon, prefer the genuine local
+        # bottom rather than the latest/higher candle with the mathematically
+        # highest per-day ratio. This keeps XAUUSD on the 2026-07-29 low instead
+        # of shifting its anchor forward into the first breakout candles.
+        best_compact = min(compact_candidates, key=lambda item: (item[3], -item[0]))
+        if best_compact[3] < fib_start and best_compact[0] > current_daily_gain:
+            _, compact_gain, compact_idx, compact_low, compact_days = best_compact
+            _log(
+                "3P steep: moved anchor to faster local acceleration "
+                f"idx={i_start} -> {compact_idx} ({compact_days}d, {compact_gain * 100:.2f}%)."
+            )
+            i_start, fib_start, incline_days = compact_idx, compact_low, compact_days
+            compact_acceleration = incline_days < min_incline_days
+    if incline_days < min_incline_days and not compact_acceleration:
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
