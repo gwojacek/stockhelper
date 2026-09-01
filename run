@@ -1145,6 +1145,14 @@ def _market_order(scope: str, ticker: str = "") -> int:
 def _market_sort_key(row: ScannerRow) -> tuple[int, str]:
     return (_market_order(row.market, row.ticker), str(row.ticker or ""))
 
+
+def _wig20_members() -> set[str]:
+    try:
+        payload = json.loads((PROJECT_ROOT / "data" / "state" / "indices" / "memberships.json").read_text(encoding="utf-8"))
+        return {str(t).upper() for t in payload.get("indices", {}).get("WIG20", {}).get("tickers", [])}
+    except (OSError, ValueError, TypeError):
+        return set()
+
 def _parse_float_text(value: str, default: float = 0.0) -> float:
     txt = str(value or "").replace("%", "").replace("🟨", "").replace("🟢", "").replace("🟡", "").replace("🔴", "").strip()
     txt = txt.replace(" ", "").replace(",", "")
@@ -3007,22 +3015,19 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 raw_cell = str(cell)
                 if raw_cell.strip():
                     columns_for_display[col_idx].append(raw_cell)
+        wig20 = _wig20_members()
         def troj_card_freshness_key(item: tuple[int, str]) -> tuple[int, int, int]:
             original_index, cell = item
             row = _troj_row_for_cell(cell, section_id)
-            highlighted = bool(
-                (row is not None and _row_has_search_day_signal(row))
-                or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row))
-                or ("fibo" in section_id and _troj_cell_recent_fibo_signal(cell, row))
-            )
-            # Fibo card text contains anchor dates, which are not signal dates.
-            # Sorting on the newest date in the text therefore promoted recent
-            # anchors over a genuinely fresh 61.8 touch/pattern. Prefer the
-            # scanner's authoritative signal date and use card dates only for
-            # historical/dropout cards which have no live ScannerRow.
-            row_signal_dates = _row_signal_dates(row) if row is not None else []
-            signal_date = max(row_signal_dates) if row_signal_dates else _latest_date_from_text(cell)
-            return (0 if highlighted else 1, -(signal_date.toordinal() if signal_date else 0), original_index)
+            if row is None:
+                return (99, 1, original_index)
+            market_rank = _market_order(row.market, row.ticker)
+            ticker = str(row.ticker or "").upper().removesuffix(".WA")
+            wig_rank = 0 if market_rank == 0 and ticker in wig20 else 1
+            # `_write_trojpolowki_fibo` already applies each column's metric
+            # order. Preserve it inside each market; HTML used to reshuffle all
+            # cards by dates and destroy both market and metric ordering.
+            return (market_rank, wig_rank, original_index)
         columns_for_display = [
             [cell for _idx, cell in sorted(enumerate(cells), key=troj_card_freshness_key)]
             for cells in columns_for_display

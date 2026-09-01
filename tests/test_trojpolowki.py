@@ -911,6 +911,8 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
     assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
     assert "retained original impulse anchors because the first" in setup
+    assert "_previous_board_fibo_anchors(ticker)" in source
+    assert "including recent dropouts" in source
     assert setup.index("if fresh_touch_window:") < setup.index("contains a completed month-long side trend", setup.index("if fresh_touch_window:"))
     run_source = Path("run").read_text(encoding="utf-8")
     touched = run_source[run_source.index('if "touched_61_8_no_pattern"'):run_source.index("def _fibo_touch_date")]
@@ -1487,9 +1489,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
     run_source = Path("run").read_text(encoding="utf-8")
     assert "def troj_card_freshness_key" in run_source
-    assert "row_signal_dates = _row_signal_dates(row)" in run_source
-    assert "signal_date = max(row_signal_dates) if row_signal_dates else _latest_date_from_text(cell)" in run_source
-    assert "-(signal_date.toordinal() if signal_date else 0)" in run_source
+    assert "wig20 = _wig20_members()" in run_source
+    assert "market_rank = _market_order(row.market, row.ticker)" in run_source
+    assert "wig_rank = 0 if market_rank == 0 and ticker in wig20 else 1" in run_source
+    assert "return (market_rank, wig_rank, original_index)" in run_source
     assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
     assert "def wedge_freshness_rank" in run_source
     assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source

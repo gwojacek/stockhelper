@@ -17,7 +17,7 @@ from itertools import combinations
 from importlib import util
 from pathlib import Path
 from typing import Callable, Sequence
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -1400,7 +1400,7 @@ def _completed_sideways_reset_long(
     # post-channel candle places it in the middle of the incline (SNT/CDR).
     # Longer pre-channel advances are still eligible for the structural reset
     # below (for example a rally, deep correction, then a new base).
-    if original_is_strong and channel_start - start_idx <= 10 and original_low <= channel_low:
+    if original_is_strong and channel_start - start_idx <= 22 and original_low <= channel_low:
         return None
 
     closes = pd.to_numeric(w["Close"], errors="coerce")
@@ -2767,6 +2767,31 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     if raw:
         return "single", [raw.upper()], "direct symbol", None
     raise ValueError(f"Brak skonfigurowanej listy instrumentów dla: {target}")
+
+
+def _previous_board_fibo_anchors(ticker: str) -> list[tuple[str, str]]:
+    """Read unchanged anchors from the prior 3P board, including recent dropouts."""
+    path = PROJECT_ROOT / "Trojpolowki" / "fibo.md"
+    if not path.exists():
+        return []
+    wanted = str(ticker or "").upper().removesuffix(".WA")
+    found: list[tuple[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for cell in cells:
+            symbol_match = re.search(r"[?&]s=([^&\)]+)", cell, re.IGNORECASE)
+            symbol = unquote(symbol_match.group(1)).upper().removesuffix(".WA") if symbol_match else ""
+            if symbol != wanted:
+                continue
+            start = re.search(r"[↗↘]️?\s*\((\d{4}-\d{2}-\d{2})\)", cell)
+            end = re.search(r"<!--fibo-end:(\d{4}-\d{2}-\d{2})-->", cell)
+            if start and end:
+                pair = (start.group(1), end.group(1))
+                if pair not in found:
+                    found.append(pair)
+    return found
 
 
 def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
@@ -6537,6 +6562,14 @@ def _find_fibo_setup(
         if base is None:
             return None
         i_start, fib_start, fib_end = base
+        if forced_anchor_dates:
+            measured_high = float(pd.to_numeric(high.iloc[i_start:], errors="coerce").max())
+            if measured_high > fib_end * 1.005:
+                _log(
+                    "Rejected saved/carried long Fibo: second anchor is not the highest high "
+                    f"of its measured leg ({fib_end:.4f} < {measured_high:.4f})."
+                )
+                return None
         newer_low_slice = low.iloc[i_start + 1:i_peak + 1] if not forced_anchor_dates else pd.Series(dtype=float)
         if not newer_low_slice.empty:
             newer_low_idx = int(newer_low_slice.idxmin())
@@ -7379,6 +7412,23 @@ def run_fibo_search(target: str) -> int:
                     broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
                     if broad_cand:
                         long_candidates.append(broad_cand)
+            # A board formation must keep the same structural anchors while it
+            # moves from waiting -> first touch -> confirmed pattern. Offset
+            # rescans otherwise re-anchor on the touch day and turn TXT/CDR
+            # into false dropouts. Revalidate only anchors that were active in
+            # the prior board. Recent dropouts are included because a valid
+            # touch/pattern may have been the reason the automatic selector
+            # temporarily lost the row; full validation below prevents an
+            # expired or invalid formation from being resurrected.
+            for anchor_start, anchor_end in _previous_board_fibo_anchors(ticker):
+                carried = _find_fibo_setup(
+                    df,
+                    "long",
+                    allow_equal_third_close=(instrument == "forex"),
+                    forced_anchor_dates=(anchor_start, anchor_end),
+                )
+                if carried:
+                    long_candidates.append(carried)
             # An offset scan may discover the correct broad anchors before the
             # live correction reaches 61.8. Once current data touches that
             # level, re-evaluate those exact anchors instead of letting a newer
