@@ -1162,6 +1162,17 @@ def _report_market_for_ticker(scope: str, ticker: str) -> str:
     return {"commodity": "COMMODITIES", "forex": "FOREX", "etf": "ETFS"}.get(detected, "WIG")
 
 
+def _selected_scope_markets(scopes: list[str]) -> list[str]:
+    markets: set[str] = set()
+    for scope in scopes:
+        if not str(scope).lower().startswith("selected__"):
+            continue
+        for ticker in str(scope).split("__")[1:]:
+            if ticker:
+                markets.add(_report_market_for_ticker(scope, ticker))
+    return sorted(markets, key=lambda market: _market_order(market))
+
+
 def _wig20_members() -> set[str]:
     try:
         payload = json.loads((PROJECT_ROOT / "data" / "state" / "indices" / "memberships.json").read_text(encoding="utf-8"))
@@ -2357,8 +2368,14 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "fibo_valid": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "valid"),
     }
     selected_scope = any(str(scope).lower().startswith("selected__") for scope in scopes)
+    if selected_scope:
+        # Rows are assembled above by several legacy readers.  Normalize them
+        # at the final aggregation boundary so the synthetic selected__ scope
+        # can never leak into a user-facing market filter.
+        for row in rows:
+            row.market = _report_market_for_ticker(row.market, row.ticker)
     market_keys = (
-        sorted({r.market for r in rows}, key=lambda market: _market_order(market))
+        sorted({r.market for r in rows} | set(_selected_scope_markets(scopes)), key=lambda market: _market_order(market))
         if selected_scope
         else [s.upper() for s in scopes]
     )

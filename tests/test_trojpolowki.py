@@ -160,12 +160,15 @@ def test_allsearch_accepts_comma_separated_selected_instruments():
     ]
     assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "SNT.WA") == "WIG"
     assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "ARM.US") == "US100"
+    assert mod._selected_scope_markets(["selected__SNT.WA__SAP.DE__ARM.US"]) == [
+        "WIG", "DAX", "US100",
+    ]
 
     source = Path("run").read_text(encoding="utf-8")
     assert "dest='allsearch_target', nargs='*', default=None" in source
     assert "if args.allsearch_target is not None:" in source
     assert 'selected_scope = any(str(scope).lower().startswith("selected__")' in source
-    assert "sorted({r.market for r in rows}, key=lambda market: _market_order(market))" in source
+    assert "{r.market for r in rows} | set(_selected_scope_markets(scopes))" in source
 
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):

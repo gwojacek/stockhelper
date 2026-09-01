@@ -5793,6 +5793,18 @@ def _select_fibo_long_impulse_base(
                     "but the post-channel impulse is not mature."
                 )
                 return None
+            # The post-channel detector identifies when the move became
+            # obvious, not necessarily the swing low that launched it. Search
+            # the preceding trading month and retain its lowest qualifying low;
+            # otherwise SNT starts on June 17 (290.20) in mid-incline instead
+            # of the June 1 structural low (262.00).
+            launch_left = max(int(i_start), int(post_anchor) - 22)
+            launch_idx = int(low.iloc[launch_left:int(post_anchor) + 1].idxmin())
+            launch_low = float(low.iloc[launch_idx])
+            launch_days = i_peak - launch_idx
+            launch_gain = (float(high.iloc[i_peak]) - launch_low) / max(abs(launch_low), 1e-9)
+            if launch_days >= min_incline_days and launch_gain >= 0.15:
+                post_anchor = launch_idx
             if post_anchor <= channel_end:
                 _log(
                     "Long: retained late channel low as genuine strong-incline launch "
@@ -6322,6 +6334,11 @@ def _find_fibo_3p_steep_setup(
         if post_anchor < 0:
             _log("Rejected 3P steep: completed side trend has no mature post-channel impulse.")
             return None
+        launch_left = max(int(i_start), int(post_anchor) - 22)
+        launch_idx = int(low.iloc[launch_left:int(post_anchor) + 1].idxmin())
+        launch_low = float(low.iloc[launch_idx])
+        if i_peak - launch_idx >= min_incline_days and (fib_end - launch_low) / max(abs(launch_low), 1e-9) >= 0.15:
+            post_anchor = launch_idx
         if post_anchor <= channel_end:
             _log(
                 "3P steep: retained late channel low as genuine strong-incline launch "
