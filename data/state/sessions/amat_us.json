@@ -2,15 +2,15 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
       "type": "fib",
       "label": "FIB 0% (739.66998)",
       "x0": "2026-06-30",
-      "x1": "2034-06-16",
+      "x1": "2034-07-17",
       "y0": 739.66998,
       "y1": 739.66998,
       "price": 739.66998,
@@ -23,7 +23,7 @@
       "type": "fib",
       "label": "FIB 38.2% (551.43949)",
       "x0": "2026-04-17",
-      "x1": "2034-06-16",
+      "x1": "2034-07-17",
       "y0": 551.43949,
       "y1": 551.43949,
       "price": 551.43949,
@@ -36,7 +36,7 @@
       "type": "fib",
       "label": "FIB 50% (493.29499)",
       "x0": "2026-03-25",
-      "x1": "2034-06-16",
+      "x1": "2034-07-17",
       "y0": 493.29499,
       "y1": 493.29499,
       "price": 493.29499,
@@ -49,7 +49,7 @@
       "type": "fib",
       "label": "FIB 61.8% (435.15049)",
       "x0": "2026-03-03",
-      "x1": "2034-06-16",
+      "x1": "2034-07-17",
       "y0": 435.15049,
       "y1": 435.15049,
       "price": 435.15049,
@@ -62,7 +62,7 @@
       "type": "fib",
       "label": "FIB 100% (246.92)",
       "x0": "2025-12-17",
-      "x1": "2034-06-16",
+      "x1": "2034-07-17",
       "y0": 246.92,
       "y1": 246.92,
       "price": 246.92,
@@ -82,10 +82,5 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__scanner_breakout_date__": "2026-07-28",
-  "__scanner_retest_count__": "1",
-  "__scanner_previous_respect_months__": "10.3",
-  "__scanner_breakout_direction__": "short",
-  "__scanner_latest_retest_date__": "2026-08-13",
-  "__scanner_latest_retest_pattern__": "bearish_engulfing"
+  "__saved_fibo_by_user__": false
 }

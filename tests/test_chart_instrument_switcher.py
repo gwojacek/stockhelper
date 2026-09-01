@@ -90,3 +90,40 @@ def test_position_calculation_displays_one_percent_avg10d_with_market_currency()
     assert '"max_capital_currency": _instrument_currency()' in source
     assert "Max capital to engage (1% Avg10d)" in source
     assert "money(b.max_capital, b.max_capital_currency || currency)" in source
+
+
+def test_quick_chart_group_has_market_and_direction_filters():
+    ui = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    server = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    report = Path("run").read_text(encoding="utf-8")
+
+    assert 'id="chart-group-filters"' in ui
+    assert "marketIcons = {{WIG:'🇵🇱',DAX:'🇩🇪',US100:'🇺🇸',FOREX:'💱',COMMODITIES:'🛢️',INDEXES:'📊',ETFS:'🧺'}}" in ui
+    assert "addFilter('↗  BULLISH', 'direction', 'long'" in ui
+    assert "addFilter('↘  BEARISH', 'direction', 'short'" in ui
+    assert '"market": market' in server
+    assert '"direction": direction if direction in {"long", "short"} else ""' in server
+    assert "b.closest('[data-market]')?.dataset.market" in report
+    assert "b.closest('[data-troj-direction]')?.dataset.trojDirection" in report
+
+
+def test_quick_chart_filters_persist_and_are_visually_separated():
+    ui = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    server = Path("utilities/report_server.py").read_text(encoding="utf-8")
+    report = Path("run").read_text(encoding="utf-8")
+
+    assert "chart-group-filter-label" in ui
+    assert "chart-group-market-filters" in ui
+    assert "chart-group-direction-filters" in ui
+    assert ">Filter charts</span>" in ui
+    assert "url.searchParams.set('groupMarket', chartGroupMarketFilter)" in ui
+    assert "url.searchParams.set('groupDirection', chartGroupDirectionFilter)" in ui
+    assert "chartGroup?.marketFilter" in ui
+    assert '"marketFilter": group_market_filter' in server
+    assert 'qs.get("groupMarket"' in server
+    assert 'group_market_filter = _clean_group_text(payload.get("marketFilter")' in server
+    assert 'first_query["groupMarket"] = group_market_filter' in server
+    assert "def _troj_market_from_card_text" in report
+    assert '("🇵🇱", "WIG")' in report
+    assert "marketFilter:(typeof m!=='undefined'&&m?m.value:'')" in report
+    assert "(!card||card.style.display!=='none')" in report

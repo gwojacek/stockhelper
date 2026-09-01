@@ -3,84 +3,7 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
   "__show_ichimoku__": false,
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (59.50)",
-      "x0": "2026-08-17",
-      "x1": "2034-07-07",
-      "y0": 59.5,
-      "y1": 59.5,
-      "price": 59.5,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (53.46)",
-      "x0": "2026-07-28",
-      "x1": "2034-07-07",
-      "y0": 53.46,
-      "y1": 53.46,
-      "price": 53.46,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (51.59)",
-      "x0": "2026-07-22",
-      "x1": "2034-07-07",
-      "y0": 51.59,
-      "y1": 51.59,
-      "price": 51.59,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (49.72)",
-      "x0": "2026-07-15",
-      "x1": "2034-07-07",
-      "y0": 49.72,
-      "y1": 49.72,
-      "price": 49.72,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (43.68)",
-      "x0": "2026-06-25",
-      "x1": "2034-07-07",
-      "y0": 43.68,
-      "y1": 43.68,
-      "price": 43.68,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-06-25",
-      "x1": "2026-08-17",
-      "y0": 43.68,
-      "y1": 59.5,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__journal_source_technique__": "Fibo",
   "capital": 307000,
   "calculation_currency": "PLN",
@@ -90,5 +13,6 @@
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
-  "level_points": {}
+  "level_points": {},
+  "__saved_fibo_by_user__": false
 }

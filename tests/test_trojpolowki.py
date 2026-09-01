@@ -363,7 +363,8 @@ def test_month_side_trends_invalidate_both_fibo_impulse_and_correction():
     steep_start = source.index("def _find_fibo_3p_steep_setup")
     regular_start = source.index("def _find_fibo_setup", steep_start)
     steep_source = source[steep_start:regular_start]
-    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep_source
+    assert "continuation_min_gain=steep_min_gain" in steep_source
+    assert "continuation_min_daily_gain=steep_min_daily_gain" in steep_source
     assert "_has_completed_month_side_trend(w.iloc[i_peak:])" in steep_source
     correction_start = source.index("correction_seg =", regular_start)
     correction_end = source.index("if corr_low > fib_236", correction_start)
@@ -421,8 +422,8 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "max(min_covered_days, int(math.ceil(len(df_slice) * min_coverage_ratio)))" in helper
     helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
     assert "short decline" in steep
-    assert "_impulse_has_disqualifying_month_side_trend(impulse_seg)" in steep
-    assert "max_days=22" in helper
+    assert "continuation_min_gain=steep_min_gain" in steep
+    assert "max_days=19" in helper
     assert "band_pct=0.20" in helper
     assert "max_progress_pct=0.08" in helper
     assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
@@ -651,6 +652,19 @@ def test_chart_png_includes_drawings_and_context_header():
     assert "...selectedValues" in ui_source
     assert "['Drawings', String(drawnObjects.length)]" in ui_source
     assert "const canvas = await captureChartPng();" in ui_source
+
+
+def test_chart_png_includes_position_table_after_calculation():
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    capture = ui_source[ui_source.index("async function captureChartPng()") : ui_source.index("function journalScreenshotRange()")]
+
+    assert "$('calc-drawer')?.classList.contains('open') ? levels.position_calculations : null" in capture
+    assert "calculation?.ok && Array.isArray(calculation.rows)" in capture
+    assert "canvas.height = base.height + headerHeight + calculationHeight" in capture
+    assert "'Position calculation'" in capture
+    assert "'Potential loss with spread'" in capture
+    assert "row.position_size" in capture
+    assert "row.potential_loss" in capture
 
 
 def test_scanner_wedge_replaces_stale_selected_values_but_keeps_entry_manual():
@@ -882,9 +896,23 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+    assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
+    assert "retained original impulse anchors because the first" in setup
+    assert setup.index("if fresh_touch_window:") < setup.index("contains a completed month-long side trend", setup.index("if fresh_touch_window:"))
     run_source = Path("run").read_text(encoding="utf-8")
     touched = run_source[run_source.index('if "touched_61_8_no_pattern"'):run_source.index("def _fibo_touch_date")]
     assert "return near >= 75.0" in touched
+
+
+def test_latest_shallow_engulfing_has_cycle_boundary_fallback():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    retest = source[source.index("def _detect_ichimoku_retest"):source.index("def run_ichimoku_search")]
+
+    assert 'valid_count == 0 and current_side == "above" and len(df) >= 3' in retest
+    assert "first_idx, confirm_idx, prior_idx = len(df) - 2, len(df) - 1, len(df) - 3" in retest
+    assert 'first_valid_status = "shallow_retest_pattern"' in retest
+    assert 'events = [(ev_date, "bullish_engulfing", "shallow")]' in retest
 
 
 def test_fibo_return_across_23_6_moves_between_early_and_waiting_columns():
@@ -998,7 +1026,8 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
 
     assert "if _has_extended_sideways(correction_seg):" in setup
     assert "correction is dominated by an extended side trend" in setup
-    assert "if _impulse_has_disqualifying_month_side_trend(impulse_seg):" in setup
+    assert "impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(" in setup
+    assert "if impulse_side_disqualifying:" in setup
     assert "contains a completed month-long side trend" in setup
     assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
     assert "if _has_completed_month_side_trend(after):" in stale
@@ -1258,18 +1287,24 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Use tabs to switch between" not in text
     assert "3P FIBO" in text
     assert "3P ICHIMOKU" in text
-    assert "⭐ Favorites <span id='favorites-count'>0</span>" in text
+    assert ">⭐ Favorites</a>" in text
+    assert "favorites-count" not in text
     assert "href='#tab-troj-fibo'" in text
     assert "href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a>" in text
     assert "window.addEventListener('hashchange',showReportTabFromHash)" in text
     assert "id='tab-favorites' class='tab-panel'" in text
     assert "stockhelper.favorite-instruments.v1" in text
+    assert "function canonicalFavoriteTicker(ticker)" in text
+    assert ".replace(/\\.WA$/,'')" in text
+    assert "new Set([...items].map(canonicalFavoriteTicker).filter(Boolean))" in text
+    assert "data.favorites.map(canonicalFavoriteTicker).filter(Boolean)" in text
     assert "function toggleFavorite(ticker)" in text
+    assert "ticker=canonicalFavoriteTicker(ticker)" in text
     assert "fetch('/favorites',{method:'POST'" in text
     assert "window.addEventListener('focus',syncFavoritesFromServer)" in text
     assert "endpoint.searchParams.set('favoriteTicker',btn.dataset.favoriteTicker||favoriteTicker(btn))" in text
     assert "function techniqueFor(el)" in text
-    assert "One favorite instrument may appear in several technique groups" in text
+    assert "One favorite instrument can appear in multiple 3P columns" in text
     assert "data-ticker='RWE.DE'" in text
     assert "⚠️ Names still needed" not in text
     assert ".troj-name-actions{display:inline-flex;float:right;align-items:center" in text
@@ -1288,8 +1323,23 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<td><strong>'+escapeFavoriteHtml(o.label)" in text
     assert "const threePTickers=new Set" in text
     assert "!threePTickers.has(o.ticker)" in text
-    assert "favorite-direction-long" in text and "favorite-direction-short" in text
-    assert "↗ Long" in text and "↘ Short" in text
+    assert "const favoriteOccurrenceRank=" in text
+    assert "const byTicker=new Map()" in text
+    assert "byTicker.set(o.ticker,{rank,items:new Map()})" in text
+    assert "const setupKey=o.is3p?[o.technique,o.columnIndex,o.direction].join('|'):'regular'" in text
+    assert "flatMap(group=>[...group.items.values()])" in text
+    assert "Favorites not classified anywhere now" in text
+    assert "No unclassified favorites" in text
+    assert "parts.push('<section class=\"favorites-technique favorites-unclassified\"" in text
+    assert "const classifiedTickers=new Set(uniqueAll.map(o=>o.ticker))" in text
+    assert "const unclassified=activeMarket?[]:[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
+    assert "const FAVORITE_INSTRUMENT_NAMES=" in text
+    assert "function favoriteInstrumentLabel(ticker)" in text
+    assert "label:favoriteInstrumentLabel(ticker)" in text
+    assert '"CDR": "CDPROJEKT"' in text
+    assert "cmd:'python run -c '+ticker" in text
+    assert '<span class="fibo-arrow fibo-arrow-long" title="Long" aria-label="Long">↗</span>' in text
+    assert '<span class="fibo-arrow fibo-arrow-short" title="Short" aria-label="Short">↘</span>' in text
     assert "<th>Instrument</th><th>Market</th><th>Direction</th><th>Status</th><th>Chart</th>" in text
     assert "📐 3P Fibo" in text and "☁️ 3P Ichimoku" in text
     assert "function favoriteWedgeContext(host)" in text
@@ -1325,8 +1375,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "class='choice-reason'" in text
     assert "class='choice-reason-kind'" in text
     assert ".fibo-arrow{display:inline-grid;place-items:center;width:18px;height:18px" in text
-    assert "class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long" in text
-    assert "class='ichi-status-chip fibo-direction ichi-bad'>↘&nbsp;Short" in text
+    assert "class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span>" in text
+    assert "class='fibo-arrow fibo-arrow-short' title='Short' aria-label='Short'>↘</span>" in text
+    assert "<col class='top-choice-direction'>" in text
+    assert "<th>Instrument</th><th>Dir</th><th>Why top choice</th>" in text
     assert ".fibo-direction{display:inline-flex;align-items:center;white-space:nowrap}" in text
     assert "class='choice-reason-sep'>|</span>" in text
     assert "id='tab-troj-fibo' class='tab-panel'" in text
@@ -1382,7 +1434,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Early breakout status (&lt;4m" not in text
     assert "<th>Dir.</th><th>Price to cloud</th><th>Ichimoku status</th><th>Świece</th>" in text
     assert text.count("<th>Ticker</th><th>Dir</th><th>Near61.8</th>") == 2
-    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td>" in text
+    assert "<b>Starbucks (SBUX.US)</b></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td>" in text
     assert "98.5%</span></td>" not in text
     fibo_one_start = text.index("WYNIKI FIBO #1 (Waiting")
     fibo_one_end = text.index("</table>", fibo_one_start)
@@ -1421,6 +1473,20 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "card.style.display=cardHit?'':'none'" in text
     assert "const visible=[];const hidden=[]" in text
     assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
+    run_source = Path("run").read_text(encoding="utf-8")
+    assert "def troj_card_freshness_key" in run_source
+    assert "-(signal_date.toordinal() if signal_date else 0)" in run_source
+    assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
+    assert "def wedge_freshness_rank" in run_source
+    assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source
+    assert '_top_choice_rank(f"breakout {d.isoformat() if d else \'\'}"' in run_source
+    assert '_top_choice_rank(f"pattern {d.isoformat() if d else \'\'}"' in run_source
+    assert 'if has_pattern or has_breakout:' in run_source
+    assert 'return (0, freshness, signal_kind_rank, text)' in run_source
+    assert 'Pattern and breakout signals compete in one freshness queue.' in run_source
+    assert 'selected = (must + [item for item in ranked if item not in must])[:limit_per_group]' in run_source
+    assert 'def _allsearch_top_choices(limit_per_group: int = 5)' in run_source
+    assert 'pattern_date = row.dates.get("pattern_date", "")' in run_source
     assert "const okDirection=directionFilter==='all'||!cardDirection||cardDirection===directionFilter" in text
     assert "return td?{html:td.innerHTML" in text
     assert "th.classList.add('chart-link-cell')" in text
@@ -1428,8 +1494,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "r.cells[colIdx]?.classList.add('stooq-column')" in text
     assert "const showEmptyGroups=!!m.value&&visibleBySelect&&!sc.value" in text
     assert "<span class='ichi-status-chip ichi-neutral'>Kijun: over</span>" in text
-    assert "<b>CREOTECH (CRI)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
-    assert "<b>Siemens Energy (ENR.DE)</b></td><td><span class='ichi-status-chip fibo-direction ichi-good'>↗&nbsp;Long</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
+    assert "<b>CREOTECH (CRI)</b></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td>Over Kijun-sen</td>" in text
+    assert "<b>Siemens Energy (ENR.DE)</b></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td><td><span class='ichi-status-chip ichi-good'>above</span></td><td><span style='color:#dc2626;font-weight:700'>Unsuccessful breakout to the other side</span></td>" in text
     assert "class='btn stooq-chart-link'" in text
     assert "<span class='ichi-status-label'>current:</span>" not in text
     assert "<span class='ichi-status-label'>last:</span>" not in text
@@ -1438,7 +1504,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "troj-info-default" in text
     assert "Why top choice" in text
     assert "top-choice-compact" in text
-    assert "<col class='top-choice-instrument'><col class='top-choice-reason'>" in text
+    assert "<col class='top-choice-instrument'><col class='top-choice-direction'><col class='top-choice-reason'>" in text
     assert ".top-choice-compact .top-choice-instrument{width:24%}" in text
     assert ".stooq-links-hidden col.top-choice-stooq{display:none}" in text
     assert "<time class='choice-reason-date' datetime='2026-07-22'><i>▦</i>2026-07-22</time>" in text
@@ -1482,7 +1548,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "near 61.8: 90.0%" in text
     assert "WYNIKI FIBO #0 (3P steep incline)" in text
     assert "<h3>📐 Fibo" in text
-    assert "<strong>🇺🇸 Starbucks (SBUX.US)</strong></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
+    assert "<strong>🇺🇸 Starbucks (SBUX.US)</strong></td><td><span class='fibo-arrow fibo-arrow-long' title='Long' aria-label='Long'>↗</span></td><td><div class='choice-reason'><span class='choice-reason-kind'><i>◆</i>Near 61.8</span><span class='choice-reason-sep'>|</span><span class='choice-reason-detail'><i>↕</i>98.5%</span>" in text
     assert "<h3>🔻 Kliny" in text
     assert "class='choice-reason choice-reason-wedge'" in text
     assert "<i>◆</i>Falling wedge" in text
@@ -1621,7 +1687,7 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert "def _mirror_ohlc_for_short(" in scanner_source
     assert '_find_fibo_setup(\n            mirrored,\n            direction="long"' in scanner_source
     assert '_find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)' in scanner_source
-    assert "min_gain_pct = 0.025 if _mirrored_short else 0.18" in scanner_source
+    assert "steep_min_gain = 0.025 if _mirrored_short else 0.15" in scanner_source
     assert "sideways_band_pct=0.02 if _mirrored_short else 0.08" in scanner_source
     assert "pre_start_left = max(0, i_start - 5)" in scanner_source
     assert "shortest_regular_by_direction" in scanner_source
@@ -1664,3 +1730,151 @@ def test_checkavg_accepts_case_insensitive_stooq_bulk_cache_sources():
     assert 'if not source.startswith("stooq"):' in checkavg
     assert 'source != "stooq"' not in checkavg
     assert 'cache={cache_path}' in checkavg
+
+
+def test_saved_drawings_do_not_disable_automatic_fibo_discovery():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    scan = source[source.index("def _scan_fibo_one"):source.index("def run_fibo_explain", source.index("def _scan_fibo_one"))]
+
+    assert 'steep_3p = _find_fibo_3p_steep_setup(df, "long")' in scan
+    assert "steep_3p = None if manual_fibo" not in scan
+    assert "if manual_fibo:\n                    break" not in scan
+    assert "if short_fibo_enabled and not manual_fibo" not in scan
+    assert "saved_fibo_keys" in scan
+
+
+def test_fresh_23_6_retracement_is_enough_for_a_short_correction_leg():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "reached_early_236 = early_rng > 0 and corr_low_early <= early_fib_236" in setup
+    assert "early_decline_pct >= 0.05 or reached_early_236" in setup
+
+
+def test_3p_accepts_a_fresh_independent_peak_below_an_old_cycle_high():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+
+    assert "independent_min_gain = 0.025 if _mirrored_short else 0.15" in steep
+    assert "independent_min_daily_gain = 0.0004 if _mirrored_short else 0.003" in steep
+    assert "independent_gain >= independent_min_gain" in steep
+    assert "independent_daily_gain >= independent_min_daily_gain" in steep
+
+
+def test_multiple_monthly_shelves_are_absorbed_only_by_exceptional_continuation():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    helper = source[source.index("def _completed_month_side_trend_phases"):source.index("def _has_extended_sideways")]
+
+    assert "side_trend_count = _completed_month_side_trend_count(leg)" in helper
+    assert "if side_trend_count >= 2 and exceptional_continuation:" in helper
+    assert "Completed 61.8 cycles are handled separately" in helper
+    assert "start > phases[-1][1] + 3" in helper
+
+
+def test_repeated_side_trends_move_the_automatic_anchor_to_the_final_launch():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+
+    assert "side_phases = _completed_month_side_trend_phases(impulse_view)" in selector
+    assert "anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.08)" in selector
+    assert "anchor_begins_side_trend = bool(anchor_side_phases) and anchor_side_phases[0][0] <= 5" in selector
+    assert "if len(side_phases) >= 2 or anchor_begins_side_trend:" in selector
+    assert "if len(side_phases) >= 2" in selector
+    assert "else i_start" in selector
+    assert "launch_candidates: list[tuple[float, float, int, float, float]]" in selector
+    assert "candidate_daily_gain" in selector
+    assert ") = max(launch_candidates)" in selector
+    assert "Long: moved fib start after completed anchor-side trend" in selector
+    assert "i_start = post_range_idx" in selector
+
+
+def test_opl_broad_incline_keeps_deep_launch_and_directional_correction():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "max_lookback=140 if _mirrored_short else 200" in setup
+    assert "if _mirrored_short and _has_completed_month_side_trend(correction_seg):" in setup
+    assert "Do not reject a directional correction" in setup
+
+
+def test_exceptional_broad_3p_impulse_beats_non_materially_faster_nested_fibo():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+
+    assert "exceptional_broad_impulse = original_gain >= 0.65" in selector
+    assert "post_range_daily_gain < original_daily_gain * 1.25" in selector
+    assert "retained exceptional broad impulse over a non-materially-faster" in selector
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+    assert "post_daily_gain < broad_daily_gain * 1.25" in steep
+    assert "3P steep: retained exceptional broad anchor" in steep
+
+
+def test_one_decisive_correction_candle_can_reach_236_and_enter_waiting_column():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "min_correction_days = 1" in setup
+    assert "early_decline_pct >= 0.05 or reached_early_236" in setup
+    assert "recent_peak_waiting = i_end - i_peak <= 3" in setup
+    assert "continuation_min_gain=0.15 if recent_peak_waiting" in setup
+
+
+def test_confirmed_first_touch_pattern_preserves_cdr_impulse_anchors():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "confirmed_first_touch_pattern = False" in setup
+    assert "_is_bullish_harami(c1, c2, fib_618)" in setup
+    assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
+    scan_start = source.index("def _scan_fibo_one")
+    scan = source[scan_start:source.index("workers_override =", scan_start)]
+    assert "refreshed_anchor_candidates: list[FiboScanResult]" in scan
+    assert "forced_anchor_dates=(historical.incline_start_date, historical.incline_end_date)" in scan
+    assert "recent_low <= float(historical.fib_61_8)" in scan
+
+
+def test_long_3p_pullback_sideways_window_does_not_hide_pco_steep_incline():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+
+    assert "if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):" in steep
+
+
+def test_asb_anchor_moves_to_late_low_of_first_base_that_launches_exceptional_leg():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+
+    assert "for phase_start, phase_end in side_phases:" in selector
+    assert "late_left = max(phase_abs_start, phase_abs_end - 5)" in selector
+    assert "late_gain >= 0.65 and late_daily_gain >= 0.006" in selector
+    assert "moved exceptional broad fib start behind completed base" in selector
+
+
+def test_exceptional_nine_day_gold_incline_is_not_rejected_as_too_short():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "exceptional_short_incline = newer_days >= 8 and newer_gain >= 0.18" in setup
+    assert "and not exceptional_short_incline" in setup
+    assert "accepted exceptional compact incline from newer low" in setup
+
+
+def test_3p_prefers_the_faster_local_gold_acceleration_anchor():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+
+    assert "compact_candidates: list[tuple[float, float, int, float, int]]" in steep
+    assert "candidate_low > float(low.iloc[local_left:local_right + 1].min()) * 1.002" in steep
+    assert "best_compact = min(compact_candidates, key=lambda item: (item[3], -item[0]))" in steep
+    assert "if best_compact[3] < fib_start and best_compact[0] > current_daily_gain:" in steep
+    assert "3P steep: moved anchor to faster local acceleration" in steep
+    assert "if incline_days < min_incline_days and not compact_acceleration:" in steep
+
+
+def test_market_filter_is_applied_to_favorite_occurrences():
+    source = Path("run").read_text(encoding="utf-8")
+
+    assert "const activeMarket=(document.getElementById('market')?.value||'').trim();" in source
+    assert "const unique=activeMarket?uniqueAll.filter(o=>o.market===activeMarket):uniqueAll;" in source
+    assert "const unclassified=activeMarket?[]:" in source
+    assert "if(typeof renderFavorites==='function')renderFavorites()" in source

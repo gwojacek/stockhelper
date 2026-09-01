@@ -1,0 +1,93 @@
+{
+  "high": 32.945,
+  "low": 28.78,
+  "entry": 31.077,
+  "stop_loss": 30.04,
+  "position_type": "long",
+  "capital": 250000,
+  "lot_cost": 137626.31,
+  "pip_value": 18100.75,
+  "spread": 604.725,
+  "name": "Silver",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (71.113)",
+      "x0": "2026-08-28",
+      "x1": "2034-07-20",
+      "y0": 71.113,
+      "y1": 71.113,
+      "price": 71.113,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (64.87303)",
+      "x0": "2026-08-13",
+      "x1": "2034-07-20",
+      "y0": 64.87303,
+      "y1": 64.87303,
+      "price": 64.87303,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (62.9455)",
+      "x0": "2026-08-07",
+      "x1": "2034-07-20",
+      "y0": 62.9455,
+      "y1": 62.9455,
+      "price": 62.9455,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (61.01797)",
+      "x0": "2026-08-03",
+      "x1": "2034-07-20",
+      "y0": 61.01797,
+      "y1": 61.01797,
+      "price": 61.01797,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (54.778)",
+      "x0": "2026-07-17",
+      "x1": "2034-07-20",
+      "y0": 54.778,
+      "y1": 54.778,
+      "price": 54.778,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-07-17",
+      "x1": "2026-08-28",
+      "y0": 54.778,
+      "y1": 71.113,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
+}

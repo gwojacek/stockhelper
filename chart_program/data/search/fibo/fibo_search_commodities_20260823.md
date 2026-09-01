@@ -15,10 +15,9 @@
 
 | Ticker | Dir | Status | Pattern | Pattern date | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Near61.8 | Link | Python command | Latest data? | Latest date | Expected date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| COFFEE | long | 3p_steep_23_6_zone | none |  | 2026-06-23->2026-08-20 | 41/1 (39.55:1) |  | 12144088 |  42.2% | [📈](https://stooq.pl/q/a2/?s=kc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c COFFEE --fibo-lines 5 --fibo-anchor-start 2026-06-23 --fibo-anchor-end 2026-08-20 --fibo-right | ✅ | 2026-08-21 | 2026-08-21 |
 | WTI | short | reached_23_6_waiting_for_61_8 | none |  | 2026-03-09->2026-07-02 | 83/36 (2.31:1) |  | 1820564 |  38.2% | [📈](https://stooq.pl/q/a2/?s=cl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c WTI --fibo-lines 5 --fibo-anchor-start 2026-03-09 --fibo-anchor-end 2026-07-02 --fibo-right | ✅ | 2026-08-21 | 2026-08-21 |
+| COFFEE | long | 3p_steep_23_6_zone | none |  | 2026-06-09->2026-08-20 | 50/1 (50.84:1) |  | 12144088 |  25.6% | [📈](https://stooq.pl/q/a2/?s=kc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c COFFEE --fibo-lines 5 --fibo-anchor-start 2026-06-09 --fibo-anchor-end 2026-08-20 --fibo-right | ✅ | 2026-08-21 | 2026-08-21 |
 | SOYOIL | long | reached_23_6_waiting_for_61_8 | none |  | 2026-01-02->2026-06-01 | 105/59 (1.78:1) |  | 780381 |  22.4% | [📈](https://stooq.pl/q/a2/?s=zl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SOYOIL --fibo-lines 5 --fibo-anchor-start 2026-01-02 --fibo-anchor-end 2026-06-01 --fibo-right | ✅ | 2026-08-21 | 2026-08-21 |
-| PLATINUM | short | 3p_steep_23_6_zone | none |  | 2026-01-26->2026-07-01 | 112/1 (106.61:1) |  | 3852631 |   5.5% | [📈](https://stooq.pl/q/a2/?s=pl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c PLATINUM --fibo-lines 5 --fibo-anchor-start 2026-01-26 --fibo-anchor-end 2026-07-01 --fibo-right | ✅ | 2026-08-21 | 2026-08-21 |
 ## WYNIKI FIBO #2 (valid pattern up to 2 weeks)
 
 | Ticker | Dir | Pattern | Pattern date | Incline | Ratio(d) | Touched_61.8_date | Avg10d PLN | Link | Python command | Latest data? | Latest date | Expected date |

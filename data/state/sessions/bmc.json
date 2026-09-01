@@ -1,6 +1,7 @@
 {
   "high": 25.3,
   "low": 14.98,
+  "entry": 21.78,
   "stop_loss": 20.44,
   "check_zr_value_fibo_or_elevation": null,
   "line_cross_value": null,
@@ -10,7 +11,7 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -73,7 +74,7 @@
       "free_extension": false
     }
   ],
-  "__journal_source_technique__": "Kliny",
+  "__journal_source_technique__": "Ichimoku",
   "position_calculations": {
     "basics": {
       "entry": 21.78,
@@ -172,5 +173,10 @@
     }
   },
   "__wedge_auto_high__": true,
-  "__wedge_auto_low__": true
+  "__wedge_auto_low__": true,
+  "__scanner_breakout_date__": "2026-04-27",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-08-11",
+  "__scanner_latest_retest_pattern__": "bearish_engulfing"
 }

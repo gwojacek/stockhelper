@@ -1,0 +1,18 @@
+## WYNIKI
+
+WYNIKI 1: instrumenty pozostające po jednej stronie chmury Ichimoku (above/below) z kontrolą płynności (Avg10d oraz Ichimoku status).
+
+| Ticker | Pozycja | Świece | Mies. | Start | Close | Avg10d PLN | Ichimoku status | Valid retests from | 4m qualification status | Retest count | Latest Retest date | Latest Retest pattern | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SILVER | 🔴 below | 129 | 5.9 | 2026-03-03 | 67.7860 | - | Inside the cloud - PATTERN! | - | standard_4m_breakout | 5 | 2026-08-28 | bearish_engulfing | 1% | bullish TK cross | slow | thick | ↑ over | green | no | yes | [📈](https://stooq.pl/q/a2/?s=xagusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c SILVER --ichimoku-mode on | ✅ | 2026-08-28 | 2026-08-28 |
+| COCOA | ⚪ above | 86 | 3.8 | 2026-05-06 | 6636.0000 | - | Over Kijun-sen | - | standard_4m_breakout | 0 | - | - | - | bullish TK cross | high | normal | ↑ over | green | yes | no | [📈](https://stooq.pl/q/a2/?s=cc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c COCOA --ichimoku-mode on | ✅ | 2026-08-28 | 2026-08-28 |
+## WYNIKI 2
+
+WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.
+
+| Ticker | Było | Jest | Data wybicia | Mies. od wybicia | Mies. respektu przed wybiciem | Valid retests from | 4m qualification status | Latest Retest status | Retest count | Avg10d PLN | Latest Retest date | Latest Retest pattern | Ichimoku status | Risk | TK cross | Dynamic | Cloud | Chikou | Twist | TK plus | Tenkan in cloud | Link | Python command | Latest data? | Latest date | Expected date |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| COCOA | below | ⚪ above | 2026-05-06 | 3.8 | 5.9 | - | standard_4m_breakout | no_breakout | 0 | - | - | - | Over Kijun-sen | - | bullish TK cross | high | normal | ↑ over | green | yes | no | [📈](https://stooq.pl/q/a2/?s=cc.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c COCOA --ichimoku-mode on | ✅ | 2026-08-28 | 2026-08-28 |
+| PALLADIUM | below | ⚪ above | 2026-08-06 | 0.8 | 5.3 | - | standard_4m_breakout | deep_retest_pattern | 2 | - | 2026-08-19 | bullish_engulfing | Touched Kijun-sen | 3% | bullish TK cross | high | thick | ↑ over | green | yes | no | [📈](https://stooq.pl/q/a2/?s=pa.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c PALLADIUM --ichimoku-mode on | ✅ | 2026-08-28 | 2026-08-28 |
+| GOLD | below | ⚪ above | 2026-08-10 | 0.6 | 4.8 | - | standard_4m_breakout | medium_retest_pattern | 1 | - | 2026-08-14 | bullish_harami | Over Kijun-sen | 3% | bullish TK cross | mild | normal | ↑ over | green | yes | no | [📈](https://stooq.pl/q/a2/?s=xauusd&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c GOLD --ichimoku-mode on | ✅ | 2026-08-28 | 2026-08-28 |
+| PLATINUM | below | ⚪ above | 2026-08-21 | 0.3 | 5.6 | - | standard_4m_breakout | medium_retest_pattern | 1 | - | 2026-08-27 | bullish_harami | Inside the cloud | 3% | bullish TK cross | slow | thick | ↑ over | green | yes | yes | [📈](https://stooq.pl/q/a2/?s=pl.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1) | python run -c PLATINUM --ichimoku-mode on | ✅ | 2026-08-28 | 2026-08-28 |

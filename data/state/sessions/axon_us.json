@@ -4,88 +4,12 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
   "__journal_source_technique__": "Ichimoku",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (485.75)",
-      "x0": "2026-07-23",
-      "x1": "2034-07-07",
-      "y0": 485.75,
-      "y1": 485.75,
-      "price": 485.75,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (554.25024)",
-      "x0": "2026-07-16",
-      "x1": "2034-07-07",
-      "y0": 554.25024,
-      "y1": 554.25024,
-      "price": 554.25024,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (575.41)",
-      "x0": "2026-07-15",
-      "x1": "2034-07-07",
-      "y0": 575.41,
-      "y1": 575.41,
-      "price": 575.41,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (596.56977)",
-      "x0": "2026-07-14",
-      "x1": "2034-07-07",
-      "y0": 596.56977,
-      "y1": 596.56977,
-      "price": 596.56977,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (665.07001)",
-      "x0": "2026-07-07",
-      "x1": "2034-07-07",
-      "y0": 665.07001,
-      "y1": 665.07001,
-      "price": 665.07001,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-07-07",
-      "x1": "2026-07-23",
-      "y0": 665.07001,
-      "y1": 485.75,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__scanner_breakout_date__": "2026-06-01",
+  "__scanner_breakout_direction__": "long",
   "__scanner_retest_count__": "1",
   "__scanner_latest_retest_date__": "2026-06-18",
   "__scanner_latest_retest_pattern__": "hammer",
   "__scanner_previous_respect_months__": "4.3",
-  "__scanner_breakout_direction__": "long"
+  "__saved_fibo_by_user__": false
 }

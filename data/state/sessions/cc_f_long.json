@@ -3,86 +3,9 @@
   "lot_cost": 12379.74,
   "pip_value": 36.19,
   "__journal_source_technique__": "Ichimoku",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (6478.0)",
-      "x0": "2026-07-09",
-      "x1": "2034-06-16",
-      "y0": 6478.0,
-      "y1": 6478.0,
-      "price": 6478.0,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (5398.086)",
-      "x0": "2026-06-22",
-      "x1": "2034-06-16",
-      "y0": 5398.086,
-      "y1": 5398.086,
-      "price": 5398.086,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (5064.5)",
-      "x0": "2026-06-16",
-      "x1": "2034-06-16",
-      "y0": 5064.5,
-      "y1": 5064.5,
-      "price": 5064.5,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (4730.914)",
-      "x0": "2026-06-10",
-      "x1": "2034-06-16",
-      "y0": 4730.914,
-      "y1": 4730.914,
-      "price": 4730.914,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (3651.0)",
-      "x0": "2026-05-22",
-      "x1": "2034-06-16",
-      "y0": 3651.0,
-      "y1": 3651.0,
-      "price": 3651.0,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-22",
-      "x1": "2026-07-09",
-      "y0": 3651.0,
-      "y1": 6478.0,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__scanner_breakout_date__": "2026-05-06",
+  "__scanner_breakout_direction__": "long",
   "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "5.9",
-  "__scanner_breakout_direction__": "long"
+  "__saved_fibo_by_user__": false
 }

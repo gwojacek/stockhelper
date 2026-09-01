@@ -1,0 +1,89 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (28.09)",
+      "x0": "2026-07-29",
+      "x1": "2034-07-13",
+      "y0": 28.09,
+      "y1": 28.09,
+      "price": 28.09,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (25.76553)",
+      "x0": "2026-07-15",
+      "x1": "2034-07-13",
+      "y0": 25.76553,
+      "y1": 25.76553,
+      "price": 25.76553,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (25.0475)",
+      "x0": "2026-07-10",
+      "x1": "2034-07-13",
+      "y0": 25.0475,
+      "y1": 25.0475,
+      "price": 25.0475,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (24.32947)",
+      "x0": "2026-07-07",
+      "x1": "2034-07-13",
+      "y0": 24.32947,
+      "y1": 24.32947,
+      "price": 24.32947,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (22.005)",
+      "x0": "2026-06-22",
+      "x1": "2034-07-13",
+      "y0": 22.005,
+      "y1": 22.005,
+      "price": 22.005,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-22",
+      "x1": "2026-07-29",
+      "y0": 22.005,
+      "y1": 28.09,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__scanner_pattern_date__": "2026-08-12",
+  "__scanner_pattern_name__": "hammer",
+  "__scanner_pattern_direction__": "long",
+  "__saved_fibo_by_user__": false
+}

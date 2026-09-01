@@ -2,84 +2,13 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false,
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (56.4)",
-      "x0": "2026-07-24",
-      "x1": "2034-07-10",
-      "y0": 56.4,
-      "y1": 56.4,
-      "price": 56.4,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (72.26064)",
-      "x0": "2026-05-04",
-      "x1": "2034-07-10",
-      "y0": 72.26064,
-      "y1": 72.26064,
-      "price": 72.26064,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (77.16)",
-      "x0": "2026-04-07",
-      "x1": "2034-07-10",
-      "y0": 77.16,
-      "y1": 77.16,
-      "price": 77.16,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (82.05936)",
-      "x0": "2026-03-09",
-      "x1": "2034-07-10",
-      "y0": 82.05936,
-      "y1": 82.05936,
-      "price": 82.05936,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (97.92)",
-      "x0": "2025-12-09",
-      "x1": "2034-07-10",
-      "y0": 97.92,
-      "y1": 97.92,
-      "price": 97.92,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2025-12-09",
-      "x1": "2026-07-24",
-      "y0": 97.92,
-      "y1": 56.4,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
-  "__journal_source_technique__": "Fibo"
+  "__show_ichimoku__": true,
+  "drawn_objects": [],
+  "__journal_source_technique__": "Ichimoku",
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-03-02",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-05-06",
+  "__scanner_latest_retest_pattern__": "bearish_hammer"
 }

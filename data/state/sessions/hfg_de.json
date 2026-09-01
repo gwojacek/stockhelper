@@ -3,84 +3,7 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (3.056)",
-      "x0": "2026-08-14",
-      "x1": "2034-07-10",
-      "y0": 3.056,
-      "y1": 3.056,
-      "price": 3.056,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (5.51684)",
-      "x0": "2026-03-26",
-      "x1": "2034-07-10",
-      "y0": 5.51684,
-      "y1": 5.51684,
-      "price": 5.51684,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (6.277)",
-      "x0": "2026-02-12",
-      "x1": "2034-07-10",
-      "y0": 6.277,
-      "y1": 6.277,
-      "price": 6.277,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (7.03716)",
-      "x0": "2025-12-30",
-      "x1": "2034-07-10",
-      "y0": 7.03716,
-      "y1": 7.03716,
-      "price": 7.03716,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (9.498)",
-      "x0": "2025-08-11",
-      "x1": "2034-07-10",
-      "y0": 9.498,
-      "y1": 9.498,
-      "price": 9.498,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2025-08-11",
-      "x1": "2026-08-14",
-      "y0": 9.498,
-      "y1": 3.056,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "position_type": "short",
   "__wedge_auto_position_type__": true,
   "__half_points__": [],
@@ -129,5 +52,6 @@
   "__scanner_breakout_direction__": "short",
   "__scanner_retest_count__": "7",
   "__scanner_latest_retest_date__": "2026-07-02",
-  "__scanner_latest_retest_pattern__": "dark_cloud_cover"
+  "__scanner_latest_retest_pattern__": "dark_cloud_cover",
+  "__saved_fibo_by_user__": false
 }

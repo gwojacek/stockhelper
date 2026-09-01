@@ -1,86 +1,15 @@
 {
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (53289.30078)",
-      "x0": "2026-07-07",
-      "x1": "2034-07-10",
-      "y0": 53289.30078,
-      "y1": 53289.30078,
-      "price": 53289.30078,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (51740.83991)",
-      "x0": "2026-06-17",
-      "x1": "2034-07-10",
-      "y0": 51740.83991,
-      "y1": 51740.83991,
-      "price": 51740.83991,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (51262.51953)",
-      "x0": "2026-06-12",
-      "x1": "2034-07-10",
-      "y0": 51262.51953,
-      "y1": 51262.51953,
-      "price": 51262.51953,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (50784.19915)",
-      "x0": "2026-06-08",
-      "x1": "2034-07-10",
-      "y0": 50784.19915,
-      "y1": 50784.19915,
-      "price": 50784.19915,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (49235.73828)",
-      "x0": "2026-05-20",
-      "x1": "2034-07-10",
-      "y0": 49235.73828,
-      "y1": 49235.73828,
-      "price": 49235.73828,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-20",
-      "x1": "2026-07-07",
-      "y0": 49235.73828,
-      "y1": 53289.30078,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "lot_cost": 44540.05,
   "pip_value": 18.21,
-  "spread_multiplier": 3.0,
-  "spread": 54.63
+  "spread_multiplier": 3,
+  "spread": 54.63,
+  "__saved_fibo_by_user__": false,
+  "capital": 303500,
+  "calculation_currency": "PLN",
+  "position_type": "long",
+  "spread_pips": null,
+  "level_points": {}
 }

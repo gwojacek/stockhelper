@@ -694,6 +694,38 @@
     "checked_at": "2026-08-23T08:22:31.822841+00:00",
     "result": "bulk"
   },
+  "stooq_bulk:2026-08-24": {
+    "checked_at": "2026-08-24T11:43:41.006311+00:00",
+    "result": "attempted"
+  },
+  "stooq_bulk:2026-08-25": {
+    "checked_at": "2026-08-25T07:36:00.040196+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-26": {
+    "checked_at": "2026-08-26T20:35:59.676704+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-27": {
+    "checked_at": "2026-08-27T07:29:41.554304+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-28": {
+    "checked_at": "2026-08-28T07:36:03.390641+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-29": {
+    "checked_at": "2026-08-29T08:56:27.266003+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-30": {
+    "checked_at": "2026-08-30T11:08:47.359046+00:00",
+    "result": "bulk"
+  },
+  "stooq_bulk:2026-08-31": {
+    "checked_at": "2026-08-31T08:30:41.897318+00:00",
+    "result": "bulk"
+  },
   "wig": {
     "last_remote_check": "2026-05-28T16:57:52.510319+02:00"
   }

@@ -4,84 +4,8 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (314.89999)",
-      "x0": "2026-07-23",
-      "x1": "2034-07-03",
-      "y0": 314.89999,
-      "y1": 314.89999,
-      "price": 314.89999,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (350.69721)",
-      "x0": "2026-06-29",
-      "x1": "2034-07-03",
-      "y0": 350.69721,
-      "y1": 350.69721,
-      "price": 350.69721,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (361.75499)",
-      "x0": "2026-06-18",
-      "x1": "2034-07-03",
-      "y0": 361.75499,
-      "y1": 361.75499,
-      "price": 361.75499,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (372.81277)",
-      "x0": "2026-06-11",
-      "x1": "2034-07-03",
-      "y0": 372.81277,
-      "y1": 372.81277,
-      "price": 372.81277,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (408.60999)",
-      "x0": "2026-05-18",
-      "x1": "2034-07-03",
-      "y0": 408.60999,
-      "y1": 408.60999,
-      "price": 408.60999,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-18",
-      "x1": "2026-07-23",
-      "y0": 408.60999,
-      "y1": 314.89999,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__scanner_pattern_date__": "2026-08-05",
-  "__scanner_pattern_name__": "bearish_engulfing"
+  "__scanner_pattern_name__": "bearish_engulfing",
+  "__saved_fibo_by_user__": false
 }

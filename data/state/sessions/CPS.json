@@ -9,14 +9,14 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
       "type": "fib",
       "label": "FIB 0% (17.95)",
       "x0": "2026-07-29",
-      "x1": "2034-07-10",
+      "x1": "2034-07-14",
       "y0": 17.95,
       "y1": 17.95,
       "price": 17.95,
@@ -29,7 +29,7 @@
       "type": "fib",
       "label": "FIB 38.2% (15.5052)",
       "x0": "2026-06-23",
-      "x1": "2034-07-10",
+      "x1": "2034-07-14",
       "y0": 15.5052,
       "y1": 15.5052,
       "price": 15.5052,
@@ -41,8 +41,8 @@
       "id": "auto-fibo-500",
       "type": "fib",
       "label": "FIB 50% (14.75)",
-      "x0": "2026-06-10",
-      "x1": "2034-07-10",
+      "x0": "2026-06-11",
+      "x1": "2034-07-14",
       "y0": 14.75,
       "y1": 14.75,
       "price": 14.75,
@@ -55,7 +55,7 @@
       "type": "fib",
       "label": "FIB 61.8% (13.9948)",
       "x0": "2026-05-28",
-      "x1": "2034-07-10",
+      "x1": "2034-07-14",
       "y0": 13.9948,
       "y1": 13.9948,
       "price": 13.9948,
@@ -68,7 +68,7 @@
       "type": "fib",
       "label": "FIB 100% (11.55)",
       "x0": "2026-04-21",
-      "x1": "2034-07-10",
+      "x1": "2034-07-14",
       "y0": 11.55,
       "y1": 11.55,
       "price": 11.55,
@@ -88,5 +88,11 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__journal_source_technique__": "Fibo"
+  "__journal_source_technique__": "Ichimoku",
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-04-21",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-08-24",
+  "__scanner_latest_retest_pattern__": "bullish_piercing_line"
 }

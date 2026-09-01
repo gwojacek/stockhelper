@@ -145,6 +145,13 @@ def test_opl_tiny_bullish_body_is_not_dark_cloud_and_later_harami_is_valid():
     assert _is_bearish_harami(july_21, july_22, 14.60)
 
 
+def test_cdr_long_lower_wick_bullish_harami_confirms_first_618_touch():
+    august_27 = candle(238.00, 238.10, 230.30, 234.00)
+    august_28 = candle(236.00, 236.60, 233.40, 236.50)
+
+    assert _is_bullish_harami(august_27, august_28, 233.34)
+
+
 def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
     from scanner_search import FiboScanResult, _limit_fibo_formations_per_ticker
 

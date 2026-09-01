@@ -11,17 +11,17 @@
       "x": [
         "2026-02-27",
         "2026-07-23",
-        "2027-05-21"
+        "2027-06-01"
       ],
       "y": [
         11.6789,
         9.882,
-        6.0007
+        5.87491
       ],
       "x0": "2026-02-27",
-      "x1": "2027-05-21",
+      "x1": "2027-06-01",
       "y0": 11.6789,
-      "y1": 6.0007,
+      "y1": 5.87491,
       "anchor_x": [
         "2026-02-27",
         "2026-07-23"
@@ -30,7 +30,7 @@
         11.6789,
         9.882
       ],
-      "price": 6.0007,
+      "price": 5.87491,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -40,36 +40,33 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
+        "2025-12-04",
         "2026-03-23",
-        "2026-10-15"
+        "2027-03-11"
       ],
       "y": [
+        8.00282,
         8.23993,
-        9.11
+        9.07148
       ],
-      "x0": "2026-03-23",
-      "x1": "2027-02-08",
-      "y0": 8.23993,
-      "y1": 9.77555,
+      "x0": "2025-12-04",
+      "x1": "2027-03-11",
+      "y0": 8.00282,
+      "y1": 9.07148,
       "anchor_x": [
-        "2026-03-23",
-        "2026-06-24"
+        "2025-12-04",
+        "2026-03-23"
       ],
       "anchor_y": [
-        8.23993,
-        8.668
+        8.00282,
+        8.23993
       ],
-      "price": 9.77555,
+      "price": 9.07148,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": true
+      "free_extension": false
     }
   ],
-  "__scanner_breakout_date__": "2026-04-16",
-  "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "12",
-  "__scanner_latest_retest_date__": "2026-08-12",
-  "__scanner_latest_retest_pattern__": "dark_cloud_cover",
   "__journal_source_technique__": "Kliny",
   "high": 11.68,
   "__wedge_auto_high__": true,

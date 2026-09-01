@@ -17,7 +17,7 @@ import time
 import webbrowser
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import urlopen
 
 REPORT_SERVER_PROTOCOL = "stockhelper-report-server-v24"
@@ -316,7 +316,13 @@ def main() -> int:
         except Exception:
             return False
 
-    def _run_chart_command(command: str, group_id: str = "", favorite_ticker_override: str = "") -> tuple[int, dict]:
+    def _run_chart_command(
+        command: str,
+        group_id: str = "",
+        favorite_ticker_override: str = "",
+        group_market_filter: str = "",
+        group_direction_filter: str = "",
+    ) -> tuple[int, dict]:
         original_command = command
         favorite_match = re.search(r"(?:^|\s)(?:-c|chart_program)\s+['\"]?([A-Za-z0-9._-]+)", original_command, re.IGNORECASE)
         favorite_ticker = favorite_ticker_override.strip().upper() or (favorite_match.group(1).upper() if favorite_match else "")
@@ -362,6 +368,8 @@ def main() -> int:
                         "items": group_items,
                         "current": original_command,
                         "reportServer": f"http://{args.host}:{args.port}",
+                        "marketFilter": group_market_filter,
+                        "directionFilter": group_direction_filter if group_direction_filter in {"long", "short"} else "",
                     },
                     ensure_ascii=False,
                 )
@@ -549,7 +557,12 @@ def main() -> int:
                     _send_html(self, "StockHelper chart failed", "missing command", debug, 400); return
                 try:
                     group_id = (qs.get("group", [""])[0] or "").strip()
-                    rc, payload = _run_chart_command(command, group_id, favorite_ticker)
+                    group_market_filter = (qs.get("groupMarket", [""])[0] or "").strip()
+                    group_direction_filter = (qs.get("groupDirection", [""])[0] or "").strip().lower()
+                    rc, payload = _run_chart_command(
+                        command, group_id, favorite_ticker,
+                        group_market_filter, group_direction_filter,
+                    )
                     debug.update(payload or {})
                     if rc == 0 and payload.get("url"):
                         self.send_response(303)
@@ -611,6 +624,10 @@ def main() -> int:
                     raw = self.rfile.read(ln).decode("utf-8") if ln > 0 else "{}"
                     payload = json.loads(raw or "{}")
                     group_label = _clean_group_text(payload.get("label") or "Quick charts from group btn")
+                    group_market_filter = _clean_group_text(payload.get("marketFilter") or "")
+                    group_direction_filter = _clean_group_text(payload.get("directionFilter") or "").lower()
+                    if group_direction_filter not in {"long", "short"}:
+                        group_direction_filter = ""
                     raw_items = payload.get("items") or []
                     items = []
                     for item in raw_items:
@@ -621,14 +638,35 @@ def main() -> int:
                             continue
                         label = _clean_group_text(item.get("label") or command)
                         section = _clean_group_text(item.get("section") or "")
-                        items.append({"command": command, "label": label, "section": section})
+                        market = _clean_group_text(item.get("market") or "")
+                        direction = _clean_group_text(item.get("direction") or "").lower()
+                        items.append({
+                            "command": command,
+                            "label": label,
+                            "section": section,
+                            "market": market,
+                            "direction": direction if direction in {"long", "short"} else "",
+                        })
                     if not items:
                         self.send_response(400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": False, "error": "missing commands"}).encode("utf-8")); return
                     group_id = uuid.uuid4().hex
                     with chart_group_lock:
-                        chart_groups[group_id] = {"label": group_label, "items": items}
+                        chart_groups[group_id] = {
+                            "label": group_label,
+                            "items": items,
+                            "marketFilter": group_market_filter,
+                            "directionFilter": group_direction_filter,
+                        }
                     first_command = items[0]["command"]
-                    first_url = f"/open-chart?command={quote(first_command, safe="")}&group={quote(group_id, safe="")}"
+                    first_query = {
+                        "command": first_command,
+                        "group": group_id,
+                    }
+                    if group_market_filter:
+                        first_query["groupMarket"] = group_market_filter
+                    if group_direction_filter:
+                        first_query["groupDirection"] = group_direction_filter
+                    first_url = "/open-chart?" + urlencode(first_query)
                     self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps({"ok": True, "group": group_id, "url": first_url}).encode("utf-8"))
                 except Exception as exc:
                     self.send_response(500); self.end_headers(); self.wfile.write(str(exc).encode("utf-8"))

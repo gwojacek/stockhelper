@@ -4,84 +4,8 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (410.98001)",
-      "x0": "2026-06-15",
-      "x1": "2034-07-06",
-      "y0": 410.98001,
-      "y1": 410.98001,
-      "price": 410.98001,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (372.86405)",
-      "x0": "2026-05-07",
-      "x1": "2034-07-06",
-      "y0": 372.86405,
-      "y1": 372.86405,
-      "price": 372.86405,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (361.09001)",
-      "x0": "2026-04-27",
-      "x1": "2034-07-06",
-      "y0": 361.09001,
-      "y1": 361.09001,
-      "price": 361.09001,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (349.31597)",
-      "x0": "2026-04-15",
-      "x1": "2034-07-06",
-      "y0": 349.31597,
-      "y1": 349.31597,
-      "price": 349.31597,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (311.20001)",
-      "x0": "2026-03-09",
-      "x1": "2034-07-06",
-      "y0": 311.20001,
-      "y1": 311.20001,
-      "price": 311.20001,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-03-09",
-      "x1": "2026-06-15",
-      "y0": 311.20001,
-      "y1": 410.98001,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__scanner_pattern_date__": "2026-08-05",
-  "__scanner_pattern_name__": "morning_star"
+  "__scanner_pattern_name__": "morning_star",
+  "__saved_fibo_by_user__": false
 }

@@ -1,13 +1,14 @@
 {
   "current_balance": 303500.0,
   "favorite_instruments": [
-    "ALR",
-    "CRI.WA",
-    "CRJ.WA",
-    "ENA.WA",
-    "MDV",
-    "PLATINUM",
+    "CDR",
+    "CRI",
+    "CRJ",
+    "ENA",
+    "EUR",
+    "LPP",
+    "SMH.US",
     "USDCAD",
-    "VRC.WA"
+    "VRC"
   ]
 }

@@ -233,7 +233,15 @@ class LightweightChartLevelSelectorUI:
                 continue
             label = str(item.get("label") or command).strip()
             section = str(item.get("section") or "").strip()
-            items.append({"command": command, "label": label, "section": section})
+            market = str(item.get("market") or "").strip()
+            direction = str(item.get("direction") or "").strip().lower()
+            items.append({
+                "command": command,
+                "label": label,
+                "section": section,
+                "market": market,
+                "direction": direction if direction in {"long", "short"} else "",
+            })
         if not items:
             return None
         return {
@@ -242,6 +250,8 @@ class LightweightChartLevelSelectorUI:
             "items": items,
             "current": str(payload.get("current") or ""),
             "reportServer": str(payload.get("reportServer") or ""),
+            "marketFilter": str(payload.get("marketFilter") or ""),
+            "directionFilter": str(payload.get("directionFilter") or "").lower(),
         }
 
     @staticmethod
@@ -555,6 +565,17 @@ class LightweightChartLevelSelectorUI:
     .chart-group-nav {{ display:none; margin-top:8px; padding:10px; border:1px solid #334155; border-radius:8px; background:#111827; }}
     .chart-group-nav h4 {{ margin:0 0 8px 0; color:#fde68a; font-size:15px; }}
     .chart-group-label {{ margin:0 0 8px 0; color:#bfdbfe; font-weight:800; font-size:13px; }}
+    .chart-group-filters {{ margin:0 0 14px; padding:12px; border:1px solid #334155; border-radius:12px; background:linear-gradient(145deg,#0b1424,#0a101d); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
+    .chart-group-filter-label {{ display:block; margin-bottom:9px; color:#93c5fd; font-size:11px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }}
+    .chart-group-market-filters {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; }}
+    .chart-group-direction-filters {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid #243247; }}
+    .chart-group-filter {{ min-height:38px; padding:7px 10px; border-radius:10px; background:#172235; border:1px solid #40516a; color:#e5e7eb; font-size:12px; font-weight:800; box-shadow:0 4px 12px rgba(0,0,0,.14); }}
+    .chart-group-filter:hover {{ border-color:#60a5fa; transform:translateY(-1px); }}
+    .chart-group-filter.active {{ background:linear-gradient(135deg,#1d4ed8,#1e40af); border-color:#60a5fa; box-shadow:0 0 0 2px rgba(96,165,250,.18); }}
+    .chart-group-direction-filters .chart-group-filter {{ min-height:52px; font-size:14px; letter-spacing:.03em; }}
+    .chart-group-direction-long {{ background:rgba(6,78,59,.38); border-color:#15803d; color:#86efac; }}
+    .chart-group-direction-short {{ background:rgba(127,29,29,.34); border-color:#b91c1c; color:#fca5a5; }}
+    @media(max-width:520px) {{ .chart-group-market-filters {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
     .chart-group-section {{ margin-top:8px; }}
     .chart-group-section-title {{ color:#cbd5e1; font-size:12px; font-weight:800; margin:5px 0; }}
     .chart-group-buttons {{ display:flex; flex-wrap:wrap; gap:6px; }}
@@ -695,6 +716,7 @@ class LightweightChartLevelSelectorUI:
         <div id="chart-group-nav" class="chart-group-nav">
           <h4>⭐ Quick charts from 📊</h4>
           <div id="chart-group-label" class="chart-group-label"></div>
+          <div id="chart-group-filters" class="chart-group-filters"><span class="chart-group-filter-label">Filter charts</span><div class="chart-group-market-filters"></div><div class="chart-group-direction-filters"></div></div>
           <div id="chart-group-buttons" class="chart-group-buttons"></div>
         </div>
       </section>
@@ -2949,18 +2971,60 @@ class LightweightChartLevelSelectorUI:
     const url = new URL('/open-chart', chartGroup.reportServer);
     url.searchParams.set('command', command);
     if (chartGroup.id) url.searchParams.set('group', chartGroup.id);
+    if (chartGroupMarketFilter) url.searchParams.set('groupMarket', chartGroupMarketFilter);
+    if (chartGroupDirectionFilter) url.searchParams.set('groupDirection', chartGroupDirectionFilter);
     return url.href;
   }}
+
+  let chartGroupMarketFilter = chartGroup?.marketFilter || new URLSearchParams(window.location.search).get('groupMarket') || '';
+  let chartGroupDirectionFilter = chartGroup?.directionFilter || new URLSearchParams(window.location.search).get('groupDirection') || '';
 
   function setupChartGroupNav() {{
     const wrap = $('chart-group-nav');
     const label = $('chart-group-label');
+    const filters = $('chart-group-filters');
     const buttons = $('chart-group-buttons');
     if (!wrap || !buttons || !chartGroup || !Array.isArray(chartGroup.items) || chartGroup.items.length < 2 || !chartGroup.reportServer) return;
     wrap.style.display = 'block';
     if (label) label.textContent = chartGroup.label || 'Group charts';
     buttons.innerHTML = '';
     const current = String(chartGroup.current || '');
+    let marketFilter = chartGroupMarketFilter;
+    let directionFilter = chartGroupDirectionFilter;
+    const marketIcons = {{WIG:'🇵🇱',DAX:'🇩🇪',US100:'🇺🇸',FOREX:'💱',COMMODITIES:'🛢️',INDEXES:'📊',ETFS:'🧺'}};
+    const applyFilters = () => {{
+      buttons.querySelectorAll('button[data-command]').forEach(btn => {{
+        btn.style.display = (!marketFilter || btn.dataset.market === marketFilter) && (!directionFilter || btn.dataset.direction === directionFilter) ? '' : 'none';
+      }});
+      buttons.querySelectorAll('.chart-group-section').forEach(section => {{
+        section.style.display = [...section.querySelectorAll('button[data-command]')].some(btn => btn.style.display !== 'none') ? '' : 'none';
+      }});
+    }};
+    const addFilter = (text, kind, value, className='') => {{
+      if (!filters) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `chart-group-filter ${{className}}`;
+      btn.textContent = text;
+      btn.onclick = () => {{
+        if (kind === 'market') marketFilter = marketFilter === value ? '' : value;
+        else directionFilter = directionFilter === value ? '' : value;
+        chartGroupMarketFilter = marketFilter;
+        chartGroupDirectionFilter = directionFilter;
+        filters.querySelectorAll(`[data-filter-kind="${{kind}}"]`).forEach(item => item.classList.toggle('active', item.dataset.filterValue === (kind === 'market' ? marketFilter : directionFilter)));
+        applyFilters();
+      }};
+      btn.dataset.filterKind = kind;
+      btn.dataset.filterValue = value;
+      const target = filters.querySelector(kind === 'market' ? '.chart-group-market-filters' : '.chart-group-direction-filters') || filters;
+      target.appendChild(btn);
+    }};
+    if (filters) {{
+      filters.innerHTML = '<span class="chart-group-filter-label">Filter charts</span><div class="chart-group-market-filters"></div><div class="chart-group-direction-filters"></div>';
+      [...new Set(chartGroup.items.map(item => item.market).filter(Boolean))].forEach(market => addFilter(`${{marketIcons[market.toUpperCase()] || '🌐'}} ${{market}}`, 'market', market));
+      if (chartGroup.items.some(item => item.direction === 'long')) addFilter('↗  BULLISH', 'direction', 'long', 'chart-group-direction-long');
+      if (chartGroup.items.some(item => item.direction === 'short')) addFilter('↘  BEARISH', 'direction', 'short', 'chart-group-direction-short');
+    }}
     const go = (command, clickedButton=null) => {{
       if (!command || command === current) return;
       if (clickedButton) clickedButton.textContent = 'Loading…';
@@ -2991,11 +3055,17 @@ class LightweightChartLevelSelectorUI:
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = item.label || command || 'Chart';
+        btn.dataset.command = command;
+        btn.dataset.market = item.market || '';
+        btn.dataset.direction = item.direction || '';
         btn.classList.toggle('active', !!current && command === current);
         btn.onclick = () => go(command, btn);
         target.appendChild(btn);
       }});
     }});
+    filters?.querySelectorAll('[data-filter-kind="market"]').forEach(item => item.classList.toggle('active', item.dataset.filterValue === marketFilter));
+    filters?.querySelectorAll('[data-filter-kind="direction"]').forEach(item => item.classList.toggle('active', item.dataset.filterValue === directionFilter));
+    applyFilters();
   }}
 
   function setupInstrumentSwitcher() {{
@@ -3312,9 +3382,15 @@ class LightweightChartLevelSelectorUI:
     ].filter(([, value]) => value !== '');
     const columns = Math.max(2, Math.min(4, Math.floor(base.width / 190)));
     const headerHeight = 70 + Math.ceil(values.length / columns) * 43;
+    // Mirror the visible UI: closing the calculation drawer also removes the
+    // calculation table from subsequent PNG downloads without discarding the
+    // saved calculation itself.
+    const calculation = $('calc-drawer')?.classList.contains('open') ? levels.position_calculations : null;
+    const calculationRows = calculation?.ok && Array.isArray(calculation.rows) ? calculation.rows : [];
+    const calculationHeight = calculationRows.length ? 68 + calculationRows.length * 36 : 0;
     const canvas = document.createElement('canvas');
     canvas.width = base.width;
-    canvas.height = base.height + headerHeight;
+    canvas.height = base.height + headerHeight + calculationHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(base, 0, headerHeight);
     if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, headerHeight, base.width, base.height);
@@ -3343,6 +3419,45 @@ class LightweightChartLevelSelectorUI:
       ctx.font = 'bold 14px ui-monospace, Menlo, monospace';
       ctx.fillText(String(value).slice(0, 26), x, y + 19);
     }});
+    if (calculationHeight) {{
+      const y0 = headerHeight + base.height;
+      const calculationCurrency = calculation.currency || currency;
+      const headings = ['Risk level', 'Position size', 'Engaged capital', 'Potential loss with spread', 'Loss %'];
+      const widths = [.18, .2, .2, .27, .15];
+      const padding = 18;
+      const usableWidth = canvas.width - padding * 2;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, y0, canvas.width, calculationHeight);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 18px Inter, Arial, sans-serif';
+      ctx.fillText('Position calculation', padding, y0 + 27);
+      let x = padding;
+      ctx.font = 'bold 11px Inter, Arial, sans-serif';
+      headings.forEach((heading, index) => {{
+        ctx.fillStyle = '#93c5fd';
+        ctx.fillText(heading.toUpperCase(), x + 6, y0 + 52);
+        x += usableWidth * widths[index];
+      }});
+      calculationRows.forEach((row, rowIndex) => {{
+        const rowY = y0 + 60 + rowIndex * 36;
+        ctx.fillStyle = rowIndex % 2 ? '#111827' : '#1e293b';
+        ctx.fillRect(padding, rowY, usableWidth, 34);
+        const cells = [
+          row.risk_label || '',
+          `${{numText(row.position_size, row.position_unit === 'Shares' ? 0 : 3)}} ${{row.position_unit || ''}}`,
+          money(row.capital_used, calculationCurrency),
+          money(row.potential_loss, calculationCurrency),
+          `${{numText(row.loss_percent, 2)}}%`,
+        ];
+        let cellX = padding;
+        ctx.font = 'bold 12px ui-monospace, Menlo, monospace';
+        cells.forEach((value, index) => {{
+          ctx.fillStyle = '#e5e7eb';
+          ctx.fillText(String(value).slice(0, 32), cellX + 6, rowY + 22);
+          cellX += usableWidth * widths[index];
+        }});
+      }});
+    }}
     return canvas;
   }}
   function journalScreenshotRange() {{

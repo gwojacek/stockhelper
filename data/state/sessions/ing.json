@@ -2,12 +2,8 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
-  "__scanner_breakout_date__": "2025-11-10",
-  "__scanner_retest_count__": "5",
-  "__scanner_latest_retest_date__": "2026-08-10",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__journal_source_technique__": "Kliny",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -72,5 +68,9 @@
       "free_extension": false
     }
   ],
-  "__scanner_breakout_direction__": "long"
+  "__scanner_breakout_date__": "2025-11-10",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "5",
+  "__scanner_latest_retest_date__": "2026-08-10",
+  "__scanner_latest_retest_pattern__": "bullish_harami"
 }

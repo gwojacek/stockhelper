@@ -3,84 +3,7 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (67.08)",
-      "x0": "2026-06-04",
-      "x1": "2034-07-08",
-      "y0": 67.08,
-      "y1": 67.08,
-      "price": 67.08,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (83.53274)",
-      "x0": "2026-04-28",
-      "x1": "2034-07-08",
-      "y0": 83.53274,
-      "y1": 83.53274,
-      "price": 83.53274,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (88.615)",
-      "x0": "2026-04-15",
-      "x1": "2034-07-08",
-      "y0": 88.615,
-      "y1": 88.615,
-      "price": 88.615,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (93.69726)",
-      "x0": "2026-04-01",
-      "x1": "2034-07-08",
-      "y0": 93.69726,
-      "y1": 93.69726,
-      "price": 93.69726,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (110.15)",
-      "x0": "2026-02-24",
-      "x1": "2034-07-08",
-      "y0": 110.15,
-      "y1": 110.15,
-      "price": 110.15,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-02-24",
-      "x1": "2026-06-04",
-      "y0": 110.15,
-      "y1": 67.08,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__journal_source_technique__": "Ichimoku",
   "high": 110.15,
   "__wedge_auto_high__": true,
@@ -114,5 +37,6 @@
   "__scanner_retest_count__": "1",
   "__scanner_latest_retest_date__": "2026-08-18",
   "__scanner_latest_retest_pattern__": "bullish_piercing_line",
-  "__scanner_previous_respect_months__": "3.9"
+  "__scanner_previous_respect_months__": "3.9",
+  "__saved_fibo_by_user__": false
 }

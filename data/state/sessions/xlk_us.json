@@ -1,0 +1,86 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (198.73)",
+      "x0": "2026-06-03",
+      "x1": "2034-07-17",
+      "y0": 198.73,
+      "y1": 198.73,
+      "price": 198.73,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (171.2069)",
+      "x0": "2026-05-08",
+      "x1": "2034-07-17",
+      "y0": 171.2069,
+      "y1": 171.2069,
+      "price": 171.2069,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (162.705)",
+      "x0": "2026-05-01",
+      "x1": "2034-07-17",
+      "y0": 162.705,
+      "y1": 162.705,
+      "price": 162.705,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (154.2031)",
+      "x0": "2026-04-23",
+      "x1": "2034-07-17",
+      "y0": 154.2031,
+      "y1": 154.2031,
+      "price": 154.2031,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (126.68)",
+      "x0": "2026-03-30",
+      "x1": "2034-07-17",
+      "y0": 126.68,
+      "y1": 126.68,
+      "price": 126.68,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-03-30",
+      "x1": "2026-06-03",
+      "y0": 126.68,
+      "y1": 198.73,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
+}

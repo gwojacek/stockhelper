@@ -1,0 +1,86 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (172.09)",
+      "x0": "2026-08-05",
+      "x1": "2034-07-15",
+      "y0": 172.09,
+      "y1": 172.09,
+      "price": 172.09,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (134.73804)",
+      "x0": "2026-06-03",
+      "x1": "2034-07-15",
+      "y0": 134.73804,
+      "y1": 134.73804,
+      "price": 134.73804,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (123.2)",
+      "x0": "2026-05-14",
+      "x1": "2034-07-15",
+      "y0": 123.2,
+      "y1": 123.2,
+      "price": 123.2,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (111.66196)",
+      "x0": "2026-04-27",
+      "x1": "2034-07-15",
+      "y0": 111.66196,
+      "y1": 111.66196,
+      "price": 111.66196,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (74.31)",
+      "x0": "2026-02-24",
+      "x1": "2034-07-15",
+      "y0": 74.31,
+      "y1": 74.31,
+      "price": 74.31,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-02-24",
+      "x1": "2026-08-05",
+      "y0": 74.31,
+      "y1": 172.09,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
+}
