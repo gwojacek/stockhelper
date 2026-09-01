@@ -6281,6 +6281,14 @@ def _find_fibo_3p_steep_setup(
     if base is None:
         return None
     i_start, fib_start, fib_end = base
+    measured_peak_idx = int(high.iloc[i_start:i_peak + 1].idxmax())
+    measured_peak_high = float(high.iloc[measured_peak_idx])
+    if measured_peak_high > fib_end * 1.005:
+        _log(
+            "3P steep: moved second anchor to the highest high of the measured leg "
+            f"idx={i_peak} high={fib_end:.4f} -> idx={measured_peak_idx} high={measured_peak_high:.4f}."
+        )
+        i_peak, fib_end = measured_peak_idx, measured_peak_high
 
     structural_reset = _completed_sideways_reset_long(
         w, i_start, i_peak, min_incline_days,
@@ -6693,10 +6701,13 @@ def _find_fibo_setup(
         # A retracement that spends several months in overlapping flat ranges
         # is no longer the decline/recovery leg of the selected impulse. Apply
         # this symmetrically to long and short formations.
-        if _has_extended_sideways(correction_seg):
+        correction_at_active_extreme = _sideways_correction_near_active_extreme(
+            correction_seg, "short" if _mirrored_short else "long"
+        )
+        if _has_extended_sideways(correction_seg) and not correction_at_active_extreme:
             _log(f"Rejected {direction}: correction is dominated by an extended side trend.")
             return None
-        if not _mirrored_short and _correction_settled_into_sideways(correction_seg):
+        if not _mirrored_short and _correction_settled_into_sideways(correction_seg) and not correction_at_active_extreme:
             _log("Rejected long: correction settled into a completed month-long side trend.")
             return None
         # A correction may consolidate while progressing from 23.6 toward 61.8;

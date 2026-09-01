@@ -164,6 +164,8 @@ def test_allsearch_accepts_comma_separated_selected_instruments():
     source = Path("run").read_text(encoding="utf-8")
     assert "dest='allsearch_target', nargs='*', default=None" in source
     assert "if args.allsearch_target is not None:" in source
+    assert 'selected_scope = any(str(scope).lower().startswith("selected__")' in source
+    assert "sorted({r.market for r in rows}, key=lambda market: _market_order(market))" in source
 
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
@@ -408,6 +410,7 @@ def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
     peak_source = source[start:end]
     assert "global_max * 0.995" in peak_source
     assert "return max(dominant)" in peak_source
+    assert "moved second anchor to the highest high of the measured leg" in source
 
 
 def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
@@ -1047,7 +1050,8 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
     stale_start = source.index("def _is_waiting_candidate_stale")
     stale = source[stale_start:source.index("def _scan_fibo_one", stale_start)]
 
-    assert "if _has_extended_sideways(correction_seg):" in setup
+    assert "if _has_extended_sideways(correction_seg) and not correction_at_active_extreme:" in setup
+    assert "_sideways_correction_near_active_extreme(" in setup
     assert "correction is dominated by an extended side trend" in setup
     assert "impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(" in setup
     assert "if impulse_side_disqualifying:" in setup
@@ -1502,6 +1506,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "market_rank = _market_order(row.market, row.ticker)" in run_source
     assert "wig_rank = 0 if market_rank == 0 and ticker in wig20 else 1" in run_source
     assert "return (market_rank, wig_rank, original_index)" in run_source
+    assert 'reason = f"Fibo pattern: {pattern}"' in run_source
     assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
     assert "def wedge_freshness_rank" in run_source
     assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source

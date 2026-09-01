@@ -2356,7 +2356,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "fibo_waiting": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "waiting"),
         "fibo_valid": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "valid"),
     }
-    by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
+    selected_scope = any(str(scope).lower().startswith("selected__") for scope in scopes)
+    market_keys = (
+        sorted({r.market for r in rows}, key=lambda market: _market_order(market))
+        if selected_scope
+        else [s.upper() for s in scopes]
+    )
+    by_market = {market: [r for r in rows if r.market == market] for market in market_keys}
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
     instrument_names = _instrument_name_registry()
 
@@ -2862,6 +2868,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     if _troj_cell_is_no_play(cell):
                         continue
                     reason = _top_choice_reason(cell, source)
+                    if not reason and ("fibo" in source.lower() or "pattern" in source.lower()):
+                        ticker = _ticker_from_troj_cell(cell)
+                        live = _fibo_row_for_troj_cell(ticker, cell) if ticker else None
+                        pattern = str(live.pattern or "").strip() if live is not None else ""
+                        if pattern.lower() not in {"", "-", "none"}:
+                            reason = f"Fibo pattern: {pattern}"
                     if not reason:
                         continue
                     items.append((source, cell, reason))
