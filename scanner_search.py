@@ -7205,7 +7205,12 @@ def run_fibo_search(target: str) -> int:
         if not touch_rows.empty:
             first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"], errors="coerce")
             if pd.notna(first_touch_ts):
-                return int((dts > first_touch_ts).sum()) >= 2
+                # The reversal window consists of the touch candle plus the
+                # following two candles.  Keep the candidate through that
+                # second follow-up candle: it may be the final candle of a
+                # morning/evening-star pattern.  It becomes stale only once a
+                # third later candle proves that the complete window elapsed.
+                return int((dts > first_touch_ts).sum()) > 2
         if cand.direction == "long":
             # Long waiting setup becomes stale if market already made a higher high
             # after the selected impulse top (newer impulse supersedes older one),
