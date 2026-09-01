@@ -145,6 +145,18 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
     assert "with MARKET_REFRESH_LOCK:" in fibo_worker
 
 
+def test_allsearch_accepts_comma_separated_selected_instruments():
+    mod = load_run_module()
+
+    assert mod._parse_allsearch_scopes("TXT, CDR, SILVER,TXT") == [
+        "selected__TXT__CDR__SILVER",
+    ]
+    assert mod._parse_allsearch_scopes("ARM.US,BFT.WA,INSM.US") == [
+        "selected__ARM.US__BFT.WA__INSM.US",
+    ]
+    assert mod._parse_allsearch_scopes("all") == mod.DEFAULT_ALLSEARCH_SCOPES
+
+
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [

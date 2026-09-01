@@ -1730,7 +1730,7 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
         instrument = "commodity"
     elif group_name == "etfs":
         instrument = "etf"
-    elif group_name == "single":
+    elif (group_name == "single" or group_name.startswith("selected__")):
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     else:
@@ -2726,6 +2726,11 @@ def _members_from_configs(scope: str) -> list[str]:
 
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
+    if normalized.startswith("selected__"):
+        members = [part.upper() for part in normalized.split("__")[1:] if part]
+        if not members:
+            raise ValueError("Selected allsearch requires at least one instrument.")
+        return normalized, members, "explicit instrument selection", None
     if normalized == "wig":
         print("[search] WIG has a large universe. For VPN/rate-limit safety use: wig_part1, wig_part2, wig_part3.")
         return "WIG", WIG_SEARCH_TICKERS, "manual WIG list", ".WA"
@@ -3220,7 +3225,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         instrument = "commodity"
     elif group_name == "etfs":
         instrument = "etf"
-    elif group_name == "single":
+    elif (group_name == "single" or group_name.startswith("selected__")):
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     else:
@@ -3248,7 +3253,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         if mapped:
             fetch_symbol = mapped.upper()
             display_symbol = fetch_symbol
-        elif group_name == "single":
+        elif (group_name == "single" or group_name.startswith("selected__")):
             canonical = _reverse_stooq_symbol(ticker)
             if canonical:
                 display_symbol = canonical
@@ -7249,7 +7254,7 @@ def run_fibo_search(target: str) -> int:
             instrument = "commodity"
         elif group_name == "etfs":
             instrument = "etf"
-        elif group_name == "single":
+        elif (group_name == "single" or group_name.startswith("selected__")):
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
@@ -7634,7 +7639,7 @@ def run_fibo_search(target: str) -> int:
             instrument = "commodity"
         elif group_name == "etfs":
             instrument = "etf"
-        elif group_name == "single":
+        elif (group_name == "single" or group_name.startswith("selected__")):
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
@@ -7797,7 +7802,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         instrument = "commodity"
     elif group_name == "etfs":
         instrument = "etf"
-    elif group_name == "single":
+    elif (group_name == "single" or group_name.startswith("selected__")):
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
