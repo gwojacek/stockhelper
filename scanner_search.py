@@ -6070,7 +6070,11 @@ def _select_fibo_long_impulse_base(
         # A later shelf low should replace a powerful, coherent broad launch
         # only when the new leg is materially faster.  Otherwise a mathematically
         # shorter candidate hides the dominant formation (ASB and PCO).
-        if exceptional_broad_impulse and post_range_daily_gain < original_daily_gain * 1.25:
+        if (
+            exceptional_broad_impulse
+            and not anchor_begins_side_trend
+            and post_range_daily_gain < original_daily_gain * 1.25
+        ):
             _log(
                 "Long: retained exceptional broad impulse over a non-materially-faster "
                 f"nested launch (broad_daily={original_daily_gain * 100:.2f}%, "
@@ -6830,7 +6834,7 @@ def _find_fibo_setup(
             return None
         decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
         decline_bars = decline_end_idx - i_peak
-        if decline_bars < 2:
+        if decline_bars < 2 and not early_correction_accepted:
             _log(f"Rejected long: decline leg too short for scoring ({decline_bars} bars).")
             return None
         ratio = round((i_peak - i_start) / max(decline_end_idx - i_peak, 1), 2)
@@ -7079,6 +7083,61 @@ def _find_fibo_setup(
         reversal_pattern_name=pattern, stop_loss=stop_loss, current_close=float(close.iloc[-1]),
         reversal_pattern_date=(str(pd.to_datetime(w.iloc[pattern_idx]["Date"]).date()) if pattern != "none" else "")
     )
+
+
+def _find_recent_fibo_anchor_recoveries(
+    df: pd.DataFrame,
+    *,
+    allow_equal_third_close: bool = False,
+) -> list[FiboScanResult]:
+    """Recover a recent impulse obscured by an older dominant market cycle.
+
+    Candidate pairs are structural recent local extremes, never ticker-specific
+    overrides. Every pair is passed back through the complete forced-anchor
+    validator, including correction, pattern, stop-loss and stale-cycle rules.
+    """
+    if len(df) < 30:
+        return []
+    w = df.tail(140).reset_index(drop=True)
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    dates = pd.to_datetime(w["Date"], errors="coerce")
+    last = len(w) - 1
+    peak_idxs: list[int] = []
+    for idx in range(max(10, last - 20), last):
+        left, right = max(0, idx - 3), min(last, idx + 3)
+        if float(high.iloc[idx]) < float(high.iloc[left:right + 1].max()):
+            continue
+        if peak_idxs and abs(float(high.iloc[peak_idxs[-1]]) - float(high.iloc[idx])) <= 1e-9:
+            continue
+        peak_idxs.append(idx)
+
+    recovered: list[FiboScanResult] = []
+    seen: set[tuple[str, str]] = set()
+    for peak_idx in peak_idxs:
+        base_left, base_right = max(0, peak_idx - 65), peak_idx - 10
+        for base_idx in range(base_left, base_right + 1):
+            local_left = max(base_left, base_idx - 3)
+            local_right = min(base_right, base_idx + 3)
+            base_low = float(low.iloc[base_idx])
+            if base_low > float(low.iloc[local_left:local_right + 1].min()) * 1.002:
+                continue
+            gain = (float(high.iloc[peak_idx]) - base_low) / max(abs(base_low), 1e-9)
+            if gain < 0.15:
+                continue
+            result = _find_fibo_setup(
+                df,
+                "long",
+                allow_equal_third_close=allow_equal_third_close,
+                forced_anchor_dates=(str(dates.iloc[base_idx].date()), str(dates.iloc[peak_idx].date())),
+            )
+            if result is None:
+                continue
+            key = (result.incline_start_date, result.incline_end_date)
+            if key not in seen:
+                recovered.append(result)
+                seen.add(key)
+    return recovered
 
 
 def _print_fibo_results(
@@ -7357,16 +7416,31 @@ def run_fibo_search(target: str) -> int:
                     out_rows.append(steep_3p_short)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
+            current_long_match = False
             for off in [0, 5, 10, 15, 20, 30, 40]:
                 cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                 if cand:
                     long_candidates.append(cand)
+                    current_long_match = current_long_match or off == 0
                 # Broad mode is substantially more expensive and is only needed
                 # at representative offsets; regular mode covers every offset.
                 if off in {0, 10, 20, 40}:
                     broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
                     if broad_cand:
                         long_candidates.append(broad_cand)
+                        current_long_match = current_long_match or off == 0
+            # The dominant-cycle selector can legitimately reject every
+            # automatic offset even though a newer, self-contained impulse is
+            # active. Discover recent local-extreme pairs independently so the
+            # July/August Silver move and analogous TXT/CDR moves are not lost
+            # merely because an old absolute high remains in the 220-bar view.
+            if not current_long_match:
+                long_candidates.extend(
+                    _find_recent_fibo_anchor_recoveries(
+                        df,
+                        allow_equal_third_close=(instrument == "forex"),
+                    )
+                )
             # An offset scan may discover the correct broad anchors before the
             # live correction reaches 61.8. Once current data touches that
             # level, re-evaluate those exact anchors instead of letting a newer

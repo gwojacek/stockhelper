@@ -222,3 +222,35 @@ def test_waiting_candidate_uses_the_full_three_candle_confirmation_window():
 
     assert 'int((dts > first_touch_ts).sum()) > 2' in stale
     assert 'int((dts > first_touch_ts).sum()) >= 2' not in stale
+
+
+@pytest.mark.parametrize(
+    ("path", "expected_start", "expected_end"),
+    [
+        ("data/csv/commodities/XAGUSD.csv", "2026-07-17", "2026-08-28"),
+        ("data/csv/stocks/TXT_WA.csv", "2026-06-08", "2026-08-12"),
+        ("data/csv/stocks/CDR_WA.csv", "2026-06-26", "2026-08-13"),
+    ],
+)
+def test_recent_local_anchor_recovery_survives_old_dominant_cycle(path, expected_start, expected_end):
+    frame = _fixture(path)
+
+    recovered = scanner._find_recent_fibo_anchor_recoveries(frame)
+
+    assert any(
+        row.incline_start_date == expected_start and row.incline_end_date == expected_end
+        for row in recovered
+    )
+
+
+def test_one_bar_silver_pullback_is_kept_after_decisively_reaching_23_6():
+    frame = _fixture("data/csv/commodities/XAGUSD.csv")
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-07-17", "2026-08-28"),
+    )
+
+    assert result is not None
+    assert result.status == "reached_23_6_waiting_for_61_8"
