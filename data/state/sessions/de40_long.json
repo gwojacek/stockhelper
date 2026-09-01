@@ -1,90 +1,10 @@
 {
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (25438.41016)",
-      "x0": "2026-05-25",
-      "x1": "2034-07-10",
-      "y0": 25438.41016,
-      "y1": 25438.41016,
-      "price": 25438.41016,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (24383.90289)",
-      "x0": "2026-05-06",
-      "x1": "2034-07-10",
-      "y0": 24383.90289,
-      "y1": 24383.90289,
-      "price": 24383.90289,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (24058.16504)",
-      "x0": "2026-04-29",
-      "x1": "2034-07-10",
-      "y0": 24058.16504,
-      "y1": 24058.16504,
-      "price": 24058.16504,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (23732.42719)",
-      "x0": "2026-04-23",
-      "x1": "2034-07-10",
-      "y0": 23732.42719,
-      "y1": 23732.42719,
-      "price": 23732.42719,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (22677.91992)",
-      "x0": "2026-04-02",
-      "x1": "2034-07-10",
-      "y0": 22677.91992,
-      "y1": 22677.91992,
-      "price": 22677.91992,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-04-02",
-      "x1": "2026-05-25",
-      "y0": 22677.91992,
-      "y1": 25438.41016,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "lot_cost": 128369.9,
   "pip_value": 106.48,
   "spread_multiplier": 1.7,
   "spread": 181.02,
-  "__saved_fibo_invalid__": {
-    "since": "2026-08-23",
-    "fingerprint": "b124f582e99cca679a3503548a456d1b8fffe4ea449d952b3943414518d1c5cd"
-  }
+  "__saved_fibo_by_user__": false
 }

@@ -3,88 +3,12 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (265.94)",
-      "x0": "2026-07-07",
-      "x1": "2034-06-19",
-      "y0": 265.94,
-      "y1": 265.94,
-      "price": 265.94,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (243.04292)",
-      "x0": "2026-06-26",
-      "x1": "2034-06-19",
-      "y0": 243.04292,
-      "y1": 243.04292,
-      "price": 243.04292,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (235.97)",
-      "x0": "2026-06-24",
-      "x1": "2034-06-19",
-      "y0": 235.97,
-      "y1": 235.97,
-      "price": 235.97,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (228.89708)",
-      "x0": "2026-06-22",
-      "x1": "2034-06-19",
-      "y0": 228.89708,
-      "y1": 228.89708,
-      "price": 228.89708,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (206.0)",
-      "x0": "2026-06-11",
-      "x1": "2034-06-19",
-      "y0": 206.0,
-      "y1": 206.0,
-      "price": 206.0,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-06-11",
-      "x1": "2026-07-07",
-      "y0": 206.0,
-      "y1": 265.94,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__journal_source_technique__": "Ichimoku",
   "__scanner_breakout_date__": "2026-05-04",
   "__scanner_breakout_direction__": "long",
   "__scanner_retest_count__": "3",
   "__scanner_latest_retest_date__": "2026-08-20",
-  "__scanner_latest_retest_pattern__": "bullish_piercing_line"
+  "__scanner_latest_retest_pattern__": "bullish_piercing_line",
+  "__saved_fibo_by_user__": false
 }

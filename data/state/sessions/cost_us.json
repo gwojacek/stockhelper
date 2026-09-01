@@ -3,87 +3,11 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (907.21002)",
-      "x0": "2026-07-10",
-      "x1": "2034-07-10",
-      "y0": 907.21002,
-      "y1": 907.21002,
-      "price": 907.21002,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (979.51879)",
-      "x0": "2026-06-22",
-      "x1": "2034-07-10",
-      "y0": 979.51879,
-      "y1": 979.51879,
-      "price": 979.51879,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (1001.85501)",
-      "x0": "2026-06-12",
-      "x1": "2034-07-10",
-      "y0": 1001.85501,
-      "y1": 1001.85501,
-      "price": 1001.85501,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (1024.19123)",
-      "x0": "2026-06-08",
-      "x1": "2034-07-10",
-      "y0": 1024.19123,
-      "y1": 1024.19123,
-      "price": 1024.19123,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (1096.5)",
-      "x0": "2026-05-19",
-      "x1": "2034-07-10",
-      "y0": 1096.5,
-      "y1": 1096.5,
-      "price": 1096.5,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-19",
-      "x1": "2026-07-10",
-      "y0": 1096.5,
-      "y1": 907.21002,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__scanner_breakout_date__": "2026-05-29",
   "__scanner_retest_count__": "0",
   "__scanner_previous_respect_months__": "4.5",
   "__journal_source_technique__": "Fibo",
-  "__scanner_breakout_direction__": "short"
+  "__scanner_breakout_direction__": "short",
+  "__saved_fibo_by_user__": false
 }

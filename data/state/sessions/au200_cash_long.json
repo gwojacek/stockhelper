@@ -1,0 +1,86 @@
+{
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (9296.7002)",
+      "x0": "2026-08-06",
+      "x1": "2034-07-13",
+      "y0": 9296.7002,
+      "y1": 9296.7002,
+      "price": 9296.7002,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (8988.88467)",
+      "x0": "2026-07-15",
+      "x1": "2034-07-13",
+      "y0": 8988.88467,
+      "y1": 8988.88467,
+      "price": 8988.88467,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (8893.8003)",
+      "x0": "2026-07-08",
+      "x1": "2034-07-13",
+      "y0": 8893.8003,
+      "y1": 8893.8003,
+      "price": 8893.8003,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (8798.71592)",
+      "x0": "2026-07-01",
+      "x1": "2034-07-13",
+      "y0": 8798.71592,
+      "y1": 8798.71592,
+      "price": 8798.71592,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (8490.90039)",
+      "x0": "2026-06-09",
+      "x1": "2034-07-13",
+      "y0": 8490.90039,
+      "y1": 8490.90039,
+      "price": 8490.90039,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-09",
+      "x1": "2026-08-06",
+      "y0": 8490.90039,
+      "y1": 9296.7002,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "lot_cost": 28375.68,
+  "pip_value": 65.06,
+  "spread_multiplier": 6.0,
+  "spread": 390.36
+}

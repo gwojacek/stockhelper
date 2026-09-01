@@ -1,12 +1,8 @@
 {
   "__show_ichimoku__": false,
-  "__scanner_breakout_date__": "2026-06-24",
-  "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "7.6",
   "__journal_source_technique__": "Kliny",
-  "lot_cost": 125345.9,
+  "lot_cost": 125763.14,
   "pip_value": 3.69,
-  "__scanner_breakout_direction__": "short",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
@@ -45,13 +41,11 @@
       "label": "Falling wedge lower",
       "x": [
         "2026-02-02",
-        "2026-07-01",
-        "2027-06-03"
+        "2026-12-25"
       ],
       "y": [
         2856.5,
-        3219.0,
-        4063.66019
+        3616.45
       ],
       "x0": "2026-02-02",
       "x1": "2027-06-03",
@@ -63,12 +57,12 @@
       ],
       "anchor_y": [
         2856.5,
-        3219.0
+        3219
       ],
       "price": 4063.66019,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": false
+      "free_extension": true
     }
   ],
   "high": 3793.5,
@@ -76,7 +70,7 @@
   "low": 2856.5,
   "__wedge_auto_low__": true,
   "__half_points__": [],
-  "capital": 325000,
+  "capital": 303500,
   "calculation_currency": "PLN",
   "spread_multiplier": 0,
   "spread": 0,
@@ -95,5 +89,7 @@
       "auto_wedge": true
     }
   },
+  "__saved_fibo_by_user__": false,
+  "__saved_wedge_by_user__": true,
   "position_type": "short"
 }

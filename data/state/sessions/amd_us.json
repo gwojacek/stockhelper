@@ -3,10 +3,11 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
-  "__scanner_breakout_date__": "2026-04-08",
-  "__scanner_retest_count__": "1",
   "__journal_source_technique__": "Ichimoku",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_latest_retest_date__": "2026-08-06",
-  "__scanner_latest_retest_pattern__": "bullish_engulfing"
+  "drawn_objects": [],
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-08-24",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "4.6"
 }

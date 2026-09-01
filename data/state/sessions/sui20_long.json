@@ -1,86 +1,10 @@
 {
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (14464.53027)",
-      "x0": "2026-07-06",
-      "x1": "2034-07-01",
-      "y0": 14464.53027,
-      "y1": 14464.53027,
-      "price": 14464.53027,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (13891.28966)",
-      "x0": "2026-06-16",
-      "x1": "2034-07-01",
-      "y0": 13891.28966,
-      "y1": 13891.28966,
-      "price": 13891.28966,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (13714.21533)",
-      "x0": "2026-06-10",
-      "x1": "2034-07-01",
-      "y0": 13714.21533,
-      "y1": 13714.21533,
-      "price": 13714.21533,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (13537.141)",
-      "x0": "2026-06-03",
-      "x1": "2034-07-01",
-      "y0": 13537.141,
-      "y1": 13537.141,
-      "price": 13537.141,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (12963.90039)",
-      "x0": "2026-05-12",
-      "x1": "2034-07-01",
-      "y0": 12963.90039,
-      "y1": 12963.90039,
-      "price": 12963.90039,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-12",
-      "x1": "2026-07-06",
-      "y0": 12963.90039,
-      "y1": 14464.53027,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "lot_cost": 94820.75,
   "pip_value": 72.83,
   "spread_multiplier": 5.0,
-  "spread": 364.15
+  "spread": 364.15,
+  "__saved_fibo_by_user__": false
 }

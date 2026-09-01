@@ -1,0 +1,86 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (847.0)",
+      "x0": "2026-08-21",
+      "x1": "2034-07-17",
+      "y0": 847.0,
+      "y1": 847.0,
+      "price": 847.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (749.40665)",
+      "x0": "2026-07-23",
+      "x1": "2034-07-17",
+      "y0": 749.40665,
+      "y1": 749.40665,
+      "price": 749.40665,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (719.26001)",
+      "x0": "2026-07-14",
+      "x1": "2034-07-17",
+      "y0": 719.26001,
+      "y1": 719.26001,
+      "price": 719.26001,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (689.11337)",
+      "x0": "2026-07-02",
+      "x1": "2034-07-17",
+      "y0": 689.11337,
+      "y1": 689.11337,
+      "price": 689.11337,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (591.52002)",
+      "x0": "2026-06-02",
+      "x1": "2034-07-17",
+      "y0": 591.52002,
+      "y1": 591.52002,
+      "price": 591.52002,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-02",
+      "x1": "2026-08-21",
+      "y0": 591.52002,
+      "y1": 847.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
+}

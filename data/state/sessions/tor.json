@@ -2,9 +2,86 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "high": 69.5,
-  "drawn_objects": [],
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (74.5)",
+      "x0": "2026-07-16",
+      "x1": "2034-07-17",
+      "y0": 74.5,
+      "y1": 74.5,
+      "price": 74.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (61.36359)",
+      "x0": "2026-03-17",
+      "x1": "2034-07-17",
+      "y0": 61.36359,
+      "y1": 61.36359,
+      "price": 61.36359,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (57.30575)",
+      "x0": "2026-02-09",
+      "x1": "2034-07-17",
+      "y0": 57.30575,
+      "y1": 57.30575,
+      "price": 57.30575,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (53.24791)",
+      "x0": "2026-01-02",
+      "x1": "2034-07-17",
+      "y0": 53.24791,
+      "y1": 53.24791,
+      "price": 53.24791,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (40.1115)",
+      "x0": "2025-09-01",
+      "x1": "2034-07-17",
+      "y0": 40.1115,
+      "y1": 40.1115,
+      "price": 40.1115,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2025-09-01",
+      "x1": "2026-07-16",
+      "y0": 40.1115,
+      "y1": 74.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
   "level_points": {
     "high": {
       "price": 69.5,
@@ -12,10 +89,6 @@
       "date": "2026-04-10 00:00:00"
     }
   },
-  "__journal_source_technique__": "Ichimoku",
-  "__scanner_breakout_date__": "2025-07-07",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "9",
-  "__scanner_latest_retest_date__": "2026-08-13",
-  "__scanner_latest_retest_pattern__": "bullish_harami"
+  "__journal_source_technique__": "Fibo",
+  "__saved_fibo_by_user__": false
 }

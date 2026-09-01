@@ -17,84 +17,7 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (0.68653)",
-      "x0": "2026-06-30",
-      "x1": "2034-07-11",
-      "y0": 0.68653,
-      "y1": 0.68653,
-      "price": 0.68653,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (0.70205)",
-      "x0": "2026-06-11",
-      "x1": "2034-07-11",
-      "y0": 0.70205,
-      "y1": 0.70205,
-      "price": 0.70205,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (0.70685)",
-      "x0": "2026-06-05",
-      "x1": "2034-07-11",
-      "y0": 0.70685,
-      "y1": 0.70685,
-      "price": 0.70685,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (0.71165)",
-      "x0": "2026-06-01",
-      "x1": "2034-07-11",
-      "y0": 0.71165,
-      "y1": 0.71165,
-      "price": 0.71165,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (0.72717)",
-      "x0": "2026-05-13",
-      "x1": "2034-07-11",
-      "y0": 0.72717,
-      "y1": 0.72717,
-      "price": 0.72717,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "short"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-13",
-      "x1": "2026-06-30",
-      "y0": 0.72717,
-      "y1": 0.68653,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "calculation_currency": "PLN",
   "position_calculations": {
     "basics": {
@@ -179,8 +102,5 @@
   "level_points": {},
   "__scanner_pattern_date__": "2026-08-18",
   "__scanner_pattern_name__": "dark_cloud_cover",
-  "__saved_fibo_invalid__": {
-    "since": "2026-08-23",
-    "fingerprint": "87a11326ae1e755d6070b684c7c032e586e8972514a18beed9ba1d7a295a257b"
-  }
+  "__saved_fibo_by_user__": false
 }

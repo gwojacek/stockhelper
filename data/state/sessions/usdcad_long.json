@@ -5,7 +5,7 @@
   "stop_loss": 1.3773,
   "position_type": "long",
   "capital": 232000,
-  "lot_cost": 12307.33,
+  "lot_cost": 12395.0,
   "pip_value": 26.86,
   "pip_size": 0.0001,
   "spread": 39.105000000000004,
@@ -19,76 +19,76 @@
     {
       "id": "auto-fibo-0",
       "type": "fib",
-      "label": "FIB 0% (1.42482)",
+      "label": "FIB 0% (1.37325)",
+      "x0": "2026-08-21",
+      "x1": "2034-07-17",
+      "y0": 1.37325,
+      "y1": 1.37325,
+      "price": 1.37325,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (1.39295)",
+      "x0": "2026-07-30",
+      "x1": "2034-07-17",
+      "y0": 1.39295,
+      "y1": 1.39295,
+      "price": 1.39295,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (1.39904)",
+      "x0": "2026-07-23",
+      "x1": "2034-07-17",
+      "y0": 1.39904,
+      "y1": 1.39904,
+      "price": 1.39904,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (1.40512)",
+      "x0": "2026-07-16",
+      "x1": "2034-07-17",
+      "y0": 1.40512,
+      "y1": 1.40512,
+      "price": 1.40512,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (1.42482)",
       "x0": "2026-06-24",
-      "x1": "2034-07-09",
+      "x1": "2034-07-17",
       "y0": 1.42482,
       "y1": 1.42482,
       "price": 1.42482,
       "color": "#64748b",
       "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (1.39817)",
-      "x0": "2026-06-03",
-      "x1": "2034-07-09",
-      "y0": 1.39817,
-      "y1": 1.39817,
-      "price": 1.39817,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (1.38994)",
-      "x0": "2026-05-28",
-      "x1": "2034-07-09",
-      "y0": 1.38994,
-      "y1": 1.38994,
-      "price": 1.38994,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (1.38171)",
-      "x0": "2026-05-22",
-      "x1": "2034-07-09",
-      "y0": 1.38171,
-      "y1": 1.38171,
-      "price": 1.38171,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (1.35506)",
-      "x0": "2026-05-01",
-      "x1": "2034-07-09",
-      "y0": 1.35506,
-      "y1": 1.35506,
-      "price": 1.35506,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
+      "direction": "short"
     },
     {
       "id": "auto-fibo-boundary",
       "type": "fib-boundary",
       "label": "FIB anchor",
-      "x0": "2026-05-01",
-      "x1": "2026-06-24",
-      "y0": 1.35506,
-      "y1": 1.42482,
+      "x0": "2026-06-24",
+      "x1": "2026-08-21",
+      "y0": 1.42482,
+      "y1": 1.37325,
       "color": "#64748b",
       "group_id": "auto-fibo"
     }
@@ -96,5 +96,6 @@
   "__saved_fibo_invalid__": {
     "since": "2026-08-21",
     "fingerprint": "84e9b8e53ba0f5a1b17daeb2351d58dc589e3137e362573a6458b1b71daec773"
-  }
+  },
+  "__saved_fibo_by_user__": false
 }

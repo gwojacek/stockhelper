@@ -4,84 +4,8 @@
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (88.83)",
-      "x0": "2026-06-22",
-      "x1": "2034-06-25",
-      "y0": 88.83,
-      "y1": 88.83,
-      "price": 88.83,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (68.5649)",
-      "x0": "2026-05-19",
-      "x1": "2034-06-25",
-      "y0": 68.5649,
-      "y1": 68.5649,
-      "price": 68.5649,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (62.305)",
-      "x0": "2026-05-08",
-      "x1": "2034-06-25",
-      "y0": 62.305,
-      "y1": 62.305,
-      "price": 62.305,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (56.0451)",
-      "x0": "2026-04-28",
-      "x1": "2034-06-25",
-      "y0": 56.0451,
-      "y1": 56.0451,
-      "price": 56.0451,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (35.78)",
-      "x0": "2026-03-23",
-      "x1": "2034-06-25",
-      "y0": 35.78,
-      "y1": 35.78,
-      "price": 35.78,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-03-23",
-      "x1": "2026-06-22",
-      "y0": 35.78,
-      "y1": 88.83,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "__scanner_pattern_date__": "2026-07-30",
-  "__scanner_pattern_name__": "bullish_engulfing"
+  "__scanner_pattern_name__": "bullish_engulfing",
+  "__saved_fibo_by_user__": false
 }

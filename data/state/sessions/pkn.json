@@ -11,84 +11,7 @@
   "__currency_fee_eligible__": false,
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [
-    {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (156.50)",
-      "x0": "2026-07-23",
-      "x1": "2034-07-10",
-      "y0": 156.5,
-      "y1": 156.5,
-      "price": 156.5,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (130.04)",
-      "x0": "2026-05-11",
-      "x1": "2034-07-10",
-      "y0": 130.04,
-      "y1": 130.04,
-      "price": 130.04,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (121.86)",
-      "x0": "2026-04-16",
-      "x1": "2034-07-10",
-      "y0": 121.86,
-      "y1": 121.86,
-      "price": 121.86,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (113.69)",
-      "x0": "2026-03-23",
-      "x1": "2034-07-10",
-      "y0": 113.69,
-      "y1": 113.69,
-      "price": 113.69,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (87.23)",
-      "x0": "2026-01-08",
-      "x1": "2034-07-10",
-      "y0": 87.23,
-      "y1": 87.23,
-      "price": 87.23,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-01-08",
-      "x1": "2026-07-23",
-      "y0": 87.23,
-      "y1": 156.5,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
-    }
-  ],
+  "drawn_objects": [],
   "calculation_currency": "PLN",
   "position_calculations": {
     "basics": {
@@ -172,5 +95,6 @@
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
-  "level_points": {}
+  "level_points": {},
+  "__saved_fibo_by_user__": false
 }

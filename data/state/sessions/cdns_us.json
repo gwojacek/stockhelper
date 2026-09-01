@@ -2,6 +2,85 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku"
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (311.42999)",
+      "x0": "2026-08-24",
+      "x1": "2034-07-17",
+      "y0": 311.42999,
+      "y1": 311.42999,
+      "price": 311.42999,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (351.63931)",
+      "x0": "2026-07-23",
+      "x1": "2034-07-17",
+      "y0": 351.63931,
+      "y1": 351.63931,
+      "price": 351.63931,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (364.05999)",
+      "x0": "2026-07-15",
+      "x1": "2034-07-17",
+      "y0": 364.05999,
+      "y1": 364.05999,
+      "price": 364.05999,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (376.48068)",
+      "x0": "2026-07-06",
+      "x1": "2034-07-17",
+      "y0": 376.48068,
+      "y1": 376.48068,
+      "price": 376.48068,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (416.69)",
+      "x0": "2026-06-02",
+      "x1": "2034-07-17",
+      "y0": 416.69,
+      "y1": 416.69,
+      "price": 416.69,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-02",
+      "x1": "2026-08-24",
+      "y0": 416.69,
+      "y1": 311.42999,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
 }
