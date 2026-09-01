@@ -1114,8 +1114,6 @@ def _impulse_has_disqualifying_month_side_trend(
     side_trend_count = _completed_month_side_trend_count(leg)
     if side_trend_count == 0:
         return False
-    if side_trend_count >= 2:
-        return True
     if len(leg) < 2:
         return True
     lows = pd.to_numeric(leg["Low"], errors="coerce")
@@ -1128,6 +1126,13 @@ def _impulse_has_disqualifying_month_side_trend(
         gain_pct >= continuation_min_gain
         and average_daily_gain >= continuation_min_daily_gain
     )
+    # Multiple rolling shelves are not automatically multiple market cycles.
+    # In a powerful stair-step advance they can be pauses inside one coherent
+    # impulse (PCO and ASB). Completed 61.8 cycles are handled separately by
+    # the stale-cycle guard, so an exceptional continuation can safely absorb
+    # more than one shelf without reviving an invalid old formation.
+    if side_trend_count >= 2 and exceptional_continuation:
+        return False
     return not exceptional_continuation
 
 
@@ -5981,6 +5986,10 @@ def _select_fibo_long_impulse_base(
     anchor_side_phases = _completed_month_side_trend_phases(impulse_view, band_pct=0.08)
     anchor_begins_side_trend = bool(anchor_side_phases) and anchor_side_phases[0][0] <= 5
     if len(side_phases) >= 2 or anchor_begins_side_trend:
+        original_days = i_peak - i_start
+        original_gain = (fib_end - fib_start) / max(abs(fib_start), 1e-9)
+        original_daily_gain = original_gain / max(original_days, 1)
+        exceptional_broad_impulse = original_gain >= 0.65 and original_daily_gain >= 0.006
         selected_phases = side_phases if len(side_phases) >= 2 else anchor_side_phases
         _last_phase_start, last_phase_end = selected_phases[-1]
         absolute_phase_end = i_start + last_phase_end
@@ -5994,6 +6003,9 @@ def _select_fibo_long_impulse_base(
             else i_start
         )
         launch_right = i_peak - min_incline_days
+        if launch_right < launch_left and exceptional_broad_impulse:
+            _log("Long: retained exceptional broad impulse; no mature faster post-range launch exists.")
+            return int(i_start), float(fib_start), float(fib_end)
         if launch_right < launch_left:
             _log("Rejected long: anchor-side range leaves no mature post-range impulse.")
             return None
@@ -6016,6 +6028,9 @@ def _select_fibo_long_impulse_base(
                 launch_candidates.append(
                     (candidate_daily_gain, candidate_gain, candidate_idx, candidate_low, candidate_days)
                 )
+        if not launch_candidates and exceptional_broad_impulse:
+            _log("Long: retained exceptional broad impulse; side phases did not produce a qualifying replacement.")
+            return int(i_start), float(fib_start), float(fib_end)
         if not launch_candidates:
             _log(
                 "Rejected long: anchor-side range is not followed by a qualifying post-range impulse."
@@ -6028,6 +6043,16 @@ def _select_fibo_long_impulse_base(
             post_range_low,
             post_range_days,
         ) = max(launch_candidates)
+        # A later shelf low should replace a powerful, coherent broad launch
+        # only when the new leg is materially faster.  Otherwise a mathematically
+        # shorter candidate hides the dominant formation (ASB and PCO).
+        if exceptional_broad_impulse and post_range_daily_gain < original_daily_gain * 1.25:
+            _log(
+                "Long: retained exceptional broad impulse over a non-materially-faster "
+                f"nested launch (broad_daily={original_daily_gain * 100:.2f}%, "
+                f"nested_daily={post_range_daily_gain * 100:.2f}%)."
+            )
+            return int(i_start), float(fib_start), float(fib_end)
         _log(
             "Long: moved fib start after completed anchor-side trend "
             f"idx={i_start} -> {post_range_idx} (last_channel_end={absolute_phase_end}, "
@@ -6201,6 +6226,29 @@ def _find_fibo_3p_steep_setup(
     )
     if structural_reset is not None:
         channel_end, post_anchor = structural_reset
+        broad_days = i_peak - i_start
+        broad_gain = (fib_end - fib_start) / max(abs(fib_start), 1e-9)
+        broad_daily_gain = broad_gain / max(broad_days, 1)
+        post_low = float(low.iloc[post_anchor]) if post_anchor >= 0 else float("nan")
+        post_days = i_peak - post_anchor if post_anchor >= 0 else 0
+        post_gain = (fib_end - post_low) / max(abs(post_low), 1e-9) if post_anchor >= 0 else 0.0
+        post_daily_gain = post_gain / max(post_days, 1)
+        keep_exceptional_broad = (
+            not _mirrored_short
+            and broad_gain >= 0.65
+            and broad_daily_gain >= 0.006
+            and post_anchor >= 0
+            and post_daily_gain < broad_daily_gain * 1.25
+        )
+        if keep_exceptional_broad:
+            _log(
+                "3P steep: retained exceptional broad anchor over a non-materially-faster "
+                f"post-channel leg (broad_daily={broad_daily_gain * 100:.2f}%, "
+                f"post_daily={post_daily_gain * 100:.2f}%)."
+            )
+            structural_reset = None
+    if structural_reset is not None:
+        channel_end, post_anchor = structural_reset
         if post_anchor < 0:
             _log("Rejected 3P steep: completed side trend has no mature post-channel impulse.")
             return None
@@ -6321,12 +6369,11 @@ def _find_fibo_3p_steep_setup(
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
-    if _has_completed_month_side_trend(w.iloc[i_peak:]):
+    if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):
         # A completed month-long base ends the old short cycle even when price
         # subsequently breaks upward and is currently near the recovery high.
         # MSTR's July-August shelf must not preserve its October-June decline.
-        side = "post-bottom recovery" if _mirrored_short else "post-peak pullback"
-        _log(f"Rejected 3P steep: {side} contains a completed month-long side trend.")
+        _log("Rejected 3P steep: post-bottom recovery contains a completed month-long side trend.")
         return None
     crossed_23_6 = progress_to_618 >= 0.0
 
@@ -6412,7 +6459,10 @@ def _find_fibo_setup(
     low = w["Low"]
     if direction == "long":
         min_incline_days = 10  # ~2 weeks
-        min_correction_days = 2
+        # One decisive post-peak candle is enough to establish the waiting leg
+        # when it already reaches 23.6 (Silver 2026-08-31). Shape/size checks
+        # below still reject an ordinary one-candle wobble.
+        min_correction_days = 1
         if forced_anchor_dates:
             dates = pd.to_datetime(w["Date"], errors="coerce")
             start_ts, end_ts = (pd.to_datetime(value, errors="coerce") for value in forced_anchor_dates)
@@ -6602,11 +6652,31 @@ def _find_fibo_setup(
             # scanner drops the setup on the exact candle where it becomes most
             # actionable (for example CDR on 2026-08-27).
             current_touch_idxs = [i for i in range(i_peak, i_end + 1) if low.iloc[i] <= fib_618 <= high.iloc[i]]
-            fresh_touch_window = bool(current_touch_idxs) and i_end <= current_touch_idxs[0] + 2
+            confirmed_first_touch_pattern = False
+            if current_touch_idxs:
+                first_touch = current_touch_idxs[0]
+                confirmation_end = min(i_end, first_touch + 2)
+                for confirm_idx in range(max(i_peak + 1, first_touch), confirmation_end + 1):
+                    c1, c2 = w.iloc[confirm_idx - 1], w.iloc[confirm_idx]
+                    includes_first_touch = first_touch in {confirm_idx - 1, confirm_idx}
+                    if (
+                        includes_first_touch
+                        and float(c2["Close"]) > fib_618
+                        and (
+                            _is_bullish_engulfing(c1, c2, fib_618)
+                            or _is_bullish_piercing_line(c1, c2, fib_618)
+                            or _is_bullish_harami(c1, c2, fib_618)
+                        )
+                    ):
+                        confirmed_first_touch_pattern = True
+                        break
+            fresh_touch_window = bool(current_touch_idxs) and (
+                i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern
+            )
             if fresh_touch_window:
                 _log(
                     f"{direction.capitalize()}: retained original impulse anchors because the first "
-                    "61.8 touch is still inside its three-candle pattern window."
+                    "61.8 touch is inside its pattern window or produced a confirmed reversal."
                 )
             else:
                 side = "short decline" if _mirrored_short else "long incline"

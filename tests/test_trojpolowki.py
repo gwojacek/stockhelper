@@ -897,7 +897,7 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
     setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
-    assert "fresh_touch_window = bool(current_touch_idxs) and i_end <= current_touch_idxs[0] + 2" in setup
+    assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
     assert "retained original impulse anchors because the first" in setup
     assert setup.index("if fresh_touch_window:") < setup.index("contains a completed month-long side trend", setup.index("if fresh_touch_window:"))
     run_source = Path("run").read_text(encoding="utf-8")
@@ -1760,13 +1760,13 @@ def test_3p_accepts_a_fresh_independent_peak_below_an_old_cycle_high():
     assert "independent_daily_gain >= independent_min_daily_gain" in steep
 
 
-def test_multiple_monthly_side_trends_cannot_be_absorbed_as_one_steep_impulse():
+def test_multiple_monthly_shelves_are_absorbed_only_by_exceptional_continuation():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     helper = source[source.index("def _completed_month_side_trend_phases"):source.index("def _has_extended_sideways")]
 
     assert "side_trend_count = _completed_month_side_trend_count(leg)" in helper
-    assert "if side_trend_count >= 2:" in helper
-    assert "return True" in helper
+    assert "if side_trend_count >= 2 and exceptional_continuation:" in helper
+    assert "Completed 61.8 cycles are handled separately" in helper
     assert "start > phases[-1][1] + 3" in helper
 
 
@@ -1794,6 +1794,42 @@ def test_opl_broad_incline_keeps_deep_launch_and_directional_correction():
     assert "max_lookback=140 if _mirrored_short else 200" in setup
     assert "if _mirrored_short and _has_completed_month_side_trend(correction_seg):" in setup
     assert "Do not reject a directional correction" in setup
+
+
+def test_exceptional_broad_3p_impulse_beats_non_materially_faster_nested_fibo():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+
+    assert "exceptional_broad_impulse = original_gain >= 0.65" in selector
+    assert "post_range_daily_gain < original_daily_gain * 1.25" in selector
+    assert "retained exceptional broad impulse over a non-materially-faster" in selector
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+    assert "post_daily_gain < broad_daily_gain * 1.25" in steep
+    assert "3P steep: retained exceptional broad anchor" in steep
+
+
+def test_one_decisive_correction_candle_can_reach_236_and_enter_waiting_column():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "min_correction_days = 1" in setup
+    assert "early_decline_pct >= 0.05 or reached_early_236" in setup
+
+
+def test_confirmed_first_touch_pattern_preserves_cdr_impulse_anchors():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
+
+    assert "confirmed_first_touch_pattern = False" in setup
+    assert "_is_bullish_harami(c1, c2, fib_618)" in setup
+    assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
+
+
+def test_long_3p_pullback_sideways_window_does_not_hide_pco_steep_incline():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
+
+    assert "if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):" in steep
 
 
 def test_exceptional_nine_day_gold_incline_is_not_rejected_as_too_short():
