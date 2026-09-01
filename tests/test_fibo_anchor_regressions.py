@@ -194,6 +194,73 @@ def test_base_followed_by_breakout_keeps_lowest_structural_launch(
 
 
 @pytest.mark.parametrize(
+    ("path", "old_anchors", "expected_start", "expected_low"),
+    [
+        (
+            "data/csv/stocks/INSM_US.csv",
+            ("2026-07-16", "2026-08-06"),
+            "2026-08-03",
+            96.42,
+        ),
+        (
+            "data/csv/commodities/XAGUSD.csv",
+            ("2026-07-08", "2026-08-28"),
+            "2026-07-17",
+            54.778,
+        ),
+    ],
+)
+def test_carried_long_anchor_cannot_skip_a_lower_pre_peak_low(
+    path, old_anchors, expected_start, expected_low
+):
+    frame = _fixture(path)
+    explain: list[str] = []
+
+    carried = scanner._find_fibo_setup(
+        frame, "long", forced_anchor_dates=old_anchors, explain=explain
+    )
+    automatic = scanner._find_fibo_setup(frame, "long")
+
+    assert carried is None
+    assert any("a lower low occurred after the first anchor" in item for item in explain)
+    assert automatic is not None
+    assert automatic.incline_start_date == expected_start
+    assert float(automatic.stop_loss) == pytest.approx(expected_low, abs=0.01)
+
+
+def test_pur_anchor_at_start_of_month_range_is_not_preserved_as_launch():
+    frame = _fixture("data/csv/stocks/PUR_WA.csv").tail(220).reset_index(drop=True)
+    peak_idx = int(frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == "2026-08-10"][0])
+    explain: list[str] = []
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=10,
+        stale_cycle_mode="reject",
+        max_lookback=200,
+        reset_after_sideways=True,
+        reset_after_extended_sideways=True,
+        log=explain.append,
+    )
+
+    # The July range starts at the old 2.06 low; that candle is not the launch
+    # of August's incline. Until the post-range impulse matures, dropping the
+    # candidate is preferable to drawing a false Fibo across the whole range.
+    assert base is None
+
+
+@pytest.mark.parametrize("path", ["data/csv/stocks/1AT_WA.csv", "data/csv/stocks/BHW_WA.csv"])
+def test_month_long_post_peak_range_is_not_a_steep_3p_candidate(path):
+    frame = _fixture(path)
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
     ("path", "anchors", "expected_status", "expected_pattern"),
     [
         (

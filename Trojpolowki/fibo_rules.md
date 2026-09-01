@@ -18,12 +18,18 @@ different pair merely to keep the instrument on the board.
 - The first anchor must precede the second anchor and the impulse between them
   must have meaningful duration, displacement and direction. A candle selected
   only because it makes the desired 61.8 value is not a valid anchor.
+- Between a long formation's first anchor and its top, no candle may make a
+  lower low; that newer low becomes the only possible launch anchor. The short
+  rule is mirrored: no higher high may occur before the measured bottom.
 - The second anchor must be the actual top/bottom of the measured leg. It must
   not be an interior candle while that same leg continues to a more extreme
   price.
 - A completed month-long sideways phase separates market legs. An old anchor
   before that phase is not joined to a later breakout; the new formation starts
   at the structural swing low/high which launches the post-range move.
+- A completed month-long range after the second anchor also ends the active
+  correction. Finishing near an edge of that range does not keep the old setup
+  in column 1 or 2; a later breakout must establish a new formation.
 - A normal, short pause within a coherent impulse does not by itself move an
   anchor. Re-anchoring is allowed only when market structure creates a genuinely
   new impulse, not because another anchor pair happens to pass the Fibo filters.

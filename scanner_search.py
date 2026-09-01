@@ -1400,7 +1400,15 @@ def _completed_sideways_reset_long(
     # post-channel candle places it in the middle of the incline (SNT/CDR).
     # Longer pre-channel advances are still eligible for the structural reset
     # below (for example a rally, deep correction, then a new base).
-    if original_is_strong and channel_start - start_idx <= 22 and original_low <= channel_low:
+    anchor_starts_with_flat_month = _early_sideways_after_anchor_window(
+        w, start_idx, direction="long", band_pct=min(band_pct, 0.10),
+    ) is not None
+    if (
+        original_is_strong
+        and channel_start - start_idx <= 22
+        and original_low <= channel_low
+        and not anchor_starts_with_flat_month
+    ):
         return None
 
     closes = pd.to_numeric(w["Close"], errors="coerce")
@@ -6456,6 +6464,16 @@ def _find_fibo_3p_steep_setup(
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
+    if not _mirrored_short and _has_completed_month_side_trend(
+        w.iloc[i_peak + 1:].reset_index(drop=True)
+    ):
+        # Column one/two describes an active correction, not a stock which has
+        # spent a complete month (or two) parked in a range after its peak.
+        # This guard is deliberately independent of the latest close's place
+        # inside that range, so BHW/1AT cannot survive merely by finishing near
+        # the channel boundary.
+        _log("Rejected 3P steep: post-peak correction contains a completed month-long side trend.")
+        return None
     if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):
         # A completed month-long base ends the old short cycle even when price
         # subsequently breaks upward and is currently near the recovery high.
@@ -6588,6 +6606,22 @@ def _find_fibo_setup(
             return None
         i_start, fib_start, fib_end = base
         if forced_anchor_dates:
+            # A long Fibo bottom must remain the bottom of the complete
+            # measured impulse. Carrying an old board anchor past a newer low
+            # manufactured formations such as INSM (105.07 even though 96.42
+            # occurred before the 137.70 top) and Silver (57.24 before 54.78).
+            # Reject that geometry and let automatic discovery rebuild it from
+            # the genuine later swing low.
+            later_lows = pd.to_numeric(
+                low.iloc[i_start + 1:i_peak + 1], errors="coerce"
+            ).dropna()
+            if not later_lows.empty and float(later_lows.min()) < fib_start * 0.999:
+                _log(
+                    "Rejected saved/carried long Fibo: a lower low occurred after "
+                    f"the first anchor and before the top "
+                    f"({float(later_lows.min()):.4f} < {fib_start:.4f})."
+                )
+                return None
             measured_high = float(pd.to_numeric(high.iloc[i_start:], errors="coerce").max())
             if measured_high > fib_end * 1.005:
                 _log(
