@@ -1395,6 +1395,14 @@ def _completed_sideways_reset_long(
     if launch_is_late_and_strong:
         return channel_end, channel_launch_idx
 
+    # If the selected lowest swing immediately precedes the base, that base is
+    # the launch structure itself—not a later reset. Moving the anchor to a
+    # post-channel candle places it in the middle of the incline (SNT/CDR).
+    # Longer pre-channel advances are still eligible for the structural reset
+    # below (for example a rally, deep correction, then a new base).
+    if original_is_strong and channel_start - start_idx <= 10 and original_low <= channel_low:
+        return None
+
     closes = pd.to_numeric(w["Close"], errors="coerce")
     post_closes = closes.iloc[channel_end + 1:peak_idx + 1]
     decisive = [
@@ -7205,7 +7213,11 @@ def run_fibo_search(target: str) -> int:
         if not touch_rows.empty:
             first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"], errors="coerce")
             if pd.notna(first_touch_ts):
-                return int((dts > first_touch_ts).sum()) >= 2
+                # Touch candle + at most two following candles comprise the
+                # complete 1/2/3-candle pattern window. On the second following
+                # candle a morning/evening star can still finish, so expire the
+                # candidate only when a third later candle exists.
+                return int((dts > first_touch_ts).sum()) > 2
         if cand.direction == "long":
             # Long waiting setup becomes stale if market already made a higher high
             # after the selected impulse top (newer impulse supersedes older one),

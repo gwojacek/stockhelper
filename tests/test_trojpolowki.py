@@ -893,7 +893,7 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'touch_mask = pd.to_numeric(after["Low"]' in stale
     assert 'touch_mask = pd.to_numeric(after["High"]' in stale
     assert 'first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"]' in stale
-    assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
+    assert 'int((dts > first_touch_ts).sum()) > 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
     setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
@@ -1475,6 +1475,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
     run_source = Path("run").read_text(encoding="utf-8")
     assert "def troj_card_freshness_key" in run_source
+    assert "row_signal_dates = _row_signal_dates(row)" in run_source
+    assert "signal_date = max(row_signal_dates) if row_signal_dates else _latest_date_from_text(cell)" in run_source
     assert "-(signal_date.toordinal() if signal_date else 0)" in run_source
     assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
     assert "def wedge_freshness_rank" in run_source

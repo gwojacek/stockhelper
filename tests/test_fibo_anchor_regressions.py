@@ -161,3 +161,64 @@ def test_regular_and_3p_share_completed_channel_reset_helper():
     steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
     assert "_completed_sideways_reset_long" in base
     assert "_completed_sideways_reset_long" in steep
+
+
+@pytest.mark.parametrize(
+    ("path", "peak_date", "expected_date", "expected_low"),
+    [
+        ("data/csv/stocks/SNT_WA.csv", "2026-07-15", "2026-06-01", 262.0),
+        ("data/csv/commodities/XAGUSD.csv", "2026-08-28", "2026-07-17", 54.778),
+    ],
+)
+def test_base_followed_by_breakout_keeps_lowest_structural_launch(
+    path, peak_date, expected_date, expected_low
+):
+    frame = _fixture(path).tail(220).reset_index(drop=True)
+    peak_idx = int(frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == peak_date][0])
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=10,
+        stale_cycle_mode="reject",
+        max_lookback=140,
+        reset_after_sideways=True,
+        reset_after_extended_sideways=True,
+        allow_independent_peak=True,
+    )
+
+    assert base is not None
+    start_idx, start_low, _peak = base
+    assert frame.iloc[start_idx]["Date"].strftime("%Y-%m-%d") == expected_date
+    assert start_low == pytest.approx(expected_low, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("path", "anchors", "expected_status", "expected_pattern"),
+    [
+        (
+            "data/csv/stocks/TXT_WA.csv",
+            ("2026-06-08", "2026-08-12"),
+            "touched_61_8_no_pattern",
+            "none",
+        ),
+        (
+            "data/csv/stocks/CDR_WA.csv",
+            ("2026-06-26", "2026-08-13"),
+            "valid_reversal",
+            "bullish_harami",
+        ),
+    ],
+)
+def test_live_first_touch_and_harami_keep_their_structural_anchors(
+    path, anchors, expected_status, expected_pattern
+):
+    frame = _fixture(path)
+
+    result = scanner._find_fibo_setup(frame, "long", forced_anchor_dates=anchors)
+
+    assert result is not None
+    assert result.incline_start_date == anchors[0]
+    assert result.incline_end_date == anchors[1]
+    assert result.status == expected_status
+    assert result.reversal_pattern_name == expected_pattern

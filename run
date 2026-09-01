@@ -3004,7 +3004,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row))
                 or ("fibo" in section_id and _troj_cell_recent_fibo_signal(cell, row))
             )
-            signal_date = _latest_date_from_text(cell)
+            # Fibo card text contains anchor dates, which are not signal dates.
+            # Sorting on the newest date in the text therefore promoted recent
+            # anchors over a genuinely fresh 61.8 touch/pattern. Prefer the
+            # scanner's authoritative signal date and use card dates only for
+            # historical/dropout cards which have no live ScannerRow.
+            row_signal_dates = _row_signal_dates(row) if row is not None else []
+            signal_date = max(row_signal_dates) if row_signal_dates else _latest_date_from_text(cell)
             return (0 if highlighted else 1, -(signal_date.toordinal() if signal_date else 0), original_index)
         columns_for_display = [
             [cell for _idx, cell in sorted(enumerate(cells), key=troj_card_freshness_key)]
