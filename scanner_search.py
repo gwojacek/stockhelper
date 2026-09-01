@@ -5991,6 +5991,30 @@ def _select_fibo_long_impulse_base(
         original_daily_gain = original_gain / max(original_days, 1)
         exceptional_broad_impulse = original_gain >= 0.65 and original_daily_gain >= 0.006
         selected_phases = side_phases if len(side_phases) >= 2 else anchor_side_phases
+        if exceptional_broad_impulse and len(side_phases) >= 2:
+            # A very large eventual rise does not authorize an anchor before a
+            # completed month-long base.  Pick the earliest completed phase
+            # whose late local bottom itself launches an exceptional move. This
+            # anchors ASB at the March 23 low after its Feb-Mar range, rather
+            # than at the old pre-range bottom or the much later July shelf.
+            for phase_start, phase_end in side_phases:
+                phase_abs_start = i_start + phase_start
+                phase_abs_end = i_start + phase_end
+                late_left = max(phase_abs_start, phase_abs_end - 5)
+                late_low_idx = int(low.iloc[late_left:phase_abs_end + 1].idxmin())
+                late_low = float(low.iloc[late_low_idx])
+                late_days = i_peak - late_low_idx
+                late_gain = (fib_end - late_low) / max(abs(late_low), 1e-9)
+                late_daily_gain = late_gain / max(late_days, 1)
+                if late_gain >= 0.65 and late_daily_gain >= 0.006:
+                    _log(
+                        "Long: moved exceptional broad fib start behind completed base "
+                        f"idx={i_start} -> {late_low_idx} (phase={phase_abs_start}-{phase_abs_end}, "
+                        f"gain={late_gain * 100:.2f}%, daily={late_daily_gain * 100:.2f}%)."
+                    )
+                    return late_low_idx, late_low, float(fib_end)
+            _log("Long: retained exceptional broad launch; no later completed base starts an equally exceptional leg.")
+            return int(i_start), float(fib_start), float(fib_end)
         _last_phase_start, last_phase_end = selected_phases[-1]
         absolute_phase_end = i_start + last_phase_end
         # For repeated phases the launch must follow the final one. For a
@@ -6645,7 +6669,16 @@ def _find_fibo_setup(
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
         fresh_touch_window = False
-        if _impulse_has_disqualifying_month_side_trend(impulse_seg):
+        recent_peak_waiting = i_end - i_peak <= 3
+        impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(
+            impulse_seg,
+            # A newest-peak formation with a decisive immediate pullback is a
+            # current setup, not a stale historical leg. Apply the 3P steepness
+            # floor so Silver's July-August advance survives its internal shelf.
+            continuation_min_gain=0.15 if recent_peak_waiting and not _mirrored_short else 0.65,
+            continuation_min_daily_gain=0.003 if recent_peak_waiting and not _mirrored_short else 0.006,
+        )
+        if impulse_side_disqualifying:
             # A first 61.8 touch is an active, incomplete reversal event. Keep
             # its original anchors during the three-candle confirmation window
             # even when the impulse contained a monthly shelf; otherwise the
@@ -7329,6 +7362,33 @@ def run_fibo_search(target: str) -> int:
                     broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
                     if broad_cand:
                         long_candidates.append(broad_cand)
+            # An offset scan may discover the correct broad anchors before the
+            # live correction reaches 61.8. Once current data touches that
+            # level, re-evaluate those exact anchors instead of letting a newer
+            # automatic re-anchor turn the setup into a dropout. This is how a
+            # CDR-style next-day harami and a TXT-style fresh first touch remain
+            # attached to the formation that produced their Fibo level.
+            refreshed_anchor_candidates: list[FiboScanResult] = []
+            recent_low = float(pd.to_numeric(df["Low"], errors="coerce").dropna().tail(10).min())
+            for historical in long_candidates:
+                should_refresh = (
+                    historical.status in {
+                        "reached_23_6_waiting_for_61_8",
+                        "touched_61_8_no_pattern",
+                    }
+                    and recent_low <= float(historical.fib_61_8)
+                )
+                if not should_refresh:
+                    continue
+                refreshed = _find_fibo_setup(
+                    df,
+                    "long",
+                    allow_equal_third_close=(instrument == "forex"),
+                    forced_anchor_dates=(historical.incline_start_date, historical.incline_end_date),
+                )
+                if refreshed:
+                    refreshed_anchor_candidates.append(refreshed)
+            long_candidates.extend(refreshed_anchor_candidates)
             if long_candidates:
                 long_candidates = [c for c in long_candidates if not _is_waiting_candidate_stale(df, c) and not _is_valid_reversal_invalidated(df, c)]
                 # Keep at most three distinct formations, preferring:

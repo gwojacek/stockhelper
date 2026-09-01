@@ -1026,7 +1026,8 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
 
     assert "if _has_extended_sideways(correction_seg):" in setup
     assert "correction is dominated by an extended side trend" in setup
-    assert "if _impulse_has_disqualifying_month_side_trend(impulse_seg):" in setup
+    assert "impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(" in setup
+    assert "if impulse_side_disqualifying:" in setup
     assert "contains a completed month-long side trend" in setup
     assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
     assert "if _has_completed_month_side_trend(after):" in stale
@@ -1814,6 +1815,8 @@ def test_one_decisive_correction_candle_can_reach_236_and_enter_waiting_column()
 
     assert "min_correction_days = 1" in setup
     assert "early_decline_pct >= 0.05 or reached_early_236" in setup
+    assert "recent_peak_waiting = i_end - i_peak <= 3" in setup
+    assert "continuation_min_gain=0.15 if recent_peak_waiting" in setup
 
 
 def test_confirmed_first_touch_pattern_preserves_cdr_impulse_anchors():
@@ -1823,6 +1826,11 @@ def test_confirmed_first_touch_pattern_preserves_cdr_impulse_anchors():
     assert "confirmed_first_touch_pattern = False" in setup
     assert "_is_bullish_harami(c1, c2, fib_618)" in setup
     assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
+    scan_start = source.index("def _scan_fibo_one")
+    scan = source[scan_start:source.index("workers_override =", scan_start)]
+    assert "refreshed_anchor_candidates: list[FiboScanResult]" in scan
+    assert "forced_anchor_dates=(historical.incline_start_date, historical.incline_end_date)" in scan
+    assert "recent_low <= float(historical.fib_61_8)" in scan
 
 
 def test_long_3p_pullback_sideways_window_does_not_hide_pco_steep_incline():
@@ -1830,6 +1838,16 @@ def test_long_3p_pullback_sideways_window_does_not_hide_pco_steep_incline():
     steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
 
     assert "if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):" in steep
+
+
+def test_asb_anchor_moves_to_late_low_of_first_base_that_launches_exceptional_leg():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    selector = source[source.index("def _select_fibo_long_impulse_base"):source.index("def _find_fibo_3p_steep_setup")]
+
+    assert "for phase_start, phase_end in side_phases:" in selector
+    assert "late_left = max(phase_abs_start, phase_abs_end - 5)" in selector
+    assert "late_gain >= 0.65 and late_daily_gain >= 0.006" in selector
+    assert "moved exceptional broad fib start behind completed base" in selector
 
 
 def test_exceptional_nine_day_gold_incline_is_not_rejected_as_too_short():
