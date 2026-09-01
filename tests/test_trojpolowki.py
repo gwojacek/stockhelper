@@ -155,6 +155,15 @@ def test_allsearch_accepts_comma_separated_selected_instruments():
         "selected__ARM.US__BFT.WA__INSM.US",
     ]
     assert mod._parse_allsearch_scopes("all") == mod.DEFAULT_ALLSEARCH_SCOPES
+    assert mod._parse_allsearch_scopes(["SNT.WA,", "CDR.WA,", "TXT.WA,", "CRI.WA"]) == [
+        "selected__SNT.WA__CDR.WA__TXT.WA__CRI.WA",
+    ]
+    assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "SNT.WA") == "WIG"
+    assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "ARM.US") == "US100"
+
+    source = Path("run").read_text(encoding="utf-8")
+    assert "dest='allsearch_target', nargs='*', default=None" in source
+    assert "if args.allsearch_target is not None:" in source
 
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
