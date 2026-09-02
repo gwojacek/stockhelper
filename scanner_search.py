@@ -780,7 +780,7 @@ def _is_doji(c: pd.Series, tol: float = 0.15) -> bool:
     return body / rng <= tol
 
 def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_floor: float | None = None) -> bool:
-    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, l2, b2 = _candle_parts(c2)
+    o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
     if not (cl1 < o1 and cl2 > o2 and b2 < b1):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
@@ -789,19 +789,10 @@ def _is_bullish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_floor: f
         if zone_floor is None
         else _overlaps_price_zone(c1, zone_floor, level) or _overlaps_price_zone(c2, zone_floor, level)
     )
-    # Provider rounding can put a small harami body a few ticks outside the
-    # first real body.  Permit only a tiny (0.2%) containment tolerance, and
-    # require the confirming candle to retain a lower wick when that tolerance
-    # is used.  This recognizes CDR's 2026-08-27/28 reversal at 61.8 without
-    # turning ordinary overlapping candles into haramis.
-    containment_tolerance = max(abs(o1), abs(cl1), 1e-9) * 0.002
-    strictly_contained = lo1 <= lo2 and hi2 <= hi1
-    nearly_contained = (
-        lo1 - containment_tolerance <= lo2
-        and hi2 <= hi1 + containment_tolerance
-        and min(o2, cl2) - l2 >= b2
-    )
-    return (strictly_contained or nearly_contained) and touches_retest
+    # A harami requires the complete second real body to remain inside the
+    # first real body.  Do not use a price-relative tolerance here: even a
+    # small overlap beyond the first close/open makes this a different pattern.
+    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
 
 def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, doji_middle: bool = False, allow_equal_third_close: bool = False) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2); o3, cl3, _, _, _ = _candle_parts(c3)

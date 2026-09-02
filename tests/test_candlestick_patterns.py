@@ -152,6 +152,13 @@ def test_cdr_long_lower_wick_bullish_harami_confirms_first_618_touch():
     assert _is_bullish_harami(august_27, august_28, 233.34)
 
 
+def test_bullish_harami_rejects_second_body_extending_below_first_body():
+    september_1 = candle(98.25, 98.95, 94.00, 95.60)
+    september_2 = candle(95.50, 96.85, 94.15, 96.20)
+
+    assert not _is_bullish_harami(september_1, september_2, 95.00)
+
+
 def test_limit_fibo_formations_keeps_one_small_and_one_big_per_ticker_direction():
     from scanner_search import FiboScanResult, _limit_fibo_formations_per_ticker
 
