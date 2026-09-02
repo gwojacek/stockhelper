@@ -21,7 +21,8 @@ def load_run_module():
     detector = types.ModuleType("chart_program.instrument_detector")
     detector.detect_instrument_type = lambda ticker, default=None: default or "stock"
     loader_mod = types.ModuleType("chart_program.chart_loader")
-    loader_mod.COMMODITY_STOOQ_MAP = {"OIL": "cl.f"}
+    loader_mod.COMMODITY_STOOQ_MAP = {"OIL": "cl.f", "SILVER": "xagusd"}
+    loader_mod.COMMODITY_YAHOO_MAP = {"OIL": "CL=F", "SILVER": "SI=F"}
     loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
@@ -143,6 +144,64 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
         scanner_source.index("def run_fibo_explain", scanner_source.index("def _scan_fibo_one"))
     ]
     assert "with MARKET_REFRESH_LOCK:" in fibo_worker
+
+
+def test_allsearch_accepts_comma_separated_selected_instruments():
+    mod = load_run_module()
+
+    assert mod._parse_allsearch_scopes("TXT, CDR, SILVER,TXT") == [
+        "selected__TXT__CDR__SILVER",
+    ]
+    assert mod._parse_allsearch_scopes("ARM.US,BFT.WA,INSM.US") == [
+        "selected__ARM.US__BFT.WA__INSM.US",
+    ]
+    assert mod._parse_allsearch_scopes("all") == mod.DEFAULT_ALLSEARCH_SCOPES
+    assert mod._parse_allsearch_scopes(["SNT.WA,", "CDR.WA,", "TXT.WA,", "CRI.WA"]) == [
+        "selected__SNT.WA__CDR.WA__TXT.WA__CRI.WA",
+    ]
+    assert mod._parse_allsearch_scopes(["INSM.US,", "SI.F,", "PUR.WA"]) == [
+        "selected__INSM.US__SILVER__PUR.WA",
+    ]
+    assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "SNT.WA") == "WIG"
+    assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "ARM.US") == "US100"
+    assert mod._selected_scope_markets(["selected__SNT.WA__SAP.DE__ARM.US"]) == [
+        "WIG", "DAX", "US100",
+    ]
+
+    source = Path("run").read_text(encoding="utf-8")
+    assert "dest='allsearch_target', nargs='*', default=None" in source
+    assert "if args.allsearch_target is not None:" in source
+    assert 'selected_scope = any(str(scope).lower().startswith("selected__")' in source
+    assert "{r.market for r in rows} | set(_selected_scope_markets(scopes))" in source
+
+
+def test_allsearch_favorites_reads_server_synchronized_settings(tmp_path):
+    mod = load_run_module()
+    settings = tmp_path / "chart_program" / "data" / "user_settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({
+        "favorite_instruments": ["snt", "ARM.US", "SI.F", "snt", "bad ticker!"],
+    }), encoding="utf-8")
+
+    with mock.patch.object(mod, "PROJECT_ROOT", tmp_path):
+        assert mod._parse_allsearch_scopes("favorites") == [
+            "selected__SNT__ARM.US__SILVER",
+        ]
+        assert mod._parse_allsearch_scopes("favs, CDR.WA") == [
+            "selected__SNT__ARM.US__SILVER__CDR.WA",
+        ]
+
+
+def test_allsearch_favorites_reports_when_nothing_is_saved(tmp_path):
+    mod = load_run_module()
+
+    with mock.patch.object(mod, "PROJECT_ROOT", tmp_path):
+        try:
+            mod._parse_allsearch_scopes("favorites")
+        except ValueError as exc:
+            assert "No favorite instruments are saved" in str(exc)
+        else:
+            raise AssertionError("empty favorites must not silently scan every market")
 
 
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
@@ -387,6 +446,7 @@ def test_fibo_peak_selection_keeps_dominant_high_over_later_lower_high():
     peak_source = source[start:end]
     assert "global_max * 0.995" in peak_source
     assert "return max(dominant)" in peak_source
+    assert "moved second anchor to the highest high of the measured leg" in source
 
 
 def test_recent_independent_fibo_peak_can_be_slightly_below_old_dominant_high():
@@ -407,15 +467,15 @@ def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
     assert "post-bottom recovery" in source
     assert "short recovery" in source
     assert "correction contains a completed month-long side trend" in source
-    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
-    assert 'cand.direction == "short" and _has_long_sideways' in stale
+    helper = source[source.index("def _waiting_correction_is_stale"):source.index("def _early_sideways_after_anchor_window")]
+    assert 'direction == "short" and _has_long_sideways' in helper
 
 
 def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     helper = source[source.index("def _has_extended_sideways"):source.index("def _sideways_correction_near_active_extreme")]
     steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
-    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    waiting = source[source.index("def _waiting_correction_is_stale"):source.index("def _early_sideways_after_anchor_window")]
 
     assert "qualifying_starts.append(start)" in helper
     assert "longest_covered" in helper
@@ -426,8 +486,8 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "max_days=19" in helper
     assert "band_pct=0.20" in helper
     assert "max_progress_pct=0.08" in helper
-    assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
-    assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
+    assert waiting.index("if _has_extended_sideways") < waiting.index("return not _sideways_correction_near_active_extreme")
+    assert "correction, max_days=22, band_pct=0.12" in waiting
 
 
 def test_fibo_pattern_may_finish_later_but_must_include_initial_touch_candle():
@@ -893,12 +953,14 @@ def test_fresh_61_8_touch_waits_for_three_candle_pattern_window():
     assert 'touch_mask = pd.to_numeric(after["Low"]' in stale
     assert 'touch_mask = pd.to_numeric(after["High"]' in stale
     assert 'first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"]' in stale
-    assert 'int((dts > first_touch_ts).sum()) >= 2' in stale
+    assert 'int((dts > first_touch_ts).sum()) > 2' in stale
     assert 'rows1.append(r)' in source[source.index('if r.status == "touched_61_8_no_pattern"'):]
     assert 'r.status in {"3p_steep_23_6_zone", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"}' in source
     setup = source[source.index("def _find_fibo_setup"):source.index("def _print_fibo_results")]
     assert "i_end <= current_touch_idxs[0] + 2 or confirmed_first_touch_pattern" in setup
     assert "retained original impulse anchors because the first" in setup
+    assert "_previous_board_fibo_anchors(ticker)" in source
+    assert "including recent dropouts" in source
     assert setup.index("if fresh_touch_window:") < setup.index("contains a completed month-long side trend", setup.index("if fresh_touch_window:"))
     run_source = Path("run").read_text(encoding="utf-8")
     touched = run_source[run_source.index('if "touched_61_8_no_pattern"'):run_source.index("def _fibo_touch_date")]
@@ -1024,13 +1086,14 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
     stale_start = source.index("def _is_waiting_candidate_stale")
     stale = source[stale_start:source.index("def _scan_fibo_one", stale_start)]
 
-    assert "if _has_extended_sideways(correction_seg):" in setup
+    assert "if _has_extended_sideways(correction_seg) and not correction_at_active_extreme:" in setup
+    assert "_sideways_correction_near_active_extreme(" in setup
     assert "correction is dominated by an extended side trend" in setup
     assert "impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(" in setup
     assert "if impulse_side_disqualifying:" in setup
     assert "contains a completed month-long side trend" in setup
-    assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
-    assert "if _has_completed_month_side_trend(after):" in stale
+    assert "if _waiting_correction_is_stale(after, cand.direction):" in stale
+    assert "if _has_completed_month_side_trend(after):" not in stale
 
 
 def test_fibo_rejects_correction_through_original_anchor():
@@ -1475,7 +1538,11 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "visible.sort((a,b)=>(Number(b.classList.contains('today-signal'))-Number(a.classList.contains('today-signal')))).concat(hidden).forEach(card=>td.querySelector('.troj-cell-stack')?.appendChild(card))" in text
     run_source = Path("run").read_text(encoding="utf-8")
     assert "def troj_card_freshness_key" in run_source
-    assert "-(signal_date.toordinal() if signal_date else 0)" in run_source
+    assert "wig20 = _wig20_members()" in run_source
+    assert "market_rank = _market_order(row.market, row.ticker)" in run_source
+    assert "wig_rank = 0 if market_rank == 0 and ticker in wig20 else 1" in run_source
+    assert "return (market_rank, wig_rank, original_index)" in run_source
+    assert 'reason = f"Fibo pattern: {pattern}"' in run_source
     assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
     assert "def wedge_freshness_rank" in run_source
     assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source

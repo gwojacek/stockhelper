@@ -35,7 +35,11 @@ try:
 except Exception:
     tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
-from chart_program.chart_loader import COMMODITY_STOOQ_MAP, local_csv_path_for_symbol
+from chart_program.chart_loader import (
+    COMMODITY_STOOQ_MAP,
+    COMMODITY_YAHOO_MAP,
+    local_csv_path_for_symbol,
+)
 try:
     from chart_program.chart_loader import CSV_DATA_DIR, STATE_DATA_DIR
 except ImportError:
@@ -112,6 +116,64 @@ TROJPOLLOWKI_RETEST_LABELS = {
     "no_breakout": "no breakout",
     "unsuccessful_breakout": "unsuccessful breakout",
 }
+
+
+def _canonical_selected_symbol(value: str) -> str:
+    """Normalize provider commodity aliases used in explicit allsearch lists."""
+    symbol = str(value or "").strip().upper()
+    if symbol in COMMODITY_STOOQ_MAP or symbol in COMMODITY_YAHOO_MAP:
+        return symbol
+    for canonical, provider in COMMODITY_STOOQ_MAP.items():
+        if str(provider).upper() == symbol:
+            return canonical
+    yahoo_symbol = symbol.replace(".F", "=F")
+    for canonical, provider in COMMODITY_YAHOO_MAP.items():
+        if str(provider).upper() == yahoo_symbol:
+            return canonical
+    return symbol
+
+
+def _favorite_instruments() -> list[str]:
+    """Load the favorites synchronized by the report and chart UIs."""
+    settings_path = PROJECT_ROOT / "chart_program" / "data" / "user_settings.json"
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except (OSError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot read favorites from {settings_path}: {exc}") from exc
+    values = payload.get("favorite_instruments", [])
+    if not isinstance(values, list):
+        raise ValueError(f"Invalid favorite_instruments value in {settings_path}")
+    return list(dict.fromkeys(
+        _canonical_selected_symbol(str(value))
+        for value in values
+        if re.fullmatch(r"[A-Za-z0-9._-]{1,25}", str(value).strip())
+    ))
+
+
+def _parse_allsearch_scopes(value: str | list[str]) -> list[str]:
+    """Parse one market scope or an explicit comma-separated symbol list."""
+    raw = " ".join(value) if isinstance(value, list) else str(value or "")
+    requested = [item.strip() for item in raw.split(",") if item.strip()]
+    if not requested or (len(requested) == 1 and requested[0].lower() == "all"):
+        return DEFAULT_ALLSEARCH_SCOPES.copy()
+    favorite_aliases = {"favorites", "favourites", "favs"}
+    favorites_requested = any(item.lower() in favorite_aliases for item in requested)
+    expanded: list[str] = []
+    for item in requested:
+        if item.lower() in favorite_aliases:
+            expanded.extend(_favorite_instruments())
+        else:
+            expanded.append(item)
+    unique = list(dict.fromkeys(_canonical_selected_symbol(item) for item in expanded))
+    if not unique:
+        raise ValueError(
+            "No favorite instruments are saved. Add favorites with ☆ in a report or chart first."
+        )
+    if len(unique) > 1 or favorites_requested:
+        return ["selected__" + "__".join(unique)]
+    return unique
 
 ANSI_RESET="\033[0m"; ANSI_BOLD="\033[1m"; ANSI_CYAN="\033[36m"
 GOLD_DOT = "🟨"
@@ -1134,6 +1196,40 @@ def _market_order(scope: str, ticker: str = "") -> int:
 def _market_sort_key(row: ScannerRow) -> tuple[int, str]:
     return (_market_order(row.market, row.ticker), str(row.ticker or ""))
 
+
+def _report_market_for_ticker(scope: str, ticker: str) -> str:
+    """Expose a real market filter for rows from a selected-symbol scope."""
+    if not str(scope or "").upper().startswith("SELECTED__"):
+        return scope
+    symbol = str(ticker or "").upper()
+    if symbol.endswith(".WA") or ("." not in symbol and len(symbol) <= 5):
+        return "WIG"
+    if symbol.endswith(".DE"):
+        return "DAX"
+    if symbol.endswith(".US"):
+        return "US100"
+    detected = detect_instrument_type(symbol)
+    return {"commodity": "COMMODITIES", "forex": "FOREX", "etf": "ETFS"}.get(detected, "WIG")
+
+
+def _selected_scope_markets(scopes: list[str]) -> list[str]:
+    markets: set[str] = set()
+    for scope in scopes:
+        if not str(scope).lower().startswith("selected__"):
+            continue
+        for ticker in str(scope).split("__")[1:]:
+            if ticker:
+                markets.add(_report_market_for_ticker(scope, ticker))
+    return sorted(markets, key=lambda market: _market_order(market))
+
+
+def _wig20_members() -> set[str]:
+    try:
+        payload = json.loads((PROJECT_ROOT / "data" / "state" / "indices" / "memberships.json").read_text(encoding="utf-8"))
+        return {str(t).upper() for t in payload.get("indices", {}).get("WIG20", {}).get("tickers", [])}
+    except (OSError, ValueError, TypeError):
+        return set()
+
 def _parse_float_text(value: str, default: float = 0.0) -> float:
     txt = str(value or "").replace("%", "").replace("🟨", "").replace("🟢", "").replace("🟡", "").replace("🔴", "").strip()
     txt = txt.replace(" ", "").replace(",", "")
@@ -1290,7 +1386,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
         for r in i_w2:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
-                market=market, scanner="ICHIMOKU", category="retest_breakout", ticker=t,
+                market=_report_market_for_ticker(market, t), scanner="ICHIMOKU", category="retest_breakout", ticker=t,
                 status=str(r.get("Latest Retest status", "")), dates={"flip_date": str(r.get("Data wybicia", ""))},
                 metrics={
                     "months": str(r.get("Mies. od wybicia", "")), "previous_respect_months": str(r.get("Mies. respektu przed wybiciem", "")), "valid_retests_from_date": str(r.get("Valid retests from", "")), "qualification_status": str(r.get("4m qualification status", "standard_4m_breakout")), "retest_count": str(r.get("Retest count", "")),
@@ -1311,7 +1407,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
         for r in i_w1:
             t = str(r.get("Ticker", "")).strip()
             rows.append(ScannerRow(
-                market=market, scanner="ICHIMOKU", category="position", ticker=t,
+                market=_report_market_for_ticker(market, t), scanner="ICHIMOKU", category="position", ticker=t,
                 status=str(r.get("Pozycja", "")), dates={"start_date": str(r.get("Start", ""))},
                 metrics={
                     "candles": str(r.get("Świece", "")), "months": str(r.get("Mies.", "")), "close": str(r.get("Close", "")),
@@ -1341,7 +1437,7 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
             upper_start, upper_end = _line_parts(upper)
             lower_start, lower_end = _line_parts(lower)
             rows.append(ScannerRow(
-                market=market, scanner="WEDGE", category="falling", ticker=t, status=str(r.get("Status", "falling_wedge_unbroken")),
+                market=_report_market_for_ticker(market, t), scanner="WEDGE", category="falling", ticker=t, status=str(r.get("Status", "falling_wedge_unbroken")),
                 dates={"wedge": str(r.get("Wedge", ""))},
                 metrics={
                     "days": str(r.get("Days", "")), "months": str(r.get("Months", "")), "upper_touches": str(r.get("Upper touches", "")), "lower_touches": str(r.get("Lower touches", "")),
@@ -1353,13 +1449,13 @@ def _read_allsearch_rows(scopes: list[str]) -> list[ScannerRow]:
             ))
         for r in f_w0:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r)), "saved_by_user": str(r.get("Saved by user", "no"))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+            rows.append(ScannerRow(market=_report_market_for_ticker(market, t), scanner="FIBO", category="steep", ticker=t, status=str(r.get("Status", "3p_steep_incline")), pattern="none", direction=str(r.get("Dir", "long")), dates={"incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r)), "saved_by_user": str(r.get("Saved by user", "no"))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w2:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "saved_by_user": str(r.get("Saved by user", "no"))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
+            rows.append(ScannerRow(market=_report_market_for_ticker(market, t), scanner="FIBO", category="valid", ticker=t, status="valid_reversal", pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "saved_by_user": str(r.get("Saved by user", "no"))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="HIGH"))
         for r in f_w1:
             t = str(r.get("Ticker", "")).strip()
-            rows.append(ScannerRow(market=market, scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")), pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r)), "saved_by_user": str(r.get("Saved by user", "no"))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
+            rows.append(ScannerRow(market=_report_market_for_ticker(market, t), scanner="FIBO", category="waiting", ticker=t, status=str(r.get("Status", "")), pattern=str(r.get("Pattern", "")), direction=str(r.get("Dir", "")), dates={"touch_61": str(r.get("Touched_61.8_date", "")), "pattern_date": str(r.get("Pattern date", "")), "incline": str(r.get("Incline", "")), "start": _extract_start_date(r)}, metrics={"ratio": str(r.get("Ratio(d)", "")), "near61": str(r.get("Near61.8", "")), "avg10d": str(r.get("Avg10d PLN", "")), "latest_data": str(r.get("Latest data?", "")), "latest_date": str(r.get("Latest date", "")), "expected_date": str(r.get("Expected date", "")), "ratio_raw": str(_ratio_value(r)), "incline_days": str(_incline_duration_days(r)), "near61_raw": str(_near61_pct(r)), "saved_by_user": str(r.get("Saved by user", "no"))}, chart_url=str(r.get("Link", "")), python_command=str(r.get("Python command", "")), priority="MEDIUM"))
     return rows
 
 
@@ -2321,7 +2417,19 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "fibo_waiting": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "waiting"),
         "fibo_valid": sum(1 for r in rows if r.scanner == "FIBO" and r.category == "valid"),
     }
-    by_market = {s.upper(): [r for r in rows if r.market == s.upper()] for s in scopes}
+    selected_scope = any(str(scope).lower().startswith("selected__") for scope in scopes)
+    if selected_scope:
+        # Rows are assembled above by several legacy readers.  Normalize them
+        # at the final aggregation boundary so the synthetic selected__ scope
+        # can never leak into a user-facing market filter.
+        for row in rows:
+            row.market = _report_market_for_ticker(row.market, row.ticker)
+    market_keys = (
+        sorted({r.market for r in rows} | set(_selected_scope_markets(scopes)), key=lambda market: _market_order(market))
+        if selected_scope
+        else [s.upper() for s in scopes]
+    )
+    by_market = {market: [r for r in rows if r.market == market] for market in market_keys}
     empty_markets = sum(1 for _, vals in by_market.items() if not vals)
     instrument_names = _instrument_name_registry()
 
@@ -2827,6 +2935,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     if _troj_cell_is_no_play(cell):
                         continue
                     reason = _top_choice_reason(cell, source)
+                    if not reason and ("fibo" in source.lower() or "pattern" in source.lower()):
+                        ticker = _ticker_from_troj_cell(cell)
+                        live = _fibo_row_for_troj_cell(ticker, cell) if ticker else None
+                        pattern = str(live.pattern or "").strip() if live is not None else ""
+                        if pattern.lower() not in {"", "-", "none"}:
+                            reason = f"Fibo pattern: {pattern}"
                     if not reason:
                         continue
                     items.append((source, cell, reason))
@@ -2996,16 +3110,19 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 raw_cell = str(cell)
                 if raw_cell.strip():
                     columns_for_display[col_idx].append(raw_cell)
+        wig20 = _wig20_members()
         def troj_card_freshness_key(item: tuple[int, str]) -> tuple[int, int, int]:
             original_index, cell = item
             row = _troj_row_for_cell(cell, section_id)
-            highlighted = bool(
-                (row is not None and _row_has_search_day_signal(row))
-                or ("ichimoku" in section_id and _troj_cell_recent_ichimoku_signal(cell, row))
-                or ("fibo" in section_id and _troj_cell_recent_fibo_signal(cell, row))
-            )
-            signal_date = _latest_date_from_text(cell)
-            return (0 if highlighted else 1, -(signal_date.toordinal() if signal_date else 0), original_index)
+            if row is None:
+                return (99, 1, original_index)
+            market_rank = _market_order(row.market, row.ticker)
+            ticker = str(row.ticker or "").upper().removesuffix(".WA")
+            wig_rank = 0 if market_rank == 0 and ticker in wig20 else 1
+            # `_write_trojpolowki_fibo` already applies each column's metric
+            # order. Preserve it inside each market; HTML used to reshuffle all
+            # cards by dates and destroy both market and metric ordering.
+            return (market_rank, wig_rank, original_index)
         columns_for_display = [
             [cell for _idx, cell in sorted(enumerate(cells), key=troj_card_freshness_key)]
             for cells in columns_for_display
@@ -3744,7 +3861,7 @@ def _run_batch_search(mode: str, batch: list[str], ask_open_links: bool = True, 
 def main()->int:
     parser=argparse.ArgumentParser(prog='run',description='Ultra-short launcher. -c opens chart_program.')
     parser.add_argument('-ichimoku_search','-search',dest='search_target'); parser.add_argument('-fibo_search',dest='fibo_search_target',nargs='?',const='single')
-    parser.add_argument('-allsearch', dest='allsearch_target', nargs='?', const='all', help='Run ichimoku+fibo combo batch report')
+    parser.add_argument('-allsearch', dest='allsearch_target', nargs='*', default=None, help='Run ichimoku+fibo combo report; accepts comma-separated symbols with optional spaces')
     parser.add_argument('-onlycache', '--onlycache', action='store_true', help='Use local CSV cache only; skip remote freshness probes/updates (works for commodities too).')
     parser.add_argument('--force-refresh', action='store_true', help='Disable cache-only rules and force remote market-data refreshes.')
     parser.add_argument('-checkavg', dest='checkavg_target', nargs='?', help='Print Avg10d PLN liquidity metric for one instrument')
@@ -4142,11 +4259,16 @@ def main()->int:
             failures = sum(run_pattern_search(scope, max(1, args.pattern_lookback), args.pattern_name) != 0 for scope in DEFAULT_ALLSEARCH_SCOPES)
             return 1 if failures else 0
         return run_pattern_search(target, max(1, args.pattern_lookback), args.pattern_name)
-    if args.allsearch_target:
-        normalized = args.allsearch_target.strip().lower()
-        if normalized == "all":
-            return _run_allsearch_combo(DEFAULT_ALLSEARCH_SCOPES, force_cache_only=args.onlycache, force_remote_refresh=args.force_refresh)
-        return _run_allsearch_combo([normalized], force_cache_only=args.onlycache, force_remote_refresh=args.force_refresh)
+    if args.allsearch_target is not None:
+        try:
+            allsearch_scopes = _parse_allsearch_scopes(args.allsearch_target)
+        except ValueError as exc:
+            parser.error(str(exc))
+        return _run_allsearch_combo(
+            allsearch_scopes,
+            force_cache_only=args.onlycache,
+            force_remote_refresh=args.force_refresh,
+        )
     if args.fibo_explain_target:
         from scanner_search import run_fibo_explain; return run_fibo_explain(args.fibo_search_target or 'single', args.fibo_explain_target)
     if args.fibo_search_target:

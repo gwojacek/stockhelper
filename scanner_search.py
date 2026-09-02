@@ -17,7 +17,7 @@ from itertools import combinations
 from importlib import util
 from pathlib import Path
 from typing import Callable, Sequence
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -1136,6 +1136,42 @@ def _impulse_has_disqualifying_month_side_trend(
     return not exceptional_continuation
 
 
+def _impulse_stalls_before_peak(
+    df_slice: pd.DataFrame,
+    *,
+    min_post_channel_days: int = 10,
+) -> bool:
+    """Detect a rise that stalls in a monthly range just before its top.
+
+    A first strong burst followed by a long shelf and only a marginal, immature
+    high is not one uninterrupted Fibo impulse.  Unlike a base at the launch or
+    a shelf followed by a mature second leg, there is no valid anchor relocation
+    available yet, so the formation must be dropped.
+    """
+    leg = df_slice.reset_index(drop=True)
+    if len(leg) < 24:
+        return False
+    channel = _latest_sideways_window(
+        leg,
+        max_days=22,
+        band_pct=0.15,
+        max_progress_pct=0.08,
+        max_outlier_candles=2,
+    )
+    if channel is None:
+        return False
+    channel_start, channel_end, _high, _low, _width = channel
+    if channel_start < 4:
+        return False
+    lows = pd.to_numeric(leg["Low"], errors="coerce")
+    highs = pd.to_numeric(leg["High"], errors="coerce")
+    launch = float(lows.iloc[0])
+    pre_channel_high = float(highs.iloc[:channel_start + 1].max())
+    gain_before_channel = (pre_channel_high - launch) / max(abs(launch), 1e-9)
+    post_channel_days = len(leg) - 1 - channel_end
+    return gain_before_channel >= 0.10 and post_channel_days < min_post_channel_days
+
+
 def _has_extended_sideways(
     df_slice: pd.DataFrame,
     window_days: int = 22,
@@ -1211,6 +1247,28 @@ def _correction_settled_into_sideways(df_slice: pd.DataFrame) -> bool:
         max_outlier_candles=2,
     )
     return channel is not None and channel[1] >= len(df_slice) - 4
+
+
+def _waiting_correction_is_stale(df_slice: pd.DataFrame, direction: str) -> bool:
+    """Return whether an already-matched waiting correction has gone stale.
+
+    A single month-scale shelf can occur inside an otherwise directional
+    pullback. It does not override the live setup result. A continuously
+    extended range, or a long correction which actually finishes as a monthly
+    range, does end the waiting formation.
+    """
+    correction = df_slice.reset_index(drop=True)
+    if _has_extended_sideways(correction):
+        return True
+    if direction == "long" and _correction_settled_into_sideways(correction):
+        return True
+    if direction == "short" and _has_long_sideways(
+        correction, max_days=22, band_pct=0.12
+    ):
+        if _has_extended_sideways(correction):
+            return True
+        return not _sideways_correction_near_active_extreme(correction, "short")
+    return False
 
 
 def _early_sideways_after_anchor_window(
@@ -1395,6 +1453,22 @@ def _completed_sideways_reset_long(
     if launch_is_late_and_strong:
         return channel_end, channel_launch_idx
 
+    # If the selected lowest swing immediately precedes the base, that base is
+    # the launch structure itself—not a later reset. Moving the anchor to a
+    # post-channel candle places it in the middle of the incline (SNT/CDR).
+    # Longer pre-channel advances are still eligible for the structural reset
+    # below (for example a rally, deep correction, then a new base).
+    anchor_starts_with_flat_month = _early_sideways_after_anchor_window(
+        w, start_idx, direction="long", band_pct=min(band_pct, 0.10),
+    ) is not None
+    if (
+        original_is_strong
+        and channel_start - start_idx <= 22
+        and original_low <= channel_low
+        and not anchor_starts_with_flat_month
+    ):
+        return None
+
     closes = pd.to_numeric(w["Close"], errors="coerce")
     post_closes = closes.iloc[channel_end + 1:peak_idx + 1]
     decisive = [
@@ -1504,6 +1578,54 @@ def _select_peak_long(
     if near_top_idxs:
         return max(near_top_idxs)
     return best_idx
+
+
+def _independent_recent_long_base(
+    w: pd.DataFrame,
+    recent_peak_idx: int,
+    old_peak_idx: int,
+    min_incline_days: int,
+    *,
+    min_gain: float = 0.15,
+) -> int | None:
+    """Return the launch low of a proven new long cycle after an older high.
+
+    A lower recent top is allowed only when price first completed the older
+    high's 61.8 correction.  The replacement anchor is then the lowest low
+    after that old top and before the new impulse's maturity boundary.  This
+    keeps the dominance exception structural rather than searching arbitrary
+    anchor pairs for a convenient Fibo level.
+    """
+    if recent_peak_idx <= old_peak_idx + min_incline_days:
+        return None
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    old_base_right = old_peak_idx - min_incline_days
+    if old_base_right < 0:
+        return None
+    old_base_left = max(0, old_peak_idx - 140)
+    old_base = float(low.iloc[old_base_left:old_base_right + 1].min())
+    old_high = float(high.iloc[old_peak_idx])
+    if not math.isfinite(old_base) or old_high <= old_base:
+        return None
+    old_618 = old_high - (old_high - old_base) * 0.618
+    between_lows = low.iloc[old_peak_idx + 1:recent_peak_idx + 1].dropna()
+    if between_lows.empty or float(between_lows.min()) > old_618:
+        return None
+
+    recent_base_right = recent_peak_idx - min_incline_days
+    recent_base_left = max(old_peak_idx + 1, recent_peak_idx - 80)
+    if recent_base_right < recent_base_left:
+        return None
+    recent_slice = low.iloc[recent_base_left:recent_base_right + 1].dropna()
+    if recent_slice.empty:
+        return None
+    recent_base_idx = int(recent_slice.idxmin())
+    recent_base = float(low.iloc[recent_base_idx])
+    recent_gain = (float(high.iloc[recent_peak_idx]) - recent_base) / max(abs(recent_base), 1e-9)
+    if recent_peak_idx - recent_base_idx < min_incline_days or recent_gain < min_gain:
+        return None
+    return recent_base_idx
 
 
 def _select_bottom_short(
@@ -1624,6 +1746,18 @@ def _normalize_commodity_symbol(raw: str) -> str:
     available = set(COMMODITY_YAHOO_MAP.keys()) | set(COMMODITY_STOOQ_MAP.keys())
     if cleaned in available:
         return cleaned
+    # Explicit selections may use either provider's notation.  Convert those
+    # spellings back to the scanner's canonical commodity name before type
+    # detection and CSV lookup.  In particular, users commonly enter Stooq's
+    # ``SI.F`` while Yahoo spells the same Silver future ``SI=F`` and our
+    # persisted history is the canonical Silver/XAGUSD series.
+    provider_symbol = cleaned.replace(".F", "=F")
+    for key, value in COMMODITY_YAHOO_MAP.items():
+        if str(value).upper() == provider_symbol:
+            return key
+    for key, value in COMMODITY_STOOQ_MAP.items():
+        if str(value).upper() == cleaned:
+            return key
     compact = cleaned.replace("_", "")
     for key in available:
         if key.replace("_", "") == compact:
@@ -1722,7 +1856,7 @@ def _search_fetch_symbol(ticker: str, group_name: str, exchange_suffix: str | No
         instrument = "commodity"
     elif group_name == "etfs":
         instrument = "etf"
-    elif group_name == "single":
+    elif (group_name == "single" or group_name.startswith("selected__")):
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     else:
@@ -2718,6 +2852,15 @@ def _members_from_configs(scope: str) -> list[str]:
 
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
+    if normalized.startswith("selected__"):
+        members = [
+            _normalize_commodity_symbol(part)
+            for part in normalized.split("__")[1:]
+            if part
+        ]
+        if not members:
+            raise ValueError("Selected allsearch requires at least one instrument.")
+        return normalized, members, "explicit instrument selection", None
     if normalized == "wig":
         print("[search] WIG has a large universe. For VPN/rate-limit safety use: wig_part1, wig_part2, wig_part3.")
         return "WIG", WIG_SEARCH_TICKERS, "manual WIG list", ".WA"
@@ -2752,8 +2895,33 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     # Fallback: traktuj input jako pojedynczy ticker/symbol do skanowania.
     raw = (target or "").strip()
     if raw:
-        return "single", [raw.upper()], "direct symbol", None
+        return "single", [_normalize_commodity_symbol(raw)], "direct symbol", None
     raise ValueError(f"Brak skonfigurowanej listy instrumentów dla: {target}")
+
+
+def _previous_board_fibo_anchors(ticker: str) -> list[tuple[str, str]]:
+    """Read unchanged anchors from the prior 3P board, including recent dropouts."""
+    path = PROJECT_ROOT / "Trojpolowki" / "fibo.md"
+    if not path.exists():
+        return []
+    wanted = str(ticker or "").upper().removesuffix(".WA")
+    found: list[tuple[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for cell in cells:
+            symbol_match = re.search(r"[?&]s=([^&\)]+)", cell, re.IGNORECASE)
+            symbol = unquote(symbol_match.group(1)).upper().removesuffix(".WA") if symbol_match else ""
+            if symbol != wanted:
+                continue
+            start = re.search(r"[↗↘]️?\s*\((\d{4}-\d{2}-\d{2})\)", cell)
+            end = re.search(r"<!--fibo-end:(\d{4}-\d{2}-\d{2})-->", cell)
+            if start and end:
+                pair = (start.group(1), end.group(1))
+                if pair not in found:
+                    found.append(pair)
+    return found
 
 
 def _ichimoku(df: pd.DataFrame) -> pd.DataFrame:
@@ -3212,7 +3380,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         instrument = "commodity"
     elif group_name == "etfs":
         instrument = "etf"
-    elif group_name == "single":
+    elif (group_name == "single" or group_name.startswith("selected__")):
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     else:
@@ -3240,7 +3408,7 @@ def _scan_one(ticker: str, group_name: str, exchange_suffix: str | None, current
         if mapped:
             fetch_symbol = mapped.upper()
             display_symbol = fetch_symbol
-        elif group_name == "single":
+        elif (group_name == "single" or group_name.startswith("selected__")):
             canonical = _reverse_stooq_symbol(ticker)
             if canonical:
                 display_symbol = canonical
@@ -5755,6 +5923,18 @@ def _select_fibo_long_impulse_base(
                     "but the post-channel impulse is not mature."
                 )
                 return None
+            # The post-channel detector identifies when the move became
+            # obvious, not necessarily the swing low that launched it. Search
+            # the preceding trading month and retain its lowest qualifying low;
+            # otherwise SNT starts on June 17 (290.20) in mid-incline instead
+            # of the June 1 structural low (262.00).
+            launch_left = max(int(i_start), int(post_anchor) - 22)
+            launch_idx = int(low.iloc[launch_left:int(post_anchor) + 1].idxmin())
+            launch_low = float(low.iloc[launch_idx])
+            launch_days = i_peak - launch_idx
+            launch_gain = (float(high.iloc[i_peak]) - launch_low) / max(abs(launch_low), 1e-9)
+            if launch_days >= min_incline_days and launch_gain >= 0.15:
+                post_anchor = launch_idx
             if post_anchor <= channel_end:
                 _log(
                     "Long: retained late channel low as genuine strong-incline launch "
@@ -5841,11 +6021,20 @@ def _select_fibo_long_impulse_base(
     # in the same structure was never fully reset by a proper 61.8 cycle.
     win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
     if win_peak != i_peak and not allow_independent_peak:
-        _log(
-            "Rejected long: selected peak is not dominant in window "
-            f"(selected={i_peak}, dominant={win_peak})."
+        independent_base = _independent_recent_long_base(
+            w, i_peak, win_peak, min_incline_days,
         )
-        return None
+        if independent_base is None:
+            _log(
+                "Rejected long: selected peak is not dominant in window "
+                f"(selected={i_peak}, dominant={win_peak})."
+            )
+            return None
+        _log(
+            "Long: accepted independent recent cycle after the dominant old "
+            f"peak corrected through 61.8; reset launch idx={i_start} -> {independent_base}."
+        )
+        i_start = independent_base
 
     # Include the five candles immediately before the detected incline.  This
     # captures the actual extreme under the first breakout candles without pulling the anchor
@@ -6189,7 +6378,18 @@ def _find_fibo_3p_steep_setup(
     # still inside the 320-candle window.  MTX.DE's May→July leg reaches 94.4%
     # of the February high and is a valid new Fibo after the May bottom.
     independent_recent_peak = False
+    structural_recent_base: int | None = None
     if global_high > 0 and peak_high < global_high * 0.94:
+        dominant_peak_idx = int(high.idxmax())
+        structural_recent_base = _independent_recent_long_base(
+            w, i_peak, dominant_peak_idx, min_incline_days,
+        )
+        if structural_recent_base is not None:
+            independent_recent_peak = True
+            _log(
+                "3P steep: accepted independent recent cycle after the old "
+                f"dominant peak completed its 61.8 correction; launch idx={structural_recent_base}."
+            )
         independent_base_right = i_peak - min_incline_days
         # A short trend can decline for most of the 260-session scan window.
         # In mirrored data, inspect that complete impulse horizon when deciding
@@ -6211,7 +6411,7 @@ def _find_fibo_3p_steep_setup(
             # of an unrelated 25% requirement (XAUUSD Jul-Aug 2026).
             independent_min_gain = 0.025 if _mirrored_short else 0.15
             independent_min_daily_gain = 0.0004 if _mirrored_short else 0.003
-            independent_recent_peak = (
+            independent_recent_peak = independent_recent_peak or (
                 independent_gain >= independent_min_gain
                 and independent_daily_gain >= independent_min_daily_gain
             )
@@ -6243,6 +6443,21 @@ def _find_fibo_3p_steep_setup(
     if base is None:
         return None
     i_start, fib_start, fib_end = base
+    if structural_recent_base is not None and i_start < structural_recent_base:
+        _log(
+            "3P steep: replaced obsolete broad launch with independent recent "
+            f"cycle low idx={i_start} -> {structural_recent_base}."
+        )
+        i_start = structural_recent_base
+        fib_start = float(low.iloc[i_start])
+    measured_peak_idx = int(high.iloc[i_start:i_peak + 1].idxmax())
+    measured_peak_high = float(high.iloc[measured_peak_idx])
+    if measured_peak_high > fib_end * 1.005:
+        _log(
+            "3P steep: moved second anchor to the highest high of the measured leg "
+            f"idx={i_peak} high={fib_end:.4f} -> idx={measured_peak_idx} high={measured_peak_high:.4f}."
+        )
+        i_peak, fib_end = measured_peak_idx, measured_peak_high
 
     structural_reset = _completed_sideways_reset_long(
         w, i_start, i_peak, min_incline_days,
@@ -6276,6 +6491,11 @@ def _find_fibo_3p_steep_setup(
         if post_anchor < 0:
             _log("Rejected 3P steep: completed side trend has no mature post-channel impulse.")
             return None
+        launch_left = max(int(i_start), int(post_anchor) - 22)
+        launch_idx = int(low.iloc[launch_left:int(post_anchor) + 1].idxmin())
+        launch_low = float(low.iloc[launch_idx])
+        if i_peak - launch_idx >= min_incline_days and (fib_end - launch_low) / max(abs(launch_low), 1e-9) >= 0.15:
+            post_anchor = launch_idx
         if post_anchor <= channel_end:
             _log(
                 "3P steep: retained late channel low as genuine strong-incline launch "
@@ -6392,6 +6612,16 @@ def _find_fibo_3p_steep_setup(
     reached_618_after_peak = bool((pd.to_numeric(w["Low"].iloc[i_peak:], errors="coerce") <= fib_618).any())
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
+        return None
+    if not _mirrored_short and _has_completed_month_side_trend(
+        w.iloc[i_peak + 1:].reset_index(drop=True)
+    ):
+        # Column one/two describes an active correction, not a stock which has
+        # spent a complete month (or two) parked in a range after its peak.
+        # This guard is deliberately independent of the latest close's place
+        # inside that range, so BHW/1AT cannot survive merely by finishing near
+        # the channel boundary.
+        _log("Rejected 3P steep: post-peak correction contains a completed month-long side trend.")
         return None
     if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):
         # A completed month-long base ends the old short cycle even when price
@@ -6524,6 +6754,30 @@ def _find_fibo_setup(
         if base is None:
             return None
         i_start, fib_start, fib_end = base
+        if forced_anchor_dates:
+            # A long Fibo bottom must remain the bottom of the complete
+            # measured impulse. Carrying an old board anchor past a newer low
+            # manufactured formations such as INSM (105.07 even though 96.42
+            # occurred before the 137.70 top) and Silver (57.24 before 54.78).
+            # Reject that geometry and let automatic discovery rebuild it from
+            # the genuine later swing low.
+            later_lows = pd.to_numeric(
+                low.iloc[i_start + 1:i_peak + 1], errors="coerce"
+            ).dropna()
+            if not later_lows.empty and float(later_lows.min()) < fib_start * 0.999:
+                _log(
+                    "Rejected saved/carried long Fibo: a lower low occurred after "
+                    f"the first anchor and before the top "
+                    f"({float(later_lows.min()):.4f} < {fib_start:.4f})."
+                )
+                return None
+            measured_high = float(pd.to_numeric(high.iloc[i_start:], errors="coerce").max())
+            if measured_high > fib_end * 1.005:
+                _log(
+                    "Rejected saved/carried long Fibo: second anchor is not the highest high "
+                    f"of its measured leg ({fib_end:.4f} < {measured_high:.4f})."
+                )
+                return None
         newer_low_slice = low.iloc[i_start + 1:i_peak + 1] if not forced_anchor_dates else pd.Series(dtype=float)
         if not newer_low_slice.empty:
             newer_low_idx = int(newer_low_slice.idxmin())
@@ -6647,10 +6901,13 @@ def _find_fibo_setup(
         # A retracement that spends several months in overlapping flat ranges
         # is no longer the decline/recovery leg of the selected impulse. Apply
         # this symmetrically to long and short formations.
-        if _has_extended_sideways(correction_seg):
+        correction_at_active_extreme = _sideways_correction_near_active_extreme(
+            correction_seg, "short" if _mirrored_short else "long"
+        )
+        if _has_extended_sideways(correction_seg) and not correction_at_active_extreme:
             _log(f"Rejected {direction}: correction is dominated by an extended side trend.")
             return None
-        if not _mirrored_short and _correction_settled_into_sideways(correction_seg):
+        if not _mirrored_short and _correction_settled_into_sideways(correction_seg) and not correction_at_active_extreme:
             _log("Rejected long: correction settled into a completed month-long side trend.")
             return None
         # A correction may consolidate while progressing from 23.6 toward 61.8;
@@ -6668,6 +6925,12 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+        if not _mirrored_short and _impulse_stalls_before_peak(impulse_seg):
+            _log(
+                "Rejected long: impulse stalled in a completed month-long side "
+                "trend and has no mature post-channel leg for re-anchoring."
+            )
+            return None
         fresh_touch_window = False
         recent_peak_waiting = i_end - i_peak <= 3
         impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(
@@ -7181,19 +7444,15 @@ def run_fibo_search(target: str) -> int:
         # into a month-long range, or either direction before a correction
         # becomes an extended side trend. Re-check against the full current
         # dataset so stale offset candidates cannot bypass the live rejection.
-        if _has_extended_sideways(after.reset_index(drop=True)):
+        # Do not expire a live directional pullback merely because one rolling
+        # four-week sub-window inside it was flat. The current scanner result
+        # has already validated the full correction. SNT's July-August shelf
+        # is followed by a continuing decline toward 61.8, and Silver has only
+        # just started its correction; both must remain active. Truly stale
+        # BHW/1AT-style corrections are still removed by the extended and
+        # terminal-sideways checks surrounding this comment.
+        if _waiting_correction_is_stale(after, cand.direction):
             return True
-        if _has_completed_month_side_trend(after):
-            return True
-        if cand.direction == "long" and _correction_settled_into_sideways(after.reset_index(drop=True)):
-            return True
-        if cand.direction == "short" and _has_long_sideways(
-            after.reset_index(drop=True), max_days=22, band_pct=0.12
-        ):
-            if _has_extended_sideways(after.reset_index(drop=True)):
-                return True
-            if not _sideways_correction_near_active_extreme(after.reset_index(drop=True), "short"):
-                return True
         # These anchors get exactly one reversal opportunity: the first 61.8
         # touch/cross and the two candles after it.  A later return to 61.8 must
         # not resurrect the old formation; only a newly anchored Fibo may return.
@@ -7205,7 +7464,11 @@ def run_fibo_search(target: str) -> int:
         if not touch_rows.empty:
             first_touch_ts = pd.to_datetime(touch_rows.iloc[0]["Date"], errors="coerce")
             if pd.notna(first_touch_ts):
-                return int((dts > first_touch_ts).sum()) >= 2
+                # Touch candle + at most two following candles comprise the
+                # complete 1/2/3-candle pattern window. On the second following
+                # candle a morning/evening star can still finish, so expire the
+                # candidate only when a third later candle exists.
+                return int((dts > first_touch_ts).sum()) > 2
         if cand.direction == "long":
             # Long waiting setup becomes stale if market already made a higher high
             # after the selected impulse top (newer impulse supersedes older one),
@@ -7237,7 +7500,7 @@ def run_fibo_search(target: str) -> int:
             instrument = "commodity"
         elif group_name == "etfs":
             instrument = "etf"
-        elif group_name == "single":
+        elif (group_name == "single" or group_name.startswith("selected__")):
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
@@ -7362,6 +7625,23 @@ def run_fibo_search(target: str) -> int:
                     broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
                     if broad_cand:
                         long_candidates.append(broad_cand)
+            # A board formation must keep the same structural anchors while it
+            # moves from waiting -> first touch -> confirmed pattern. Offset
+            # rescans otherwise re-anchor on the touch day and turn TXT/CDR
+            # into false dropouts. Revalidate only anchors that were active in
+            # the prior board. Recent dropouts are included because a valid
+            # touch/pattern may have been the reason the automatic selector
+            # temporarily lost the row; full validation below prevents an
+            # expired or invalid formation from being resurrected.
+            for anchor_start, anchor_end in _previous_board_fibo_anchors(ticker):
+                carried = _find_fibo_setup(
+                    df,
+                    "long",
+                    allow_equal_third_close=(instrument == "forex"),
+                    forced_anchor_dates=(anchor_start, anchor_end),
+                )
+                if carried:
+                    long_candidates.append(carried)
             # An offset scan may discover the correct broad anchors before the
             # live correction reaches 61.8. Once current data touches that
             # level, re-evaluate those exact anchors instead of letting a newer
@@ -7622,7 +7902,7 @@ def run_fibo_search(target: str) -> int:
             instrument = "commodity"
         elif group_name == "etfs":
             instrument = "etf"
-        elif group_name == "single":
+        elif (group_name == "single" or group_name.startswith("selected__")):
             detected = detect_instrument_type(ticker, None)
             instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
         fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
@@ -7785,7 +8065,7 @@ def run_fibo_explain(scope: str, symbol: str) -> int:
         instrument = "commodity"
     elif group_name == "etfs":
         instrument = "etf"
-    elif group_name == "single":
+    elif (group_name == "single" or group_name.startswith("selected__")):
         detected = detect_instrument_type(ticker, None)
         instrument = "commodity" if detected == "commodity" else ("forex" if detected == "forex" else "stock")
     fetch_symbol = ticker if instrument != "stock" or not exchange_suffix else f"{ticker}{exchange_suffix}"
