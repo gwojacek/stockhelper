@@ -22,7 +22,7 @@
       "type": "fib",
       "label": "FIB 0% (54.8)",
       "x0": "2026-08-12",
-      "x1": "2034-07-20",
+      "x1": "2034-07-22",
       "y0": 54.8,
       "y1": 54.8,
       "price": 54.8,
@@ -35,7 +35,7 @@
       "type": "fib",
       "label": "FIB 38.2% (48.2814)",
       "x0": "2026-07-17",
-      "x1": "2034-07-20",
+      "x1": "2034-07-22",
       "y0": 48.2814,
       "y1": 48.2814,
       "price": 48.2814,
@@ -48,7 +48,7 @@
       "type": "fib",
       "label": "FIB 50% (46.2678)",
       "x0": "2026-07-10",
-      "x1": "2034-07-20",
+      "x1": "2034-07-22",
       "y0": 46.2678,
       "y1": 46.2678,
       "price": 46.2678,
@@ -61,7 +61,7 @@
       "type": "fib",
       "label": "FIB 61.8% (44.2542)",
       "x0": "2026-07-02",
-      "x1": "2034-07-20",
+      "x1": "2034-07-22",
       "y0": 44.2542,
       "y1": 44.2542,
       "price": 44.2542,
@@ -74,7 +74,7 @@
       "type": "fib",
       "label": "FIB 100% (37.7356)",
       "x0": "2026-06-08",
-      "x1": "2034-07-20",
+      "x1": "2034-07-22",
       "y0": 37.7356,
       "y1": 37.7356,
       "price": 37.7356,
@@ -116,8 +116,8 @@
       "date": "2026-04-28T00:00:00"
     }
   },
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
   "__half_points__": [],
   "calculation_currency": "PLN",
   "position_calculations": {
@@ -200,9 +200,5 @@
     "zr_ratio": 15.9
   },
   "spread_pips": null,
-  "__saved_fibo_by_user__": false,
-  "__scanner_breakout_date__": "2026-08-31",
-  "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "4.5"
+  "__saved_fibo_by_user__": false
 }

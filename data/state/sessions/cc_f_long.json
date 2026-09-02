@@ -4,8 +4,8 @@
   "pip_value": 36.19,
   "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [],
+  "__saved_fibo_by_user__": false,
   "__scanner_breakout_date__": "2026-05-06",
   "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "0",
-  "__saved_fibo_by_user__": false
+  "__scanner_retest_count__": "0"
 }

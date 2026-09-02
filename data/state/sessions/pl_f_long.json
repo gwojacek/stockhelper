@@ -1,8 +1,8 @@
 {
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
-  "lot_cost": 100830.47,
-  "pip_value": 560.73,
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
+  "lot_cost": 97725.82,
+  "pip_value": 561.03,
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
@@ -81,5 +81,11 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-08-21",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-09-02",
+  "__scanner_latest_retest_pattern__": "hammer",
+  "__scanner_previous_respect_months__": "5.6"
 }

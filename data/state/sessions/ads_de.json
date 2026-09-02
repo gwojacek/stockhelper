@@ -3,9 +3,87 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
-  "__scanner_pattern_date__": "2026-07-30",
-  "__scanner_pattern_name__": "hammer",
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [],
-  "__saved_fibo_by_user__": false
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (167.89999)",
+      "x0": "2026-08-10",
+      "x1": "2034-07-20",
+      "y0": 167.89999,
+      "y1": 167.89999,
+      "price": 167.89999,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (157.20399)",
+      "x0": "2026-07-07",
+      "x1": "2034-07-20",
+      "y0": 157.20399,
+      "y1": 157.20399,
+      "price": 157.20399,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (153.89999)",
+      "x0": "2026-06-25",
+      "x1": "2034-07-20",
+      "y0": 153.89999,
+      "y1": 153.89999,
+      "price": 153.89999,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (150.59599)",
+      "x0": "2026-06-15",
+      "x1": "2034-07-20",
+      "y0": 150.59599,
+      "y1": 150.59599,
+      "price": 150.59599,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (139.89999)",
+      "x0": "2026-05-12",
+      "x1": "2034-07-20",
+      "y0": 139.89999,
+      "y1": 139.89999,
+      "price": 139.89999,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-12",
+      "x1": "2026-08-10",
+      "y0": 139.89999,
+      "y1": 167.89999,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false,
+  "__scanner_pattern_date__": "2026-08-21",
+  "__scanner_pattern_name__": "bullish_harami",
+  "__scanner_pattern_direction__": "long"
 }

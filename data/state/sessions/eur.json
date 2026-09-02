@@ -71,6 +71,8 @@
   "__saved_wedge_by_user__": false,
   "__scanner_breakout_date__": "2026-08-27",
   "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "0",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-09-02",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
   "__scanner_previous_respect_months__": "9.7"
 }

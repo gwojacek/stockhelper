@@ -354,5 +354,158 @@
     "outcome": "pending",
     "review_notes": "",
     "screenshot_path": "data/journal/screenshots/2026-08-20_MDV.WA_04ba731f.png"
+  },
+  {
+    "symbol": "EUR.WA",
+    "sourceTicker": "EUR.WA / EUR",
+    "instrumentType": "stock",
+    "technique": "Ichimoku",
+    "direction": "long",
+    "amount": "34450",
+    "amount_currency": "PLN",
+    "entry": "",
+    "stop_loss": 5.14,
+    "take_profit": "",
+    "line_cross_value": 4.98,
+    "high": 5.94,
+    "low": 4.81,
+    "reason": "ichimoku_retest_pattern",
+    "reason_label": "Retest + Bullish Harami",
+    "pattern": "Bullish Harami",
+    "touches": "",
+    "notes": "",
+    "preview": "Instrument: EUR.WA\nTechnique: Ichimoku\nDirection: long\nAmount: 34450 PLN\nEntry: \nStop loss: 5.14\nTake profit/check: \nReason: Retest + Bullish Harami\n\n",
+    "levels": {
+      "apply_currency_conversion_fee": false,
+      "currency_conversion_fee_pct": 0.01,
+      "__currency_fee_eligible__": false,
+      "__show_ichimoku__": true,
+      "drawn_objects": [
+        {
+          "id": "auto-wedge-upper",
+          "type": "wedge",
+          "label": "Falling wedge upper",
+          "x": [
+            "2026-04-29",
+            "2026-07-17",
+            "2027-01-26"
+          ],
+          "y": [
+            5.94,
+            5.3,
+            3.70582
+          ],
+          "x0": "2026-04-29",
+          "x1": "2027-01-26",
+          "y0": 5.94,
+          "y1": 3.70582,
+          "anchor_x": [
+            "2026-04-29",
+            "2026-07-17"
+          ],
+          "anchor_y": [
+            5.94,
+            5.3
+          ],
+          "price": 3.70582,
+          "color": "#dc2626",
+          "group_id": "auto-wedge",
+          "free_extension": false
+        },
+        {
+          "id": "auto-wedge-lower",
+          "type": "wedge",
+          "label": "Falling wedge lower",
+          "x": [
+            "2026-07-28",
+            "2026-08-19",
+            "2026-12-15"
+          ],
+          "y": [
+            4.84,
+            4.81,
+            4.6525
+          ],
+          "x0": "2026-07-28",
+          "x1": "2026-12-15",
+          "y0": 4.84,
+          "y1": 4.6525,
+          "anchor_x": [
+            "2026-07-28",
+            "2026-08-19"
+          ],
+          "anchor_y": [
+            4.84,
+            4.81
+          ],
+          "price": 4.6525,
+          "color": "#2563eb",
+          "group_id": "auto-wedge",
+          "free_extension": false
+        }
+      ],
+      "__journal_source_technique__": "Ichimoku",
+      "__saved_wedge_by_user__": false,
+      "__scanner_breakout_date__": "2026-08-27",
+      "__scanner_breakout_direction__": "long",
+      "__scanner_retest_count__": "1",
+      "__scanner_latest_retest_date__": "2026-09-02",
+      "__scanner_latest_retest_pattern__": "bullish_harami",
+      "__scanner_previous_respect_months__": "9.7",
+      "high": 5.94,
+      "__wedge_auto_high__": true,
+      "low": 4.81,
+      "__wedge_auto_low__": true,
+      "line_cross_value": 4.98,
+      "__wedge_auto_line_cross__": true,
+      "position_type": "long",
+      "__wedge_auto_position_type__": true,
+      "stop_loss": 5.14,
+      "__wedge_auto_stop_loss__": true,
+      "__half_points__": [],
+      "__scanner_auto_stop_loss__": "Ichimoku retest",
+      "capital": 295,
+      "calculation_currency": "PLN",
+      "__saved_fibo_by_user__": false,
+      "lot_cost": 0,
+      "pip_value": 0,
+      "spread_multiplier": 0,
+      "spread": 0,
+      "spread_pips": null,
+      "level_points": {
+        "high": {
+          "price": 5.94,
+          "plot_price": 5.94,
+          "date": "2026-04-29",
+          "auto_wedge": true
+        },
+        "low": {
+          "price": 4.81,
+          "plot_price": 4.81,
+          "date": "2026-08-19",
+          "auto_wedge": true
+        },
+        "line_cross_value": {
+          "price": 4.98,
+          "plot_price": 4.98,
+          "date": "2026-08-25",
+          "auto_wedge": true
+        },
+        "stop_loss": {
+          "price": 5.14,
+          "plot_price": 5.14,
+          "date": "2026-09-02",
+          "auto_scanner": true,
+          "source": "Ichimoku retest"
+        }
+      },
+      "__finished__": false
+    },
+    "id": "137576ca5a0946be9ed24721263d98f0",
+    "created_at": "2026-09-02T09:14:31Z",
+    "status": "open",
+    "outcome": "pending",
+    "review_notes": "",
+    "screenshot_path": "data/journal/screenshots/2026-09-02_EUR.WA_137576ca.png"
   }
 ]

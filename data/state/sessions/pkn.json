@@ -11,7 +11,84 @@
   "__currency_fee_eligible__": false,
   "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
-  "drawn_objects": [],
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (157.18)",
+      "x0": "2026-08-21",
+      "x1": "2034-07-20",
+      "y0": 157.18,
+      "y1": 157.18,
+      "price": 157.18,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (124.79343)",
+      "x0": "2026-04-13",
+      "x1": "2034-07-20",
+      "y0": 124.79343,
+      "y1": 124.79343,
+      "price": 124.79343,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (114.7892)",
+      "x0": "2026-02-27",
+      "x1": "2034-07-20",
+      "y0": 114.7892,
+      "y1": 114.7892,
+      "price": 114.7892,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (104.78497)",
+      "x0": "2026-01-19",
+      "x1": "2034-07-20",
+      "y0": 104.78497,
+      "y1": 104.78497,
+      "price": 104.78497,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (72.3984)",
+      "x0": "2025-09-02",
+      "x1": "2034-07-20",
+      "y0": 72.3984,
+      "y1": 72.3984,
+      "price": 72.3984,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2025-09-02",
+      "x1": "2026-08-21",
+      "y0": 72.3984,
+      "y1": 157.18,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
   "calculation_currency": "PLN",
   "position_calculations": {
     "basics": {

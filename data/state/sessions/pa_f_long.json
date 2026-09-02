@@ -1,7 +1,7 @@
 {
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
-  "lot_cost": 51605.85,
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
+  "lot_cost": 50978.93,
   "pip_value": 3.74,
   "drawn_objects": [
     {
@@ -106,5 +106,11 @@
       "auto_wedge": true
     }
   },
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-08-06",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "3",
+  "__scanner_latest_retest_date__": "2026-09-02",
+  "__scanner_latest_retest_pattern__": "bullish_piercing_line",
+  "__scanner_previous_respect_months__": "5.3"
 }

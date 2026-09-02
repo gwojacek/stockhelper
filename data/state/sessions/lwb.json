@@ -1,0 +1,72 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-04-09",
+        "2026-08-26",
+        "2027-06-01"
+      ],
+      "y": [
+        32.9,
+        25.4,
+        10.0134
+      ],
+      "x0": "2026-04-09",
+      "x1": "2027-06-01",
+      "y0": 32.9,
+      "y1": 10.0134,
+      "anchor_x": [
+        "2026-04-09",
+        "2026-08-26"
+      ],
+      "anchor_y": [
+        32.9,
+        25.4
+      ],
+      "price": 10.0134,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-06-24",
+        "2026-07-29",
+        "2026-12-23"
+      ],
+      "y": [
+        19.74,
+        20.65,
+        24.472
+      ],
+      "x0": "2026-06-24",
+      "x1": "2026-12-23",
+      "y0": 19.74,
+      "y1": 24.472,
+      "anchor_x": [
+        "2026-06-24",
+        "2026-07-29"
+      ],
+      "anchor_y": [
+        19.74,
+        20.65
+      ],
+      "price": 24.472,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    }
+  ],
+  "__saved_wedge_by_user__": false
+}
