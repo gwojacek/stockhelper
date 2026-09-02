@@ -175,6 +175,35 @@ def test_allsearch_accepts_comma_separated_selected_instruments():
     assert "{r.market for r in rows} | set(_selected_scope_markets(scopes))" in source
 
 
+def test_allsearch_favorites_reads_server_synchronized_settings(tmp_path):
+    mod = load_run_module()
+    settings = tmp_path / "chart_program" / "data" / "user_settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({
+        "favorite_instruments": ["snt", "ARM.US", "SI.F", "snt", "bad ticker!"],
+    }), encoding="utf-8")
+
+    with mock.patch.object(mod, "PROJECT_ROOT", tmp_path):
+        assert mod._parse_allsearch_scopes("favorites") == [
+            "selected__SNT__ARM.US__SILVER",
+        ]
+        assert mod._parse_allsearch_scopes("favs, CDR.WA") == [
+            "selected__SNT__ARM.US__SILVER__CDR.WA",
+        ]
+
+
+def test_allsearch_favorites_reports_when_nothing_is_saved(tmp_path):
+    mod = load_run_module()
+
+    with mock.patch.object(mod, "PROJECT_ROOT", tmp_path):
+        try:
+            mod._parse_allsearch_scopes("favorites")
+        except ValueError as exc:
+            assert "No favorite instruments are saved" in str(exc)
+        else:
+            raise AssertionError("empty favorites must not silently scan every market")
+
+
 def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     mod = load_run_module()
     rows = [

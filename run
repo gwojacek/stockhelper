@@ -133,14 +133,45 @@ def _canonical_selected_symbol(value: str) -> str:
     return symbol
 
 
+def _favorite_instruments() -> list[str]:
+    """Load the favorites synchronized by the report and chart UIs."""
+    settings_path = PROJECT_ROOT / "chart_program" / "data" / "user_settings.json"
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except (OSError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot read favorites from {settings_path}: {exc}") from exc
+    values = payload.get("favorite_instruments", [])
+    if not isinstance(values, list):
+        raise ValueError(f"Invalid favorite_instruments value in {settings_path}")
+    return list(dict.fromkeys(
+        _canonical_selected_symbol(str(value))
+        for value in values
+        if re.fullmatch(r"[A-Za-z0-9._-]{1,25}", str(value).strip())
+    ))
+
+
 def _parse_allsearch_scopes(value: str | list[str]) -> list[str]:
     """Parse one market scope or an explicit comma-separated symbol list."""
     raw = " ".join(value) if isinstance(value, list) else str(value or "")
     requested = [item.strip() for item in raw.split(",") if item.strip()]
     if not requested or (len(requested) == 1 and requested[0].lower() == "all"):
         return DEFAULT_ALLSEARCH_SCOPES.copy()
-    unique = list(dict.fromkeys(_canonical_selected_symbol(item) for item in requested))
-    if len(unique) > 1:
+    favorite_aliases = {"favorites", "favourites", "favs"}
+    favorites_requested = any(item.lower() in favorite_aliases for item in requested)
+    expanded: list[str] = []
+    for item in requested:
+        if item.lower() in favorite_aliases:
+            expanded.extend(_favorite_instruments())
+        else:
+            expanded.append(item)
+    unique = list(dict.fromkeys(_canonical_selected_symbol(item) for item in expanded))
+    if not unique:
+        raise ValueError(
+            "No favorite instruments are saved. Add favorites with ☆ in a report or chart first."
+        )
+    if len(unique) > 1 or favorites_requested:
         return ["selected__" + "__".join(unique)]
     return unique
 
@@ -4229,8 +4260,12 @@ def main()->int:
             return 1 if failures else 0
         return run_pattern_search(target, max(1, args.pattern_lookback), args.pattern_name)
     if args.allsearch_target is not None:
+        try:
+            allsearch_scopes = _parse_allsearch_scopes(args.allsearch_target)
+        except ValueError as exc:
+            parser.error(str(exc))
         return _run_allsearch_combo(
-            _parse_allsearch_scopes(args.allsearch_target),
+            allsearch_scopes,
             force_cache_only=args.onlycache,
             force_remote_refresh=args.force_refresh,
         )
