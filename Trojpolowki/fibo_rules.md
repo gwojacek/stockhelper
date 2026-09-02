@@ -28,8 +28,11 @@ different pair merely to keep the instrument on the board.
   before that phase is not joined to a later breakout; the new formation starts
   at the structural swing low/high which launches the post-range move.
 - A completed month-long range after the second anchor also ends the active
-  correction. Finishing near an edge of that range does not keep the old setup
-  in column 1 or 2; a later breakout must establish a new formation.
+  correction when the correction is dominated by that range or finishes parked
+  inside it. A temporary monthly shelf followed by renewed directional progress
+  toward 61.8 does not end the setup merely because one rolling sub-window was
+  flat. A later breakout from a genuinely completed range must establish a new
+  formation.
 - A normal, short pause within a coherent impulse does not by itself move an
   anchor. Re-anchoring is allowed only when market structure creates a genuinely
   new impulse, not because another anchor pair happens to pass the Fibo filters.

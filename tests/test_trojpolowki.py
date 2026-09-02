@@ -434,15 +434,15 @@ def test_short_fibo_month_long_post_bottom_sideways_is_rejected():
     assert "post-bottom recovery" in source
     assert "short recovery" in source
     assert "correction contains a completed month-long side trend" in source
-    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
-    assert 'cand.direction == "short" and _has_long_sideways' in stale
+    helper = source[source.index("def _waiting_correction_is_stale"):source.index("def _early_sideways_after_anchor_window")]
+    assert 'direction == "short" and _has_long_sideways' in helper
 
 
 def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     helper = source[source.index("def _has_extended_sideways"):source.index("def _sideways_correction_near_active_extreme")]
     steep = source[source.index("def _find_fibo_3p_steep_setup"):source.index("def _find_fibo_setup")]
-    stale = source[source.index("def _is_waiting_candidate_stale"):source.index("def _scan_fibo_one")]
+    waiting = source[source.index("def _waiting_correction_is_stale"):source.index("def _early_sideways_after_anchor_window")]
 
     assert "qualifying_starts.append(start)" in helper
     assert "longest_covered" in helper
@@ -453,8 +453,8 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "max_days=19" in helper
     assert "band_pct=0.20" in helper
     assert "max_progress_pct=0.08" in helper
-    assert stale.index("if _has_extended_sideways") < stale.index("if not _sideways_correction_near_active_extreme")
-    assert "after.reset_index(drop=True), max_days=22, band_pct=0.12" in stale
+    assert waiting.index("if _has_extended_sideways") < waiting.index("return not _sideways_correction_near_active_extreme")
+    assert "correction, max_days=22, band_pct=0.12" in waiting
 
 
 def test_fibo_pattern_may_finish_later_but_must_include_initial_touch_candle():
@@ -1059,8 +1059,8 @@ def test_regular_fibo_rejects_extended_side_trends_on_impulse_and_correction():
     assert "impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(" in setup
     assert "if impulse_side_disqualifying:" in setup
     assert "contains a completed month-long side trend" in setup
-    assert "if _has_extended_sideways(after.reset_index(drop=True)):" in stale
-    assert "if _has_completed_month_side_trend(after):" in stale
+    assert "if _waiting_correction_is_stale(after, cand.direction):" in stale
+    assert "if _has_completed_month_side_trend(after):" not in stale
 
 
 def test_fibo_rejects_correction_through_original_anchor():

@@ -1213,6 +1213,28 @@ def _correction_settled_into_sideways(df_slice: pd.DataFrame) -> bool:
     return channel is not None and channel[1] >= len(df_slice) - 4
 
 
+def _waiting_correction_is_stale(df_slice: pd.DataFrame, direction: str) -> bool:
+    """Return whether an already-matched waiting correction has gone stale.
+
+    A single month-scale shelf can occur inside an otherwise directional
+    pullback. It does not override the live setup result. A continuously
+    extended range, or a long correction which actually finishes as a monthly
+    range, does end the waiting formation.
+    """
+    correction = df_slice.reset_index(drop=True)
+    if _has_extended_sideways(correction):
+        return True
+    if direction == "long" and _correction_settled_into_sideways(correction):
+        return True
+    if direction == "short" and _has_long_sideways(
+        correction, max_days=22, band_pct=0.12
+    ):
+        if _has_extended_sideways(correction):
+            return True
+        return not _sideways_correction_near_active_extreme(correction, "short")
+    return False
+
+
 def _early_sideways_after_anchor_window(
     w: pd.DataFrame,
     i_start: int,
@@ -7289,19 +7311,15 @@ def run_fibo_search(target: str) -> int:
         # into a month-long range, or either direction before a correction
         # becomes an extended side trend. Re-check against the full current
         # dataset so stale offset candidates cannot bypass the live rejection.
-        if _has_extended_sideways(after.reset_index(drop=True)):
+        # Do not expire a live directional pullback merely because one rolling
+        # four-week sub-window inside it was flat. The current scanner result
+        # has already validated the full correction. SNT's July-August shelf
+        # is followed by a continuing decline toward 61.8, and Silver has only
+        # just started its correction; both must remain active. Truly stale
+        # BHW/1AT-style corrections are still removed by the extended and
+        # terminal-sideways checks surrounding this comment.
+        if _waiting_correction_is_stale(after, cand.direction):
             return True
-        if _has_completed_month_side_trend(after):
-            return True
-        if cand.direction == "long" and _correction_settled_into_sideways(after.reset_index(drop=True)):
-            return True
-        if cand.direction == "short" and _has_long_sideways(
-            after.reset_index(drop=True), max_days=22, band_pct=0.12
-        ):
-            if _has_extended_sideways(after.reset_index(drop=True)):
-                return True
-            if not _sideways_correction_near_active_extreme(after.reset_index(drop=True), "short"):
-                return True
         # These anchors get exactly one reversal opportunity: the first 61.8
         # touch/cross and the two candles after it.  A later return to 61.8 must
         # not resurrect the old formation; only a newly anchored Fibo may return.

@@ -261,6 +261,24 @@ def test_month_long_post_peak_range_is_not_a_steep_3p_candidate(path):
 
 
 @pytest.mark.parametrize(
+    ("path", "peak_date", "expected_stale"),
+    [
+        ("data/csv/stocks/SNT_WA.csv", "2026-07-15", False),
+        ("data/csv/commodities/XAGUSD.csv", "2026-08-28", False),
+        ("data/csv/stocks/BHW_WA.csv", "2026-06-24", True),
+        ("data/csv/stocks/1AT_WA.csv", "2026-07-14", True),
+    ],
+)
+def test_waiting_staleness_distinguishes_directional_pullback_from_full_range(
+    path, peak_date, expected_stale
+):
+    frame = _fixture(path)
+    correction = frame.loc[frame["Date"] > pd.Timestamp(peak_date)]
+
+    assert scanner._waiting_correction_is_stale(correction, "long") is expected_stale
+
+
+@pytest.mark.parametrize(
     ("path", "anchors", "expected_status", "expected_pattern"),
     [
         (
