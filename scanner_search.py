@@ -1136,6 +1136,42 @@ def _impulse_has_disqualifying_month_side_trend(
     return not exceptional_continuation
 
 
+def _impulse_stalls_before_peak(
+    df_slice: pd.DataFrame,
+    *,
+    min_post_channel_days: int = 10,
+) -> bool:
+    """Detect a rise that stalls in a monthly range just before its top.
+
+    A first strong burst followed by a long shelf and only a marginal, immature
+    high is not one uninterrupted Fibo impulse.  Unlike a base at the launch or
+    a shelf followed by a mature second leg, there is no valid anchor relocation
+    available yet, so the formation must be dropped.
+    """
+    leg = df_slice.reset_index(drop=True)
+    if len(leg) < 24:
+        return False
+    channel = _latest_sideways_window(
+        leg,
+        max_days=22,
+        band_pct=0.15,
+        max_progress_pct=0.08,
+        max_outlier_candles=2,
+    )
+    if channel is None:
+        return False
+    channel_start, channel_end, _high, _low, _width = channel
+    if channel_start < 4:
+        return False
+    lows = pd.to_numeric(leg["Low"], errors="coerce")
+    highs = pd.to_numeric(leg["High"], errors="coerce")
+    launch = float(lows.iloc[0])
+    pre_channel_high = float(highs.iloc[:channel_start + 1].max())
+    gain_before_channel = (pre_channel_high - launch) / max(abs(launch), 1e-9)
+    post_channel_days = len(leg) - 1 - channel_end
+    return gain_before_channel >= 0.10 and post_channel_days < min_post_channel_days
+
+
 def _has_extended_sideways(
     df_slice: pd.DataFrame,
     window_days: int = 22,
@@ -6889,6 +6925,12 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+        if not _mirrored_short and _impulse_stalls_before_peak(impulse_seg):
+            _log(
+                "Rejected long: impulse stalled in a completed month-long side "
+                "trend and has no mature post-channel leg for re-anchoring."
+            )
+            return None
         fresh_touch_window = False
         recent_peak_waiting = i_end - i_peak <= 3
         impulse_side_disqualifying = _impulse_has_disqualifying_month_side_trend(

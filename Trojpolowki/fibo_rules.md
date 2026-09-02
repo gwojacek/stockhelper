@@ -27,6 +27,10 @@ different pair merely to keep the instrument on the board.
 - A completed month-long sideways phase separates market legs. An old anchor
   before that phase is not joined to a later breakout; the new formation starts
   at the structural swing low/high which launches the post-range move.
+- A material initial rise followed by a completed monthly shelf and only an
+  immature final push is not one continuous impulse. If there are not enough
+  post-shelf candles to establish a new launch-to-top leg, the setup is dropped
+  rather than allowing a later 61.8 candle pattern to revive the stale anchors.
 - A completed month-long range after the second anchor also ends the active
   correction when the correction is dominated by that range or finishes parked
   inside it. A temporary monthly shelf followed by renewed directional progress

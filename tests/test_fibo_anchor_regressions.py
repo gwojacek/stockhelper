@@ -310,6 +310,35 @@ def test_silver_recent_cycle_replaces_obsolete_dominant_high():
     assert result.status == "reached_23_6_waiting_for_61_8"
 
 
+def test_bdx_sideways_shelf_before_marginal_top_invalidates_harami_fibo():
+    frame = _fixture("data/csv/stocks/BDX_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start = int(frame.index[dates == "2026-06-11"][0])
+    peak = int(frame.index[dates == "2026-08-11"][0])
+    impulse = frame.iloc[start:peak + 1]
+    explain: list[str] = []
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-11", "2026-08-11"),
+        explain=explain,
+    )
+
+    assert scanner._impulse_stalls_before_peak(impulse) is True
+    assert result is None
+    assert any("stalled in a completed month-long side trend" in item for item in explain)
+
+
+def test_cdr_mature_post_base_leg_is_not_bdx_style_terminal_stall():
+    frame = _fixture("data/csv/stocks/CDR_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start = int(frame.index[dates == "2026-06-26"][0])
+    peak = int(frame.index[dates == "2026-08-13"][0])
+
+    assert scanner._impulse_stalls_before_peak(frame.iloc[start:peak + 1]) is False
+
+
 @pytest.mark.parametrize(
     ("path", "anchors", "expected_status", "expected_pattern"),
     [
