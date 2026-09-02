@@ -21,7 +21,8 @@ def load_run_module():
     detector = types.ModuleType("chart_program.instrument_detector")
     detector.detect_instrument_type = lambda ticker, default=None: default or "stock"
     loader_mod = types.ModuleType("chart_program.chart_loader")
-    loader_mod.COMMODITY_STOOQ_MAP = {"OIL": "cl.f"}
+    loader_mod.COMMODITY_STOOQ_MAP = {"OIL": "cl.f", "SILVER": "xagusd"}
+    loader_mod.COMMODITY_YAHOO_MAP = {"OIL": "CL=F", "SILVER": "SI=F"}
     loader_mod.local_csv_path_for_symbol = lambda *args, **kwargs: Path("data/fake.csv")
     scanner = types.ModuleType("scanner_search")
     scanner.COMMODITIES_SEARCH_TICKERS = []
@@ -157,6 +158,9 @@ def test_allsearch_accepts_comma_separated_selected_instruments():
     assert mod._parse_allsearch_scopes("all") == mod.DEFAULT_ALLSEARCH_SCOPES
     assert mod._parse_allsearch_scopes(["SNT.WA,", "CDR.WA,", "TXT.WA,", "CRI.WA"]) == [
         "selected__SNT.WA__CDR.WA__TXT.WA__CRI.WA",
+    ]
+    assert mod._parse_allsearch_scopes(["INSM.US,", "SI.F,", "PUR.WA"]) == [
+        "selected__INSM.US__SILVER__PUR.WA",
     ]
     assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "SNT.WA") == "WIG"
     assert mod._report_market_for_ticker("SELECTED__SNT.WA__ARM.US", "ARM.US") == "US100"

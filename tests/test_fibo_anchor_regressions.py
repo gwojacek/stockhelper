@@ -16,6 +16,18 @@ def _fixture(path: str):
     return frame.reset_index(drop=True)
 
 
+def test_selected_silver_provider_alias_uses_canonical_xagusd_history():
+    group, members, _source, _suffix = scanner._get_members(
+        "selected__INSM.US__SI.F__PUR.WA"
+    )
+
+    assert group == "selected__insm.us__si.f__pur.wa"
+    assert members == ["INSM.US", "SILVER", "PUR.WA"]
+    assert scanner._search_fetch_symbol("SILVER", group, None) == (
+        "XAGUSD", "commodity",
+    )
+
+
 def test_mstr_broad_short_is_rejected_by_month_side_trends():
     frame = _fixture("data/csv/stocks/MSTR_US.csv")
     explain: list[str] = []

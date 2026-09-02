@@ -35,7 +35,11 @@ try:
 except Exception:
     tabulate = None
 from chart_program.instrument_detector import detect_instrument_type
-from chart_program.chart_loader import COMMODITY_STOOQ_MAP, local_csv_path_for_symbol
+from chart_program.chart_loader import (
+    COMMODITY_STOOQ_MAP,
+    COMMODITY_YAHOO_MAP,
+    local_csv_path_for_symbol,
+)
 try:
     from chart_program.chart_loader import CSV_DATA_DIR, STATE_DATA_DIR
 except ImportError:
@@ -114,13 +118,28 @@ TROJPOLLOWKI_RETEST_LABELS = {
 }
 
 
+def _canonical_selected_symbol(value: str) -> str:
+    """Normalize provider commodity aliases used in explicit allsearch lists."""
+    symbol = str(value or "").strip().upper()
+    if symbol in COMMODITY_STOOQ_MAP or symbol in COMMODITY_YAHOO_MAP:
+        return symbol
+    for canonical, provider in COMMODITY_STOOQ_MAP.items():
+        if str(provider).upper() == symbol:
+            return canonical
+    yahoo_symbol = symbol.replace(".F", "=F")
+    for canonical, provider in COMMODITY_YAHOO_MAP.items():
+        if str(provider).upper() == yahoo_symbol:
+            return canonical
+    return symbol
+
+
 def _parse_allsearch_scopes(value: str | list[str]) -> list[str]:
     """Parse one market scope or an explicit comma-separated symbol list."""
     raw = " ".join(value) if isinstance(value, list) else str(value or "")
     requested = [item.strip() for item in raw.split(",") if item.strip()]
     if not requested or (len(requested) == 1 and requested[0].lower() == "all"):
         return DEFAULT_ALLSEARCH_SCOPES.copy()
-    unique = list(dict.fromkeys(item.upper() for item in requested))
+    unique = list(dict.fromkeys(_canonical_selected_symbol(item) for item in requested))
     if len(unique) > 1:
         return ["selected__" + "__".join(unique)]
     return unique

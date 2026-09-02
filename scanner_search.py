@@ -1710,6 +1710,18 @@ def _normalize_commodity_symbol(raw: str) -> str:
     available = set(COMMODITY_YAHOO_MAP.keys()) | set(COMMODITY_STOOQ_MAP.keys())
     if cleaned in available:
         return cleaned
+    # Explicit selections may use either provider's notation.  Convert those
+    # spellings back to the scanner's canonical commodity name before type
+    # detection and CSV lookup.  In particular, users commonly enter Stooq's
+    # ``SI.F`` while Yahoo spells the same Silver future ``SI=F`` and our
+    # persisted history is the canonical Silver/XAGUSD series.
+    provider_symbol = cleaned.replace(".F", "=F")
+    for key, value in COMMODITY_YAHOO_MAP.items():
+        if str(value).upper() == provider_symbol:
+            return key
+    for key, value in COMMODITY_STOOQ_MAP.items():
+        if str(value).upper() == cleaned:
+            return key
     compact = cleaned.replace("_", "")
     for key in available:
         if key.replace("_", "") == compact:
@@ -2805,7 +2817,11 @@ def _members_from_configs(scope: str) -> list[str]:
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
     if normalized.startswith("selected__"):
-        members = [part.upper() for part in normalized.split("__")[1:] if part]
+        members = [
+            _normalize_commodity_symbol(part)
+            for part in normalized.split("__")[1:]
+            if part
+        ]
         if not members:
             raise ValueError("Selected allsearch requires at least one instrument.")
         return normalized, members, "explicit instrument selection", None
@@ -2843,7 +2859,7 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     # Fallback: traktuj input jako pojedynczy ticker/symbol do skanowania.
     raw = (target or "").strip()
     if raw:
-        return "single", [raw.upper()], "direct symbol", None
+        return "single", [_normalize_commodity_symbol(raw)], "direct symbol", None
     raise ValueError(f"Brak skonfigurowanej listy instrumentów dla: {target}")
 
 
