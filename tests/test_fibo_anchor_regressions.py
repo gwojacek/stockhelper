@@ -278,6 +278,26 @@ def test_waiting_staleness_distinguishes_directional_pullback_from_full_range(
     assert scanner._waiting_correction_is_stale(correction, "long") is expected_stale
 
 
+def test_silver_recent_cycle_replaces_obsolete_dominant_high():
+    frame = _fixture("data/csv/commodities/XAGUSD.csv").tail(320).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    recent_peak = int(frame.index[dates == "2026-08-28"][0])
+    old_peak = int(frame.loc[:recent_peak - 1, "High"].idxmax())
+
+    start = scanner._independent_recent_long_base(
+        frame, recent_peak, old_peak, min_incline_days=10,
+    )
+    result = scanner._find_fibo_setup(frame, "long")
+
+    assert start is not None
+    assert dates.iloc[start] == "2026-07-17"
+    assert float(frame.iloc[start]["Low"]) == pytest.approx(54.778, abs=0.01)
+    assert result is not None
+    assert result.incline_start_date == "2026-07-17"
+    assert result.incline_end_date == "2026-08-28"
+    assert result.status == "reached_23_6_waiting_for_61_8"
+
+
 @pytest.mark.parametrize(
     ("path", "anchors", "expected_status", "expected_pattern"),
     [

@@ -1544,6 +1544,54 @@ def _select_peak_long(
     return best_idx
 
 
+def _independent_recent_long_base(
+    w: pd.DataFrame,
+    recent_peak_idx: int,
+    old_peak_idx: int,
+    min_incline_days: int,
+    *,
+    min_gain: float = 0.15,
+) -> int | None:
+    """Return the launch low of a proven new long cycle after an older high.
+
+    A lower recent top is allowed only when price first completed the older
+    high's 61.8 correction.  The replacement anchor is then the lowest low
+    after that old top and before the new impulse's maturity boundary.  This
+    keeps the dominance exception structural rather than searching arbitrary
+    anchor pairs for a convenient Fibo level.
+    """
+    if recent_peak_idx <= old_peak_idx + min_incline_days:
+        return None
+    high = pd.to_numeric(w["High"], errors="coerce")
+    low = pd.to_numeric(w["Low"], errors="coerce")
+    old_base_right = old_peak_idx - min_incline_days
+    if old_base_right < 0:
+        return None
+    old_base_left = max(0, old_peak_idx - 140)
+    old_base = float(low.iloc[old_base_left:old_base_right + 1].min())
+    old_high = float(high.iloc[old_peak_idx])
+    if not math.isfinite(old_base) or old_high <= old_base:
+        return None
+    old_618 = old_high - (old_high - old_base) * 0.618
+    between_lows = low.iloc[old_peak_idx + 1:recent_peak_idx + 1].dropna()
+    if between_lows.empty or float(between_lows.min()) > old_618:
+        return None
+
+    recent_base_right = recent_peak_idx - min_incline_days
+    recent_base_left = max(old_peak_idx + 1, recent_peak_idx - 80)
+    if recent_base_right < recent_base_left:
+        return None
+    recent_slice = low.iloc[recent_base_left:recent_base_right + 1].dropna()
+    if recent_slice.empty:
+        return None
+    recent_base_idx = int(recent_slice.idxmin())
+    recent_base = float(low.iloc[recent_base_idx])
+    recent_gain = (float(high.iloc[recent_peak_idx]) - recent_base) / max(abs(recent_base), 1e-9)
+    if recent_peak_idx - recent_base_idx < min_incline_days or recent_gain < min_gain:
+        return None
+    return recent_base_idx
+
+
 def _select_bottom_short(
     w: pd.DataFrame,
     min_decline_days: int,
@@ -5921,11 +5969,20 @@ def _select_fibo_long_impulse_base(
     # in the same structure was never fully reset by a proper 61.8 cycle.
     win_peak = int(high.iloc[i_start:i_end + 1].idxmax())
     if win_peak != i_peak and not allow_independent_peak:
-        _log(
-            "Rejected long: selected peak is not dominant in window "
-            f"(selected={i_peak}, dominant={win_peak})."
+        independent_base = _independent_recent_long_base(
+            w, i_peak, win_peak, min_incline_days,
         )
-        return None
+        if independent_base is None:
+            _log(
+                "Rejected long: selected peak is not dominant in window "
+                f"(selected={i_peak}, dominant={win_peak})."
+            )
+            return None
+        _log(
+            "Long: accepted independent recent cycle after the dominant old "
+            f"peak corrected through 61.8; reset launch idx={i_start} -> {independent_base}."
+        )
+        i_start = independent_base
 
     # Include the five candles immediately before the detected incline.  This
     # captures the actual extreme under the first breakout candles without pulling the anchor
@@ -6269,7 +6326,18 @@ def _find_fibo_3p_steep_setup(
     # still inside the 320-candle window.  MTX.DE's May→July leg reaches 94.4%
     # of the February high and is a valid new Fibo after the May bottom.
     independent_recent_peak = False
+    structural_recent_base: int | None = None
     if global_high > 0 and peak_high < global_high * 0.94:
+        dominant_peak_idx = int(high.idxmax())
+        structural_recent_base = _independent_recent_long_base(
+            w, i_peak, dominant_peak_idx, min_incline_days,
+        )
+        if structural_recent_base is not None:
+            independent_recent_peak = True
+            _log(
+                "3P steep: accepted independent recent cycle after the old "
+                f"dominant peak completed its 61.8 correction; launch idx={structural_recent_base}."
+            )
         independent_base_right = i_peak - min_incline_days
         # A short trend can decline for most of the 260-session scan window.
         # In mirrored data, inspect that complete impulse horizon when deciding
@@ -6291,7 +6359,7 @@ def _find_fibo_3p_steep_setup(
             # of an unrelated 25% requirement (XAUUSD Jul-Aug 2026).
             independent_min_gain = 0.025 if _mirrored_short else 0.15
             independent_min_daily_gain = 0.0004 if _mirrored_short else 0.003
-            independent_recent_peak = (
+            independent_recent_peak = independent_recent_peak or (
                 independent_gain >= independent_min_gain
                 and independent_daily_gain >= independent_min_daily_gain
             )
@@ -6323,6 +6391,13 @@ def _find_fibo_3p_steep_setup(
     if base is None:
         return None
     i_start, fib_start, fib_end = base
+    if structural_recent_base is not None and i_start < structural_recent_base:
+        _log(
+            "3P steep: replaced obsolete broad launch with independent recent "
+            f"cycle low idx={i_start} -> {structural_recent_base}."
+        )
+        i_start = structural_recent_base
+        fib_start = float(low.iloc[i_start])
     measured_peak_idx = int(high.iloc[i_start:i_peak + 1].idxmax())
     measured_peak_high = float(high.iloc[measured_peak_idx])
     if measured_peak_high > fib_end * 1.005:
