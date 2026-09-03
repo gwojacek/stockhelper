@@ -102,6 +102,17 @@ def test_reported_mixed_language_phrases_have_complete_polish_translations():
         assert POLISH_TRANSLATIONS[source] == translation
 
 
+def test_short_fibo_zero_status_is_direction_aware_in_both_languages():
+    markup = language_controls_html()
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+
+    assert "direction==='short'" in markup
+    assert "replaceAll('3p_steep_incline','3p_steep_decline')" in markup
+    assert POLISH_TRANSLATIONS["3p_steep_decline"] == "3P_stromy_spadek"
+    assert POLISH_TRANSLATIONS["3P steep decline"] == "3P stromy spadek"
+    assert '"🚀 3p_steep_decline" if r.direction=="short"' in scanner_source
+
+
 def test_language_preference_uses_cookie_for_cross_port_views():
     markup = language_controls_html()
 

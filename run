@@ -548,7 +548,10 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
         elif csv_path.name.startswith("fibo_search_"):
             for r in rows:
                 status = str(r.get("status", ""))
-                if status == "valid_reversal":
+                direction = str(r.get("direction", "")).lower()
+                if status == "3p_steep_incline" and direction == "short":
+                    r["status_marker"] = "🚀 3p_steep_decline"
+                elif status == "valid_reversal":
                     r["status_marker"] = "🟢 valid_reversal"
                 elif status == "reached_23_6_waiting_for_61_8":
                     r["status_marker"] = "reached_23_6_waiting_for_61_8"

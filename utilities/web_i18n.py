@@ -268,6 +268,9 @@ POLISH_TRANSLATIONS = {
     "Last valid retest": "Ostatni prawidłowy retest",
     "No major bearish signal": "Brak istotnego sygnału spadkowego",
     "3p_steep_incline": "3P_stromy_wzrost",
+    "3p_steep_decline": "3P_stromy_spadek",
+    "3P steep incline": "3P stromy wzrost",
+    "3P steep decline": "3P stromy spadek",
     "3p_steep_23_6_zone": "3P_stromy_wzrost_strefa_23,6",
     "reached_23_6_waiting_for_61_8": "osiągnięto_23,6_oczekiwanie_na_61,8",
     "returned_before_61_8": "powrót_przed_61,8",
@@ -431,11 +434,15 @@ function translateNode(root){{
     if(node.parentElement?.closest('script,style,[data-market-language]'))return;
     if(node.__stockhelperEnglish===undefined)node.__stockhelperEnglish=node.nodeValue;
     const original=node.__stockhelperEnglish;
-    const trimmed=original.trim();
+    const direction=node.parentElement?.closest('[data-troj-direction]')?.dataset?.trojDirection;
+    const directionalOriginal=direction==='short'
+      ? original.replaceAll('3p_steep_incline','3p_steep_decline').replaceAll('3P steep incline','3P steep decline')
+      : original;
+    const trimmed=directionalOriginal.trim();
     const columnKey=trimmed.replace(/\\s*[↕↑↓]\\s*$/,'');
     if(language==='pl'&&node.parentElement?.closest('th')&&COLUMN_PL[columnKey]){{
-      node.nodeValue=original.replace(columnKey,COLUMN_PL[columnKey]);
-    }}else node.nodeValue=translate(original);
+      node.nodeValue=directionalOriginal.replace(columnKey,COLUMN_PL[columnKey]);
+    }}else node.nodeValue=translate(directionalOriginal);
   }});
   if(root.querySelectorAll){{[root,...root.querySelectorAll('*')].forEach(el=>ATTRS.forEach(attr=>{{
     if(!el.hasAttribute?.(attr)||el.closest('[data-market-language]'))return;
