@@ -40,6 +40,21 @@ def load_run_module():
     return module
 
 
+def test_report_language_switcher_defaults_to_english_and_preserves_market_terms():
+    mod = load_run_module()
+
+    script = mod._report_language_script()
+
+    assert "setReportLanguage('en')" in script
+    assert "document.documentElement.lang=lang" in script
+    assert "data-market-language" in script
+    assert "'Wedges':'Kliny'" in script
+    assert "Ichimoku only" in script
+    assert "Fibo only" in script
+    assert "'Ichimoku':'" not in script
+    assert "'Fibo':'" not in script
+
+
 def test_scanner_report_instrument_labels_include_full_names_and_tickers():
     mod = load_run_module()
 
