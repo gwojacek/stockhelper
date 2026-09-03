@@ -1,10 +1,4 @@
 {
-  "ING|long|2025-10-14": {
-    "cell": "**🇵🇱 INGBSK (ING) ↗️ (2025-10-14)** <!--fibo-end:2026-06-15-->[🔗 stooq](https://stooq.pl/q/a2/?s=ing&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-08-23",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 0
-  },
   "EURPLN|long|2026-05-07": {
     "cell": "**💱 EURPLN ↗️ (2026-05-07) 26.0%** <!--fibo-end:2026-07-10-->[🔗 stooq](https://stooq.pl/q/a2/?s=eurpln&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-08-24",
@@ -329,12 +323,6 @@
     "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
     "column": 2
   },
-  "ADS.DE|long|2026-05-12": {
-    "cell": "**🇩🇪 Adidas (ADS.DE) ↗️ (2026-05-12)** <!--fibo-end:2026-08-10-->[🔗 stooq](https://stooq.pl/q/a2/?s=ads.de&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-09-01",
-    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
-    "column": 3
-  },
   "SCW|long|2026-07-30": {
     "cell": "**🇵🇱 SCANWAY (SCW) ↗️ (2026-07-30) 95.3%** <!--fibo-end:2026-08-21-->[🔗 stooq](https://stooq.pl/q/a2/?s=scw&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-09-01",
@@ -397,12 +385,6 @@
   },
   "AXON.US|long|2026-06-11": {
     "cell": "**🇺🇸 Axon Enterprise (AXON.US) ↗️ (2026-06-11) 19.7%** <!--fibo-end:2026-08-19-->[🔗 stooq](https://stooq.pl/q/a2/?s=axon.us&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
-    "dropped": "2026-09-01",
-    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
-    "column": 1
-  },
-  "OIL|long|2026-08-05": {
-    "cell": "**🛢️ OIL ↗️ (2026-08-05) 38.4%** <!--fibo-end:2026-08-21-->[🔗 stooq](https://stooq.pl/q/a2/?s=cb.f&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
     "dropped": "2026-09-01",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 1
@@ -742,5 +724,65 @@
     "dropped": "2026-09-02",
     "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
     "column": 1
+  },
+  "COG|long|2026-07-01": {
+    "cell": "**🇵🇱 COGNOR (COG) ↗️ (2026-07-01) 173.4%** <!--fibo-end:2026-08-11-->[🔗 stooq](https://stooq.pl/q/a2/?s=cog&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 2
+  },
+  "DIG|long|2025-10-27": {
+    "cell": "**🇵🇱 DIGITANET (DIG) ↗️ (2025-10-27)** <!--fibo-end:2026-08-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=dig&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "TXT|long|2026-06-08": {
+    "cell": "**🇵🇱 TEXT (TXT) ↗️ (2026-06-08) 149.9%** <!--fibo-end:2026-08-12-->[🔗 stooq](https://stooq.pl/q/a2/?s=txt&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 2
+  },
+  "BRACOMP|short|2026-04-14": {
+    "cell": "**📊 BRACOMP ↘️ (2026-04-14) 92.7%** <!--fibo-end:2026-08-14-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Ebvp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "NO_VALID_PATTERN_AT_61_8 — no active reversal pattern at 61.8",
+    "column": 2
+  },
+  "ATR|long|2026-06-25": {
+    "cell": "**🇵🇱 ATREM (ATR) ↗️ (2026-06-25)** <!--fibo-end:2026-08-05-->[🔗 stooq](https://stooq.pl/q/a2/?s=atr&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "USDCAD|short|2026-07-28": {
+    "cell": "**💱 USDCAD ↘️ (2026-07-28) 67.3%** <!--fibo-end:2026-08-21-->[🔗 stooq](https://stooq.pl/q/a2/?s=usdcad&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "EURGBP|short|2026-06-22": {
+    "cell": "**💱 EURGBP ↘️ (2026-06-22) 66.7%** <!--fibo-end:2026-07-15-->[🔗 stooq](https://stooq.pl/q/a2/?s=eurgbp&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 1
+  },
+  "ITA40|long|2026-03-23": {
+    "cell": "**📊 ITA40 ↗️ (2026-03-23)** <!--fibo-end:2026-08-07-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Efmib&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "SG20CASH|long|2026-06-11": {
+    "cell": "**📊 SG20CASH ↗️ (2026-06-11)** <!--fibo-end:2026-08-11-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Esti&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
+  },
+  "MEXCOMP|short|2026-02-12": {
+    "cell": "**📊 MEXCOMP ↘️ (2026-02-12)** <!--fibo-end:2026-08-18-->[🔗 stooq](https://stooq.pl/q/a2/?s=%5Eipc&i=d&t=c&a=ln&z=224&ft=20251204&l=234&d=1&ch=0&f=1&lt=56&r=0&o=1)",
+    "dropped": "2026-09-03",
+    "reason": "OTHER_SETUP_FILTER — re-anchored or no longer selected by the scanner",
+    "column": 0
   }
 }

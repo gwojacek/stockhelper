@@ -23,6 +23,7 @@ Use this table as the fastest path to the commands you will run most often. The 
 | --- | --- | --- |
 | Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
 | Install/update `stock` shortcut | `./scripts/install-stock-command.sh` | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
+| Commit and push new data | `./pd` | Stages all changes, creates a commit named `data`, and pushes the current branch to its configured upstream. Run it from `master` to update `master`. |
 | Show launcher help | `stock --help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
 | Run a stock setup | `stock ena` | Auto-detects a stock config and prints position/risk output. |
 | Run a forex/commodity setup | `stock eurpln_long` | Auto-detects a forex/commodity config and prints lot/risk output. |
