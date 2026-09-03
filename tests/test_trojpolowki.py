@@ -1604,6 +1604,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "class='market direction-filter-section saved-filter-section' id='wedge-report'" in text
     assert "setActiveReportDirection('long',this)" in text
     assert "setActiveReportDirection('short',this)" in text
+    assert "if(dw)dw.style.display='inline-flex'" in text
+    assert "const activeDirection=(document.getElementById('tab-favorites')?.dataset?.trojDirection||'all').toLowerCase()" in text
+    assert "activeDirection==='all'||o.direction===activeDirection" in text
+    assert "if(typeof renderFavorites==='function')renderFavorites()" in text
     assert "Osobna lista klinów:" not in text
     assert "const okDirection=directionFilter==='all'||r.dataset.trojDirection===directionFilter" in text
     assert "falling_wedge_breakout" not in text
