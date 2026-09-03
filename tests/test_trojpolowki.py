@@ -281,7 +281,8 @@ def test_fibo_columns_are_compact_and_without_chart_links(tmp_path: Path):
     out = mod._write_trojpolowki_fibo(rows, tmp_path, datetime(2026, 5, 30, 10, 11, 12))
     text = out.read_text(encoding="utf-8")
     assert "# Trójpolówki — Fibo" in text
-    assert "Updated from allsearch: 2026-05-30 10:11:12" in text
+    assert "Updated from allsearch:" not in text
+    assert "Recent dropouts are retained for 10 days" not in text
     assert "✅ Pattern ≤14d / SL intact" in text
     assert "**🇵🇱 TAURONPE (TPE) ↗️ (2026-03-23)**" in text
     assert "**🇵🇱 ORANGEPL (OPL) ↗️ (2026-01-15)**" in text
@@ -1426,7 +1427,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert 'onclick="downloadPdfReport()"' in text
     assert "@media print" in text
     assert "zoom:.78" in text
-    assert "id='tab-allsearch' class='tab-panel active'" in text
+    assert "id='tab-allsearch' class='tab-panel active direction-filter-section'" in text
     assert "id='current-balance'" in text
     assert "Jacek Gwoździewicz trading masterpiece" in text
     assert "fetch('/current-balance'" in text
@@ -1464,7 +1465,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-formula='=HYPERLINK(&quot;https://stooq.pl/gpp&quot;; &quot;GPP&quot;)'" in text
     assert "Open all visible stooq chart links" not in text
     assert "border:none" in text
-    assert "<details class='legend troj-legend'><summary><b>Legenda</b>" in text
+    assert "id='report-legends-dialog'" in text
+    assert "📊 Legenda progów" in text
+    assert "☁️ Ichimoku legend" in text
+    assert "📖 Legends" in text
     assert "Open stooq links from top choices" in text
     assert "Open stockhelper charts from this top-choice column" not in text
     assert "Open stockhelper charts from this column" in text
@@ -1590,8 +1594,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert ".troj-cell-card.today-signal{background:#14532d!important" in text
     assert "data-scanner='WEDGE' data-status='🚀 breakout' data-breakout-date='2026-05-30' data-troj-direction='long' class='today-signal'" in text
     assert "class='market direction-filter-section saved-filter-section' id='wedge-report'" in text
-    assert "setTrojDirection('wedge-report','long',this)" in text
-    assert "setTrojDirection('wedge-report','short',this)" in text
+    assert "setActiveReportDirection('long',this)" in text
+    assert "setActiveReportDirection('short',this)" in text
+    assert "Osobna lista klinów:" not in text
     assert "const okDirection=directionFilter==='all'||r.dataset.trojDirection===directionFilter" in text
     assert "falling_wedge_breakout" not in text
     assert "wybicie long 2026-05-30" not in text
