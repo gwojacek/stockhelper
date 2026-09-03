@@ -416,79 +416,9 @@ def _liquidity_legend_text() -> str:
     )
 
 def _report_language_script() -> str:
-    """Return the self-contained English/Polish report language switcher.
+    from utilities.web_i18n import language_controls_html
 
-    Instrument, exchange, scanner, and trading vocabulary is deliberately not
-    translated: those labels are market-specific and must remain recognizable
-    regardless of the interface language.
-    """
-    return r"""<script>
-const REPORT_TRANSLATIONS={
-  pl:{
-    'StockHelper Scanner Report':'Raport skanera StockHelper','Generated:':'Wygenerowano:',
-    'StockHelper scanner workspace':'Przestrzeń robocza skanera StockHelper',
-    'Search':'Szukaj','Market':'Rynek','Direction:':'Kierunek:','Favorites':'Ulubione',
-    'Open journal':'Otwórz dziennik','Show':'Pokaż','Hide':'Ukryj','Legends':'Legendy',
-    'Checked':'Sprawdzone','Current balance':'Aktualny kapitał',
-    'Instruments checked for this report':'Instrumenty sprawdzone w tym raporcie',
-    'Instrument universe is unavailable for this saved report.':'Lista instrumentów jest niedostępna dla zapisanego raportu.',
-    'Close':'Zamknij','Ichimoku legend':'Legenda Ichimoku','Top choices':'Najlepsze wybory',
-    'Instrument':'Instrument','Why top choice':'Dlaczego wybrano','Chart':'Wykres',
-    'All markets':'Wszystkie rynki','All results':'Wszystkie wyniki',
-    'Ichimoku only':'Tylko Ichimoku','Fibo only':'Tylko Fibo','Sort':'Sortuj',
-    'Open':'Otwórz','Copied':'Skopiowano','Failed':'Błąd','Opened':'Otwarto','Grouped':'Zgrupowano',
-    'Name only':'Tylko nazwa','Full':'Pełne','Default':'Domyślne',
-    'Show recent dropouts':'Pokaż ostatnie odrzucone','Hide recent dropouts':'Ukryj ostatnie odrzucone',
-    'No results.':'Brak wyników.','Saved setups only':'Tylko zapisane układy',
-    'Show all setups':'Pokaż wszystkie układy','Language':'Język','Wedges':'Kliny',
-    'Threshold legend':'Legenda progów','liquidity threshold':'próg płynności',
-    'last 10 candles':'ostatnie 10 świeczek','country GDP multiplier':'mnożnik PKB kraju',
-    'number of days in the last 20 below the threshold':'liczba dni z ostatnich 20 poniżej progu',
-    'There cannot be more than 2 days.':'Nie może być więcej niż 2 dni.'
-  }
-};
-const REPORT_TO_EN={
-  'Legenda progów':'Threshold legend','Kliny':'Wedges','WYNIKI':'RESULTS',
-  'poza chmurą, z warunkami płynności':'outside the cloud, with liquidity conditions',
-  'po flipie chmury: retest/pattern po wybiciu':'after cloud flip: retest/pattern after breakout',
-  'Brak wyników.':'No results.','próg płynności':'liquidity threshold',
-  'ostatnie 10 świeczek':'last 10 candles','bazowo':'base',
-  'mnożnik PKB kraju':'country GDP multiplier','mnożnik kraju':'country multiplier',
-  'liczba dni z ostatnich 20 poniżej progu':'number of days in the last 20 below the threshold',
-  'Nie może być więcej niż 2 dni.':'There cannot be more than 2 days.'
-};
-const REPORT_PLACEHOLDERS={pl:{'Search ticker/status/top choices on any tab':'Szukaj tickera/statusu/najlepszych wyborów na dowolnej karcie'}};
-const REPORT_ATTRS=['title','aria-label','placeholder'];
-function reportTranslateText(value,lang){
-  let out=value;
-  for(const [source,target] of Object.entries(REPORT_TO_EN))out=out.replaceAll(source,target);
-  if(lang==='en')return out;
-  for(const [source,target] of Object.entries(REPORT_TRANSLATIONS[lang]||{})){
-    out=out.replaceAll(source,target);
-  }
-  return out;
-}
-function setReportLanguage(lang){
-  lang=lang==='pl'?'pl':'en';
-  document.documentElement.lang=lang;
-  document.querySelectorAll('[data-report-lang]').forEach(btn=>btn.classList.toggle('active',btn.dataset.reportLang===lang));
-  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
-  let node;
-  while((node=walker.nextNode())){
-    if(node.parentElement?.closest('script,style,[data-market-language]'))continue;
-    if(node.__reportEnglish===undefined)node.__reportEnglish=node.nodeValue;
-    node.nodeValue=reportTranslateText(node.__reportEnglish,lang);
-  }
-  document.querySelectorAll('*').forEach(el=>REPORT_ATTRS.forEach(attr=>{
-    if(!el.hasAttribute(attr)||el.closest('[data-market-language]'))return;
-    const key='reportEnglish'+attr.replace('-','');
-    if(el.dataset[key]===undefined)el.dataset[key]=el.getAttribute(attr);
-    const source=el.dataset[key];
-    el.setAttribute(attr,(REPORT_PLACEHOLDERS[lang]?.[source])||reportTranslateText(source,lang));
-  }));
-}
-document.addEventListener('DOMContentLoaded',()=>setReportLanguage('en'));
-</script>"""
+    return language_controls_html()
 
 def _normalize_key(value: str) -> str: return "".join(ch for ch in (value or "").lower() if ch.isalnum())
 def _match_in_dir(directory: Path, target: str) -> list[Path]:
@@ -3432,7 +3362,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         "<select id='market' style='display:none'><option value=''>All markets</option>" + "".join([f"<option>{m}</option>" for m in by_market]) + "</select>"
         "<select id='scanner' style='display:none'><option value=''>All results</option><option value='ICHIMOKU'>Ichimoku only</option><option value='FIBO'>Fibo only</option></select></div>"
     )
-    html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><div class='tabbar'><a class='btn tabbtn active' data-tab='allsearch' href='#tab-allsearch'>ALLSEARCH REPORT</a><a class='btn tabbtn' data-tab='troj-fibo' href='#tab-troj-fibo'>3P FIBO</a><a class='btn tabbtn' data-tab='troj-ichimoku' href='#tab-troj-ichimoku'>3P ICHIMOKU</a><a class='btn tabbtn' data-tab='wedges' href='#tab-wedges'>🔻 Wedges</a><a class='btn tabbtn' data-tab='favorites' href='#tab-favorites'>⭐ Favorites</a><a class='btn tabbtn' href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a><span class='language-switcher push-right' aria-label='Language'><button class='btn compactbtn active' type='button' data-report-lang='en' onclick=\"setReportLanguage('en')\">EN</button><button class='btn compactbtn' type='button' data-report-lang='pl' onclick=\"setReportLanguage('pl')\">PL</button></span><button class='btn compactbtn' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button><button class='btn pdfbtn' type='button' title='Show report legends' onclick=\"document.getElementById('report-legends-dialog').showModal()\">📖 Legends</button><button class='btn pdfbtn' type='button' title='Show every instrument checked for this report' onclick=\"document.getElementById('checked-instruments-dialog').showModal()\">🗂 Checked</button></div></div>")
+    html_parts.append("<div class='troj-hero'><h2>📈 StockHelper scanner workspace</h2><div class='tabbar'><a class='btn tabbtn active' data-tab='allsearch' href='#tab-allsearch'>ALLSEARCH REPORT</a><a class='btn tabbtn' data-tab='troj-fibo' href='#tab-troj-fibo'>3P FIBO</a><a class='btn tabbtn' data-tab='troj-ichimoku' href='#tab-troj-ichimoku'>3P ICHIMOKU</a><a class='btn tabbtn' data-tab='wedges' href='#tab-wedges'>🔻 Wedges</a><a class='btn tabbtn' data-tab='favorites' href='#tab-favorites'>⭐ Favorites</a><a class='btn tabbtn' href='/journal-html' target='_blank' rel='noopener'>🧾 Open journal</a><button class='btn compactbtn' type='button' onclick=\"toggleStooqLinks(this)\">📈 Show</button><button class='btn pdfbtn' type='button' title='Download PDF' onclick=\"downloadPdfReport()\">📄 PDF</button><button class='btn pdfbtn' type='button' title='Show report legends' onclick=\"document.getElementById('report-legends-dialog').showModal()\">📖 Legends</button><button class='btn pdfbtn' type='button' title='Show every instrument checked for this report' onclick=\"document.getElementById('checked-instruments-dialog').showModal()\">🗂 Checked</button></div></div>")
     checked_lists_html = "".join(
         "<section class='checked-market-list'><h3>" + html.escape(market) + f" <span>({len(members)})</span></h3><div>"
         + "".join(f"<code>{html.escape(member)}</code>" for member in members) + "</div></section>"
