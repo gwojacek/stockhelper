@@ -41,6 +41,19 @@ def test_statuses_and_directions_are_translated():
     assert POLISH_TRANSLATIONS["Closing Price"] == "Cena zamknięcia"
     assert POLISH_TRANSLATIONS["Calculate position"] == "Oblicz pozycję"
     assert COLUMN_POLISH_TRANSLATIONS["Close"] == "Cena zamknięcia"
+    assert POLISH_TRANSLATIONS["Trade Summary"] == "Podsumowanie transakcji"
+    assert POLISH_TRANSLATIONS["NO PLAY UNTIL"] == "BEZ TRANSAKCJI DO"
+    assert POLISH_TRANSLATIONS["breakout"] == "wybicie"
+    assert POLISH_TRANSLATIONS["below"] == "pod chmurą"
+    assert POLISH_TRANSLATIONS["bearish_hammer"] == "spadkowy_młot"
+    assert POLISH_TRANSLATIONS["valid_reversal"] == "prawidłowe_odwrócenie"
+
+
+def test_sorted_close_column_uses_price_translation():
+    markup = language_controls_html()
+
+    assert "trimmed.replace(/\\s*[↕↑↓]\\s*$/,'')" in markup
+    assert "COLUMN_PL[columnKey]" in markup
 
 
 def test_language_preference_uses_cookie_for_cross_port_views():
