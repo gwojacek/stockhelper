@@ -2,10 +2,11 @@ from utilities.web_i18n import COLUMN_POLISH_TRANSLATIONS, ENGLISH_NORMALIZATION
 from pathlib import Path
 
 
-def test_language_controls_are_flagged_fixed_and_english_first():
+def test_language_controls_are_in_report_toolbar_and_english_first():
     markup = language_controls_html()
 
-    assert "position:fixed;top:12px;right:14px" in markup
+    assert "if(languageControls&&reportToolbar)reportToolbar.appendChild(languageControls)" in markup
+    assert "position:fixed" not in markup
     assert markup.index("🇬🇧 EN") < markup.index("🇵🇱 PL")
     assert "window.setStockhelperLanguage(savedLanguage(),false)" in markup
     assert "stockhelper-language=${value}" in markup
@@ -56,6 +57,22 @@ def test_sorted_close_column_uses_price_translation():
     assert "COLUMN_PL[columnKey]" in markup
 
 
+def test_candlestick_names_follow_polish_reference_material():
+    expected = {
+        "morning_doji_star": "gwiazda_poranna_doji",
+        "evening_doji_star": "gwiazda_wieczorna_doji",
+        "piercing_pattern": "formacja_przenikania",
+        "bullish_harami": "harami_prowzrostowe",
+        "bearish_harami": "harami_prospadkowe",
+        "dark_cloud_cover": "zasłona_ciemnej_chmury",
+        "bullish_engulfing": "objęcie_hossy",
+        "bearish_engulfing": "objęcie_bessy",
+    }
+
+    for source, translation in expected.items():
+        assert POLISH_TRANSLATIONS[source] == translation
+
+
 def test_language_preference_uses_cookie_for_cross_port_views():
     markup = language_controls_html()
 
@@ -72,3 +89,6 @@ def test_language_controls_are_injected_into_all_web_views():
     assert "<body>{language_ui}<div class='shell'>" in journal_source
     assert "  {language_ui}" in chart_source
     assert '_report_language_script() + "</body></html>"' in report_source
+    assert "language_controls_html(show_controls=False)" in journal_source
+    assert "language_controls_html(show_controls=False)" in chart_source
+    assert "🇬🇧 EN" not in language_controls_html(show_controls=False)

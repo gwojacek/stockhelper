@@ -477,7 +477,7 @@ class LightweightChartLevelSelectorUI:
     def _html(self) -> str:
         payload = json.dumps(self._payload(), ensure_ascii=False)
         fallback_script = self._fallback_lightweight_charts_script()
-        language_ui = language_controls_html()
+        language_ui = language_controls_html(show_controls=False)
         chart_identity = self.source_name or self.symbol
         if self.source_ticker:
             chart_identity = f"{chart_identity} ({self.source_ticker})"

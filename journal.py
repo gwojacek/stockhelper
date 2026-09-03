@@ -315,7 +315,7 @@ def html_document(entries: list[dict[str, Any]] | None = None) -> str:
     options = "".join(f"<option value='{html.escape(y)}'>{html.escape(y)}</option>" for y in years)
     cards = html_fragment(entries)
     stats = _stats_section(entries)
-    language_ui = language_controls_html()
+    language_ui = language_controls_html(show_controls=False)
     return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><title>StockHelper Transaction Journal</title>
 <style>
 :root{{--bg:#f7fbff;--card:#fff;--ink:#10213d;--muted:#64748b;--line:#cbdff5;--blue:#1476f2;--danger:#ef233c}}

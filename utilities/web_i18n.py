@@ -23,6 +23,8 @@ POLISH_TRANSLATIONS = {
     "Show": "Pokaż",
     "Hide": "Ukryj",
     "Legends": "Legendy",
+    "Ichimoku legend": "Legenda Ichimoku",
+    "Threshold legend": "Legenda progów",
     "Checked": "Sprawdzone",
     "Current balance": "Aktualny kapitał",
     "Top choices": "Najlepsze wybory",
@@ -141,6 +143,7 @@ POLISH_TRANSLATIONS = {
     "Full": "Pełne",
     "Ticker": "Ticker",
     "Dir": "Kierunek",
+    "Dir.": "Kierunek",
     "Position": "Pozycja",
     "Previous": "Poprzednia",
     "Price to cloud": "Cena względem chmury",
@@ -201,6 +204,21 @@ POLISH_TRANSLATIONS = {
     "Strong / continuation": "Silny sygnał / kontynuacja",
     "Kijun / watch": "Kijun / obserwacja",
     "Cloud / retest / breakout": "Chmura / retest / wybicie",
+    "Cloud/retest/breakout rows have priority and appear in the third column.": "Wiersze chmury/retestu/wybicia mają pierwszeństwo i znajdują się w trzeciej kolumnie.",
+    "Early breakouts are hidden from 3P Ichimoku until four months after the preceding breakout; afterward they return and are treated normally.": "Wczesne wybicia są ukryte w 3P Ichimoku przez cztery miesiące od poprzedniego wybicia; później wracają i są traktowane standardowo.",
+    "Risk/grading details are shown only in the": "Szczegóły ryzyka i oceny są wyświetlane tylko w kolumnach",
+    "Risk icons": "Ikony ryzyka",
+    "number of days in the last 20 below the Ichimoku liquidity threshold; no more than 2 days are allowed.": "liczba dni z ostatnich 20 poniżej progu płynności Ichimoku; dozwolone są najwyżej 2 dni.",
+    "Chikou uses arrow-only direction": "Kierunek Chikou jest oznaczany wyłącznie strzałką",
+    "over price and": "nad ceną, a",
+    "under price": "pod ceną",
+    "TK values use the latest actionable Tenkan/Kijun direction": "Wartości TK używają najnowszego aktywnego kierunku Tenkan/Kijun",
+    "with neutral only when equal": "neutralnego tylko przy równości",
+    "placement is context-aware": "położenie zależy od kontekstu",
+    "Tenkan is inside the cloud": "Tenkan znajduje się w chmurze",
+    "kumo color is the projected cloud to the right of the latest candle": "kolor kumo oznacza prognozowaną chmurę na prawo od ostatniej świecy",
+    "lines are qualitative context only": "linie stanowią wyłącznie kontekst jakościowy",
+    "is the current scanner status/note; missing source fields stay as": "oznacza bieżący status/uwagę skanera; brakujące pola źródłowe pozostają jako",
     "Recent breakout": "Ostatnie wybicie",
     "Breakout": "Wybicie",
     "breakout": "wybicie",
@@ -239,19 +257,39 @@ POLISH_TRANSLATIONS = {
     "touched_61_8_no_pattern": "dotknięto_61,8_brak_formacji",
     "valid_reversal": "prawidłowe_odwrócenie",
     "Bearish hammer": "Spadkowy młot",
-    "Bullish hammer": "Wzrostowy młot",
+    "Bullish hammer": "Młot",
     "bearish_hammer": "spadkowy_młot",
-    "bullish_hammer": "wzrostowy_młot",
-    "Bearish engulfing": "Spadkowe objęcie",
-    "Bullish engulfing": "Wzrostowe objęcie",
-    "bearish_engulfing": "spadkowe_objęcie",
-    "bullish_engulfing": "wzrostowe_objęcie",
+    "bullish_hammer": "młot",
+    "Bearish engulfing": "Objęcie bessy",
+    "Bullish engulfing": "Objęcie hossy",
+    "bearish_engulfing": "objęcie_bessy",
+    "bullish_engulfing": "objęcie_hossy",
     "Shooting star": "Spadająca gwiazda",
     "shooting_star": "spadająca_gwiazda",
     "Morning star": "Gwiazda poranna",
     "Evening star": "Gwiazda wieczorna",
     "morning_star": "gwiazda_poranna",
     "evening_star": "gwiazda_wieczorna",
+    "Morning doji star": "Gwiazda poranna doji",
+    "Evening doji star": "Gwiazda wieczorna doji",
+    "morning_doji_star": "gwiazda_poranna_doji",
+    "evening_doji_star": "gwiazda_wieczorna_doji",
+    "Piercing pattern": "Formacja przenikania",
+    "piercing_pattern": "formacja_przenikania",
+    "Bullish harami": "Harami prowzrostowe",
+    "Bearish harami": "Harami prospadkowe",
+    "bullish_harami": "harami_prowzrostowe",
+    "bearish_harami": "harami_prospadkowe",
+    "Dark cloud cover": "Zasłona ciemnej chmury",
+    "dark_cloud_cover": "zasłona_ciemnej_chmury",
+    "Fibo pattern": "Formacja Fibo",
+    "Show 3P debug": "Pokaż diagnostykę 3P",
+    "Hide 3P debug": "Ukryj diagnostykę 3P",
+    "BULLISH": "WZROSTOWY",
+    "BEARISH": "SPADKOWY",
+    "FX conversion fee 1%": "Opłata za przewalutowanie 1%",
+    "OFF": "WYŁ.",
+    "ON": "WŁ.",
     "Bullish": "Wzrostowy",
     "Bearish": "Spadkowy",
     "bullish": "wzrostowy",
@@ -267,6 +305,8 @@ POLISH_TRANSLATIONS = {
 }
 
 COLUMN_POLISH_TRANSLATIONS = {
+    "Dir": "Kierunek",
+    "Dir.": "Kierunek",
     "Close": "Cena zamknięcia",
     "Open": "Cena otwarcia",
     "High": "Najwyższa cena",
@@ -274,6 +314,7 @@ COLUMN_POLISH_TRANSLATIONS = {
     "Current": "Obecnie",
     "Position": "Pozycja",
     "Direction": "Kierunek",
+    "Mo.": "Mies.",
 }
 
 ENGLISH_NORMALIZATIONS = {
@@ -299,21 +340,22 @@ ENGLISH_NORMALIZATIONS = {
 }
 
 
-def language_controls_html() -> str:
+def language_controls_html(*, show_controls: bool = True) -> str:
     """Return reusable EN/PL controls and runtime for generated web views."""
     translations = json.dumps(POLISH_TRANSLATIONS, ensure_ascii=False)
     column_translations = json.dumps(COLUMN_POLISH_TRANSLATIONS, ensure_ascii=False)
     normalizations = json.dumps(ENGLISH_NORMALIZATIONS, ensure_ascii=False)
+    controls = """<nav class="stockhelper-language-switcher" aria-label="Language / Język">
+  <button type="button" data-stockhelper-language="en" aria-label="English" title="English">🇬🇧 EN</button>
+  <button type="button" data-stockhelper-language="pl" aria-label="Polski" title="Polski">🇵🇱 PL</button>
+</nav>""" if show_controls else ""
     return f"""
 <style>
-.stockhelper-language-switcher{{position:fixed;top:12px;right:14px;z-index:2147483647;display:flex;gap:6px;padding:5px;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:rgba(15,23,42,.92);box-shadow:0 8px 24px rgba(0,0,0,.3);backdrop-filter:blur(8px)}}
+.stockhelper-language-switcher{{display:inline-flex;gap:6px;margin-left:auto;padding:5px;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:rgba(15,23,42,.92)}}
 .stockhelper-language-switcher button{{min-width:42px;padding:6px 8px;border:1px solid transparent;border-radius:8px;background:transparent;color:#cbd5e1;cursor:pointer;font:700 14px/1.2 Inter,system-ui,sans-serif}}
 .stockhelper-language-switcher button.active{{border-color:#60a5fa;background:#1d4ed8;color:#fff}}
 </style>
-<nav class="stockhelper-language-switcher" aria-label="Language / Język">
-  <button type="button" data-stockhelper-language="en" aria-label="English" title="English">🇬🇧 EN</button>
-  <button type="button" data-stockhelper-language="pl" aria-label="Polski" title="Polski">🇵🇱 PL</button>
-</nav>
+{controls}
 <script>
 (()=>{{
 const PL={translations};
@@ -371,6 +413,9 @@ window.setStockhelperLanguage=(lang,remember=true)=>{{
   document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.classList.toggle('active',btn.dataset.stockhelperLanguage===language));
   translateNode(document.body);translating=false;
 }};
+const languageControls=document.querySelector('.stockhelper-language-switcher');
+const reportToolbar=document.querySelector('.tabbar');
+if(languageControls&&reportToolbar)reportToolbar.appendChild(languageControls);
 document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.addEventListener('click',()=>window.setStockhelperLanguage(btn.dataset.stockhelperLanguage)));
 new MutationObserver(changes=>{{if(translating)return;translating=true;changes.forEach(change=>change.addedNodes.forEach(translateNode));translating=false;}}).observe(document.body,{{childList:true,subtree:true}});
 window.setStockhelperLanguage(savedLanguage(),false);
