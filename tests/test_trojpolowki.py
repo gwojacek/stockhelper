@@ -1471,6 +1471,10 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "📖 Legends" in text
     assert "kliknij, aby rozwinąć" not in text
     assert "<details class='legend troj-legend'><summary><b>☁️ Ichimoku legend</b></summary>" in text
+    assert "<details class='legend'><summary><b>📊 Legenda progów</b></summary>" in text
+    assert "<strong>Low &lt; Th20 for Ichimoku</strong>" in text
+    assert "class='btn dialog-close-btn'" in text
+    assert ".dialog-close-btn:hover{background:#334155;border-color:#94a3b8}" in text
     assert ".tabbar>.pdfbtn,.tabbar>.compactbtn,.report-search-toolbar .btn{box-sizing:border-box;height:28px" in text
     assert ".report-search-toolbar .troj-direction-btn .fibo-arrow{box-sizing:border-box;width:15px;height:15px" in text
     assert "Open stooq links from top choices" in text
