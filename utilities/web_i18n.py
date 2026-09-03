@@ -16,15 +16,27 @@ POLISH_TRANSLATIONS = {
     "Generated:": "Wygenerowano:",
     "Search": "Szukaj",
     "Market": "Rynek",
+    "Scanner": "Skaner",
     "Direction": "Kierunek",
     "Status": "Status",
     "Favorites": "Ulubione",
     "Open journal": "Otwórz dziennik",
     "Show": "Pokaż",
     "Hide": "Ukryj",
+    "📈 Show": "📈 Pokaż",
+    "📈 Hide": "📈 Ukryj",
     "Legends": "Legendy",
     "Ichimoku legend": "Legenda Ichimoku",
     "Threshold legend": "Legenda progów",
+    "Liquidity legend": "Legenda płynności",
+    "liquidity threshold": "próg płynności",
+    "last 10 candles": "ostatnie 10 świec",
+    "country GDP multiplier": "mnożnik PKB kraju",
+    "country multiplier": "mnożnik kraju",
+    "base": "wartość bazowa",
+    "base 500 000 PLN": "wartość bazowa 500 000 PLN",
+    "number of days in the last 20 below the threshold": "liczba dni z ostatnich 20 poniżej progu",
+    "There cannot be more than 2 days.": "Nie mogą wystąpić więcej niż 2 takie dni.",
     "Checked": "Sprawdzone",
     "Current balance": "Aktualny kapitał",
     "Top choices": "Najlepsze wybory",
@@ -238,7 +250,7 @@ POLISH_TRANSLATIONS = {
     "Returned to cloud waiting for pattern": "Powrót do chmury – oczekiwanie na formację",
     "Breakout confirmed": "Wybicie potwierdzone",
     "breakout_confirmed": "wybicie_potwierdzone",
-    "medium_retest_pattern": "średni_retest_formacja",
+    "medium_retest_pattern": "średni_retest_z_formacją",
     "returned_to_cloud_waiting_for_pattern": "powrót_do_chmury_oczekiwanie_na_formację",
     "Waiting for pattern": "Oczekiwanie na formację",
     "Valid reversal": "Prawidłowe odwrócenie",
@@ -276,6 +288,8 @@ POLISH_TRANSLATIONS = {
     "evening_doji_star": "gwiazda_wieczorna_doji",
     "Piercing pattern": "Formacja przenikania",
     "piercing_pattern": "formacja_przenikania",
+    "piercing_line": "formacja_przenikania",
+    "bullish_piercing_line": "formacja_przenikania",
     "Bullish harami": "Harami prowzrostowe",
     "Bearish harami": "Harami prospadkowe",
     "bullish_harami": "harami_prowzrostowe",
@@ -288,6 +302,8 @@ POLISH_TRANSLATIONS = {
     "BULLISH": "WZROSTOWY",
     "BEARISH": "SPADKOWY",
     "FX conversion fee 1%": "Opłata za przewalutowanie 1%",
+    "FX conversion fee 1%: OFF": "Opłata za przewalutowanie 1%: WYŁ.",
+    "FX conversion fee 1%: ON": "Opłata za przewalutowanie 1%: WŁ.",
     "OFF": "WYŁ.",
     "ON": "WŁ.",
     "Bullish": "Wzrostowy",
@@ -302,6 +318,16 @@ POLISH_TRANSLATIONS = {
     "short": "krótka",
     "Shares": "Akcje",
     "Lots": "Loty",
+    "shallow_retest_pattern": "płytki_retest_z_formacją",
+    "deep_retest_pattern": "głęboki_retest_z_formacją",
+    "Mild": "Łagodne",
+    "Moderate": "Umiarkowane",
+    "Strong": "Silne",
+    "Very strong": "Bardzo silne",
+    "mild": "łagodne",
+    "moderate": "umiarkowane",
+    "strong": "silne",
+    "very strong": "bardzo silne",
 }
 
 COLUMN_POLISH_TRANSLATIONS = {
@@ -351,9 +377,12 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 </nav>""" if show_controls else ""
     return f"""
 <style>
-.stockhelper-language-switcher{{display:inline-flex;gap:6px;margin-left:auto;padding:5px;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:rgba(15,23,42,.92)}}
+.stockhelper-language-switcher{{display:flex;gap:6px;width:max-content;margin:0 0 8px auto;padding:5px;border:1px solid rgba(148,163,184,.45);border-radius:12px;background:rgba(15,23,42,.92)}}
 .stockhelper-language-switcher button{{min-width:42px;padding:6px 8px;border:1px solid transparent;border-radius:8px;background:transparent;color:#cbd5e1;cursor:pointer;font:700 14px/1.2 Inter,system-ui,sans-serif}}
 .stockhelper-language-switcher button.active{{border-color:#60a5fa;background:#1d4ed8;color:#fff}}
+.top-choice-compact .top-choice-direction{{width:92px!important;min-width:92px!important}}
+.top-choice-compact th:nth-child(2),.top-choice-compact td:nth-child(2){{min-width:92px;font-size:13px!important;white-space:normal}}
+.troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
 </style>
 {controls}
 <script>
@@ -414,8 +443,8 @@ window.setStockhelperLanguage=(lang,remember=true)=>{{
   translateNode(document.body);translating=false;
 }};
 const languageControls=document.querySelector('.stockhelper-language-switcher');
-const reportToolbar=document.querySelector('.tabbar');
-if(languageControls&&reportToolbar)reportToolbar.appendChild(languageControls);
+const reportHero=document.querySelector('.troj-hero');
+if(languageControls&&reportHero)reportHero.parentNode.insertBefore(languageControls,reportHero);
 document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.addEventListener('click',()=>window.setStockhelperLanguage(btn.dataset.stockhelperLanguage)));
 new MutationObserver(changes=>{{if(translating)return;translating=true;changes.forEach(change=>change.addedNodes.forEach(translateNode));translating=false;}}).observe(document.body,{{childList:true,subtree:true}});
 window.setStockhelperLanguage(savedLanguage(),false);

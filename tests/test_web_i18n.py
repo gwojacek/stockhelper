@@ -5,12 +5,13 @@ from pathlib import Path
 def test_language_controls_are_in_report_toolbar_and_english_first():
     markup = language_controls_html()
 
-    assert "if(languageControls&&reportToolbar)reportToolbar.appendChild(languageControls)" in markup
+    assert "reportHero.parentNode.insertBefore(languageControls,reportHero)" in markup
     assert "position:fixed" not in markup
     assert markup.index("🇬🇧 EN") < markup.index("🇵🇱 PL")
     assert "window.setStockhelperLanguage(savedLanguage(),false)" in markup
     assert "stockhelper-language=${value}" in markup
     assert "MutationObserver" in markup
+    assert ".top-choice-compact .top-choice-direction{width:92px!important" in markup
 
 
 def test_polish_dictionary_covers_reports_journal_and_chart_columns():
@@ -71,6 +72,20 @@ def test_candlestick_names_follow_polish_reference_material():
 
     for source, translation in expected.items():
         assert POLISH_TRANSLATIONS[source] == translation
+
+    assert POLISH_TRANSLATIONS["bullish_piercing_line"] == "formacja_przenikania"
+
+
+def test_remaining_report_controls_and_statuses_are_localized():
+    assert POLISH_TRANSLATIONS["Scanner"] == "Skaner"
+    assert POLISH_TRANSLATIONS["Fibo pattern"] == "Formacja Fibo"
+    assert POLISH_TRANSLATIONS["Show 3P debug"] == "Pokaż diagnostykę 3P"
+    assert POLISH_TRANSLATIONS["shallow_retest_pattern"] == "płytki_retest_z_formacją"
+    assert POLISH_TRANSLATIONS["Strong"] == "Silne"
+    assert POLISH_TRANSLATIONS["FX conversion fee 1%: OFF"].endswith("WYŁ.")
+    assert POLISH_TRANSLATIONS["Liquidity legend"] == "Legenda płynności"
+    assert POLISH_TRANSLATIONS["base 500 000 PLN"].startswith("wartość bazowa")
+    assert COLUMN_POLISH_TRANSLATIONS["Dir."] == "Kierunek"
 
 
 def test_language_preference_uses_cookie_for_cross_port_views():
