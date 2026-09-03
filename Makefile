@@ -1,4 +1,4 @@
-.PHONY: build install-stock help allsearch open-allsearch chart ichimoku fibo journal journal-pdf cleanup fix-permissions cache-only force-fibo wig-bulk trim-wig
+.PHONY: build install-stock pd help allsearch open-allsearch chart ichimoku fibo journal journal-pdf cleanup fix-permissions cache-only force-fibo wig-bulk trim-wig
 
 TARGET ?= ena
 MARKET ?= wig
@@ -9,6 +9,9 @@ build:
 
 install-stock:
 	./scripts/install-stock-command.sh
+
+pd:
+	./pd
 
 help:
 	./stock --help
