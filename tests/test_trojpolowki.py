@@ -45,7 +45,7 @@ def test_report_language_switcher_defaults_to_english_and_preserves_market_terms
 
     script = mod._report_language_script()
 
-    assert "setStockhelperLanguage('en')" in script
+    assert "setStockhelperLanguage(savedLanguage(),false)" in script
     assert "document.documentElement.lang=language" in script
     assert "data-market-language" in script
     assert "🇬🇧 EN" in script and "🇵🇱 PL" in script
@@ -54,6 +54,8 @@ def test_report_language_switcher_defaults_to_english_and_preserves_market_terms
     assert '"Fibo only": "Tylko Fibo"' in script
     assert '"Ichimoku":' not in script
     assert '"Fibo":' not in script
+    assert '"Ichimoku continuation": "Kontynuacja Ichimoku"' in script
+    assert "stockhelper-language=${value}" in script
 
 
 def test_scanner_report_instrument_labels_include_full_names_and_tickers():

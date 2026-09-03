@@ -1,4 +1,4 @@
-from utilities.web_i18n import ENGLISH_NORMALIZATIONS, POLISH_TRANSLATIONS, language_controls_html
+from utilities.web_i18n import COLUMN_POLISH_TRANSLATIONS, ENGLISH_NORMALIZATIONS, POLISH_TRANSLATIONS, language_controls_html
 from pathlib import Path
 
 
@@ -7,7 +7,8 @@ def test_language_controls_are_flagged_fixed_and_english_first():
 
     assert "position:fixed;top:12px;right:14px" in markup
     assert markup.index("🇬🇧 EN") < markup.index("🇵🇱 PL")
-    assert "window.setStockhelperLanguage('en')" in markup
+    assert "window.setStockhelperLanguage(savedLanguage(),false)" in markup
+    assert "stockhelper-language=${value}" in markup
     assert "MutationObserver" in markup
 
 
@@ -27,9 +28,27 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
     assert ENGLISH_NORMALIZATIONS["Brak wyników."] == "No results."
 
 
-def test_market_vocabulary_is_not_translated():
-    for term in ("Ichimoku", "Fibo", "Stooq", "Long", "Short", "PLN"):
+def test_market_names_and_currencies_are_not_translated():
+    for term in ("Ichimoku", "Fibo", "Stooq", "PLN"):
         assert term not in POLISH_TRANSLATIONS
+
+
+def test_statuses_and_directions_are_translated():
+    assert POLISH_TRANSLATIONS["Ichimoku continuation"] == "Kontynuacja Ichimoku"
+    assert POLISH_TRANSLATIONS["Above the cloud"] == "Nad chmurą"
+    assert POLISH_TRANSLATIONS["Long"] == "Długa"
+    assert POLISH_TRANSLATIONS["Short"] == "Krótka"
+    assert POLISH_TRANSLATIONS["Closing Price"] == "Cena zamknięcia"
+    assert POLISH_TRANSLATIONS["Calculate position"] == "Oblicz pozycję"
+    assert COLUMN_POLISH_TRANSLATIONS["Close"] == "Cena zamknięcia"
+
+
+def test_language_preference_uses_cookie_for_cross_port_views():
+    markup = language_controls_html()
+
+    assert "document.cookie.split('; ')" in markup
+    assert "Max-Age=31536000; Path=/; SameSite=Lax" in markup
+    assert "localStorage.setItem('stockhelper-language',value)" in markup
 
 
 def test_language_controls_are_injected_into_all_web_views():

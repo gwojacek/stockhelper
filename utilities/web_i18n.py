@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 
 
-# Product names, symbols, currencies, and established market vocabulary (for
-# example Ichimoku, Fibo, Stooq, Long and Short) intentionally stay unchanged.
+# Product names, symbols, currencies, and indicator names (for example
+# Ichimoku, Fibo, and Stooq) stay unchanged; descriptive statuses and position
+# directions are localized.
 POLISH_TRANSLATIONS = {
     "StockHelper Scanner Report": "Raport skanera StockHelper",
     "StockHelper scanner workspace": "Panel skanera StockHelper",
+    "Ichimoku continuation": "Kontynuacja Ichimoku",
+    "Ichimoku reversal": "Odwrócenie Ichimoku",
+    "Ichimoku status": "Status Ichimoku",
     "StockHelper Transaction Journal": "Dziennik transakcji StockHelper",
     "Generated:": "Wygenerowano:",
     "Search": "Szukaj",
@@ -34,6 +38,10 @@ POLISH_TRANSLATIONS = {
     "No results.": "Brak wyników.",
     "Sort": "Sortuj",
     "Close": "Zamknij",
+    "Closing Price": "Cena zamknięcia",
+    "Close Price": "Cena zamknięcia",
+    "Close position": "Zamknij pozycję",
+    "Save & Close": "Zapisz i zamknij",
     "Open": "Otwarte",
     "Closed": "Zamknięte",
     "Profit": "Zysk",
@@ -51,6 +59,11 @@ POLISH_TRANSLATIONS = {
     "Close screenshot": "Zrzut zamknięcia",
     "No screenshot": "Brak zrzutu",
     "Position summary": "Podsumowanie pozycji",
+    "Position Value": "Wartość pozycji",
+    "Position type": "Kierunek pozycji",
+    "Position size": "Wielkość pozycji",
+    "Position Size": "Wielkość pozycji",
+    "Position calculation": "Obliczenie pozycji",
     "Trade review": "Ocena transakcji",
     "Edit transaction": "Edytuj transakcję",
     "Notes": "Notatki",
@@ -66,16 +79,49 @@ POLISH_TRANSLATIONS = {
     "Save": "Zapisz",
     "Cancel": "Anuluj",
     "Select level": "Wybierz poziom",
+    "Interactive Level Selector": "Interaktywny wybór poziomów",
+    "Line tool": "Narzędzie linii",
+    "Line color": "Kolor linii",
+    "Reset scanner": "Resetuj skaner",
+    "Reset scanner drawings": "Resetuj rysunki skanera",
+    "Selected values": "Wybrane wartości",
+    "Manual inputs": "Dane ręczne",
     "Position calculator": "Kalkulator pozycji",
     "Calculate": "Oblicz",
+    "Calculate position": "Oblicz pozycję",
     "Capital": "Kapitał",
     "Risk": "Ryzyko",
     "Entry price": "Cena wejścia",
     "Take profit": "Take profit",
+    "Engaged capital": "Zaangażowany kapitał",
+    "Engaged Capital": "Zaangażowany kapitał",
+    "Potential loss with spread": "Potencjalna strata ze spreadem",
+    "Potential Loss With Spread": "Potencjalna strata ze spreadem",
+    "Loss %": "Strata %",
     "Reset all": "Resetuj wszystko",
     "Delete object": "Usuń obiekt",
     "Download chart PNG": "Pobierz wykres PNG",
     "Find new wedge": "Znajdź nowy klin",
+    "Delete selected object": "Usuń wybrany obiekt",
+    "Quick charts from": "Szybkie wykresy z",
+    "Filter charts": "Filtruj wykresy",
+    "Open another instrument": "Otwórz inny instrument",
+    "Instrument type": "Typ instrumentu",
+    "Source": "Źródło",
+    "Setup information": "Informacje o układzie",
+    "Add journal entry": "Dodaj wpis do dziennika",
+    "Transaction journal": "Dziennik transakcji",
+    "Transaction amount": "Wartość transakcji",
+    "Notes / why entry": "Notatki / powód wejścia",
+    "Save journal + screenshot": "Zapisz dziennik i zrzut",
+    "Calculation currency": "Waluta obliczeń",
+    "Lot cost": "Koszt lota",
+    "Pip value": "Wartość pipsa",
+    "Spread multiplier": "Mnożnik spreadu",
+    "Setup": "Układ",
+    "Sold / Close": "Sprzedaż / zamknięcie",
+    "Chart - Opened Position": "Wykres – otwarta pozycja",
+    "Chart - Closed Position": "Wykres – zamknięta pozycja",
     "Instrument universe is unavailable for this saved report.": "Lista instrumentów jest niedostępna dla zapisanego raportu.",
     "Instruments checked for this report": "Instrumenty sprawdzone w tym raporcie",
     "Show recent dropouts": "Pokaż ostatnie odrzucone",
@@ -122,6 +168,10 @@ POLISH_TRANSLATIONS = {
     "Pattern": "Formacja",
     "Incline": "Wzrost",
     "Waiting": "Oczekujące",
+    "Waiting 23.6→61.8 and patterns": "Oczekiwanie 23,6→61,8 i formacje",
+    "Steep incline / no major bearish signal": "Stromy wzrost / brak istotnego sygnału spadkowego",
+    "Pattern ≤14d / SL intact": "Formacja ≤14 dni / SL nienaruszony",
+    "Recent dropouts": "Ostatnio odrzucone",
     "Ratio": "Stosunek",
     "Near 61.8": "Blisko 61,8",
     "Touched 61.8 date": "Data dotknięcia 61,8",
@@ -131,6 +181,52 @@ POLISH_TRANSLATIONS = {
     "Slope": "Nachylenie",
     "Score": "Ocena",
     "Saved by user": "Zapisane przez użytkownika",
+    "Strong / continuation": "Silny sygnał / kontynuacja",
+    "Kijun / watch": "Kijun / obserwacja",
+    "Cloud / retest / breakout": "Chmura / retest / wybicie",
+    "Recent breakout": "Ostatnie wybicie",
+    "Breakout": "Wybicie",
+    "Retest": "Retest",
+    "Above the cloud": "Nad chmurą",
+    "Below the cloud": "Pod chmurą",
+    "Inside the cloud": "W chmurze",
+    "Touched the cloud": "Dotknięcie chmury",
+    "Over Kijun-sen": "Nad Kijun-sen",
+    "Under Kijun-sen": "Pod Kijun-sen",
+    "Touched Kijun-sen": "Dotknięcie Kijun-sen",
+    "Unsuccessful breakout to the other side": "Nieudane wybicie na drugą stronę",
+    "Returned to cloud waiting for pattern": "Powrót do chmury – oczekiwanie na formację",
+    "Breakout confirmed": "Wybicie potwierdzone",
+    "Waiting for pattern": "Oczekiwanie na formację",
+    "Valid reversal": "Prawidłowe odwrócenie",
+    "Strong trend": "Silny trend",
+    "Long trend": "Długotrwały trend",
+    "Short trend": "Krótkotrwały trend",
+    "Latest retest": "Ostatni retest",
+    "Last valid retest": "Ostatni prawidłowy retest",
+    "No major bearish signal": "Brak istotnego sygnału spadkowego",
+    "Bullish": "Wzrostowy",
+    "Bearish": "Spadkowy",
+    "bullish": "wzrostowy",
+    "bearish": "spadkowy",
+    "Long": "Długa",
+    "Short": "Krótka",
+    "LONG": "DŁUGA",
+    "SHORT": "KRÓTKA",
+    "long": "długa",
+    "short": "krótka",
+    "Shares": "Akcje",
+    "Lots": "Loty",
+}
+
+COLUMN_POLISH_TRANSLATIONS = {
+    "Close": "Cena zamknięcia",
+    "Open": "Cena otwarcia",
+    "High": "Najwyższa cena",
+    "Low": "Najniższa cena",
+    "Current": "Obecnie",
+    "Position": "Pozycja",
+    "Direction": "Kierunek",
 }
 
 ENGLISH_NORMALIZATIONS = {
@@ -159,6 +255,7 @@ ENGLISH_NORMALIZATIONS = {
 def language_controls_html() -> str:
     """Return reusable EN/PL controls and runtime for generated web views."""
     translations = json.dumps(POLISH_TRANSLATIONS, ensure_ascii=False)
+    column_translations = json.dumps(COLUMN_POLISH_TRANSLATIONS, ensure_ascii=False)
     normalizations = json.dumps(ENGLISH_NORMALIZATIONS, ensure_ascii=False)
     return f"""
 <style>
@@ -173,15 +270,27 @@ def language_controls_html() -> str:
 <script>
 (()=>{{
 const PL={translations};
+const COLUMN_PL={column_translations};
 const TO_EN={normalizations};
 const ATTRS=['title','aria-label','placeholder'];
 let language='en',translating=false;
+function savedLanguage(){{
+  const cookie=document.cookie.split('; ').find(item=>item.startsWith('stockhelper-language='))?.split('=')[1];
+  if(cookie==='en'||cookie==='pl')return cookie;
+  try{{const stored=localStorage.getItem('stockhelper-language');if(stored==='en'||stored==='pl')return stored;}}catch(error){{}}
+  return 'en';
+}}
+function rememberLanguage(value){{
+  try{{localStorage.setItem('stockhelper-language',value);}}catch(error){{}}
+  if(location.protocol!=='file:')document.cookie=`stockhelper-language=${{value}}; Max-Age=31536000; Path=/; SameSite=Lax`;
+}}
 function translate(value){{
   if(!value)return value;
   let output=value;
   Object.entries(TO_EN).sort((a,b)=>b[0].length-a[0].length).forEach(([source,en])=>output=output.replaceAll(source,en));
   if(language!=='pl')return output;
   Object.entries(PL).sort((a,b)=>b[0].length-a[0].length).forEach(([en,pl])=>{{
+    if(en.length<=4&&output.trim()!==en)return;
     output=output.replaceAll(en,pl);
   }});
   return output;
@@ -194,7 +303,11 @@ function translateNode(root){{
   nodes.forEach(node=>{{
     if(node.parentElement?.closest('script,style,[data-market-language]'))return;
     if(node.__stockhelperEnglish===undefined)node.__stockhelperEnglish=node.nodeValue;
-    node.nodeValue=translate(node.__stockhelperEnglish);
+    const original=node.__stockhelperEnglish;
+    const trimmed=original.trim();
+    if(language==='pl'&&node.parentElement?.closest('th')&&COLUMN_PL[trimmed]){{
+      node.nodeValue=original.replace(trimmed,COLUMN_PL[trimmed]);
+    }}else node.nodeValue=translate(original);
   }});
   if(root.querySelectorAll){{[root,...root.querySelectorAll('*')].forEach(el=>ATTRS.forEach(attr=>{{
     if(!el.hasAttribute?.(attr)||el.closest('[data-market-language]'))return;
@@ -203,14 +316,15 @@ function translateNode(root){{
     el.setAttribute(attr,translate(el.dataset[key]));
   }}));}}
 }}
-window.setStockhelperLanguage=lang=>{{
+window.setStockhelperLanguage=(lang,remember=true)=>{{
   language=lang==='pl'?'pl':'en';translating=true;
+  if(remember)rememberLanguage(language);
   document.documentElement.lang=language;
   document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.classList.toggle('active',btn.dataset.stockhelperLanguage===language));
   translateNode(document.body);translating=false;
 }};
 document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.addEventListener('click',()=>window.setStockhelperLanguage(btn.dataset.stockhelperLanguage)));
 new MutationObserver(changes=>{{if(translating)return;translating=true;changes.forEach(change=>change.addedNodes.forEach(translateNode));translating=false;}}).observe(document.body,{{childList:true,subtree:true}});
-window.setStockhelperLanguage('en');
+window.setStockhelperLanguage(savedLanguage(),false);
 }})();
 </script>"""
