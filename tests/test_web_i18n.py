@@ -88,6 +88,20 @@ def test_remaining_report_controls_and_statuses_are_localized():
     assert COLUMN_POLISH_TRANSLATIONS["Dir."] == "Kierunek"
 
 
+def test_reported_mixed_language_phrases_have_complete_polish_translations():
+    expected = {
+        "Bullish piercing line": "Formacja przenikania",
+        "Hammer": "Młot",
+        "Falling wedge": "Klin opadający",
+        "Inside the cloud - PATTERN!": "W chmurze – FORMACJA!",
+        "Months since breakout": "Miesiące od wybicia",
+        "completed · loss": "zamknięta · strata",
+    }
+
+    for source, translation in expected.items():
+        assert POLISH_TRANSLATIONS[source] == translation
+
+
 def test_language_preference_uses_cookie_for_cross_port_views():
     markup = language_controls_html()
 
