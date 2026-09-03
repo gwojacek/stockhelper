@@ -1542,7 +1542,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "setTrojDirection" in text
     assert "data-direction='long'" in text and "data-direction='short'" in text
     assert "data-direction='all'" not in text
-    assert "const next=(el.dataset.trojDirection||'all')===requested?'all':requested" in text
+    assert "const next=(document.body.dataset.trojDirection||'all')===requested?'all':requested" in text
+    assert "document.querySelectorAll('.tab-panel,.troj-section,.direction-filter-section').forEach(el=>el.dataset.trojDirection=next)" in text
     assert "b.dataset.direction===next" in text
     assert "card.dataset.market" in text
     assert "card.style.display=cardHit?'':'none'" in text
