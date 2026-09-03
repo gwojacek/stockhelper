@@ -5,12 +5,12 @@
   "stop_loss": 5434.5,
   "position_type": "long",
   "capital": 245000,
-  "lot_cost": 290439.99,
+  "lot_cost": 285833.85,
   "pip_value": 3.73,
   "spread": 131.21499999999997,
   "name": "S&P500",
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
@@ -88,5 +88,10 @@
       "color": "#64748b",
       "group_id": "auto-fibo"
     }
-  ]
+  ],
+  "__scanner_breakout_date__": "2026-04-13",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-07-31",
+  "__scanner_latest_retest_pattern__": "hammer"
 }
