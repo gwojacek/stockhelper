@@ -637,7 +637,7 @@ def _append_csv_section(fp: Path, section: str, csv_path: Path, links: set[str],
                 if id(r) in top_ratio_ids:
                     r["ratio_top"] = "1"
             if rows_w1:
-                _write_table(out, "WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)", rows_w1, cols_w1)
+                _write_table(out, "WYNIKI FIBO #1 (Waiting 23.6→61.8)", rows_w1, cols_w1)
             if rows_w2:
                 _write_table(out, "WYNIKI FIBO #2 (valid pattern up to 2 weeks)", rows_w2, cols_w2)
         else:
@@ -891,6 +891,12 @@ def _format_avg10d_value(value: str) -> str:
     except Exception:
         return txt
     return f"{number:,.0f}".replace(",", ".")
+
+
+def _display_pattern(value: object) -> str:
+    """Return a clean table placeholder instead of serialized missing values."""
+    text = str(value or "").strip()
+    return "-" if text.lower() in {"", "none", "nan", "null"} else text
 
 
 def _report_open_chart_js() -> str:
@@ -1711,7 +1717,7 @@ def _write_trojpolowki_fibo(rows: list[ScannerRow], out_dir: Path, timestamp: da
     history_path.write_text(json.dumps(dropout_history, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     dropouts = sorted(dropout_history.values(), key=lambda item: (item["dropped"], item["cell"]), reverse=True)
     max_len = max(len(col1), len(col2), len(col3), len(col4), len(dropouts), 1)
-    lines = ["# Trójpolówki — Fibo", "", "| 🚀 Steep incline / no major bearish signal | ⚠️ Waiting 23.6→61.8 / bearish close | 🎯 Near 61.8 > 75% / deeper pullback | ✅ Pattern ≤14d / SL intact | 🕘 Recent dropouts (10d) |", "|---|---|---|---|---|"]
+    lines = ["# Trójpolówki — Fibo", "", "| 🚀 Strong impulse | ⚠️ Waiting 23.6→61.8 | 🎯 Near 61.8 > 75% / deeper pullback | ✅ Pattern ≤14d / SL intact | 🕘 Recent dropouts (10d) |", "|---|---|---|---|---|"]
     for idx in range(max_len):
         cells = [
             _fibo_item(col1[idx], include_near=False) if idx < len(col1) else "",
@@ -3084,6 +3090,13 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         toolbar_buttons.append("<button class='btn compactbtn' type='button' title='Open all stockhelper charts from this table' onclick='openClosestStockhelperCharts(this)'>📊</button>")
         table_controls = f"<div class='troj-toolbar'>{' '.join(toolbar_buttons)}</div>"
         table_html = table_controls + "<div style='overflow:auto'><table class='troj-table'><thead><tr>"
+        def display_header(value: object) -> str:
+            text = str(value)
+            if text.startswith("🚀 Steep incline / no major bearish signal"):
+                return "🚀 Strong impulse"
+            if text.startswith("⚠️ Waiting 23.6→61.8"):
+                return "⚠️ Waiting 23.6→61.8"
+            return text
         # Every Trójpolówki column can contain grouped instrument cells, so expose
         # the bulk open/copy controls on every header instead of only top-choice
         # columns. Empty columns are harmless: the JS helpers simply no-op.
@@ -3094,7 +3107,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                 f" <button class='iconbtn' title='Open stooq links from this column' onclick=\"event.stopPropagation();openTrojColumnStooqLinks(this,{idx})\">🔗</button>"
                 f" <button class='iconbtn' title='Copy Google Sheets cells from this column' onclick=\"event.stopPropagation();copyTrojColumnSheetsCells(this,{idx})\">📋</button>"
             )
-            table_html += f"<th{dropout_class}>{_md_inline_to_html(str(h))}{open_btn}</th>"
+            table_html += f"<th{dropout_class}>{_md_inline_to_html(display_header(h))}{open_btn}</th>"
         table_html += "</tr></thead><tbody>"
         columns_for_display: list[list[str]] = [[] for _ in headers]
         for row in body_rows:
@@ -3435,7 +3448,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         groups = [("WYNIKI 1 ICHIMOKU (poza chmurą, z warunkami płynności)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "position"]),
                   ("WYNIKI 2 ICHIMOKU (po flipie chmury: retest/pattern po wybiciu)", [x for x in mrows if x.scanner == "ICHIMOKU" and x.category == "retest_breakout"]),
                   ("WYNIKI FIBO #0 (3P steep incline)", [x for x in mrows if x.scanner == "FIBO" and x.category == "steep"]),
-                  ("WYNIKI FIBO #1 (Waiting 23.6→61.8 and patterns)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
+                  ("WYNIKI FIBO #1 (Waiting 23.6→61.8)", [x for x in mrows if x.scanner == "FIBO" and x.category == "waiting"]),
                   ("WYNIKI FIBO #2 (valid pattern up to 2 weeks)", [x for x in mrows if x.scanner == "FIBO" and x.category == "valid"])]
         for gname, grows in groups:
             is_i1 = gname.startswith("WYNIKI 1 ICHIMOKU")
@@ -3495,12 +3508,12 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{status_html}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{status_html}</td><td>{html.escape(_display_pattern(r.pattern))}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
                 else:
                     ratio_html = _color_fibo_metric(r.metrics.get('ratio',''))
                     if str(r.metrics.get("ratio_top", "")) == "1":
                         ratio_html = f"<span style='color:#b45309;font-weight:700'>{html.escape(str(r.metrics.get('ratio','')))}</span>"
-                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(r.pattern)}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
+                    html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(_display_pattern(r.pattern))}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
     html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div><div id='tab-favorites' class='tab-panel'><section class='market favorites-panel'><h2>⭐ Favorite setups</h2><p class='muted'>Each matching setup appears once. One favorite instrument can appear in multiple 3P columns when it has separate long/short setups.</p><div id='favorites-content'></div></section></div>")
@@ -3519,6 +3532,7 @@ function decorateFavoriteStars(){saveFavorites(loadFavorites());document.querySe
 function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const ticker=canonicalFavoriteTicker(star.dataset.ticker);const on=fav.has(ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove from favorites: ':'Add to favorites: ')+ticker;star.setAttribute('aria-pressed',on?'true':'false');});renderFavorites();}
 function toggleFavorite(ticker){ticker=canonicalFavoriteTicker(ticker);const fav=loadFavorites();fav.has(ticker)?fav.delete(ticker):fav.add(ticker);saveFavorites(fav);refreshFavoriteStars();}
 function escapeFavoriteHtml(value){return String(value||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function favoriteUiText(value){return window.stockhelperTranslateText?window.stockhelperTranslateText(value):value;}
 function favoriteInstrumentLabel(ticker){const normalized=String(ticker||'').toUpperCase();const name=FAVORITE_INSTRUMENT_NAMES[normalized]||FAVORITE_INSTRUMENT_NAMES[normalized+'.WA']||'';return name?name+' ('+normalized+')':normalized;}
 function favoriteWedgeContext(host){if(host?.dataset?.scanner!=='WEDGE')return '';const date=host.dataset.breakoutDate||'';return date?'Breakout: '+date:'Unbroken';}
 function renderFavorites(){
@@ -3564,8 +3578,10 @@ function renderFavorites(){
   ['Fibo','Ichimoku','Other'].filter(t=>groups[t]).forEach(t=>parts.push('<section class="favorites-technique"><h3>'+({Fibo:'📐 Fibo',Ichimoku:'☁️ Ichimoku',Other:'Other'}[t])+'</h3>'+Object.keys(groups[t]).sort().map(m=>'<div class="favorites-market"><h4>'+escapeFavoriteHtml(m)+'</h4><div class="favorites-grid">'+groups[t][m].sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(card).join('')+'</div></div>').join('')+'</section>'));
   const classifiedTickers=new Set(uniqueAll.map(o=>o.ticker));
   const unclassified=(activeMarket||activeDirection!=='all')?[]:[...fav].filter(ticker=>!classifiedTickers.has(ticker)).sort().map(ticker=>({ticker,label:favoriteInstrumentLabel(ticker),cmd:'python run -c '+ticker}));
-  parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted">Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+(unclassified.length?unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join(''):'<tr><td colspan="2" class="muted">No unclassified favorites</td></tr>')+'</tbody></table></div></section>');
+  const unclassifiedHelp='Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.';
+  parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted" data-i18n-key="'+unclassifiedHelp+'">'+escapeFavoriteHtml(favoriteUiText(unclassifiedHelp))+'</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+(unclassified.length?unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join(''):'<tr><td colspan="2" class="muted">No unclassified favorites</td></tr>')+'</tbody></table></div></section>');
   root.innerHTML=parts.join('')||'<p class="muted">Favorites are saved, but none occur in this report.</p>';
+  window.translateStockhelperNode?.(root);
 }
 document.addEventListener('DOMContentLoaded',decorateFavoriteStars);
 window.addEventListener('focus',syncFavoritesFromServer);

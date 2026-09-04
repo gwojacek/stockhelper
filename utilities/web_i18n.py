@@ -12,6 +12,7 @@ POLISH_TRANSLATIONS = {
     "Ichimoku continuation": "Kontynuacja Ichimoku",
     "Ichimoku reversal": "Odwrócenie Ichimoku",
     "Ichimoku status": "Status Ichimoku",
+    "Ichimoku information": "Informacje Ichimoku",
     "StockHelper Transaction Journal": "Dziennik transakcji StockHelper",
     "Generated:": "Wygenerowano:",
     "Search": "Szukaj",
@@ -58,6 +59,8 @@ POLISH_TRANSLATIONS = {
     "Instrument": "Instrument",
     "Chart": "Wykres",
     "Open chart": "Otwórz wykres",
+    "Open stockhelper chart": "Otwórz wykres StockHelper",
+    "Open stooq chart": "Otwórz wykres Stooq",
     "Wedges": "Kliny",
     "All markets": "Wszystkie rynki",
     "All results": "Wszystkie wyniki",
@@ -70,6 +73,15 @@ POLISH_TRANSLATIONS = {
     "Close Price": "Cena zamknięcia",
     "Close position": "Zamknij pozycję",
     "Open close-adjust chart": "Otwórz wykres korekty zamknięcia",
+    "Close adjust": "Korekta zamknięcia",
+    "Grab a line, click chart, or edit inputs.": "Przeciągnij linię, kliknij wykres lub edytuj pola.",
+    "Accept closing screenshot": "Zatwierdź zrzut zamknięcia",
+    "last SL": "ostatni SL",
+    "🟢 SOLD": "🟢 SPRZEDANO",
+    "🔵 ENTRY": "🔵 WEJŚCIE",
+    "↕ SIDE": "↕ KIERUNEK",
+    "Closing screenshot saved. Closing chart...": "Zapisano zrzut zamknięcia. Zamykanie wykresu...",
+    "Closing screenshot failed:": "Nie udało się zapisać zrzutu zamknięcia:",
     "Price (sold / close price)": "Cena (sprzedaż / cena zamknięcia)",
     "Mode": "Tryb",
     "Manually": "Ręcznie",
@@ -145,6 +157,11 @@ POLISH_TRANSLATIONS = {
     "Position calculator": "Kalkulator pozycji",
     "Calculate": "Oblicz",
     "Calculate position": "Oblicz pozycję",
+    "Unable to calculate position.": "Nie można obliczyć pozycji.",
+    "Data required for calculation:": "Dane wymagane do obliczenia:",
+    "entry price, stop loss, and current capital.": "cena wejścia, stop loss i aktualny kapitał.",
+    "For Forex and commodities also provide lot cost and pip value.": "Dla Forex i towarów podaj także koszt lota i wartość pipsa.",
+    "Check the data and try again.": "Sprawdź dane i spróbuj ponownie.",
     "Capital": "Kapitał",
     "Risk": "Ryzyko",
     "Entry price": "Cena wejścia",
@@ -157,6 +174,7 @@ POLISH_TRANSLATIONS = {
     "Reset all": "Resetuj wszystko",
     "Delete object": "Usuń obiekt",
     "Download chart PNG": "Pobierz wykres PNG",
+    "Copy Google Sheets HYPERLINK formula": "Kopiuj formułę HYPERLINK do Arkuszy Google",
     "Find new wedge": "Znajdź nowy klin",
     "Delete selected object": "Usuń wybrany obiekt",
     "Quick charts from": "Szybkie wykresy z",
@@ -232,8 +250,8 @@ POLISH_TRANSLATIONS = {
     "Pattern": "Formacja",
     "Incline": "Wzrost",
     "Waiting": "Oczekujące",
-    "Waiting 23.6→61.8 and patterns": "Oczekiwanie 23,6→61,8 i formacje",
-    "Steep incline / no major bearish signal": "Stromy wzrost / brak istotnego sygnału spadkowego",
+    "Waiting 23.6→61.8": "Oczekujące 23,6→61,8",
+    "Strong impulse": "Silny impuls",
     "Pattern ≤14d / SL intact": "Formacja ≤14 dni / SL nienaruszony",
     "Recent dropouts": "Ostatnio odrzucone",
     "Ratio": "Stosunek",
@@ -348,6 +366,19 @@ POLISH_TRANSLATIONS = {
     "Fibo pattern": "Formacja Fibo",
     "Show 3P debug": "Pokaż diagnostykę 3P",
     "Hide 3P debug": "Ukryj diagnostykę 3P",
+    "Fibo dropout analyzer": "Diagnostyka odrzuceń Fibo",
+    "Runs every Fibo calculation against current cached OHLC data and identifies the exact rejection stage for each offset and direction.": "Uruchamia wszystkie obliczenia Fibo na aktualnych danych OHLC i wskazuje dokładny etap odrzucenia dla każdego przesunięcia i kierunku.",
+    "Copy for Codex": "Kopiuj dla Codex",
+    "Select a dropout to analyze it.": "Wybierz odrzucony wynik do analizy.",
+    "Running complete Fibo calculations…": "Uruchamianie pełnych obliczeń Fibo…",
+    "Analyzing": "Analizowanie",
+    "Analysis complete · copied automatically": "Analiza zakończona · skopiowano automatycznie",
+    "Analysis failed:": "Analiza nie powiodła się:",
+    "Manual command:": "Polecenie ręczne:",
+    "Analyze why this Fibo dropped": "Sprawdź, dlaczego wynik Fibo został odrzucony",
+    "dropout analysis": "analiza odrzucenia",
+    "debug endpoint unavailable": "punkt diagnostyczny jest niedostępny",
+    "StockHelper report server unavailable; reopen the report from StockHelper": "Serwer raportu StockHelper jest niedostępny; otwórz raport ponownie ze StockHelper",
     "BULLISH": "WZROSTOWY",
     "BEARISH": "SPADKOWY",
     "FX conversion fee 1%": "Opłata za przewalutowanie 1%",
@@ -431,6 +462,12 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .stockhelper-language-switcher button.active{{border-color:#60a5fa;background:#1d4ed8;color:#fff}}
 .top-choice-compact .top-choice-direction{{width:92px!important;min-width:92px!important}}
 .top-choice-compact th:nth-child(2),.top-choice-compact td:nth-child(2){{min-width:92px;font-size:13px!important;white-space:normal}}
+.top-choice-compact col.top-choice-stooq{{width:112px!important}}
+.top-choice-compact col.top-choice-chart{{width:112px!important}}
+.top-choice-compact td.chart-link-cell,.top-choice-compact td.chart-action-cell{{padding:6px 8px!important;white-space:nowrap}}
+.top-choice-compact th.chart-link-cell,.top-choice-compact th.chart-action-cell{{min-width:112px!important;text-align:center}}
+.top-choice-compact td.chart-link-cell .btn,.top-choice-compact td.chart-action-cell .btn,.top-choice-compact td.chart-link-cell .favorite-star{{margin:2px}}
+.top-choice>h2,.top-choice>h3{{margin:0;padding:13px 15px;border-bottom:1px solid rgba(96,165,250,.28);line-height:1.35}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
 </style>
 {controls}
@@ -475,7 +512,7 @@ function translateNode(root){{
   nodes.forEach(node=>{{
     if(node.parentElement?.closest('script,style,[data-market-language]'))return;
     if(node.__stockhelperEnglish===undefined)node.__stockhelperEnglish=node.nodeValue;
-    const original=node.__stockhelperEnglish;
+    const original=node.parentElement?.dataset?.i18nKey||node.__stockhelperEnglish;
     const direction=node.parentElement?.closest('[data-troj-direction]')?.dataset?.trojDirection;
     const directionalOriginal=direction==='short'
       ? original.replaceAll('3p_steep_incline','3p_steep_decline').replaceAll('3P steep incline','3P steep decline')
@@ -504,6 +541,8 @@ window.setStockhelperLanguage=(lang,remember=true)=>{{
   document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.classList.toggle('active',btn.dataset.stockhelperLanguage===language));
   translateNode(document.body);translating=false;
 }};
+window.translateStockhelperNode=translateNode;
+window.stockhelperTranslateText=translate;
 const languageControls=document.querySelector('.stockhelper-language-switcher');
 const reportHero=document.querySelector('.troj-hero');
 if(languageControls&&reportHero)reportHero.parentNode.insertBefore(languageControls,reportHero);
