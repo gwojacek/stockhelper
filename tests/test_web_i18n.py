@@ -12,6 +12,8 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert "stockhelper-language=${value}" in markup
     assert "MutationObserver" in markup
     assert ".top-choice-compact .top-choice-direction{width:92px!important" in markup
+    assert ".top-choice>h2,.top-choice>h3{margin:0;padding:13px 15px" in markup
+    assert "window.translateStockhelperNode=translateNode" in markup
 
 
 def test_translation_tables_are_compiled_once_for_fast_polish_filter_updates():
@@ -35,6 +37,11 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Download chart PNG": "Pobierz wykres PNG",
         "Unable to calculate position.": "Nie można obliczyć pozycji.",
         "Data required for calculation:": "Dane wymagane do obliczenia:",
+        "Copy Google Sheets HYPERLINK formula": "Kopiuj formułę HYPERLINK do Arkuszy Google",
+        "Open close-adjust chart": "Otwórz wykres korekty zamknięcia",
+        "Accept closing screenshot": "Zatwierdź zrzut zamknięcia",
+        "🟢 SOLD": "🟢 SPRZEDANO",
+        "Closing screenshot saved. Closing chart...": "Zapisano zrzut zamknięcia. Zamykanie wykresu...",
     }
 
     for english, polish in expected.items():
@@ -48,6 +55,16 @@ def test_chart_calculation_error_explains_required_data_without_fetch_details():
     assert "Data required for calculation:" in chart_source
     assert "For Forex and commodities also provide lot cost and pip value." in chart_source
     assert "Unable to calculate:</b>" not in chart_source
+    assert "label:polishCloseMode ? 'SPRZEDANO' : 'SOLD'" in chart_source
+
+
+def test_dynamic_favorites_are_translated_after_they_are_rendered():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert "window.translateStockhelperNode?.(root)" in report_source
+    assert POLISH_TRANSLATIONS[
+        "Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results."
+    ].startswith("Zapisane ulubione")
 
 
 def test_favorites_and_journal_are_fully_localized():

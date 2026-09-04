@@ -3745,6 +3745,7 @@ class LightweightChartLevelSelectorUI:
     const first = ohlc[0]?.time, last = ohlc[ohlc.length - 1]?.time;
     const asNum = (value, fallback=null) => {{ const n=Number(String(value ?? '').replace(',','.')); return Number.isFinite(n) ? n : fallback; }};
     const latestClose = asNum(ohlc[ohlc.length - 1]?.close, 0);
+    const polishCloseMode = document.documentElement.lang === 'pl';
     const initialEntry = asNum(cfg.__journal_entry_price__ || cfg.entry, latestClose);
     const initialSold = asNum(cfg.__journal_close_price__ || cfg.exit_price, latestClose);
     const initialSl = asNum(cfg.__journal_stop_loss__ || cfg.stop_loss, null);
@@ -3755,8 +3756,8 @@ class LightweightChartLevelSelectorUI:
     let activeLine = 'sold';
     let dragLine = null;
     const lines = {{
-      sold: {{input:soldInput, color:'#22c55e', width:3, label:'SOLD', series:null, marker:null}},
-      entry: {{input:entryInput, color:'#60a5fa', width:2, label:'ENTRY', series:null, marker:null}},
+      sold: {{input:soldInput, color:'#22c55e', width:3, label:polishCloseMode ? 'SPRZEDANO' : 'SOLD', series:null, marker:null}},
+      entry: {{input:entryInput, color:'#60a5fa', width:2, label:polishCloseMode ? 'WEJŚCIE' : 'ENTRY', series:null, marker:null}},
       sl: {{input:slInput, color:'#ef4444', width:2, label:'SL', series:null, marker:null}},
     }};
     Object.values(lines).forEach(line => {{

@@ -70,6 +70,15 @@ POLISH_TRANSLATIONS = {
     "Close Price": "Cena zamknięcia",
     "Close position": "Zamknij pozycję",
     "Open close-adjust chart": "Otwórz wykres korekty zamknięcia",
+    "Close adjust": "Korekta zamknięcia",
+    "Grab a line, click chart, or edit inputs.": "Przeciągnij linię, kliknij wykres lub edytuj pola.",
+    "Accept closing screenshot": "Zatwierdź zrzut zamknięcia",
+    "last SL": "ostatni SL",
+    "🟢 SOLD": "🟢 SPRZEDANO",
+    "🔵 ENTRY": "🔵 WEJŚCIE",
+    "↕ SIDE": "↕ KIERUNEK",
+    "Closing screenshot saved. Closing chart...": "Zapisano zrzut zamknięcia. Zamykanie wykresu...",
+    "Closing screenshot failed:": "Nie udało się zapisać zrzutu zamknięcia:",
     "Price (sold / close price)": "Cena (sprzedaż / cena zamknięcia)",
     "Mode": "Tryb",
     "Manually": "Ręcznie",
@@ -162,6 +171,7 @@ POLISH_TRANSLATIONS = {
     "Reset all": "Resetuj wszystko",
     "Delete object": "Usuń obiekt",
     "Download chart PNG": "Pobierz wykres PNG",
+    "Copy Google Sheets HYPERLINK formula": "Kopiuj formułę HYPERLINK do Arkuszy Google",
     "Find new wedge": "Znajdź nowy klin",
     "Delete selected object": "Usuń wybrany obiekt",
     "Quick charts from": "Szybkie wykresy z",
@@ -436,6 +446,7 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .stockhelper-language-switcher button.active{{border-color:#60a5fa;background:#1d4ed8;color:#fff}}
 .top-choice-compact .top-choice-direction{{width:92px!important;min-width:92px!important}}
 .top-choice-compact th:nth-child(2),.top-choice-compact td:nth-child(2){{min-width:92px;font-size:13px!important;white-space:normal}}
+.top-choice>h2,.top-choice>h3{{margin:0;padding:13px 15px;border-bottom:1px solid rgba(96,165,250,.28);line-height:1.35}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
 </style>
 {controls}
@@ -509,6 +520,7 @@ window.setStockhelperLanguage=(lang,remember=true)=>{{
   document.querySelectorAll('[data-stockhelper-language]').forEach(btn=>btn.classList.toggle('active',btn.dataset.stockhelperLanguage===language));
   translateNode(document.body);translating=false;
 }};
+window.translateStockhelperNode=translateNode;
 const languageControls=document.querySelector('.stockhelper-language-switcher');
 const reportHero=document.querySelector('.troj-hero');
 if(languageControls&&reportHero)reportHero.parentNode.insertBefore(languageControls,reportHero);

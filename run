@@ -3566,6 +3566,7 @@ function renderFavorites(){
   const unclassified=(activeMarket||activeDirection!=='all')?[]:[...fav].filter(ticker=>!classifiedTickers.has(ticker)).sort().map(ticker=>({ticker,label:favoriteInstrumentLabel(ticker),cmd:'python run -c '+ticker}));
   parts.push('<section class="favorites-technique favorites-unclassified"><h3>Favorites not classified anywhere now</h3><p class="muted">Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.</p><div style="overflow:auto"><table><thead><tr><th>Instrument</th><th>Chart</th></tr></thead><tbody>'+(unclassified.length?unclassified.map(o=>'<tr data-ticker="'+escapeFavoriteHtml(o.ticker)+'"><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td class="chart-action-cell">'+star(o)+chartButton(o)+'</td></tr>').join(''):'<tr><td colspan="2" class="muted">No unclassified favorites</td></tr>')+'</tbody></table></div></section>');
   root.innerHTML=parts.join('')||'<p class="muted">Favorites are saved, but none occur in this report.</p>';
+  window.translateStockhelperNode?.(root);
 }
 document.addEventListener('DOMContentLoaded',decorateFavoriteStars);
 window.addEventListener('focus',syncFavoritesFromServer);
