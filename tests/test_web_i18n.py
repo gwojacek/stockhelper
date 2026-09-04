@@ -14,6 +14,8 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert ".top-choice-compact .top-choice-direction{width:92px!important" in markup
     assert ".top-choice>h2,.top-choice>h3{margin:0;padding:13px 15px" in markup
     assert ".top-choice-compact col.top-choice-stooq{width:112px!important}" in markup
+    assert ".top-choice-compact col.top-choice-chart{width:112px!important}" in markup
+    assert ".top-choice-compact th.chart-link-cell,.top-choice-compact th.chart-action-cell{min-width:112px!important" in markup
     assert ".top-choice-compact td.chart-link-cell .btn" in markup
     assert "window.translateStockhelperNode=translateNode" in markup
 

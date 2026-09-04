@@ -450,8 +450,9 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .top-choice-compact .top-choice-direction{{width:92px!important;min-width:92px!important}}
 .top-choice-compact th:nth-child(2),.top-choice-compact td:nth-child(2){{min-width:92px;font-size:13px!important;white-space:normal}}
 .top-choice-compact col.top-choice-stooq{{width:112px!important}}
-.top-choice-compact col.top-choice-chart{{width:70px!important}}
+.top-choice-compact col.top-choice-chart{{width:112px!important}}
 .top-choice-compact td.chart-link-cell,.top-choice-compact td.chart-action-cell{{padding:6px 8px!important;white-space:nowrap}}
+.top-choice-compact th.chart-link-cell,.top-choice-compact th.chart-action-cell{{min-width:112px!important;text-align:center}}
 .top-choice-compact td.chart-link-cell .btn,.top-choice-compact td.chart-action-cell .btn,.top-choice-compact td.chart-link-cell .favorite-star{{margin:2px}}
 .top-choice>h2,.top-choice>h3{{margin:0;padding:13px 15px;border-bottom:1px solid rgba(96,165,250,.28);line-height:1.35}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
