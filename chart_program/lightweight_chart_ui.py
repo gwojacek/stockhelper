@@ -18,6 +18,7 @@ from flask import Flask, jsonify, request
 from core.calculator import calculate_position_size, calculate_stock_position
 from core.risk_manager import calculate_distance_ratio, calculate_take_profit
 from chart_program.config_writer import DEFAULT_RISK_LEVELS
+from utilities.web_i18n import language_controls_html
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 SELECTION_SEQUENCE = [
@@ -476,6 +477,7 @@ class LightweightChartLevelSelectorUI:
     def _html(self) -> str:
         payload = json.dumps(self._payload(), ensure_ascii=False)
         fallback_script = self._fallback_lightweight_charts_script()
+        language_ui = language_controls_html(show_controls=False)
         chart_identity = self.source_name or self.symbol
         if self.source_ticker:
             chart_identity = f"{chart_identity} ({self.source_ticker})"
@@ -662,6 +664,7 @@ class LightweightChartLevelSelectorUI:
   </style>
 </head>
 <body>
+  {language_ui}
   <div class="layout">
     <main class="main">
       <h3>Interactive Level Selector: {self.symbol}</h3>

@@ -40,6 +40,24 @@ def load_run_module():
     return module
 
 
+def test_report_language_switcher_defaults_to_english_and_preserves_market_terms():
+    mod = load_run_module()
+
+    script = mod._report_language_script()
+
+    assert "setStockhelperLanguage(savedLanguage(),false)" in script
+    assert "document.documentElement.lang=language" in script
+    assert "data-market-language" in script
+    assert "🇬🇧 EN" in script and "🇵🇱 PL" in script
+    assert '"Wedges": "Kliny"' in script
+    assert '"Ichimoku only": "Tylko Ichimoku"' in script
+    assert '"Fibo only": "Tylko Fibo"' in script
+    assert '"Ichimoku":' not in script
+    assert '"Fibo":' not in script
+    assert '"Ichimoku continuation": "Kontynuacja Ichimoku"' in script
+    assert "stockhelper-language=${value}" in script
+
+
 def test_scanner_report_instrument_labels_include_full_names_and_tickers():
     mod = load_run_module()
 
@@ -1466,12 +1484,12 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "Open all visible stooq chart links" not in text
     assert "border:none" in text
     assert "id='report-legends-dialog'" in text
-    assert "📊 Legenda progów" in text
+    assert "📊 Liquidity legend" in text
     assert "☁️ Ichimoku legend" in text
     assert "📖 Legends" in text
     assert "kliknij, aby rozwinąć" not in text
     assert "<details class='legend troj-legend'><summary><b>☁️ Ichimoku legend</b></summary>" in text
-    assert "<details class='legend'><summary><b>📊 Legenda progów</b></summary>" in text
+    assert "<details class='legend'><summary><b>📊 Liquidity legend</b></summary>" in text
     assert "<strong>Low &lt; Th20 for Ichimoku</strong>" in text
     assert "class='btn dialog-close-btn'" in text
     assert ".dialog-close-btn:hover{background:#334155;border-color:#94a3b8}" in text
