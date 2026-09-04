@@ -12,6 +12,7 @@ POLISH_TRANSLATIONS = {
     "Ichimoku continuation": "Kontynuacja Ichimoku",
     "Ichimoku reversal": "Odwrócenie Ichimoku",
     "Ichimoku status": "Status Ichimoku",
+    "Ichimoku information": "Informacje Ichimoku",
     "StockHelper Transaction Journal": "Dziennik transakcji StockHelper",
     "Generated:": "Wygenerowano:",
     "Search": "Szukaj",
@@ -58,6 +59,8 @@ POLISH_TRANSLATIONS = {
     "Instrument": "Instrument",
     "Chart": "Wykres",
     "Open chart": "Otwórz wykres",
+    "Open stockhelper chart": "Otwórz wykres StockHelper",
+    "Open stooq chart": "Otwórz wykres Stooq",
     "Wedges": "Kliny",
     "All markets": "Wszystkie rynki",
     "All results": "Wszystkie wyniki",
@@ -446,6 +449,10 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .stockhelper-language-switcher button.active{{border-color:#60a5fa;background:#1d4ed8;color:#fff}}
 .top-choice-compact .top-choice-direction{{width:92px!important;min-width:92px!important}}
 .top-choice-compact th:nth-child(2),.top-choice-compact td:nth-child(2){{min-width:92px;font-size:13px!important;white-space:normal}}
+.top-choice-compact col.top-choice-stooq{{width:112px!important}}
+.top-choice-compact col.top-choice-chart{{width:70px!important}}
+.top-choice-compact td.chart-link-cell,.top-choice-compact td.chart-action-cell{{padding:6px 8px!important;white-space:nowrap}}
+.top-choice-compact td.chart-link-cell .btn,.top-choice-compact td.chart-action-cell .btn,.top-choice-compact td.chart-link-cell .favorite-star{{margin:2px}}
 .top-choice>h2,.top-choice>h3{{margin:0;padding:13px 15px;border-bottom:1px solid rgba(96,165,250,.28);line-height:1.35}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
 </style>
@@ -491,7 +498,7 @@ function translateNode(root){{
   nodes.forEach(node=>{{
     if(node.parentElement?.closest('script,style,[data-market-language]'))return;
     if(node.__stockhelperEnglish===undefined)node.__stockhelperEnglish=node.nodeValue;
-    const original=node.__stockhelperEnglish;
+    const original=node.parentElement?.dataset?.i18nKey||node.__stockhelperEnglish;
     const direction=node.parentElement?.closest('[data-troj-direction]')?.dataset?.trojDirection;
     const directionalOriginal=direction==='short'
       ? original.replaceAll('3p_steep_incline','3p_steep_decline').replaceAll('3P steep incline','3P steep decline')

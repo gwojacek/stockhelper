@@ -13,6 +13,8 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert "MutationObserver" in markup
     assert ".top-choice-compact .top-choice-direction{width:92px!important" in markup
     assert ".top-choice>h2,.top-choice>h3{margin:0;padding:13px 15px" in markup
+    assert ".top-choice-compact col.top-choice-stooq{width:112px!important}" in markup
+    assert ".top-choice-compact td.chart-link-cell .btn" in markup
     assert "window.translateStockhelperNode=translateNode" in markup
 
 
@@ -42,6 +44,9 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Accept closing screenshot": "Zatwierdź zrzut zamknięcia",
         "🟢 SOLD": "🟢 SPRZEDANO",
         "Closing screenshot saved. Closing chart...": "Zapisano zrzut zamknięcia. Zamykanie wykresu...",
+        "Open stockhelper chart": "Otwórz wykres StockHelper",
+        "Open stooq chart": "Otwórz wykres Stooq",
+        "Ichimoku information": "Informacje Ichimoku",
     }
 
     for english, polish in expected.items():
@@ -62,9 +67,17 @@ def test_dynamic_favorites_are_translated_after_they_are_rendered():
     report_source = Path("run").read_text(encoding="utf-8")
 
     assert "window.translateStockhelperNode?.(root)" in report_source
+    assert 'data-i18n-key="Saved favorites that do not occur' in report_source
     assert POLISH_TRANSLATIONS[
         "Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results."
     ].startswith("Zapisane ulubione")
+
+
+def test_missing_fibo_patterns_use_a_dash_in_report_columns():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert 'text.lower() in {"", "none", "nan", "null"}' in report_source
+    assert "html.escape(_display_pattern(r.pattern))" in report_source
 
 
 def test_favorites_and_journal_are_fully_localized():
