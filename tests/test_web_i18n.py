@@ -33,11 +33,21 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Trade review": "Ocena transakcji",
         "Position calculator": "Kalkulator pozycji",
         "Download chart PNG": "Pobierz wykres PNG",
+        "Unable to calculate position.": "Nie można obliczyć pozycji.",
+        "Data required for calculation:": "Dane wymagane do obliczenia:",
     }
 
     for english, polish in expected.items():
         assert POLISH_TRANSLATIONS[english] == polish
     assert ENGLISH_NORMALIZATIONS["Brak wyników."] == "No results."
+
+
+def test_chart_calculation_error_explains_required_data_without_fetch_details():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "Data required for calculation:" in chart_source
+    assert "For Forex and commodities also provide lot cost and pip value." in chart_source
+    assert "Unable to calculate:</b>" not in chart_source
 
 
 def test_favorites_and_journal_are_fully_localized():

@@ -3642,7 +3642,13 @@ class LightweightChartLevelSelectorUI:
     drawer.classList.add('open');
     $('calc-drawer').closest('.main')?.classList.add('calc-open');
     if (!data || !data.ok) {{
-      summary.innerHTML = `<b>Unable to calculate:</b> ${{(data && data.error) ? data.error : 'unknown error'}}`;
+      const needsTradingDetails = !levels.__stock_cfd_mode__ && P.instrumentType !== 'stock';
+      summary.innerHTML = [
+        '<b>Unable to calculate position.</b>',
+        '<span><b>Data required for calculation:</b> entry price, stop loss, and current capital.</span>',
+        needsTradingDetails ? '<span>For Forex and commodities also provide lot cost and pip value.</span>' : '',
+        '<span>Check the data and try again.</span>'
+      ].filter(Boolean).join('');
       table.innerHTML = ''; warnings.innerHTML = ''; return;
     }}
     const currency = data.currency || 'PLN';
