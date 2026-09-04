@@ -18,6 +18,7 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert ".top-choice-compact th.chart-link-cell,.top-choice-compact th.chart-action-cell{min-width:112px!important" in markup
     assert ".top-choice-compact td.chart-link-cell .btn" in markup
     assert "window.translateStockhelperNode=translateNode" in markup
+    assert "window.stockhelperTranslateText=translate" in markup
 
 
 def test_translation_tables_are_compiled_once_for_fast_polish_filter_updates():
@@ -69,7 +70,7 @@ def test_dynamic_favorites_are_translated_after_they_are_rendered():
     report_source = Path("run").read_text(encoding="utf-8")
 
     assert "window.translateStockhelperNode?.(root)" in report_source
-    assert 'data-i18n-key="Saved favorites that do not occur' in report_source
+    assert "favoriteUiText(unclassifiedHelp)" in report_source
     assert POLISH_TRANSLATIONS[
         "Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results."
     ].startswith("Zapisane ulubione")
@@ -80,6 +81,16 @@ def test_missing_fibo_patterns_use_a_dash_in_report_columns():
 
     assert 'text.lower() in {"", "none", "nan", "null"}' in report_source
     assert "html.escape(_display_pattern(r.pattern))" in report_source
+
+
+def test_fibo_board_uses_short_actionable_column_names():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert '"| 🚀 Strong impulse | ⚠️ Waiting 23.6→61.8 |' in report_source
+    assert 'return "🚀 Strong impulse"' in report_source
+    assert 'return "⚠️ Waiting 23.6→61.8"' in report_source
+    assert POLISH_TRANSLATIONS["Strong impulse"] == "Silny impuls"
+    assert POLISH_TRANSLATIONS["Waiting 23.6→61.8"] == "Oczekujące 23,6→61,8"
 
 
 def test_favorites_and_journal_are_fully_localized():

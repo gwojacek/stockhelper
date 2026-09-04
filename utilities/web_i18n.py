@@ -250,8 +250,8 @@ POLISH_TRANSLATIONS = {
     "Pattern": "Formacja",
     "Incline": "Wzrost",
     "Waiting": "Oczekujące",
-    "Waiting 23.6→61.8 and patterns": "Oczekiwanie 23,6→61,8 i formacje",
-    "Steep incline / no major bearish signal": "Stromy wzrost / brak istotnego sygnału spadkowego",
+    "Waiting 23.6→61.8": "Oczekujące 23,6→61,8",
+    "Strong impulse": "Silny impuls",
     "Pattern ≤14d / SL intact": "Formacja ≤14 dni / SL nienaruszony",
     "Recent dropouts": "Ostatnio odrzucone",
     "Ratio": "Stosunek",
@@ -366,6 +366,19 @@ POLISH_TRANSLATIONS = {
     "Fibo pattern": "Formacja Fibo",
     "Show 3P debug": "Pokaż diagnostykę 3P",
     "Hide 3P debug": "Ukryj diagnostykę 3P",
+    "Fibo dropout analyzer": "Diagnostyka odrzuceń Fibo",
+    "Runs every Fibo calculation against current cached OHLC data and identifies the exact rejection stage for each offset and direction.": "Uruchamia wszystkie obliczenia Fibo na aktualnych danych OHLC i wskazuje dokładny etap odrzucenia dla każdego przesunięcia i kierunku.",
+    "Copy for Codex": "Kopiuj dla Codex",
+    "Select a dropout to analyze it.": "Wybierz odrzucony wynik do analizy.",
+    "Running complete Fibo calculations…": "Uruchamianie pełnych obliczeń Fibo…",
+    "Analyzing": "Analizowanie",
+    "Analysis complete · copied automatically": "Analiza zakończona · skopiowano automatycznie",
+    "Analysis failed:": "Analiza nie powiodła się:",
+    "Manual command:": "Polecenie ręczne:",
+    "Analyze why this Fibo dropped": "Sprawdź, dlaczego wynik Fibo został odrzucony",
+    "dropout analysis": "analiza odrzucenia",
+    "debug endpoint unavailable": "punkt diagnostyczny jest niedostępny",
+    "StockHelper report server unavailable; reopen the report from StockHelper": "Serwer raportu StockHelper jest niedostępny; otwórz raport ponownie ze StockHelper",
     "BULLISH": "WZROSTOWY",
     "BEARISH": "SPADKOWY",
     "FX conversion fee 1%": "Opłata za przewalutowanie 1%",
@@ -529,6 +542,7 @@ window.setStockhelperLanguage=(lang,remember=true)=>{{
   translateNode(document.body);translating=false;
 }};
 window.translateStockhelperNode=translateNode;
+window.stockhelperTranslateText=translate;
 const languageControls=document.querySelector('.stockhelper-language-switcher');
 const reportHero=document.querySelector('.troj-hero');
 if(languageControls&&reportHero)reportHero.parentNode.insertBefore(languageControls,reportHero);
