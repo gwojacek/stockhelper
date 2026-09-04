@@ -14,6 +14,16 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert ".top-choice-compact .top-choice-direction{width:92px!important" in markup
 
 
+def test_translation_tables_are_compiled_once_for_fast_polish_filter_updates():
+    markup = language_controls_html()
+
+    assert "const TO_EN_PATTERN=replacementPattern(Object.keys(TO_EN))" in markup
+    assert "const PL_LONG_PATTERN=replacementPattern(Object.keys(PL_LONG))" in markup
+    assert "output.replace(PL_LONG_PATTERN,source=>PL_LONG[source])" in markup
+    assert "Object.entries(PL).sort" not in markup
+    assert "node.__stockhelperLanguage===language" in markup
+
+
 def test_polish_dictionary_covers_reports_journal_and_chart_columns():
     expected = {
         "Why top choice": "Dlaczego wybrano",

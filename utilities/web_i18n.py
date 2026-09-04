@@ -403,6 +403,14 @@ const PL={translations};
 const COLUMN_PL={column_translations};
 const TO_EN={normalizations};
 const ATTRS=['title','aria-label','placeholder'];
+function replacementPattern(values){{
+  const escape=value=>[...value].map(char=>'^$.*+?()[]{{}}|\\\\'.includes(char)?'\\\\'+char:char).join('');
+  return new RegExp(values.sort((a,b)=>b.length-a.length).map(escape).join('|'),'g');
+}}
+const TO_EN_PATTERN=replacementPattern(Object.keys(TO_EN));
+const PL_LONG=Object.fromEntries(Object.entries(PL).filter(([source])=>source.length>4));
+const PL_LONG_PATTERN=replacementPattern(Object.keys(PL_LONG));
+const PL_SHORT=Object.fromEntries(Object.entries(PL).filter(([source])=>source.length<=4));
 let language='en',translating=false;
 function savedLanguage(){{
   const cookie=document.cookie.split('; ').find(item=>item.startsWith('stockhelper-language='))?.split('=')[1];
@@ -416,14 +424,11 @@ function rememberLanguage(value){{
 }}
 function translate(value){{
   if(!value)return value;
-  let output=value;
-  Object.entries(TO_EN).sort((a,b)=>b[0].length-a[0].length).forEach(([source,en])=>output=output.replaceAll(source,en));
+  let output=value.replace(TO_EN_PATTERN,source=>TO_EN[source]);
   if(language!=='pl')return output;
-  Object.entries(PL).sort((a,b)=>b[0].length-a[0].length).forEach(([en,pl])=>{{
-    if(en.length<=4&&output.trim()!==en)return;
-    output=output.replaceAll(en,pl);
-  }});
-  return output;
+  const trimmed=output.trim();
+  if(PL_SHORT[trimmed])return output.replace(trimmed,PL_SHORT[trimmed]);
+  return output.replace(PL_LONG_PATTERN,source=>PL_LONG[source]);
 }}
 function translateNode(root){{
   if(!root||root.closest?.('[data-market-language],script,style'))return;
@@ -438,11 +443,15 @@ function translateNode(root){{
     const directionalOriginal=direction==='short'
       ? original.replaceAll('3p_steep_incline','3p_steep_decline').replaceAll('3P steep incline','3P steep decline')
       : original;
+    if(node.__stockhelperLanguage===language&&node.__stockhelperRendered===node.nodeValue&&node.__stockhelperDirectionalOriginal===directionalOriginal)return;
     const trimmed=directionalOriginal.trim();
     const columnKey=trimmed.replace(/\\s*[↕↑↓]\\s*$/,'');
     if(language==='pl'&&node.parentElement?.closest('th')&&COLUMN_PL[columnKey]){{
       node.nodeValue=directionalOriginal.replace(columnKey,COLUMN_PL[columnKey]);
     }}else node.nodeValue=translate(directionalOriginal);
+    node.__stockhelperLanguage=language;
+    node.__stockhelperRendered=node.nodeValue;
+    node.__stockhelperDirectionalOriginal=directionalOriginal;
   }});
   if(root.querySelectorAll){{[root,...root.querySelectorAll('*')].forEach(el=>ATTRS.forEach(attr=>{{
     if(!el.hasAttribute?.(attr)||el.closest('[data-market-language]'))return;
