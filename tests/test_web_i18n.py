@@ -40,6 +40,22 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
     assert ENGLISH_NORMALIZATIONS["Brak wyników."] == "No results."
 
 
+def test_favorites_and_journal_are_fully_localized():
+    expected = {
+        "Favorite setups": "Ulubione układy",
+        "No favorites": "Brak ulubionych",
+        "Favorites not classified anywhere now": "Ulubione obecnie niesklasyfikowane",
+        "No unclassified favorites": "Brak niesklasyfikowanych ulubionych",
+        "Trade / Review": "Transakcja / ocena",
+        "Buy / Entry": "Kupno / wejście",
+        "Auto context": "Kontekst automatyczny",
+        "Stop loss moves count": "Liczba przesunięć stop loss",
+        "Notes saved": "Notatki zapisano",
+    }
+    for english, polish in expected.items():
+        assert POLISH_TRANSLATIONS[english] == polish
+
+
 def test_market_names_and_currencies_are_not_translated():
     for term in ("Ichimoku", "Fibo", "Stooq", "PLN"):
         assert term not in POLISH_TRANSLATIONS
