@@ -1991,9 +1991,11 @@ def test_market_filter_is_applied_to_favorite_occurrences():
 def test_report_supports_persistent_orange_instrument_coloring():
     source = Path("run").read_text(encoding="utf-8")
     assert "id='instrument-color-btn'" in source
+    hero = source[source.index("html_parts.append(\"<div class='troj-hero'"):source.index("checked_lists_html =")]
+    assert hero.index("🗂 Checked") < hero.index("🖌 Color instrument")
     assert "stockhelper.colored-instruments.v1" in source
     assert "function toggleInstrumentColorMode(btn)" in source
-    assert "tr.instrument-colored>td{background:rgba(249,115,22,.30)!important}" in source
+    assert "tr.instrument-colored>td{background:rgba(255,171,64,.22)!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
     assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
     assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
@@ -2008,7 +2010,10 @@ def test_fibo_chart_shades_the_anchor_formation_area():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function drawFiboAnchorBackground(ctx)" in source
     assert "rgba(148,163,184,0.075)" in source
-    assert "items.flatMap(obj => [obj.x0, obj.x1])" in source
+    assert "String(boundary.x1).slice(0, 10)" in source
+    assert "const upperPrice = Math.max" in source
+    assert "const lowerPrice = Math.min" in source
+    assert "const right = $('chart-wrap').clientWidth" in source
     assert "drawFiboAnchorBackground(ctx);" in source
 
 

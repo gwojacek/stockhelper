@@ -2603,20 +2603,22 @@ class LightweightChartLevelSelectorUI:
     groups.forEach(items => {{
       const boundary = items.find(obj => obj.type === 'fib-boundary');
       if (!boundary) return;
-      // Fill the complete rendered formation: the 0%/100% anchor levels are
-      // its horizontal borders, while the visible Fib lines define its width.
-      const xValues = items.flatMap(obj => [obj.x0, obj.x1]).filter(Boolean).map(value =>
-        chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(value).slice(0, 10)) : null
-      ).filter(Number.isFinite);
-      const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y0)) : null;
-      const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y1)) : null;
-      if (!xValues.length || ![y0, y1].every(Number.isFinite)) return;
-      const left = Math.max(0, Math.min(...xValues));
-      const right = Math.min($('chart-wrap').clientWidth, Math.max(...xValues));
+      const zero = items.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio)) < 0.002);
+      const hundred = items.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio) - 1) < 0.002);
+      // The second selected swing starts the forward-looking retracement zone.
+      // Its vertical bounds are exactly the 0% and 100% Fibonacci lines.
+      const startX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x1).slice(0, 10)) : null;
+      const upperPrice = Math.max(Number(zero?.price ?? zero?.y0 ?? boundary.y0), Number(hundred?.price ?? hundred?.y0 ?? boundary.y1));
+      const lowerPrice = Math.min(Number(zero?.price ?? zero?.y0 ?? boundary.y0), Number(hundred?.price ?? hundred?.y0 ?? boundary.y1));
+      const upperY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(upperPrice) : null;
+      const lowerY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(lowerPrice) : null;
+      if (![startX, upperY, lowerY].every(Number.isFinite)) return;
+      const left = Math.max(0, startX);
+      const right = $('chart-wrap').clientWidth;
       if (right <= left) return;
       ctx.save();
       ctx.fillStyle = 'rgba(148,163,184,0.075)';
-      ctx.fillRect(left, Math.min(y0, y1), right - left, Math.abs(y1 - y0));
+      ctx.fillRect(left, Math.min(upperY, lowerY), right - left, Math.abs(lowerY - upperY));
       ctx.restore();
     }});
   }}
