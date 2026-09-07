@@ -951,6 +951,9 @@ def _patch_report_runtime_js(path: Path) -> None:
         "fetch(&quot;/run-command?command=python%20run%20--journal-html&quot;).then(()=>setButtonText(this,&quot;Opened&quot;))",
         "window.open('/journal-html','_blank')"
     )
+    favorite_i18n_fallback = """<script id='stockhelper-favorite-i18n-fallback'>(function(){const en='Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results.',pl='Zapisane ulubione, które nie występują w bieżących wynikach Allsearch, 3P ani Klinów.';const isPl=()=>document.documentElement.lang==='pl'||localStorage.getItem('stockhelper-language')==='pl'||document.cookie.includes('stockhelper-language=pl');const apply=root=>{if(!isPl())return;const walker=document.createTreeWalker(root||document.body,NodeFilter.SHOW_TEXT);let n;while((n=walker.nextNode()))if(n.nodeValue.includes(en))n.nodeValue=n.nodeValue.replaceAll(en,pl);};document.addEventListener('DOMContentLoaded',()=>{apply(document.body);new MutationObserver(items=>items.forEach(item=>item.addedNodes.forEach(apply))).observe(document.body,{childList:true,subtree:true});});})();</script>"""
+    if "stockhelper-favorite-i18n-fallback" not in patched:
+        patched = patched.replace("</body></html>", favorite_i18n_fallback + "</body></html>", 1)
     if count or group_count or scoped_chart_count or scoped_sheets_count or patched != text:
         path.write_text(patched, encoding="utf-8")
 
@@ -3516,7 +3519,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
                     html_parts.append(f"<tr{_row_attrs(r)}><td><b>{html.escape(_instrument_label(r))}</b></td><td>{_fibo_direction_html(r.direction)}</td><td>{_color_fibo_metric(r.metrics.get('near61',''))}</td><td>{html.escape(_display_pattern(r.pattern))}</td><td>{html.escape(r.dates.get('incline',''))}</td><td>{ratio_html}</td><td>{html.escape(r.dates.get('touch_61',''))}</td><td>{html.escape(_format_avg10d_value(r.metrics.get('avg10d','')))}</td><td class='chart-link-cell'>{chart_btn}</td>{_latest_data_cell(r.metrics.get('latest_data',''))}<td>{html.escape(r.metrics.get('latest_date',''))}</td><td>{html.escape(r.metrics.get('expected_date',''))}</td><td class='chart-action-cell'>{_stockhelper_chart_button(cmd, f"{_market_icon(r.market, r.ticker)} {r.ticker}")}</td></tr>")
             html_parts.append("</tbody></table></div>")
         html_parts.append("</div>")
-    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div><div id='tab-favorites' class='tab-panel'><section class='market favorites-panel'><h2>⭐ Favorite setups</h2><p class='muted'>Each matching setup appears once. One favorite instrument can appear in multiple 3P columns when it has separate long/short setups.</p><div id='favorites-content'></div></section></div>")
+    html_parts.append("</div><div id='tab-troj-fibo' class='tab-panel'>" + _trojpolowki_html_section(troj_fibo_parsed, "trojpolowki-fibo", [2, 3]) + "</div><div id='tab-troj-ichimoku' class='tab-panel'>" + _trojpolowki_html_section(troj_ichi_parsed, "trojpolowki-ichimoku", [2, 3]) + "</div><div id='tab-wedges' class='tab-panel'>" + _wedge_tab_html() + "</div><div id='tab-favorites' class='tab-panel'><section class='market favorites-panel'><h2>⭐ Favorite setups <button class='iconbtn' title='Open favorite charts' onclick='openClosestStockhelperCharts(this)'>📊</button> <button class='iconbtn' title='Clear all favorites' onclick='clearAllFavorites()'>✕</button></h2><p class='muted'>Each matching setup appears once. One favorite instrument can appear in multiple 3P columns when it has separate long/short setups.</p><div id='favorites-content'></div></section></div>")
     favorite_instrument_names = dict(instrument_names)
     favorite_instrument_names.update({ticker.removesuffix(".WA"): name for ticker, name in instrument_names.items() if ticker.endswith(".WA")})
     html_parts.append("<script>const FAVORITE_INSTRUMENT_NAMES=" + json.dumps(favorite_instrument_names, ensure_ascii=False) + ";</script>")
@@ -3531,6 +3534,7 @@ function techniqueFor(el){const scanner=el.closest('[data-scanner]')?.dataset?.s
 function decorateFavoriteStars(){saveFavorites(loadFavorites());document.querySelectorAll('.stockhelper-chart-btn[data-cmd]:not([data-favorite-ready])').forEach(chart=>{const ticker=favoriteTicker(chart);if(!ticker)return;chart.dataset.favoriteReady='1';chart.dataset.favoriteTicker=ticker;const chartUrl=new URL(chart.getAttribute('href')||'/open-chart',window.location.href);chartUrl.searchParams.set('favoriteTicker',ticker);chart.setAttribute('href',chartUrl.pathname+chartUrl.search);const star=document.createElement('button');star.type='button';star.className='favorite-star';star.dataset.ticker=ticker;star.title='Add to favorites: '+ticker;star.setAttribute('aria-label',star.title);star.onclick=()=>toggleFavorite(ticker);chart.insertAdjacentElement('beforebegin',star);});refreshFavoriteStars();}
 function refreshFavoriteStars(){const fav=loadFavorites();document.querySelectorAll('.favorite-star[data-ticker]').forEach(star=>{const ticker=canonicalFavoriteTicker(star.dataset.ticker);const on=fav.has(ticker);star.classList.toggle('active',on);star.textContent=on?'★':'☆';star.title=(on?'Remove from favorites: ':'Add to favorites: ')+ticker;star.setAttribute('aria-pressed',on?'true':'false');});renderFavorites();}
 function toggleFavorite(ticker){ticker=canonicalFavoriteTicker(ticker);const fav=loadFavorites();fav.has(ticker)?fav.delete(ticker):fav.add(ticker);saveFavorites(fav);refreshFavoriteStars();}
+function clearAllFavorites(){if(!confirm('Clear all favorites?'))return;saveFavorites(new Set());refreshFavoriteStars();}
 function escapeFavoriteHtml(value){return String(value||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function favoriteUiText(value){return window.stockhelperTranslateText?window.stockhelperTranslateText(value):value;}
 function favoriteInstrumentLabel(ticker){const normalized=String(ticker||'').toUpperCase();const name=FAVORITE_INSTRUMENT_NAMES[normalized]||FAVORITE_INSTRUMENT_NAMES[normalized+'.WA']||'';return name?name+' ('+normalized+')':normalized;}
@@ -3539,8 +3543,8 @@ function renderFavorites(){
   const root=document.getElementById('favorites-content');if(!root)return;
   const fav=loadFavorites();if(!fav.size){root.innerHTML='<p class="muted">No favorites yet. Select an empty ☆ beside any instrument.</p>';return;}
   const occurrences=[];
-  document.querySelectorAll('.stockhelper-chart-btn[data-favorite-ticker]').forEach(btn=>{
-    const ticker=canonicalFavoriteTicker(btn.dataset.favoriteTicker);
+  document.querySelectorAll('.stockhelper-chart-btn[data-cmd]').forEach(btn=>{
+    const ticker=canonicalFavoriteTicker(btn.dataset.favoriteTicker||favoriteTicker(btn));
     if(btn.closest('#tab-favorites')||!fav.has(ticker))return;
     const card=btn.closest('.troj-cell-card'),host=card||btn.closest('tr');
     const market=host?.dataset?.market||btn.closest('[data-market-block]')?.dataset?.marketBlock||'OTHER';
@@ -3550,7 +3554,8 @@ function renderFavorites(){
     const wedgeContext=favoriteWedgeContext(host);
     const context=wedgeContext||btn.dataset.groupSection||btn.closest('.subhead')?.childNodes?.[0]?.textContent?.trim()||'';
     const stooqUrl=host?.querySelector('a.stooq-chart-link')?.href||btn.closest('td')?.querySelector('a.stooq-chart-link')?.href||'';
-    occurrences.push({ticker,technique:techniqueFor(btn),market,label:(btn.dataset.groupLabel||ticker).trim(),context,cmd:btn.dataset.cmd,stooqUrl,direction:(host?.dataset?.trojDirection||'').toLowerCase(),is3p:!!sourceTable,columnIndex,columnHeader});
+    const percentMatch=String(card?.innerText||'').match(/(?:near\s*61\.8\D*)?(\d+(?:[.,]\d+)?)%/i);
+    occurrences.push({ticker,technique:techniqueFor(btn),market,label:(btn.dataset.groupLabel||ticker).trim(),context,cmd:btn.dataset.cmd,stooqUrl,direction:(host?.dataset?.trojDirection||'').toLowerCase(),is3p:!!sourceTable,columnIndex,columnHeader,percent:percentMatch?percentMatch[1].replace(',','.')+'%':''});
   });
   const favoriteOccurrenceRank=o=>o.is3p&&o.technique==='Fibo'?0:o.is3p&&o.technique==='Ichimoku'?1:o.technique==='Kliny'?2:o.technique==='Fibo'?3:o.technique==='Ichimoku'?4:5;
   const byTicker=new Map();
@@ -3558,7 +3563,7 @@ function renderFavorites(){
   const uniqueAll=[...byTicker.values()].flatMap(group=>[...group.items.values()]);
   const activeMarket=(document.getElementById('market')?.value||'').trim();
   const activeDirection=(document.getElementById('tab-favorites')?.dataset?.trojDirection||'all').toLowerCase();
-  const unique=uniqueAll.filter(o=>(!activeMarket||o.market===activeMarket)&&(activeDirection==='all'||o.direction===activeDirection));
+  const unique=uniqueAll.filter(o=>(!activeMarket||String(o.market).toUpperCase()===activeMarket.toUpperCase())&&(activeDirection==='all'||o.direction===activeDirection));
   const chartButton=o=>'<a class="btn stockhelper-chart-btn" href="/open-chart?command='+encodeURIComponent(o.cmd)+'&amp;favoriteTicker='+encodeURIComponent(o.ticker)+'" target="_blank" rel="noopener" data-favorite-ticker="'+escapeFavoriteHtml(o.ticker)+'" data-cmd="'+String(o.cmd).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">📊</a>';
   const stooqLink=o=>o.stooqUrl?'<a class="btn stooq-chart-link" href="'+escapeFavoriteHtml(o.stooqUrl)+'" target="_blank" rel="noopener" title="Open stooq chart">📈</a>':'';
   const star=o=>'<button class="favorite-star active" data-ticker="'+o.ticker+'" onclick="toggleFavorite(\''+o.ticker+'\')" title="Remove from favorites">★</button>';
@@ -3570,7 +3575,7 @@ function renderFavorites(){
     const sourceTable=document.querySelector(tech==='Fibo'?'#tab-troj-fibo table.troj-table':'#tab-troj-ichimoku table.troj-table');
     const columns=[0,1,2,3];
     const columnData=columns.map(col=>{const columnItems=items.filter(o=>o.columnIndex===col);const sourceHeader=sourceTable?.tHead?.rows?.[0]?.cells?.[col]?.dataset?.base||sourceTable?.tHead?.rows?.[0]?.cells?.[col]?.innerText||('3P '+(col+1));return {header:(columnItems[0]?.columnHeader||sourceHeader).replace(/[📊🔗📋↕↑↓]/g,'').trim(),items:columnItems};});
-    parts.push('<section class="favorites-technique"><h3>'+title+'</h3><div class="favorites-3p-table-wrap"><table class="favorites-3p-table"><colgroup><col><col><col><col></colgroup><thead><tr>'+columnData.map(column=>'<th>'+escapeFavoriteHtml(column.header)+'</th>').join('')+'</tr></thead><tbody><tr>'+columnData.map(column=>'<td><div class="favorites-3p-stack">'+(column.items.length?column.items.sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(o=>'<div class="favorites-3p-card"><span class="favorite-card-name">'+escapeFavoriteHtml(o.label)+direction(o)+'</span>'+stooqLink(o)+star(o)+chartButton(o)+'</div>').join(''):'<div class="favorites-3p-empty">No favorites</div>')+'</div></td>').join('')+'</tr></tbody></table></div></section>');
+    parts.push('<section class="favorites-technique"><h3>'+title+'</h3><div class="favorites-3p-table-wrap"><table class="favorites-3p-table"><colgroup><col><col><col><col></colgroup><thead><tr>'+columnData.map(column=>'<th>'+escapeFavoriteHtml(column.header)+'</th>').join('')+'</tr></thead><tbody><tr>'+columnData.map(column=>'<td><div class="favorites-3p-stack">'+(column.items.length?column.items.sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(o=>'<div class="favorites-3p-card"><span class="favorite-card-name">'+escapeFavoriteHtml(o.label)+direction(o)+(tech==='Fibo'&&o.percent?'<small class="favorite-fibo-percent">'+o.percent+'</small>':'')+'</span>'+stooqLink(o)+star(o)+chartButton(o)+'</div>').join(''):'<div class="favorites-3p-empty">No favorites</div>')+'</div></td>').join('')+'</tr></tbody></table></div></section>');
   });
   const threePTickers=new Set(unique.filter(o=>o.is3p).map(o=>o.ticker)),regular=unique.filter(o=>!o.is3p&&(o.technique==='Kliny'||!threePTickers.has(o.ticker))),wedgeItems=regular.filter(o=>o.technique==='Kliny');
   if(wedgeItems.length)parts.push('<section class="favorites-technique"><h3>🔻 Kliny</h3><div style="overflow:auto"><table class="favorites-wedge-table"><thead><tr><th>Instrument</th><th>Market</th><th>Direction</th><th>Status</th><th>Chart</th></tr></thead><tbody>'+wedgeItems.sort((a,b)=>a.ticker.localeCompare(b.ticker)).map(o=>'<tr><td><strong>'+escapeFavoriteHtml(o.label)+'</strong></td><td>'+escapeFavoriteHtml(o.market)+'</td><td>'+direction(o)+'</td><td>'+escapeFavoriteHtml(o.context)+'</td><td class="chart-action-cell">'+stooqLink(o)+star(o)+chartButton(o)+'</td></tr>').join('')+'</tbody></table></div></section>');

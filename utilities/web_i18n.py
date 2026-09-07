@@ -31,6 +31,9 @@ POLISH_TRANSLATIONS = {
     "Each matching setup appears once. One favorite instrument can appear in multiple 3P columns when it has separate long/short setups.": "Każdy pasujący układ pojawia się raz. Jeden ulubiony instrument może wystąpić w kilku kolumnach 3P, jeśli ma osobne układy długie i krótkie.",
     "Add to favorites": "Dodaj do ulubionych",
     "Remove from favorites": "Usuń z ulubionych",
+    "Clear all favorites": "Usuń wszystkie ulubione",
+    "Clear all favorites?": "Usunąć wszystkie ulubione?",
+    "Open favorite charts": "Otwórz wykresy ulubionych",
     "Open journal": "Otwórz dziennik",
     "Show": "Pokaż",
     "Hide": "Ukryj",
@@ -157,6 +160,11 @@ POLISH_TRANSLATIONS = {
     "Position calculator": "Kalkulator pozycji",
     "Calculate": "Oblicz",
     "Calculate position": "Oblicz pozycję",
+    "% Diff": "% różnicy",
+    "Select two candles to calculate the price difference": "Wybierz dwie świece, aby obliczyć różnicę ceny",
+    "Select the first candle.": "Wybierz pierwszą świecę.",
+    "Select the second candle.": "Wybierz drugą świecę.",
+    "Price difference": "Różnica ceny",
     "Unable to calculate position.": "Nie można obliczyć pozycji.",
     "Data required for calculation:": "Dane wymagane do obliczenia:",
     "entry price, stop loss, and current capital.": "cena wejścia, stop loss i aktualny kapitał.",
@@ -468,6 +476,9 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .top-choice-compact th.chart-link-cell,.top-choice-compact th.chart-action-cell{{min-width:112px!important;text-align:center}}
 .top-choice-compact td.chart-link-cell .btn,.top-choice-compact td.chart-action-cell .btn,.top-choice-compact td.chart-link-cell .favorite-star{{margin:2px}}
 .top-choice>h2,.top-choice>h3{{margin:0;padding:13px 15px;border-bottom:1px solid rgba(96,165,250,.28);line-height:1.35}}
+.favorite-star.active{{filter:drop-shadow(0 0 5px rgba(250,204,21,.42))}}
+tr:has(.favorite-star.active)>td,.troj-cell-card:has(.favorite-star.active),.favorite-card{{border-color:rgba(250,204,21,.55)!important}}
+.favorite-fibo-percent{{display:block;margin-top:2px;color:#facc15;font-size:11px;font-weight:900}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
 </style>
 {controls}

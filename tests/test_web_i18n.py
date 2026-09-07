@@ -19,6 +19,7 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert ".top-choice-compact td.chart-link-cell .btn" in markup
     assert "window.translateStockhelperNode=translateNode" in markup
     assert "window.stockhelperTranslateText=translate" in markup
+    assert ".favorite-fibo-percent" in markup
 
 
 def test_translation_tables_are_compiled_once_for_fast_polish_filter_updates():
@@ -71,6 +72,7 @@ def test_dynamic_favorites_are_translated_after_they_are_rendered():
 
     assert "window.translateStockhelperNode?.(root)" in report_source
     assert "favoriteUiText(unclassifiedHelp)" in report_source
+    assert "stockhelper-favorite-i18n-fallback" in report_source
     assert POLISH_TRANSLATIONS[
         "Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results."
     ].startswith("Zapisane ulubione")
@@ -91,6 +93,24 @@ def test_fibo_board_uses_short_actionable_column_names():
     assert 'return "⚠️ Waiting 23.6→61.8"' in report_source
     assert POLISH_TRANSLATIONS["Strong impulse"] == "Silny impuls"
     assert POLISH_TRANSLATIONS["Waiting 23.6→61.8"] == "Oczekujące 23,6→61,8"
+
+
+def test_favorites_support_bulk_chart_open_clear_and_fibo_percentages():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert "Open favorite charts" in report_source
+    assert "clearAllFavorites" in report_source
+    assert "favorite-fibo-percent" in report_source
+    assert "btn.dataset.favoriteTicker||favoriteTicker(btn)" in report_source
+    assert "String(o.market).toUpperCase()===activeMarket.toUpperCase()" in report_source
+
+
+def test_chart_has_two_candle_percent_difference_tool():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert 'id="tool-percent-diff"' in chart_source
+    assert "activeTool === 'percent-diff'" in chart_source
+    assert "Price difference" in chart_source
 
 
 def test_favorites_and_journal_are_fully_localized():

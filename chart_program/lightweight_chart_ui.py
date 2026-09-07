@@ -673,6 +673,7 @@ class LightweightChartLevelSelectorUI:
         <button id="tool-line">Line tool</button>
         <button id="tool-fib">Fib 61.8</button>
         <button id="tool-half">Half→SL</button>
+        <button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button>
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
@@ -786,6 +787,7 @@ class LightweightChartLevelSelectorUI:
   let lineAnchor = null;
   let fibAnchor = null;
   let halfAnchor = null;
+  let percentDiffAnchor = null;
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
@@ -2839,6 +2841,7 @@ class LightweightChartLevelSelectorUI:
     $('tool-line').classList.toggle('active', activeTool === 'line');
     $('tool-fib').classList.toggle('active', activeTool === 'fib');
     $('tool-half').classList.toggle('active', activeTool === 'half');
+    $('tool-percent-diff').classList.toggle('active', activeTool === 'percent-diff');
     $('ichimoku-toggle').classList.toggle('active', !!levels.__show_ichimoku__);
     $('ichimoku-toggle').textContent = `Ichimoku: ${{levels.__show_ichimoku__ ? 'ON' : 'OFF'}}`;
     $('values-panel').innerHTML = seq.map(k => `<div class="value-tile ${{k}}"><div class="value-label">${{labels[k]}}</div><div class="value-number">${{levels[k] == null ? '--' : fmt(levels[k])}}</div></div>`).join('');
@@ -3108,7 +3111,8 @@ class LightweightChartLevelSelectorUI:
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
   $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
-  $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
+  $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
+  $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('download-chart-png').onclick = async () => {{
     try {{
@@ -3223,6 +3227,15 @@ class LightweightChartLevelSelectorUI:
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
     const time = typeof param.time === 'string' ? param.time : (param.time ? `${{param.time.year}}-${{String(param.time.month).padStart(2,'0')}}-${{String(param.time.day).padStart(2,'0')}}` : nearest(null).time);
     if (!Number.isFinite(price)) return;
+    if (activeTool === 'percent-diff') {{
+      const row = nearest(time);
+      if (!percentDiffAnchor) {{ percentDiffAnchor = {{time:row.time, price}}; $('result-box').textContent = 'Select the second candle.'; return; }}
+      const change = price - percentDiffAnchor.price;
+      const percent = percentDiffAnchor.price ? (change / percentDiffAnchor.price) * 100 : 0;
+      const sign = change >= 0 ? '+' : '';
+      $('result-box').textContent = `Price difference (${{percentDiffAnchor.time}} → ${{row.time}}): ${{sign}}${{fmt(change)}} (${{sign}}${{percent.toFixed(2)}}%)`;
+      percentDiffAnchor = null; activeTool = 'level'; updatePanel(); return;
+    }}
     if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); updatePanel(); }} else {{ commitLineDrawing(time, price); }} return; }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
