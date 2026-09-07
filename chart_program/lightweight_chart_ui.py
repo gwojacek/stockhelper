@@ -590,6 +590,9 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
+    .line-color-picker {{ position:relative; }}
+    .line-color-menu {{ display:none; position:absolute; z-index:30; top:calc(100% + 5px); left:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
+    .line-color-picker.open .line-color-menu {{ display:flex; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
     #scanner-highlight-legend {{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; min-height:20px; margin:0 0 7px 0; font-size:12px; font-weight:800; }}
@@ -670,7 +673,7 @@ class LightweightChartLevelSelectorUI:
       <h3>Interactive Level Selector: {self.symbol}</h3>
       <div class="level-grid" id="level-buttons"></div>
       <div class="toolbar">
-        <button id="tool-line">Line tool</button>
+        <button id="tool-line">Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">🎨</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span>
         <button id="tool-fib">Fib 61.8</button>
         <button id="tool-half">Half→SL</button>
         <button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button>
@@ -680,10 +683,6 @@ class LightweightChartLevelSelectorUI:
         <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
         <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line">↑</button>
         <button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line">↓</button>
-        <span>Line color:</span>
-        <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
-        <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
-        <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
         <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
         <button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button>
       </div>
@@ -3119,7 +3118,8 @@ class LightweightChartLevelSelectorUI:
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
   $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
-  document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
+  $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');
+  document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => {{ lineColor = b.dataset.color; $('line-color-toggle').style.background=b.dataset.color; $('line-color-picker').classList.remove('open'); }});
   $('download-chart-png').onclick = async () => {{
     try {{
       const canvas = await captureChartPng();
