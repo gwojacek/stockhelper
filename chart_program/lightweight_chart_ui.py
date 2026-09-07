@@ -3230,14 +3230,17 @@ class LightweightChartLevelSelectorUI:
     if (!Number.isFinite(price)) return;
     if (activeTool === 'percent-diff') {{
       const row = nearest(time);
-      if (!percentDiffAnchor) {{ percentDiffAnchor = {{time:row.time, price}}; $('result-box').textContent = 'Select the second candle.'; return; }}
-      const change = price - percentDiffAnchor.price;
+      const midpoint = (Number(row.high) + Number(row.low)) / 2;
+      const anchorPrice = price >= midpoint ? Number(row.high) : Number(row.low);
+      const anchorSide = price >= midpoint ? 'top' : 'bottom';
+      if (!percentDiffAnchor) {{ percentDiffAnchor = {{time:row.time, price:anchorPrice, side:anchorSide}}; $('result-box').textContent = 'Select the second candle.'; return; }}
+      const change = anchorPrice - percentDiffAnchor.price;
       const percent = percentDiffAnchor.price ? (change / percentDiffAnchor.price) * 100 : 0;
       const sign = change >= 0 ? '+' : '';
       const label = `Price difference: ${{sign}}${{fmt(change)}} (${{sign}}${{percent.toFixed(2)}}%)`;
       safeRemoveSeries(percentDiffSeries);
-      percentDiffSeries = addLine([{{time:percentDiffAnchor.time,value:percentDiffAnchor.price}},{{time:row.time,value:price}}], '#facc15', 2.2, LightweightCharts.LineStyle.Dashed, label, true, true, false, 'percent-diff', () => {{ safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; }});
-      try {{ percentDiffSeries?.setMarkers?.([{{time:percentDiffAnchor.time,position:'belowBar',color:'#facc15',shape:'circle',text:'START'}},{{time:row.time,position:'aboveBar',color:'#facc15',shape:'arrowUp',text:label}}]); }} catch(e) {{}}
+      percentDiffSeries = addLine([{{time:percentDiffAnchor.time,value:percentDiffAnchor.price}},{{time:row.time,value:anchorPrice}}], '#facc15', 2.2, LightweightCharts.LineStyle.Dashed, `${{percentDiffAnchor.time}} ${{fmt(percentDiffAnchor.price)}} → ${{row.time}} ${{fmt(anchorPrice)}} · ${{label}}`, true, true, false, 'percent-diff', () => {{ safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; }});
+      try {{ percentDiffSeries?.setMarkers?.([{{time:percentDiffAnchor.time,position:percentDiffAnchor.side==='top'?'aboveBar':'belowBar',color:'#facc15',shape:'circle',text:percentDiffAnchor.side==='top'?'🔺':'🔻'}},{{time:row.time,position:anchorSide==='top'?'aboveBar':'belowBar',color:'#facc15',shape:anchorSide==='top'?'arrowUp':'arrowDown',text:`${{anchorSide==='top'?'🔺':'🔻'}} ${{label}}`}}]); }} catch(e) {{}}
       $('result-box').textContent = '';
       percentDiffAnchor = null; activeTool = 'level'; updatePanel(); return;
     }}

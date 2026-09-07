@@ -478,9 +478,8 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .top-choice-compact td.chart-link-cell .btn,.top-choice-compact td.chart-action-cell .btn,.top-choice-compact td.chart-link-cell .favorite-star{{margin:2px}}
 .top-choice>h2,.top-choice>h3{{margin:0;padding:13px 15px;border-bottom:1px solid rgba(96,165,250,.28);line-height:1.35}}
 .favorite-star.active{{filter:drop-shadow(0 0 5px rgba(250,204,21,.42))}}
-tr:has(.favorite-star.active){{outline:1px solid rgba(250,204,21,.58);outline-offset:-1px}}
-.troj-cell-card:has(.favorite-star.active){{border-color:rgba(250,204,21,.58)!important}}
-#tab-troj-ichimoku .troj-cell-card:has(.favorite-star.active){{border-width:2px}}
+#tab-allsearch table.data tr:has(.favorite-star.active),#tab-wedges table.data tr:has(.favorite-star.active){{outline:2px solid rgba(250,204,21,.58);outline-offset:-2px}}
+.troj-cell-card:has(.favorite-star.active){{border-color:rgba(250,204,21,.58)!important;border-width:2px}}
 .favorites-panel .favorite-card{{border-color:rgba(51,65,85,.95)!important}}
 .favorite-clear-btn{{margin-left:8px!important;border:1px solid rgba(251,191,36,.7)!important;border-radius:8px!important;background:rgba(120,53,15,.32)!important;color:#fef3c7!important;font-size:12px!important;font-weight:900!important;padding:5px 9px!important}}
 .favorite-fibo-percent{{display:block;margin-top:2px;color:#facc15;font-size:11px;font-weight:900}}
