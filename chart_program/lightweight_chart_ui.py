@@ -2621,7 +2621,12 @@ class LightweightChartLevelSelectorUI:
       if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
       const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
       const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level;
-      if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+      const b1 = Math.abs(c1-o1), b2 = Math.abs(c2-o2);
+      const lo1 = Math.min(o1,c1), hi1 = Math.max(o1,c1), lo2 = Math.min(o2,c2), hi2 = Math.max(o2,c2);
+      const containedBearishHarami = c1 > o1 && c2 < o2 && b2 < b1 && lo1 <= lo2 && hi2 <= hi1;
+      const fxMicroBearishHarami = c1 > o1 && c2 < o2 && b1 <= 0.00025 && b2 <= b1*2.05 && lo2 >= lo1-b1 && hi2 <= hi1+b1;
+      if (touches618 && (containedBearishHarami || fxMicroBearishHarami)) found = {{name:'bearish_harami', time:String(second.time).slice(0,10)}};
+      else if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
     }}
     if (!found) return null;
     const latest = ohlc[ohlc.length - 1]?.time;
@@ -3230,10 +3235,13 @@ class LightweightChartLevelSelectorUI:
     if (!Number.isFinite(price)) return;
     if (activeTool === 'percent-diff') {{
       const row = nearest(time);
-      const midpoint = (Number(row.high) + Number(row.low)) / 2;
-      const anchorPrice = price >= midpoint ? Number(row.high) : Number(row.low);
-      const anchorSide = price >= midpoint ? 'top' : 'bottom';
-      if (!percentDiffAnchor) {{ percentDiffAnchor = {{time:row.time, price:anchorPrice, side:anchorSide}}; $('result-box').textContent = 'Select the second candle.'; return; }}
+      if (!percentDiffAnchor) {{ percentDiffAnchor = {{time:row.time, high:Number(row.high), low:Number(row.low), mid:(Number(row.high)+Number(row.low))/2}}; $('result-box').textContent = 'Select the second candle.'; return; }}
+      const secondMid = (Number(row.high) + Number(row.low)) / 2;
+      const rising = secondMid >= percentDiffAnchor.mid;
+      percentDiffAnchor.price = rising ? percentDiffAnchor.low : percentDiffAnchor.high;
+      percentDiffAnchor.side = rising ? 'bottom' : 'top';
+      const anchorPrice = rising ? Number(row.high) : Number(row.low);
+      const anchorSide = rising ? 'top' : 'bottom';
       const change = anchorPrice - percentDiffAnchor.price;
       const percent = percentDiffAnchor.price ? (change / percentDiffAnchor.price) * 100 : 0;
       const sign = change >= 0 ? '+' : '';

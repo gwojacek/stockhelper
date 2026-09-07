@@ -3562,13 +3562,13 @@ function renderFavorites(){
     const context=wedgeContext||btn.dataset.groupSection||btn.closest('.subhead')?.childNodes?.[0]?.textContent?.trim()||'';
     const stooqUrl=host?.querySelector('a.stooq-chart-link')?.href||btn.closest('td')?.querySelector('a.stooq-chart-link')?.href||'';
     const percentMatch=String(card?.innerText||'').match(/(?:near\s*61\.8\D*)?(\d+(?:[.,]\d+)?)%/i);
-    occurrences.push({ticker,technique:techniqueFor(btn),market,label:(btn.dataset.groupLabel||ticker).trim(),context,cmd:btn.dataset.cmd,stooqUrl,direction:(host?.dataset?.trojDirection||'').toLowerCase(),is3p:!!sourceTable,columnIndex,columnHeader,percent:percentMatch?percentMatch[1].replace(',','.')+'%':''});
+    occurrences.push({ticker,technique:techniqueFor(btn),market,label:favoriteInstrumentLabel(ticker),context,cmd:btn.dataset.cmd,stooqUrl,direction:(host?.dataset?.trojDirection||'').toLowerCase(),is3p:!!sourceTable,columnIndex,columnHeader,percent:percentMatch?percentMatch[1].replace(',','.')+'%':''});
   });
   const uniqueAll=[...new Map(occurrences.map(o=>[[o.ticker,o.technique,o.is3p?o.columnIndex:'regular',o.direction].join('|'),o])).values()];
   const activeMarket=(document.getElementById('market')?.value||'').trim();
   const activeDirection=(document.getElementById('tab-favorites')?.dataset?.trojDirection||'all').toLowerCase();
   const unique=uniqueAll.filter(o=>(!activeMarket||String(o.market).toUpperCase()===activeMarket.toUpperCase())&&(activeDirection==='all'||o.direction===activeDirection));
-  const chartButton=o=>'<a class="btn stockhelper-chart-btn" href="/open-chart?command='+encodeURIComponent(o.cmd)+'&amp;favoriteTicker='+encodeURIComponent(o.ticker)+'" target="_blank" rel="noopener" data-favorite-ticker="'+escapeFavoriteHtml(o.ticker)+'" data-cmd="'+String(o.cmd).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">📊</a>';
+  const chartButton=o=>'<a class="btn stockhelper-chart-btn" href="/open-chart?command='+encodeURIComponent(o.cmd)+'&amp;favoriteTicker='+encodeURIComponent(o.ticker)+'" target="_blank" rel="noopener" data-favorite-ticker="'+escapeFavoriteHtml(o.ticker)+'" data-group-label="'+escapeFavoriteHtml(o.label)+'" data-group-section="Favorites" data-cmd="'+String(o.cmd).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">📊</a>';
   const stooqLink=o=>o.stooqUrl?'<a class="btn stooq-chart-link" href="'+escapeFavoriteHtml(o.stooqUrl)+'" target="_blank" rel="noopener" title="Open stooq chart">📈</a>':'';
   const star=o=>'<button class="favorite-star active" data-ticker="'+o.ticker+'" onclick="toggleFavorite(\''+o.ticker+'\')" title="Remove from favorites">★</button>';
   const direction=o=>o.direction==="long"?'<span class="fibo-arrow fibo-arrow-long" title="Long" aria-label="Long">↗</span>':o.direction==="short"?'<span class="fibo-arrow fibo-arrow-short" title="Short" aria-label="Short">↘</span>':'';

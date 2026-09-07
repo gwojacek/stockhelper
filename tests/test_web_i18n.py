@@ -111,6 +111,9 @@ def test_chart_has_two_candle_percent_difference_tool():
     assert 'id="tool-percent-diff"' in chart_source
     assert "activeTool === 'percent-diff'" in chart_source
     assert "Price difference" in chart_source
+    assert "rising ? percentDiffAnchor.low : percentDiffAnchor.high" in chart_source
+    assert "rising ? Number(row.high) : Number(row.low)" in chart_source
+    assert "fxMicroBearishHarami" in chart_source
 
 
 def test_favorites_and_journal_are_fully_localized():

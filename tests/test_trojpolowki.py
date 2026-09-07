@@ -1407,11 +1407,15 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "!threePTickers.has(o.ticker)" in text
     assert "const uniqueAll=[...new Map(occurrences.map" in text
     assert "o.ticker,o.technique,o.is3p?o.columnIndex:'regular',o.direction" in text
+    assert "label:favoriteInstrumentLabel(ticker)" in text
+    assert 'data-group-label="\'+escapeFavoriteHtml(o.label)' in text
+    assert "openFavoriteGroupCharts(this)" in text
     assert "Favorites not classified anywhere now" in text
     assert "No unclassified favorites" in text
     assert "parts.push('<section class=\"favorites-technique favorites-unclassified\"" in text
     assert "const classifiedTickers=new Set(uniqueAll.map(o=>o.ticker))" in text
-    assert "const unclassified=activeMarket?[]:[...fav].filter(ticker=>!classifiedTickers.has(ticker))" in text
+    assert "const unclassified=[...fav].filter(ticker=>!classifiedTickers.has(ticker)" in text
+    assert "FAVORITE_MARKETS[ticker]||'OTHER'" in text
     assert "const FAVORITE_INSTRUMENT_NAMES=" in text
     assert "function favoriteInstrumentLabel(ticker)" in text
     assert "label:favoriteInstrumentLabel(ticker)" in text

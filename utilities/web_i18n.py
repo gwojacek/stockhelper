@@ -485,7 +485,8 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 .troj-cell-card:has(.favorite-star.active){{border-color:rgba(250,204,21,.58)!important;border-width:2px}}
 .favorites-panel .favorite-card{{border-color:rgba(51,65,85,.95)!important}}
 .favorite-highlights-off #tab-allsearch table.data tr,.favorite-highlights-off #tab-wedges table.data tr{{outline:none!important}}
-.favorite-highlights-off .troj-cell-card{{border-color:#334155!important;border-width:1px!important}}
+body.favorite-highlights-off .troj-section .troj-cell-card{{border-color:#334155!important;border-width:1px!important;box-shadow:none!important}}
+body.favorite-highlights-off .favorite-star.active{{filter:none!important}}
 .favorite-clear-btn{{margin-left:8px!important;border:1px solid rgba(251,191,36,.7)!important;border-radius:8px!important;background:rgba(120,53,15,.32)!important;color:#fef3c7!important;font-size:12px!important;font-weight:900!important;padding:5px 9px!important}}
 .favorite-fibo-percent{{display:block;margin-top:2px;color:#facc15;font-size:11px;font-weight:900}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
