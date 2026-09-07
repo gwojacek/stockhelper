@@ -116,6 +116,7 @@ def test_chart_has_two_candle_percent_difference_tool():
     assert "fxMicroBearishHarami" in chart_source
     assert 'id="line-color-toggle"' in chart_source
     assert 'class="line-color-menu"' in chart_source
+    assert 'class="line-tool-group"' in chart_source
 
 
 def test_favorites_and_journal_are_fully_localized():

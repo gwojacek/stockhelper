@@ -1411,6 +1411,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "favoriteMarketIcon(market,ticker)" in text
     assert 'data-group-label="\'+escapeFavoriteHtml(o.label)' in text
     assert 'data-group-market="\'+escapeFavoriteHtml(o.market)' in text
+    assert 'data-group-section="\'+escapeFavoriteHtml(o.groupSection' in text
+    assert "technique==='Ichimoku'?'☁️ ':'📐 '" in text
+    assert ".favorite-highlight-toggle.active" in text
     assert "openFavoriteGroupCharts(this)" in text
     assert "Favorites not classified anywhere now" in text
     assert "No unclassified favorites" in text
@@ -1565,7 +1568,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-direction='all'" not in text
     assert "const next=(document.body.dataset.trojDirection||'all')===requested?'all':requested" in text
     assert "document.querySelectorAll('.tab-panel,.troj-section,.direction-filter-section').forEach(el=>el.dataset.trojDirection=next)" in text
-    assert "b.dataset.direction===next" in text
+    assert "b.dataset.direction===value" in text
     assert "card.dataset.market" in text
     assert "card.style.display=cardHit?'':'none'" in text
     assert "const visible=[];const hidden=[]" in text
@@ -1981,6 +1984,7 @@ def test_market_filter_is_applied_to_favorite_occurrences():
     source = Path("run").read_text(encoding="utf-8")
 
     assert "const activeMarket=(document.getElementById('market')?.value||'').trim();" in source
-    assert "const unique=activeMarket?uniqueAll.filter(o=>o.market===activeMarket):uniqueAll;" in source
-    assert "const unclassified=activeMarket?[]:" in source
+    assert "String(o.market).toUpperCase()===activeMarket.toUpperCase()" in source
+    assert "activeDirection==='all'||o.direction===activeDirection" in source
+    assert "!activeMarket||String(FAVORITE_MARKETS[ticker]||'OTHER').toUpperCase()===activeMarket.toUpperCase()" in source
     assert "if(typeof renderFavorites==='function')renderFavorites()" in source

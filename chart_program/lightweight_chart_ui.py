@@ -590,7 +590,10 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
-    .line-color-picker {{ position:relative; }}
+    .line-tool-group {{ display:inline-flex; align-items:stretch; gap:0; }}
+    .line-tool-group #tool-line {{ border-radius:7px 0 0 7px; }}
+    .line-color-picker {{ position:relative; display:inline-flex; margin-left:-1px; }}
+    .line-color-picker #line-color-toggle {{ border-radius:0 7px 7px 0; min-width:34px; padding-left:8px; padding-right:8px; }}
     .line-color-menu {{ display:none; position:absolute; z-index:30; top:calc(100% + 5px); left:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
     .line-color-picker.open .line-color-menu {{ display:flex; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }}
@@ -673,7 +676,7 @@ class LightweightChartLevelSelectorUI:
       <h3>Interactive Level Selector: {self.symbol}</h3>
       <div class="level-grid" id="level-buttons"></div>
       <div class="toolbar">
-        <button id="tool-line">Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">🎨</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span>
+        <span class="line-tool-group"><button id="tool-line">Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">🎨</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
         <button id="tool-fib">Fib 61.8</button>
         <button id="tool-half">Half→SL</button>
         <button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button>

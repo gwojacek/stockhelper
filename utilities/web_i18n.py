@@ -491,6 +491,7 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 body.favorite-highlights-off .troj-section .troj-cell-card{{border-color:#334155!important;border-width:1px!important;box-shadow:none!important}}
 body.favorite-highlights-off .favorite-star.active{{filter:none!important}}
 .favorite-clear-btn{{margin-left:8px!important;border:1px solid rgba(251,191,36,.7)!important;border-radius:8px!important;background:rgba(120,53,15,.32)!important;color:#fef3c7!important;font-size:12px!important;font-weight:900!important;padding:5px 9px!important}}
+.favorite-highlight-toggle.active{{border-color:#facc15!important;background:linear-gradient(135deg,#a16207,#ca8a04)!important;color:#fffbea!important;box-shadow:0 0 0 2px rgba(250,204,21,.22),0 5px 16px rgba(161,98,7,.3)!important}}
 .favorite-fibo-percent{{display:block;margin-top:2px;color:#facc15;font-size:11px;font-weight:900}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}
 </style>
