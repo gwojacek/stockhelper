@@ -1988,3 +1988,24 @@ def test_market_filter_is_applied_to_favorite_occurrences():
     assert "activeDirection==='all'||o.direction===activeDirection" in source
     assert "!activeMarket||String(FAVORITE_MARKETS[ticker]||'OTHER').toUpperCase()===activeMarket.toUpperCase()" in source
     assert "if(typeof renderFavorites==='function')renderFavorites()" in source
+
+
+def test_report_supports_persistent_orange_instrument_coloring():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "id='instrument-color-btn'" in source
+    assert "stockhelper.colored-instruments.v1" in source
+    assert "function toggleInstrumentColorMode(btn)" in source
+    assert "tr.instrument-colored>td{background:rgba(251,146,60,.16)!important}" in source
+    assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
+
+
+def test_early_breakout_label_explains_cutoff_basis():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "four-month wait is measured from the preceding breakout" in source
+
+
+def test_fibo_chart_shades_the_anchor_formation_area():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "function drawFiboAnchorBackground(ctx)" in source
+    assert "rgba(148,163,184,0.075)" in source
+    assert "drawFiboAnchorBackground(ctx);" in source

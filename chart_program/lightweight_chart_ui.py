@@ -2593,6 +2593,25 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function drawFiboAnchorBackground(ctx) {{
+    const groups = new Map();
+    drawnObjects.forEach(obj => {{
+      if (!obj?.group_id || hiddenLegendKeys.has(`fib-group:${{obj.group_id}}`)) return;
+      if (obj.type === 'fib-boundary') groups.set(obj.group_id, obj);
+    }});
+    groups.forEach(boundary => {{
+      const x0 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x0).slice(0, 10)) : null;
+      const x1 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x1).slice(0, 10)) : null;
+      const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y0)) : null;
+      const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y1)) : null;
+      if (![x0, x1, y0, y1].every(Number.isFinite)) return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(148,163,184,0.075)';
+      ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+      ctx.restore();
+    }});
+  }}
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const chartEl = $('chart');
@@ -2606,6 +2625,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
+    drawFiboAnchorBackground(ctx);
     if (!levels.__show_ichimoku__) {{ drawScannerHighlights(ctx); drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,
