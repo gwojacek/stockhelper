@@ -252,3 +252,9 @@ def test_language_controls_are_injected_into_all_web_views():
     assert "language_controls_html(show_controls=False)" in journal_source
     assert "language_controls_html(show_controls=False)" in chart_source
     assert "🇬🇧 EN" not in language_controls_html(show_controls=False)
+
+
+def test_favorite_clear_button_uses_neutral_compact_button_styling():
+    html = language_controls_html()
+    assert ".favorite-clear-btn{margin-left:8px!important;min-width:28px" in html
+    assert "background:rgba(120,53,15,.32)" not in html

@@ -1412,6 +1412,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert 'data-group-section="\'+escapeFavoriteHtml(o.groupSection' in text
     assert "technique==='Ichimoku'?'☁️ ':'📐 '" in text
     assert ".favorite-highlight-toggle.active" in text
+    assert "class='btn compactbtn favorite-clear-btn'" in text
+    assert "onclick='clearAllFavorites()'>🗑</button>" in text
+    assert "🗑 Clear favorites" not in text
     assert "openFavoriteGroupCharts(this)" in text
     assert "Favorites not classified anywhere now" in text
     assert "No unclassified favorites" in text
