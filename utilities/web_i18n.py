@@ -32,8 +32,11 @@ POLISH_TRANSLATIONS = {
     "Add to favorites": "Dodaj do ulubionych",
     "Remove from favorites": "Usuń z ulubionych",
     "Clear all favorites": "Usuń wszystkie ulubione",
+    "Clear favorites": "Wyczyść ulubione",
     "Clear all favorites?": "Usunąć wszystkie ulubione?",
     "Open favorite charts": "Otwórz wykresy ulubionych",
+    "Highlighting: ON": "Wyróżnianie: WŁ.",
+    "Highlighting: OFF": "Wyróżnianie: WYŁ.",
     "Open journal": "Otwórz dziennik",
     "Show": "Pokaż",
     "Hide": "Ukryj",
@@ -481,6 +484,8 @@ def language_controls_html(*, show_controls: bool = True) -> str:
 #tab-allsearch table.data tr:has(.favorite-star.active),#tab-wedges table.data tr:has(.favorite-star.active){{outline:2px solid rgba(250,204,21,.58);outline-offset:-2px}}
 .troj-cell-card:has(.favorite-star.active){{border-color:rgba(250,204,21,.58)!important;border-width:2px}}
 .favorites-panel .favorite-card{{border-color:rgba(51,65,85,.95)!important}}
+.favorite-highlights-off #tab-allsearch table.data tr,.favorite-highlights-off #tab-wedges table.data tr{{outline:none!important}}
+.favorite-highlights-off .troj-cell-card{{border-color:#334155!important;border-width:1px!important}}
 .favorite-clear-btn{{margin-left:8px!important;border:1px solid rgba(251,191,36,.7)!important;border-radius:8px!important;background:rgba(120,53,15,.32)!important;color:#fef3c7!important;font-size:12px!important;font-weight:900!important;padding:5px 9px!important}}
 .favorite-fibo-percent{{display:block;margin-top:2px;color:#facc15;font-size:11px;font-weight:900}}
 .troj-table th,.troj-table td{{overflow-wrap:anywhere;word-break:normal}}

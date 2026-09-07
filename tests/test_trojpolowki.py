@@ -1405,11 +1405,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "<td><strong>'+escapeFavoriteHtml(o.label)" in text
     assert "const threePTickers=new Set" in text
     assert "!threePTickers.has(o.ticker)" in text
-    assert "const favoriteOccurrenceRank=" in text
-    assert "const byTicker=new Map()" in text
-    assert "byTicker.set(o.ticker,{rank,items:new Map()})" in text
-    assert "const setupKey=o.is3p?[o.technique,o.columnIndex,o.direction].join('|'):'regular'" in text
-    assert "flatMap(group=>[...group.items.values()])" in text
+    assert "const uniqueAll=[...new Map(occurrences.map" in text
+    assert "o.ticker,o.technique,o.is3p?o.columnIndex:'regular',o.direction" in text
     assert "Favorites not classified anywhere now" in text
     assert "No unclassified favorites" in text
     assert "parts.push('<section class=\"favorites-technique favorites-unclassified\"" in text
