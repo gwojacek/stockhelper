@@ -2593,6 +2593,54 @@ class LightweightChartLevelSelectorUI:
     }});
   }}
 
+  function drawFiboAnchorBackground(ctx) {{
+    const groups = new Map();
+    drawnObjects.forEach(obj => {{
+      if (!obj?.group_id || !['fib', 'fib-boundary'].includes(obj.type) || hiddenLegendKeys.has(`fib-group:${{obj.group_id}}`)) return;
+      if (!groups.has(obj.group_id)) groups.set(obj.group_id, []);
+      groups.get(obj.group_id).push(obj);
+    }});
+    groups.forEach(items => {{
+      const boundary = items.find(obj => obj.type === 'fib-boundary');
+      if (!boundary) return;
+      const zero = items.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio)) < 0.002);
+      const hundred = items.find(obj => obj.type === 'fib' && Math.abs(Number(obj.ratio) - 1) < 0.002);
+      // The second selected swing starts the forward-looking retracement zone.
+      // Its vertical bounds are exactly the 0% and 100% Fibonacci lines.
+      const startX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x1).slice(0, 10)) : null;
+      const upperPrice = Math.max(Number(zero?.price ?? zero?.y0 ?? boundary.y0), Number(hundred?.price ?? hundred?.y0 ?? boundary.y1));
+      const lowerPrice = Math.min(Number(zero?.price ?? zero?.y0 ?? boundary.y0), Number(hundred?.price ?? hundred?.y0 ?? boundary.y1));
+      const upperY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(upperPrice) : null;
+      const lowerY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(lowerPrice) : null;
+      if (![startX, upperY, lowerY].every(Number.isFinite)) return;
+      const anchorX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x0).slice(0, 10)) : null;
+      const left = Math.max(0, startX);
+      const right = $('chart-wrap').clientWidth;
+      if (right <= left || !Number.isFinite(anchorX)) return;
+      const top = Math.min(upperY, lowerY);
+      const bottom = Math.max(upperY, lowerY);
+      const firstY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y0)) : null;
+      const secondY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y1)) : null;
+      ctx.save();
+      ctx.fillStyle = 'rgba(148,163,184,0.075)';
+      // Fill the impulse triangle between both anchors, then the retracement
+      // rectangle forward. Both shapes are clipped to the 0%-100% price band.
+      ctx.beginPath();
+      ctx.rect(0, top, right, bottom - top);
+      ctx.clip();
+      if ([anchorX, firstY, secondY].every(Number.isFinite)) {{
+        ctx.beginPath();
+        ctx.moveTo(anchorX, firstY);
+        ctx.lineTo(startX, secondY);
+        ctx.lineTo(startX, firstY);
+        ctx.closePath();
+        ctx.fill();
+      }}
+      ctx.fillRect(left, top, right - left, bottom - top);
+      ctx.restore();
+    }});
+  }}
+
   function drawCloud() {{
     const canvas = $('cloud-overlay');
     const chartEl = $('chart');
@@ -2606,6 +2654,7 @@ class LightweightChartLevelSelectorUI:
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
+    drawFiboAnchorBackground(ctx);
     if (!levels.__show_ichimoku__) {{ drawScannerHighlights(ctx); drawWedgeStraightLines(ctx); drawWedgeTouchPoints(ctx); drawValuePointers(ctx); drawLineObjectHandles(ctx); drawDomChartIcons(); return; }}
     const pairs = cloudPairs().map(p => ({{
       x: chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(p.time) : null,

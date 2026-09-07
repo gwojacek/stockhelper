@@ -1286,9 +1286,7 @@ def test_early_rebreakout_in_position_table_is_not_playable():
     )
 
     assert mod._ichimoku_qualification_state(row) == "waiting_first"
-    assert mod._ichimoku_early_breakout_html(row) == (
-        "<strong style='color:#dc2626'>NO PLAY UNTIL 2026-08-28</strong>"
-    )
+    assert "NO PLAY UNTIL 2026-08-28" in mod._ichimoku_early_breakout_html(row)
 
 
 def test_3p_ichimoku_returns_early_breakout_after_cutoff(tmp_path: Path):
@@ -1414,6 +1412,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert 'data-group-section="\'+escapeFavoriteHtml(o.groupSection' in text
     assert "technique==='Ichimoku'?'☁️ ':'📐 '" in text
     assert ".favorite-highlight-toggle.active" in text
+    assert "class='btn compactbtn favorite-clear-btn'" in text
+    assert "onclick='clearAllFavorites()'>🗑</button>" in text
+    assert "🗑 Clear favorites" not in text
     assert "openFavoriteGroupCharts(this)" in text
     assert "Favorites not classified anywhere now" in text
     assert "No unclassified favorites" in text
@@ -1988,3 +1989,55 @@ def test_market_filter_is_applied_to_favorite_occurrences():
     assert "activeDirection==='all'||o.direction===activeDirection" in source
     assert "!activeMarket||String(FAVORITE_MARKETS[ticker]||'OTHER').toUpperCase()===activeMarket.toUpperCase()" in source
     assert "if(typeof renderFavorites==='function')renderFavorites()" in source
+
+
+def test_report_supports_persistent_orange_instrument_coloring():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "id='instrument-color-btn'" in source
+    hero = source[source.index("html_parts.append(\"<div class='troj-hero'"):source.index("checked_lists_html =")]
+    assert hero.index("🗂 Checked") < hero.index("🖌 Color instrument")
+    assert "stockhelper.colored-instruments.v1" in source
+    assert "function toggleInstrumentColorMode(btn)" in source
+    assert "tr.instrument-colored>td{background:#968c6f!important}" in source
+    assert "body .instrument-colored :not(.btn):not(button){color:#1f2937!important}" in source
+    assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
+    assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
+    assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
+
+
+def test_early_breakout_label_explains_cutoff_basis():
+    source = Path("run").read_text(encoding="utf-8")
+    assert "A new breakout after at least four months" in source
+
+
+def test_fibo_chart_shades_the_anchor_formation_area():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    assert "function drawFiboAnchorBackground(ctx)" in source
+    assert "rgba(148,163,184,0.075)" in source
+    assert "String(boundary.x1).slice(0, 10)" in source
+    assert "const upperPrice = Math.max" in source
+    assert "const lowerPrice = Math.min" in source
+    assert "const right = $('chart-wrap').clientWidth" in source
+    assert "ctx.moveTo(anchorX, firstY)" in source
+    assert "ctx.lineTo(startX, secondY)" in source
+    assert "ctx.rect(0, top, right, bottom - top)" in source
+    assert "drawFiboAnchorBackground(ctx);" in source
+
+
+def test_four_month_previous_respect_overrides_stale_early_breakout_status():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker="BMC",
+        status="breakout_confirmed", dates={"flip_date": "2026-09-04"},
+        metrics={
+            "previous_respect_months": "4.4",
+            "qualification_status": "early_breakout_waiting_until_4m",
+            "valid_retests_from_date": "2027-01-03",
+            "retest_count": "0",
+        },
+    )
+
+    assert mod._ichimoku_qualification_state(row) == "standard"
+    assert mod._ichimoku_early_breakout_html(row) == "—"
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "if previous_respect_months < 4.0 and flip_ts < four_month_date" in scanner_source

@@ -4153,7 +4153,7 @@ def _flip_after_long_respect(df: pd.DataFrame, min_days: int = 80, allow_equal_t
     if previous_breakout_idx is not None:
         previous_breakout_ts = pd.to_datetime(df.iloc[previous_breakout_idx]["Date"])
         four_month_date = previous_breakout_ts + pd.DateOffset(months=4)
-        if flip_ts < four_month_date and end_ts < four_month_date:
+        if previous_respect_months < 4.0 and flip_ts < four_month_date and end_ts < four_month_date:
             flip.valid_retests_from_date = four_month_date.strftime("%Y-%m-%d")
             flip.qualification_status = "early_breakout_waiting_until_4m"
     return flip
