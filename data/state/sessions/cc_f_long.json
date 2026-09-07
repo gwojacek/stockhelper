@@ -1,11 +1,85 @@
 {
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "lot_cost": 12379.74,
   "pip_value": 36.19,
-  "__journal_source_technique__": "Ichimoku",
-  "drawn_objects": [],
-  "__saved_fibo_by_user__": false,
-  "__scanner_breakout_date__": "2026-05-06",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "0"
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (6777.0)",
+      "x0": "2026-08-31",
+      "x1": "2034-07-23",
+      "y0": 6777.0,
+      "y1": 6777.0,
+      "price": 6777.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (5632.146)",
+      "x0": "2026-07-31",
+      "x1": "2034-07-23",
+      "y0": 5632.146,
+      "y1": 5632.146,
+      "price": 5632.146,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (5278.5)",
+      "x0": "2026-07-22",
+      "x1": "2034-07-23",
+      "y0": 5278.5,
+      "y1": 5278.5,
+      "price": 5278.5,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (4924.854)",
+      "x0": "2026-07-14",
+      "x1": "2034-07-23",
+      "y0": 4924.854,
+      "y1": 4924.854,
+      "price": 4924.854,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (3780.0)",
+      "x0": "2026-06-11",
+      "x1": "2034-07-23",
+      "y0": 3780.0,
+      "y1": 3780.0,
+      "price": 3780.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-06-11",
+      "x1": "2026-08-31",
+      "y0": 3780.0,
+      "y1": 6777.0,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
 }

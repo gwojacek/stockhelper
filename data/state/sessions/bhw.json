@@ -85,6 +85,8 @@
   "__saved_fibo_by_user__": false,
   "__scanner_breakout_date__": "2026-09-01",
   "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "0",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-09-03",
+  "__scanner_latest_retest_pattern__": "bearish_engulfing",
   "__scanner_previous_respect_months__": "5.0"
 }
