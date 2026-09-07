@@ -1999,6 +1999,7 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "stockhelper.colored-instruments.v1" in source
     assert "function toggleInstrumentColorMode(btn)" in source
     assert "tr.instrument-colored>td{background:#968c6f!important}" in source
+    assert "body .instrument-colored :not(.btn):not(button){color:#1f2937!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
     assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
     assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
