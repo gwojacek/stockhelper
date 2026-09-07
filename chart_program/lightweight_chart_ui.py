@@ -2613,12 +2613,30 @@ class LightweightChartLevelSelectorUI:
       const upperY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(upperPrice) : null;
       const lowerY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(lowerPrice) : null;
       if (![startX, upperY, lowerY].every(Number.isFinite)) return;
+      const anchorX = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x0).slice(0, 10)) : null;
       const left = Math.max(0, startX);
       const right = $('chart-wrap').clientWidth;
-      if (right <= left) return;
+      if (right <= left || !Number.isFinite(anchorX)) return;
+      const top = Math.min(upperY, lowerY);
+      const bottom = Math.max(upperY, lowerY);
+      const firstY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y0)) : null;
+      const secondY = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y1)) : null;
       ctx.save();
       ctx.fillStyle = 'rgba(148,163,184,0.075)';
-      ctx.fillRect(left, Math.min(upperY, lowerY), right - left, Math.abs(lowerY - upperY));
+      // Fill the impulse triangle between both anchors, then the retracement
+      // rectangle forward. Both shapes are clipped to the 0%-100% price band.
+      ctx.beginPath();
+      ctx.rect(0, top, right, bottom - top);
+      ctx.clip();
+      if ([anchorX, firstY, secondY].every(Number.isFinite)) {{
+        ctx.beginPath();
+        ctx.moveTo(anchorX, firstY);
+        ctx.lineTo(startX, secondY);
+        ctx.lineTo(startX, firstY);
+        ctx.closePath();
+        ctx.fill();
+      }}
+      ctx.fillRect(left, top, right - left, bottom - top);
       ctx.restore();
     }});
   }}
