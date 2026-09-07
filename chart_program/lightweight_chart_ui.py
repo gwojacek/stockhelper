@@ -528,7 +528,12 @@ class LightweightChartLevelSelectorUI:
     .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
     .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
-    .instrument-hero {{ display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; }}
+    .instrument-card {{ position:relative; }}
+    .instrument-hero {{ display:grid; grid-template-columns:42px minmax(0,1fr) 30px; gap:10px; align-items:center; margin-bottom:8px; }}
+    .instrument-card-toggle {{ width:30px; height:30px; padding:0; border-radius:9px; font-size:15px; line-height:1; transition:transform .16s ease,background .16s ease; }}
+    .instrument-card.collapsed .instrument-card-toggle {{ transform:rotate(-90deg); }}
+    .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
+    .instrument-card.collapsed .instrument-card-body {{ display:none; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
@@ -704,12 +709,13 @@ class LightweightChartLevelSelectorUI:
       </section>
     </main>
     <aside class="side">
-      <section class="side-card instrument-card">
+      <section class="side-card instrument-card" id="instrument-card">
         <div class="instrument-hero">
           <div class="hero-icon">↗</div>
           <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button></div><div class="identity-sub">Name / Ticker</div></div>
+          <button class="instrument-card-toggle" id="instrument-card-toggle" type="button" aria-controls="instrument-card-body" aria-expanded="true" title="Collapse instrument details">⌄</button>
         </div>
-        <div class="meta-grid">
+        <div class="meta-grid instrument-card-body" id="instrument-card-body">
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
@@ -798,6 +804,20 @@ class LightweightChartLevelSelectorUI:
   const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
   let scannerHighlightRects = [];
+
+  function setInstrumentCardCollapsed(collapsed) {{
+    const card=document.getElementById('instrument-card'),toggle=document.getElementById('instrument-card-toggle');
+    if(!card||!toggle)return;
+    card.classList.toggle('collapsed',collapsed);
+    toggle.setAttribute('aria-expanded',collapsed?'false':'true');
+    toggle.title=collapsed?'Expand instrument details':'Collapse instrument details';
+  }}
+  document.getElementById('instrument-card-toggle')?.addEventListener('click',()=>{{
+    const collapsed=!document.getElementById('instrument-card')?.classList.contains('collapsed');
+    setInstrumentCardCollapsed(collapsed);
+    try{{localStorage.setItem('stockhelper-instrument-card-collapsed',collapsed?'1':'0');}}catch(e){{}}
+  }});
+  try{{setInstrumentCardCollapsed(localStorage.getItem('stockhelper-instrument-card-collapsed')==='1');}}catch(e){{}}
 
   const chartInstrumentCurrency = () => {{
     const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();

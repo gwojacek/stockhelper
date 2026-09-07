@@ -159,6 +159,8 @@ POLISH_TRANSLATIONS = {
     "Yellow": "Żółty",
     "Purple": "Fioletowy",
     "Green": "Zielony",
+    "Collapse instrument details": "Zwiń szczegóły instrumentu",
+    "Expand instrument details": "Rozwiń szczegóły instrumentu",
     "Reset scanner": "Resetuj skaner",
     "Reset scanner drawings": "Resetuj rysunki skanera",
     "Selected values": "Wybrane wartości",
