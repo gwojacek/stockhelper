@@ -495,14 +495,29 @@ class LightweightChartLevelSelectorUI:
     .layout {{ display: grid; grid-template-columns: 1fr 430px; height: 100vh; }}
     .main {{ padding: 14px 0 14px 14px; min-width: 0; }}
     h3 {{ margin: 0 0 10px 0; }}
-    button {{ background: #1f2937; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 8px; cursor: pointer; font-weight: 700; }}
-    button.active {{ background: #2563eb; border-color: #2563eb; color: white; }}
-    .level-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }}
-    .toolbar {{ display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }}
-    .wedge-mini-btn {{ display:none; min-width:32px; padding:8px 6px; }}
+    button {{ background:linear-gradient(180deg,#17263b,#101d30); color:#e8eef8; border:1px solid #2d4663; border-radius:9px; padding:9px 12px; cursor:pointer; font-weight:800; box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }}
+    button:hover {{ border-color:#4c78a8; background:linear-gradient(180deg,#1d314c,#13253d); }}
+    button.active {{ background:linear-gradient(180deg,#1681ff,#0560db); border-color:#4da3ff; color:white; box-shadow:0 0 18px rgba(24,129,255,.32),inset 0 1px 0 rgba(255,255,255,.25); }}
+    .toolbar {{ display:flex; align-items:stretch; gap:0; margin:0 0 10px; padding:13px 14px; border:1px solid #29415f; border-radius:14px; background:linear-gradient(135deg,rgba(13,29,49,.98),rgba(5,17,32,.98)); box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 14px 35px rgba(0,0,0,.28); overflow-x:auto; }}
+    .chart-control-title {{ display:flex; align-items:center; gap:9px; margin:0 0 8px; color:#f1f5f9; font-size:18px; font-weight:900; letter-spacing:-.015em; }}
+    .chart-control-title::before {{ content:'▥'; color:#3b9cff; font-size:23px; }}
+    .chart-control-title strong {{ color:#3b9cff; }}
+    .toolbar-group {{ display:flex; flex-direction:column; min-width:max-content; padding:0 17px; border-left:1px solid #29415f; }}
+    .toolbar-group:first-child {{ padding-left:0; border-left:0; }}
+    .toolbar-group:last-child {{ padding-right:0; }}
+    .toolbar-label {{ color:#b8c9df; font-size:11px; font-weight:900; letter-spacing:.045em; text-transform:uppercase; }}
+    .toolbar-hint {{ margin:1px 0 9px; color:#7590b2; font-size:11px; font-style:italic; }}
+    .toolbar-actions,.level-grid {{ display:flex; align-items:stretch; gap:7px; min-height:38px; }}
+    .level-grid button {{ min-width:86px; }}
+    #analysis-buttons button {{ min-width:112px; }}
+    .toolbar button {{ white-space:nowrap; }}
+    .tool-icon {{ margin-right:6px; color:#cfe4ff; font-size:15px; }}
+    .wedge-mini-btn {{ display:none; min-width:38px; padding:8px 10px; font-size:18px; line-height:1; }}
+    .toolbar-spacer {{ flex:1 1 auto; min-width:0; }}
+    @media(max-width:1100px) {{ .toolbar {{ border-radius:10px; }} .toolbar-group {{ padding:0 11px; }} }}
     #chart-wrap {{ position: relative; height: calc(100vh - 230px); min-height: 360px; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; }}
     body.close-mode .layout {{ grid-template-columns: 1fr; }}
-    body.close-mode .side, body.close-mode .toolbar, body.close-mode .level-grid, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer, body.close-mode .main>h3 {{ display:none !important; }}
+    body.close-mode .side, body.close-mode .toolbar, body.close-mode .level-grid, body.close-mode .chart-control-title, body.close-mode #cursor-box, body.close-mode #chart-legend, body.close-mode #calc-drawer, body.close-mode .main>h3 {{ display:none !important; }}
     body.close-mode .main {{ padding:14px; }}
     body.close-mode #chart-wrap {{ height:calc(100vh - 96px); min-height:520px; border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.35),0 24px 80px rgba(0,0,0,.45); }}
     #close-mode-panel {{ display:none; align-items:center; gap:10px; margin:0 0 10px; padding:10px 12px; border:1px solid rgba(34,197,94,.45); border-radius:14px; background:linear-gradient(135deg,rgba(22,101,52,.30),rgba(15,23,42,.92)); }}
@@ -680,21 +695,18 @@ class LightweightChartLevelSelectorUI:
   {language_ui}
   <div class="layout">
     <main class="main">
-      <h3>Interactive Level Selector: {self.symbol}</h3>
-      <div class="level-grid" id="level-buttons"></div>
+      <div class="chart-control-title">Interactive Level Selector: <strong>{self.symbol}</strong></div>
       <div class="toolbar">
-        <span class="line-tool-group"><button id="tool-line">Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">🎨</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
-        <button id="tool-fib">Fib 61.8</button>
-        <button id="tool-half">Half→SL</button>
-        <button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button>
-        <button id="ichimoku-toggle">Ichimoku</button>
-        <button id="reset-all" style="margin-left:auto">Reset all</button>
-        <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
-        <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
-        <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line">↑</button>
-        <button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line">↓</button>
-        <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
-        <button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button>
+        <section class="toolbar-group"><span class="toolbar-label">Levels</span><span class="toolbar-hint">Select key price levels</span><div class="level-grid" id="level-buttons"></div></section>
+        <section class="toolbar-group"><span class="toolbar-label">Analysis</span><span class="toolbar-hint">Validate and confirm levels</span><div class="toolbar-actions" id="analysis-buttons"></div></section>
+        <section class="toolbar-group"><span class="toolbar-label">Tools</span><span class="toolbar-hint">Drawing &amp; measurement tools</span><div class="toolbar-actions">
+          <span class="line-tool-group"><button id="tool-line"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">●⌄</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
+          <button id="tool-fib">Fib 61.8</button><button id="tool-half">Half→SL</button><button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button><button id="ichimoku-toggle">Ichimoku</button>
+        </div></section>
+        <section class="toolbar-group" id="scanner-toolbar-group"><span class="toolbar-label">Scanner</span><span class="toolbar-hint">Find chart patterns</span><div class="toolbar-actions">
+          <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line" aria-label="Find a new upper wedge line">↑</button><button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">△ Find new wedge</button><button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line" aria-label="Find a new lower wedge line">↓</button><button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset Wedges</button>
+        </div></section>
+        <section class="toolbar-group"><span class="toolbar-label">Actions</span><span class="toolbar-hint">Reset or export chart</span><div class="toolbar-actions"><button id="reset-all">Reset all</button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button><button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button></div></section>
       </div>
       <div id="cursor-box">D:---- -- -- O:-- H:-- L:-- C:-- DAY:-- CURSOR:--</div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
@@ -2934,7 +2946,7 @@ class LightweightChartLevelSelectorUI:
     const resetScannerBtn = $('reset-scanner-drawings');
     if (resetScannerBtn) {{
       resetScannerBtn.style.display = initialScannerDrawnObjects.length ? 'block' : 'none';
-      resetScannerBtn.textContent = initialScannerDrawnObjects.some(o => o.group_id === 'auto-fibo') ? 'Reset Fibo' : 'Reset scanner';
+      resetScannerBtn.textContent = initialScannerDrawnObjects.some(o => o.group_id === 'auto-fibo') ? 'Reset Fibo' : 'Reset Wedges';
     }}
     const hasWedgeObjects = drawnObjects.some(isWedgeLineObject);
     const setupInfoBtn = $('setup-debug-btn');
@@ -3187,7 +3199,8 @@ class LightweightChartLevelSelectorUI:
     status.textContent = `${{instruments.length}} instruments with local data`;
   }}
 
-  seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.textContent = labels[field]; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; $('level-buttons').appendChild(b); }});
+  const levelButtonIcons = {{high:'↑',low:'↓',entry:'◎',stop_loss:'◇',check_zr_value_fibo_or_elevation:'⌕',line_cross_value:'⌁'}};
+  seq.forEach(field => {{ const b = document.createElement('button'); b.id = field + '-btn'; b.innerHTML = `<span class="tool-icon">${{levelButtonIcons[field] || '•'}}</span>${{String(labels[field] || field).replaceAll('_',' ')}}`; b.onclick = () => {{ clearPreviews(); const same = activeTool === 'level' && activeField === field; activeTool='level'; activeField=same ? null : field; lineAnchor=fibAnchor=halfAnchor=null; updatePanel(); }}; (['check_zr_value_fibo_or_elevation','line_cross_value'].includes(field) ? $('analysis-buttons') : $('level-buttons')).appendChild(b); }});
   setupInstrumentSwitcher();
   $('position-type').value = levels.position_type || 'long'; $('capital').value = levels.capital || 255000; $('calculation-currency').value = levels.calculation_currency || levels.currency || 'PLN'; setCalculationCurrencyButtons($('calculation-currency').value);
   loadSharedBalance();

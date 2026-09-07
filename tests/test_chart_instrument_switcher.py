@@ -44,6 +44,20 @@ def test_chart_has_save_and_save_close_actions():
     assert '@app.route("/save", methods=["POST"])' in source
 
 
+def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert 'class="chart-control-title">Interactive Level Selector:' in source
+    for label in ("Levels", "Analysis", "Tools", "Scanner", "Actions"):
+        assert f'class="toolbar-label">{label}</span>' in source
+    assert 'class="level-grid" id="level-buttons"' in source
+    assert 'id="analysis-buttons"' in source
+    assert "? 'Reset Fibo' : 'Reset Wedges'" in source
+    assert 'aria-label="Find a new upper wedge line">↑</button>' in source
+    assert 'aria-label="Find a new lower wedge line">↓</button>' in source
+    assert source.index('id="reset-all"') < source.index('id="download-chart-png"')
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
