@@ -12,6 +12,14 @@ def test_language_controls_are_in_report_toolbar_and_english_first():
     assert "stockhelper-language=${value}" in markup
     assert "MutationObserver" in markup
     assert ".top-choice-compact .top-choice-direction{width:92px!important" in markup
+    assert ".top-choice>h2,.top-choice>h3{margin:0;padding:13px 15px" in markup
+    assert ".top-choice-compact col.top-choice-stooq{width:112px!important}" in markup
+    assert ".top-choice-compact col.top-choice-chart{width:112px!important}" in markup
+    assert ".top-choice-compact th.chart-link-cell,.top-choice-compact th.chart-action-cell{min-width:112px!important" in markup
+    assert ".top-choice-compact td.chart-link-cell .btn" in markup
+    assert "window.translateStockhelperNode=translateNode" in markup
+    assert "window.stockhelperTranslateText=translate" in markup
+    assert ".favorite-fibo-percent" in markup
 
 
 def test_translation_tables_are_compiled_once_for_fast_polish_filter_updates():
@@ -33,11 +41,97 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Trade review": "Ocena transakcji",
         "Position calculator": "Kalkulator pozycji",
         "Download chart PNG": "Pobierz wykres PNG",
+        "Unable to calculate position.": "Nie można obliczyć pozycji.",
+        "Data required for calculation:": "Dane wymagane do obliczenia:",
+        "Copy Google Sheets HYPERLINK formula": "Kopiuj formułę HYPERLINK do Arkuszy Google",
+        "Open close-adjust chart": "Otwórz wykres korekty zamknięcia",
+        "Accept closing screenshot": "Zatwierdź zrzut zamknięcia",
+        "🟢 SOLD": "🟢 SPRZEDANO",
+        "Closing screenshot saved. Closing chart...": "Zapisano zrzut zamknięcia. Zamykanie wykresu...",
+        "Open stockhelper chart": "Otwórz wykres StockHelper",
+        "Open stooq chart": "Otwórz wykres Stooq",
+        "Ichimoku information": "Informacje Ichimoku",
     }
 
     for english, polish in expected.items():
         assert POLISH_TRANSLATIONS[english] == polish
     assert ENGLISH_NORMALIZATIONS["Brak wyników."] == "No results."
+
+
+def test_chart_calculation_error_explains_required_data_without_fetch_details():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "Data required for calculation:" in chart_source
+    assert "For Forex and commodities also provide lot cost and pip value." in chart_source
+    assert "Unable to calculate:</b>" not in chart_source
+    assert "label:polishCloseMode ? 'SPRZEDANO' : 'SOLD'" in chart_source
+
+
+def test_dynamic_favorites_are_translated_after_they_are_rendered():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert "window.translateStockhelperNode?.(root)" in report_source
+    assert "favoriteUiText(unclassifiedHelp)" in report_source
+    assert "stockhelper-favorite-i18n-fallback" in report_source
+    assert POLISH_TRANSLATIONS[
+        "Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results."
+    ].startswith("Zapisane ulubione")
+
+
+def test_missing_fibo_patterns_use_a_dash_in_report_columns():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert 'text.lower() in {"", "none", "nan", "null"}' in report_source
+    assert "html.escape(_display_pattern(r.pattern))" in report_source
+
+
+def test_fibo_board_uses_short_actionable_column_names():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert '"| 🚀 Strong impulse | ⚠️ Waiting 23.6→61.8 |' in report_source
+    assert 'return "🚀 Strong impulse"' in report_source
+    assert 'return "⚠️ Waiting 23.6→61.8"' in report_source
+    assert POLISH_TRANSLATIONS["Strong impulse"] == "Silny impuls"
+    assert POLISH_TRANSLATIONS["Waiting 23.6→61.8"] == "Oczekujące 23,6→61,8"
+
+
+def test_favorites_support_bulk_chart_open_clear_and_fibo_percentages():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert "Open favorite charts" in report_source
+    assert "clearAllFavorites" in report_source
+    assert "favorite-fibo-percent" in report_source
+    assert "btn.dataset.favoriteTicker||favoriteTicker(btn)" in report_source
+    assert "String(o.market).toUpperCase()===activeMarket.toUpperCase()" in report_source
+
+
+def test_chart_has_two_candle_percent_difference_tool():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert 'id="tool-percent-diff"' in chart_source
+    assert "activeTool === 'percent-diff'" in chart_source
+    assert "Price difference" in chart_source
+    assert "rising ? percentDiffAnchor.low : percentDiffAnchor.high" in chart_source
+    assert "rising ? Number(row.high) : Number(row.low)" in chart_source
+    assert "fxMicroBearishHarami" in chart_source
+    assert 'id="line-color-toggle"' in chart_source
+    assert 'class="line-color-menu"' in chart_source
+    assert 'class="line-tool-group"' in chart_source
+
+
+def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert chart_source.count('class="side-card-toggle"') == 3
+    assert 'data-card="instrument-card"' in chart_source
+    assert 'data-card="selected-card"' in chart_source
+    assert 'data-card="manual-card"' in chart_source
+    assert 'aria-controls="instrument-card-body"' in chart_source
+    assert "setSideCardCollapsed" in chart_source
+    assert "stockhelper-side-card-collapsed-" in chart_source
+    assert '<section class="side-card instrument-switcher-card">' in chart_source
+    assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
+    assert POLISH_TRANSLATIONS["Expand section"] == "Rozwiń sekcję"
 
 
 def test_favorites_and_journal_are_fully_localized():

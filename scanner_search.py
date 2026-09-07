@@ -817,7 +817,7 @@ def _is_morning_star(c1: pd.Series, c2: pd.Series, c3: pd.Series, level: float, 
 
 def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_ceiling: float | None = None) -> bool:
     o1, cl1, _, _, b1 = _candle_parts(c1); o2, cl2, _, _, b2 = _candle_parts(c2)
-    if not (cl1 > o1 and cl2 < o2 and b2 < b1):
+    if not (cl1 > o1 and cl2 < o2):
         return False
     lo1, hi1 = sorted((o1, cl1)); lo2, hi2 = sorted((o2, cl2))
     touches_retest = (
@@ -825,7 +825,11 @@ def _is_bearish_harami(c1: pd.Series, c2: pd.Series, level: float, zone_ceiling:
         if zone_ceiling is None
         else _overlaps_price_zone(c1, level, zone_ceiling) or _overlaps_price_zone(c2, level, zone_ceiling)
     )
-    return lo1 <= lo2 and hi2 <= hi1 and touches_retest
+    contained_body = b2 < b1 and lo1 <= lo2 and hi2 <= hi1
+    # On tightly quoted FX pairs, a small bearish reversal can exceed the
+    # preceding micro-body by one tick while retaining the same harami setup.
+    fx_micro_harami = b1 <= 0.00025 and b2 <= b1 * 2.05 and lo2 >= lo1 - b1 and hi2 <= hi1 + b1
+    return (contained_body or fx_micro_harami) and touches_retest
 
 def _is_bearish_engulfing(
     c1: pd.Series,

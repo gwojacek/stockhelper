@@ -5,128 +5,95 @@
   "pip_value": 18100.75,
   "drawn_objects": [
     {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (71.113)",
-      "x0": "2026-08-28",
-      "x1": "2034-07-20",
-      "y0": 71.113,
-      "y1": 71.113,
-      "price": 71.113,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-01-29",
+        "2026-08-28",
+        "2027-11-03"
+      ],
+      "y": [
+        121.643,
+        71.113,
+        -31.95481
+      ],
+      "x0": "2026-01-29",
+      "x1": "2027-11-03",
+      "y0": 121.643,
+      "y1": -31.95481,
+      "anchor_x": [
+        "2026-01-29",
+        "2026-08-28"
+      ],
+      "anchor_y": [
+        121.643,
+        71.113
+      ],
+      "price": -31.95481,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
     },
     {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (65.81542)",
-      "x0": "2026-08-10",
-      "x1": "2034-07-20",
-      "y0": 65.81542,
-      "y1": 65.81542,
-      "price": 65.81542,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (64.179)",
-      "x0": "2026-08-03",
-      "x1": "2034-07-20",
-      "y0": 64.179,
-      "y1": 64.179,
-      "price": 64.179,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (62.54258)",
-      "x0": "2026-07-28",
-      "x1": "2034-07-20",
-      "y0": 62.54258,
-      "y1": 62.54258,
-      "price": 62.54258,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (57.245)",
-      "x0": "2026-07-08",
-      "x1": "2034-07-20",
-      "y0": 57.245,
-      "y1": 57.245,
-      "price": 57.245,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-07-08",
-      "x1": "2026-08-28",
-      "y0": 57.245,
-      "y1": 71.113,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-07-17",
+        "2026-10-30"
+      ],
+      "y": [
+        54.78,
+        72.83
+      ],
+      "x0": "2026-08-19",
+      "x1": "2026-12-28",
+      "y0": 62.519,
+      "y1": 69.9125,
+      "anchor_x": [
+        "2026-07-17",
+        "2026-09-02"
+      ],
+      "anchor_y": [
+        54.78,
+        63.314
+      ],
+      "price": 69.9125,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true
     }
   ],
-  "high": 89.35,
+  "high": 121.64,
   "__wedge_auto_high__": true,
-  "low": 55.64,
+  "low": 54.78,
   "__wedge_auto_low__": true,
-  "line_cross_value": 57.65,
-  "__wedge_auto_line_cross__": true,
-  "position_type": "long",
-  "__wedge_auto_position_type__": true,
-  "stop_loss": 55.64,
-  "__wedge_auto_stop_loss__": true,
   "__half_points__": [],
-  "capital": 400,
+  "capital": 295000,
   "calculation_currency": "PLN",
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
   "level_points": {
     "high": {
-      "price": 89.35,
-      "plot_price": 89.35,
-      "date": "2026-05-13",
+      "price": 121.64,
+      "plot_price": 121.64,
+      "date": "2026-01-29",
       "auto_wedge": true
     },
     "low": {
-      "price": 55.64,
-      "plot_price": 55.64,
-      "date": "2026-06-24",
-      "auto_wedge": true
-    },
-    "line_cross_value": {
-      "price": 57.65,
-      "plot_price": 57.65,
-      "date": "2026-07-30",
-      "auto_wedge": true
-    },
-    "stop_loss": {
-      "price": 55.64,
-      "plot_price": 55.64,
-      "date": "2026-07-30",
+      "price": 54.78,
+      "plot_price": 54.78,
+      "date": "2026-07-17",
       "auto_wedge": true
     }
   },
   "__saved_fibo_by_user__": false,
-  "__scanner_breakout_date__": "2026-03-03",
-  "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "5",
-  "__scanner_latest_retest_date__": "2026-08-28",
-  "__scanner_latest_retest_pattern__": "bearish_engulfing"
+  "__saved_wedge_by_user__": true,
+  "position_type": "long",
+  "__scanner_breakout_date__": "2026-09-03",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "6.0"
 }

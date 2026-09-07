@@ -2,15 +2,15 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
       "type": "fib",
       "label": "FIB 0% (1086.0)",
       "x0": "2026-05-29",
-      "x1": "2034-07-21",
+      "x1": "2034-07-27",
       "y0": 1086.0,
       "y1": 1086.0,
       "price": 1086.0,
@@ -23,7 +23,7 @@
       "type": "fib",
       "label": "FIB 38.2% (782.71454)",
       "x0": "2026-03-30",
-      "x1": "2034-07-21",
+      "x1": "2034-07-27",
       "y0": 782.71454,
       "y1": 782.71454,
       "price": 782.71454,
@@ -35,8 +35,8 @@
       "id": "auto-fibo-500",
       "type": "fib",
       "label": "FIB 50% (689.0295)",
-      "x0": "2026-03-12",
-      "x1": "2034-07-21",
+      "x0": "2026-03-11",
+      "x1": "2034-07-27",
       "y0": 689.0295,
       "y1": 689.0295,
       "price": 689.0295,
@@ -49,7 +49,7 @@
       "type": "fib",
       "label": "FIB 61.8% (595.34446)",
       "x0": "2026-02-23",
-      "x1": "2034-07-21",
+      "x1": "2034-07-27",
       "y0": 595.34446,
       "y1": 595.34446,
       "price": 595.34446,
@@ -62,7 +62,7 @@
       "type": "fib",
       "label": "FIB 100% (292.059)",
       "x0": "2025-12-18",
-      "x1": "2034-07-21",
+      "x1": "2034-07-27",
       "y0": 292.059,
       "y1": 292.059,
       "price": 292.059,
@@ -82,7 +82,7 @@
       "group_id": "auto-fibo"
     }
   ],
-  "capital": 303500,
+  "capital": 295000,
   "calculation_currency": "PLN",
   "position_type": "long",
   "lot_cost": 0,
@@ -90,6 +90,29 @@
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
-  "level_points": {},
-  "__saved_fibo_by_user__": false
+  "level_points": {
+    "high": {
+      "price": 1086,
+      "plot_price": 1086,
+      "date": "2026-05-29",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 514.86,
+      "plot_price": 514.86,
+      "date": "2026-03-27",
+      "auto_wedge": true
+    }
+  },
+  "__saved_fibo_by_user__": false,
+  "__saved_wedge_by_user__": true,
+  "high": 1086,
+  "__wedge_auto_high__": true,
+  "low": 514.86,
+  "__wedge_auto_low__": true,
+  "__half_points__": [],
+  "__scanner_breakout_date__": "2026-07-15",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "6.7"
 }

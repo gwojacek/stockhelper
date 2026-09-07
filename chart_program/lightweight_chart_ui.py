@@ -528,12 +528,18 @@ class LightweightChartLevelSelectorUI:
     .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
     .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
-    .instrument-hero {{ display:grid; grid-template-columns:42px 1fr; gap:10px; align-items:center; margin-bottom:8px; }}
+    .instrument-card {{ position:relative; }}
+    .instrument-hero {{ display:grid; grid-template-columns:42px minmax(0,1fr); gap:10px; align-items:center; margin-bottom:8px; }}
+    .side-card-toggle {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#94a3b8; font-size:24px; line-height:1; transition:transform .16s ease,color .16s ease; }}
+    .side-card-toggle:hover {{ color:#f8fafc; background:transparent; }}
+    .collapsible-side-card.collapsed .side-card-toggle {{ transform:rotate(-90deg); }}
+    .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
+    .collapsible-side-card.collapsed .side-card-body {{ display:none; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
     .section-icon {{ width:26px; height:26px; font-size:14px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
-    #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
+    #identity {{ min-width:0; flex:1 1 auto; margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
     #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
@@ -553,6 +559,7 @@ class LightweightChartLevelSelectorUI:
     #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
     #stock-cfd-toggle.active::before {{ right:13px; background:#fff; }}
     .side-card-head {{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }}
+    .side-card-head h4 {{ flex:1 1 auto; }}
     .manual-card .side-card-head {{ padding-bottom:14px; border-bottom:1px solid rgba(148,163,184,.20); margin-bottom:14px; }}
     .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
     .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:24px; letter-spacing:-.03em; }}
@@ -590,6 +597,12 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
+    .line-tool-group {{ display:inline-flex; align-items:stretch; gap:0; }}
+    .line-tool-group #tool-line {{ border-radius:7px 0 0 7px; }}
+    .line-color-picker {{ position:relative; display:inline-flex; margin-left:-1px; }}
+    .line-color-picker #line-color-toggle {{ border-radius:0 7px 7px 0; min-width:34px; padding-left:8px; padding-right:8px; }}
+    .line-color-menu {{ display:none; position:absolute; z-index:30; top:calc(100% + 5px); left:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
+    .line-color-picker.open .line-color-menu {{ display:flex; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }}
     #chart-legend {{ display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-height: 20px; margin: 0 0 7px 0; font-size: 12px; font-weight: 700; }}
     #scanner-highlight-legend {{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; min-height:20px; margin:0 0 7px 0; font-size:12px; font-weight:800; }}
@@ -635,7 +648,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > label,.manual-card.journal-open > input,.manual-card.journal-open > select,.manual-card.journal-open > #calculation-currency-buttons,.manual-card.journal-open > #currency-fee-toggle,.manual-card.journal-open > #object-picker,.manual-card.journal-open > #delete-object,.manual-card.journal-open > #calculate-btn,.manual-card.journal-open > .action-grid,.manual-card.journal-open > .save-actions,.manual-card.journal-open > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > .save-actions,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -670,19 +683,16 @@ class LightweightChartLevelSelectorUI:
       <h3>Interactive Level Selector: {self.symbol}</h3>
       <div class="level-grid" id="level-buttons"></div>
       <div class="toolbar">
-        <button id="tool-line">Line tool</button>
+        <span class="line-tool-group"><button id="tool-line">Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">🎨</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
         <button id="tool-fib">Fib 61.8</button>
         <button id="tool-half">Half→SL</button>
+        <button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button>
         <button id="ichimoku-toggle">Ichimoku</button>
         <button id="reset-all" style="margin-left:auto">Reset all</button>
         <button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Reset scanner</button>
         <button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">🎲 Find new wedge</button>
         <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line">↑</button>
         <button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line">↓</button>
-        <span>Line color:</span>
-        <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
-        <button class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
-        <button class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
         <button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⬇ PNG</button>
         <button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button>
       </div>
@@ -701,20 +711,21 @@ class LightweightChartLevelSelectorUI:
       </section>
     </main>
     <aside class="side">
-      <section class="side-card instrument-card">
+      <section class="side-card instrument-card collapsible-side-card" id="instrument-card">
         <div class="instrument-hero">
           <div class="hero-icon">↗</div>
-          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button></div><div class="identity-sub">Name / Ticker</div></div>
+          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button><button class="side-card-toggle" type="button" data-card="instrument-card" aria-controls="instrument-card-body" aria-expanded="true" title="Collapse section">⌄</button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
-        <div class="meta-grid">
+        <div class="meta-grid side-card-body" id="instrument-card-body">
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
-          <div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search and select, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist></div><span id="instrument-switch-status"></span></div>
         </div>
       </section>
-      <section class="side-card selected-card">
-        <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4></div>
+      <section class="side-card instrument-switcher-card"><div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search and select, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist></div><span id="instrument-switch-status"></span></div></section>
+      <section class="side-card selected-card collapsible-side-card" id="selected-card">
+        <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4><button class="side-card-toggle" type="button" data-card="selected-card" aria-controls="selected-card-body" aria-expanded="true" title="Collapse section">⌄</button></div>
+        <div class="side-card-body" id="selected-card-body">
         <div id="values-panel" class="values"></div>
         <div id="chart-group-nav" class="chart-group-nav">
           <h4>⭐ Quick charts from 📊</h4>
@@ -722,10 +733,12 @@ class LightweightChartLevelSelectorUI:
           <div id="chart-group-filters" class="chart-group-filters"><span class="chart-group-filter-label">Filter charts</span><div class="chart-group-market-filters"></div><div class="chart-group-direction-filters"></div></div>
           <div id="chart-group-buttons" class="chart-group-buttons"></div>
         </div>
+        </div>
       </section>
-      <section class="side-card manual-card">
+      <section class="side-card manual-card collapsible-side-card" id="manual-card">
+        <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4><button class="side-card-toggle" type="button" data-card="manual-card" aria-controls="manual-card-body" aria-expanded="true" title="Collapse section">⌄</button></div>
+        <div class="side-card-body" id="manual-card-body">
         <div id="chart-context-info"></div>
-        <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
         <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
@@ -758,6 +771,7 @@ class LightweightChartLevelSelectorUI:
         </div>
         <div id="wedge-debug-panel"></div>
         <div id="result-box"></div>
+        </div>
       </section>
     </aside>
   </div>
@@ -786,6 +800,8 @@ class LightweightChartLevelSelectorUI:
   let lineAnchor = null;
   let fibAnchor = null;
   let halfAnchor = null;
+  let percentDiffAnchor = null;
+  let percentDiffSeries = null;
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
@@ -793,6 +809,23 @@ class LightweightChartLevelSelectorUI:
   const ohlcWithFuture = [...ohlc, ...futureTimes.map(time => ({{time}}))];
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
   let scannerHighlightRects = [];
+
+  function setSideCardCollapsed(cardId,collapsed) {{
+    const card=document.getElementById(cardId),toggle=card?.querySelector('.side-card-toggle');
+    if(!card||!toggle)return;
+    card.classList.toggle('collapsed',collapsed);
+    toggle.setAttribute('aria-expanded',collapsed?'false':'true');
+    toggle.title=collapsed?'Expand section':'Collapse section';
+  }}
+  document.querySelectorAll('.side-card-toggle[data-card]').forEach(toggle=>{{
+    const cardId=toggle.dataset.card,key='stockhelper-side-card-collapsed-'+cardId;
+    try{{setSideCardCollapsed(cardId,localStorage.getItem(key)==='1');}}catch(e){{}}
+    toggle.addEventListener('click',()=>{{
+      const collapsed=!document.getElementById(cardId)?.classList.contains('collapsed');
+      setSideCardCollapsed(cardId,collapsed);
+      try{{localStorage.setItem(key,collapsed?'1':'0');}}catch(e){{}}
+    }});
+  }});
 
   const chartInstrumentCurrency = () => {{
     const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();
@@ -2618,7 +2651,12 @@ class LightweightChartLevelSelectorUI:
       if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
       const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
       const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level;
-      if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+      const b1 = Math.abs(c1-o1), b2 = Math.abs(c2-o2);
+      const lo1 = Math.min(o1,c1), hi1 = Math.max(o1,c1), lo2 = Math.min(o2,c2), hi2 = Math.max(o2,c2);
+      const containedBearishHarami = c1 > o1 && c2 < o2 && b2 < b1 && lo1 <= lo2 && hi2 <= hi1;
+      const fxMicroBearishHarami = c1 > o1 && c2 < o2 && b1 <= 0.00025 && b2 <= b1*2.05 && lo2 >= lo1-b1 && hi2 <= hi1+b1;
+      if (touches618 && (containedBearishHarami || fxMicroBearishHarami)) found = {{name:'bearish_harami', time:String(second.time).slice(0,10)}};
+      else if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
     }}
     if (!found) return null;
     const latest = ohlc[ohlc.length - 1]?.time;
@@ -2839,6 +2877,7 @@ class LightweightChartLevelSelectorUI:
     $('tool-line').classList.toggle('active', activeTool === 'line');
     $('tool-fib').classList.toggle('active', activeTool === 'fib');
     $('tool-half').classList.toggle('active', activeTool === 'half');
+    $('tool-percent-diff').classList.toggle('active', activeTool === 'percent-diff');
     $('ichimoku-toggle').classList.toggle('active', !!levels.__show_ichimoku__);
     $('ichimoku-toggle').textContent = `Ichimoku: ${{levels.__show_ichimoku__ ? 'ON' : 'OFF'}}`;
     $('values-panel').innerHTML = seq.map(k => `<div class="value-tile ${{k}}"><div class="value-label">${{labels[k]}}</div><div class="value-number">${{levels[k] == null ? '--' : fmt(levels[k])}}</div></div>`).join('');
@@ -3108,8 +3147,10 @@ class LightweightChartLevelSelectorUI:
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
   $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
-  $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=null; updatePanel(); }};
-  document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
+  $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
+  $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
+  $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');
+  document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => {{ lineColor = b.dataset.color; $('line-color-toggle').style.background=b.dataset.color; $('line-color-picker').classList.remove('open'); }});
   $('download-chart-png').onclick = async () => {{
     try {{
       const canvas = await captureChartPng();
@@ -3223,6 +3264,25 @@ class LightweightChartLevelSelectorUI:
     const price = roundPrice(candleSeries.coordinateToPrice(param.point.y));
     const time = typeof param.time === 'string' ? param.time : (param.time ? `${{param.time.year}}-${{String(param.time.month).padStart(2,'0')}}-${{String(param.time.day).padStart(2,'0')}}` : nearest(null).time);
     if (!Number.isFinite(price)) return;
+    if (activeTool === 'percent-diff') {{
+      const row = nearest(time);
+      if (!percentDiffAnchor) {{ percentDiffAnchor = {{time:row.time, high:Number(row.high), low:Number(row.low), mid:(Number(row.high)+Number(row.low))/2}}; $('result-box').textContent = 'Select the second candle.'; return; }}
+      const secondMid = (Number(row.high) + Number(row.low)) / 2;
+      const rising = secondMid >= percentDiffAnchor.mid;
+      percentDiffAnchor.price = rising ? percentDiffAnchor.low : percentDiffAnchor.high;
+      percentDiffAnchor.side = rising ? 'bottom' : 'top';
+      const anchorPrice = rising ? Number(row.high) : Number(row.low);
+      const anchorSide = rising ? 'top' : 'bottom';
+      const change = anchorPrice - percentDiffAnchor.price;
+      const percent = percentDiffAnchor.price ? (change / percentDiffAnchor.price) * 100 : 0;
+      const sign = change >= 0 ? '+' : '';
+      const label = `Price difference: ${{sign}}${{fmt(change)}} (${{sign}}${{percent.toFixed(2)}}%)`;
+      safeRemoveSeries(percentDiffSeries);
+      percentDiffSeries = addLine([{{time:percentDiffAnchor.time,value:percentDiffAnchor.price}},{{time:row.time,value:anchorPrice}}], '#facc15', 2.2, LightweightCharts.LineStyle.Dashed, `${{percentDiffAnchor.time}} ${{fmt(percentDiffAnchor.price)}} → ${{row.time}} ${{fmt(anchorPrice)}} · ${{label}}`, true, true, false, 'percent-diff', () => {{ safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; }});
+      try {{ percentDiffSeries?.setMarkers?.([{{time:percentDiffAnchor.time,position:percentDiffAnchor.side==='top'?'aboveBar':'belowBar',color:'#facc15',shape:'circle',text:percentDiffAnchor.side==='top'?'🔺':'🔻'}},{{time:row.time,position:anchorSide==='top'?'aboveBar':'belowBar',color:'#facc15',shape:anchorSide==='top'?'arrowUp':'arrowDown',text:`${{anchorSide==='top'?'🔺':'🔻'}} ${{label}}`}}]); }} catch(e) {{}}
+      $('result-box').textContent = '';
+      percentDiffAnchor = null; activeTool = 'level'; updatePanel(); return;
+    }}
     if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); updatePanel(); }} else {{ commitLineDrawing(time, price); }} return; }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
@@ -3642,7 +3702,13 @@ class LightweightChartLevelSelectorUI:
     drawer.classList.add('open');
     $('calc-drawer').closest('.main')?.classList.add('calc-open');
     if (!data || !data.ok) {{
-      summary.innerHTML = `<b>Unable to calculate:</b> ${{(data && data.error) ? data.error : 'unknown error'}}`;
+      const needsTradingDetails = !levels.__stock_cfd_mode__ && P.instrumentType !== 'stock';
+      summary.innerHTML = [
+        '<b>Unable to calculate position.</b>',
+        '<span><b>Data required for calculation:</b> entry price, stop loss, and current capital.</span>',
+        needsTradingDetails ? '<span>For Forex and commodities also provide lot cost and pip value.</span>' : '',
+        '<span>Check the data and try again.</span>'
+      ].filter(Boolean).join('');
       table.innerHTML = ''; warnings.innerHTML = ''; return;
     }}
     const currency = data.currency || 'PLN';
@@ -3739,6 +3805,7 @@ class LightweightChartLevelSelectorUI:
     const first = ohlc[0]?.time, last = ohlc[ohlc.length - 1]?.time;
     const asNum = (value, fallback=null) => {{ const n=Number(String(value ?? '').replace(',','.')); return Number.isFinite(n) ? n : fallback; }};
     const latestClose = asNum(ohlc[ohlc.length - 1]?.close, 0);
+    const polishCloseMode = document.documentElement.lang === 'pl';
     const initialEntry = asNum(cfg.__journal_entry_price__ || cfg.entry, latestClose);
     const initialSold = asNum(cfg.__journal_close_price__ || cfg.exit_price, latestClose);
     const initialSl = asNum(cfg.__journal_stop_loss__ || cfg.stop_loss, null);
@@ -3749,8 +3816,8 @@ class LightweightChartLevelSelectorUI:
     let activeLine = 'sold';
     let dragLine = null;
     const lines = {{
-      sold: {{input:soldInput, color:'#22c55e', width:3, label:'SOLD', series:null, marker:null}},
-      entry: {{input:entryInput, color:'#60a5fa', width:2, label:'ENTRY', series:null, marker:null}},
+      sold: {{input:soldInput, color:'#22c55e', width:3, label:polishCloseMode ? 'SPRZEDANO' : 'SOLD', series:null, marker:null}},
+      entry: {{input:entryInput, color:'#60a5fa', width:2, label:polishCloseMode ? 'WEJŚCIE' : 'ENTRY', series:null, marker:null}},
       sl: {{input:slInput, color:'#ef4444', width:2, label:'SL', series:null, marker:null}},
     }};
     Object.values(lines).forEach(line => {{
