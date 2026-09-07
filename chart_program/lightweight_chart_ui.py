@@ -788,6 +788,7 @@ class LightweightChartLevelSelectorUI:
   let fibAnchor = null;
   let halfAnchor = null;
   let percentDiffAnchor = null;
+  let percentDiffSeries = null;
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
@@ -3112,7 +3113,7 @@ class LightweightChartLevelSelectorUI:
   $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
-  $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
+  $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => lineColor = b.dataset.color);
   $('download-chart-png').onclick = async () => {{
     try {{
@@ -3233,7 +3234,11 @@ class LightweightChartLevelSelectorUI:
       const change = price - percentDiffAnchor.price;
       const percent = percentDiffAnchor.price ? (change / percentDiffAnchor.price) * 100 : 0;
       const sign = change >= 0 ? '+' : '';
-      $('result-box').textContent = `Price difference (${{percentDiffAnchor.time}} → ${{row.time}}): ${{sign}}${{fmt(change)}} (${{sign}}${{percent.toFixed(2)}}%)`;
+      const label = `Price difference: ${{sign}}${{fmt(change)}} (${{sign}}${{percent.toFixed(2)}}%)`;
+      safeRemoveSeries(percentDiffSeries);
+      percentDiffSeries = addLine([{{time:percentDiffAnchor.time,value:percentDiffAnchor.price}},{{time:row.time,value:price}}], '#facc15', 2.2, LightweightCharts.LineStyle.Dashed, label, true, true, false, 'percent-diff', () => {{ safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; }});
+      try {{ percentDiffSeries?.setMarkers?.([{{time:percentDiffAnchor.time,position:'belowBar',color:'#facc15',shape:'circle',text:'START'}},{{time:row.time,position:'aboveBar',color:'#facc15',shape:'arrowUp',text:label}}]); }} catch(e) {{}}
+      $('result-box').textContent = '';
       percentDiffAnchor = null; activeTool = 'level'; updatePanel(); return;
     }}
     if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); updatePanel(); }} else {{ commitLineDrawing(time, price); }} return; }}
