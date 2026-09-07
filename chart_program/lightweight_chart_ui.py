@@ -529,16 +529,17 @@ class LightweightChartLevelSelectorUI:
     .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
     .instrument-card {{ position:relative; }}
-    .instrument-hero {{ display:grid; grid-template-columns:42px minmax(0,1fr) 30px; gap:10px; align-items:center; margin-bottom:8px; }}
-    .instrument-card-toggle {{ width:30px; height:30px; padding:0; border-radius:9px; font-size:15px; line-height:1; transition:transform .16s ease,background .16s ease; }}
-    .instrument-card.collapsed .instrument-card-toggle {{ transform:rotate(-90deg); }}
+    .instrument-hero {{ display:grid; grid-template-columns:42px minmax(0,1fr); gap:10px; align-items:center; margin-bottom:8px; }}
+    .side-card-toggle {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#94a3b8; font-size:24px; line-height:1; transition:transform .16s ease,color .16s ease; }}
+    .side-card-toggle:hover {{ color:#f8fafc; background:transparent; }}
+    .collapsible-side-card.collapsed .side-card-toggle {{ transform:rotate(-90deg); }}
     .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
-    .instrument-card.collapsed .instrument-card-body {{ display:none; }}
+    .collapsible-side-card.collapsed .side-card-body {{ display:none; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
     .section-icon {{ width:26px; height:26px; font-size:14px; background:rgba(37,99,235,.18); color:#c7d2fe; box-shadow:none; }}
-    #identity {{ margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
+    #identity {{ min-width:0; flex:1 1 auto; margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
     #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
@@ -558,6 +559,7 @@ class LightweightChartLevelSelectorUI:
     #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
     #stock-cfd-toggle.active::before {{ right:13px; background:#fff; }}
     .side-card-head {{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }}
+    .side-card-head h4 {{ flex:1 1 auto; }}
     .manual-card .side-card-head {{ padding-bottom:14px; border-bottom:1px solid rgba(148,163,184,.20); margin-bottom:14px; }}
     .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
     .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:24px; letter-spacing:-.03em; }}
@@ -646,7 +648,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > label,.manual-card.journal-open > input,.manual-card.journal-open > select,.manual-card.journal-open > #calculation-currency-buttons,.manual-card.journal-open > #currency-fee-toggle,.manual-card.journal-open > #object-picker,.manual-card.journal-open > #delete-object,.manual-card.journal-open > #calculate-btn,.manual-card.journal-open > .action-grid,.manual-card.journal-open > .save-actions,.manual-card.journal-open > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > .save-actions,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -709,21 +711,21 @@ class LightweightChartLevelSelectorUI:
       </section>
     </main>
     <aside class="side">
-      <section class="side-card instrument-card" id="instrument-card">
+      <section class="side-card instrument-card collapsible-side-card" id="instrument-card">
         <div class="instrument-hero">
           <div class="hero-icon">↗</div>
-          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button></div><div class="identity-sub">Name / Ticker</div></div>
-          <button class="instrument-card-toggle" id="instrument-card-toggle" type="button" aria-controls="instrument-card-body" aria-expanded="true" title="Collapse instrument details">⌄</button>
+          <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button><button class="side-card-toggle" type="button" data-card="instrument-card" aria-controls="instrument-card-body" aria-expanded="true" title="Collapse section">⌄</button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
-        <div class="meta-grid instrument-card-body" id="instrument-card-body">
+        <div class="meta-grid side-card-body" id="instrument-card-body">
           <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
-          <div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search and select, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist></div><span id="instrument-switch-status"></span></div>
         </div>
       </section>
-      <section class="side-card selected-card">
-        <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4></div>
+      <section class="side-card instrument-switcher-card"><div class="instrument-switcher"><div class="meta-label">🔎 Open another instrument</div><div class="instrument-switch-row"><input id="instrument-search" type="search" list="instrument-options" autocomplete="off" placeholder="Search and select, e.g. XTB or EURPLN"><datalist id="instrument-options"></datalist></div><span id="instrument-switch-status"></span></div></section>
+      <section class="side-card selected-card collapsible-side-card" id="selected-card">
+        <div class="side-card-head"><span class="section-icon">◎</span><h4>Selected values</h4><button class="side-card-toggle" type="button" data-card="selected-card" aria-controls="selected-card-body" aria-expanded="true" title="Collapse section">⌄</button></div>
+        <div class="side-card-body" id="selected-card-body">
         <div id="values-panel" class="values"></div>
         <div id="chart-group-nav" class="chart-group-nav">
           <h4>⭐ Quick charts from 📊</h4>
@@ -731,10 +733,12 @@ class LightweightChartLevelSelectorUI:
           <div id="chart-group-filters" class="chart-group-filters"><span class="chart-group-filter-label">Filter charts</span><div class="chart-group-market-filters"></div><div class="chart-group-direction-filters"></div></div>
           <div id="chart-group-buttons" class="chart-group-buttons"></div>
         </div>
+        </div>
       </section>
-      <section class="side-card manual-card">
+      <section class="side-card manual-card collapsible-side-card" id="manual-card">
+        <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4><button class="side-card-toggle" type="button" data-card="manual-card" aria-controls="manual-card-body" aria-expanded="true" title="Collapse section">⌄</button></div>
+        <div class="side-card-body" id="manual-card-body">
         <div id="chart-context-info"></div>
-        <div class="side-card-head"><span class="section-icon">✎</span><h4>Manual inputs</h4></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
         <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
@@ -767,6 +771,7 @@ class LightweightChartLevelSelectorUI:
         </div>
         <div id="wedge-debug-panel"></div>
         <div id="result-box"></div>
+        </div>
       </section>
     </aside>
   </div>
@@ -805,19 +810,22 @@ class LightweightChartLevelSelectorUI:
   const ohlcByTime = new Map(ohlc.map((r, idx) => [r.time, {{...r, idx}}]));
   let scannerHighlightRects = [];
 
-  function setInstrumentCardCollapsed(collapsed) {{
-    const card=document.getElementById('instrument-card'),toggle=document.getElementById('instrument-card-toggle');
+  function setSideCardCollapsed(cardId,collapsed) {{
+    const card=document.getElementById(cardId),toggle=card?.querySelector('.side-card-toggle');
     if(!card||!toggle)return;
     card.classList.toggle('collapsed',collapsed);
     toggle.setAttribute('aria-expanded',collapsed?'false':'true');
-    toggle.title=collapsed?'Expand instrument details':'Collapse instrument details';
+    toggle.title=collapsed?'Expand section':'Collapse section';
   }}
-  document.getElementById('instrument-card-toggle')?.addEventListener('click',()=>{{
-    const collapsed=!document.getElementById('instrument-card')?.classList.contains('collapsed');
-    setInstrumentCardCollapsed(collapsed);
-    try{{localStorage.setItem('stockhelper-instrument-card-collapsed',collapsed?'1':'0');}}catch(e){{}}
+  document.querySelectorAll('.side-card-toggle[data-card]').forEach(toggle=>{{
+    const cardId=toggle.dataset.card,key='stockhelper-side-card-collapsed-'+cardId;
+    try{{setSideCardCollapsed(cardId,localStorage.getItem(key)==='1');}}catch(e){{}}
+    toggle.addEventListener('click',()=>{{
+      const collapsed=!document.getElementById(cardId)?.classList.contains('collapsed');
+      setSideCardCollapsed(cardId,collapsed);
+      try{{localStorage.setItem(key,collapsed?'1':'0');}}catch(e){{}}
+    }});
   }});
-  try{{setInstrumentCardCollapsed(localStorage.getItem('stockhelper-instrument-card-collapsed')==='1');}}catch(e){{}}
 
   const chartInstrumentCurrency = () => {{
     const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();

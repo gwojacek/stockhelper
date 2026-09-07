@@ -119,15 +119,19 @@ def test_chart_has_two_candle_percent_difference_tool():
     assert 'class="line-tool-group"' in chart_source
 
 
-def test_chart_instrument_card_is_collapsible_and_remembers_its_state():
+def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():
     chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert 'id="instrument-card-toggle"' in chart_source
+    assert chart_source.count('class="side-card-toggle"') == 3
+    assert 'data-card="instrument-card"' in chart_source
+    assert 'data-card="selected-card"' in chart_source
+    assert 'data-card="manual-card"' in chart_source
     assert 'aria-controls="instrument-card-body"' in chart_source
-    assert "setInstrumentCardCollapsed" in chart_source
-    assert "stockhelper-instrument-card-collapsed" in chart_source
-    assert POLISH_TRANSLATIONS["Collapse instrument details"] == "Zwiń szczegóły instrumentu"
-    assert POLISH_TRANSLATIONS["Expand instrument details"] == "Rozwiń szczegóły instrumentu"
+    assert "setSideCardCollapsed" in chart_source
+    assert "stockhelper-side-card-collapsed-" in chart_source
+    assert '<section class="side-card instrument-switcher-card">' in chart_source
+    assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
+    assert POLISH_TRANSLATIONS["Expand section"] == "Rozwiń sekcję"
 
 
 def test_favorites_and_journal_are_fully_localized():
