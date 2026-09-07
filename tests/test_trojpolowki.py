@@ -1995,7 +1995,7 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert hero.index("🗂 Checked") < hero.index("🖌 Color instrument")
     assert "stockhelper.colored-instruments.v1" in source
     assert "function toggleInstrumentColorMode(btn)" in source
-    assert "tr.instrument-colored>td{background:#F4BA94!important}" in source
+    assert "tr.instrument-colored>td{background:#FFE5B4!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
     assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
     assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
