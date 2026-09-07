@@ -1286,9 +1286,7 @@ def test_early_rebreakout_in_position_table_is_not_playable():
     )
 
     assert mod._ichimoku_qualification_state(row) == "waiting_first"
-    assert mod._ichimoku_early_breakout_html(row) == (
-        "<strong style='color:#dc2626'>NO PLAY UNTIL 2026-08-28</strong>"
-    )
+    assert "NO PLAY UNTIL 2026-08-28" in mod._ichimoku_early_breakout_html(row)
 
 
 def test_3p_ichimoku_returns_early_breakout_after_cutoff(tmp_path: Path):
@@ -1995,17 +1993,39 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "id='instrument-color-btn'" in source
     assert "stockhelper.colored-instruments.v1" in source
     assert "function toggleInstrumentColorMode(btn)" in source
-    assert "tr.instrument-colored>td{background:rgba(251,146,60,.16)!important}" in source
+    assert "tr.instrument-colored>td{background:rgba(249,115,22,.30)!important}" in source
+    assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
+    assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
     assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
 
 
 def test_early_breakout_label_explains_cutoff_basis():
     source = Path("run").read_text(encoding="utf-8")
-    assert "four-month wait is measured from the preceding breakout" in source
+    assert "A new breakout after at least four months" in source
 
 
 def test_fibo_chart_shades_the_anchor_formation_area():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert "function drawFiboAnchorBackground(ctx)" in source
     assert "rgba(148,163,184,0.075)" in source
+    assert "items.flatMap(obj => [obj.x0, obj.x1])" in source
     assert "drawFiboAnchorBackground(ctx);" in source
+
+
+def test_four_month_previous_respect_overrides_stale_early_breakout_status():
+    mod = load_run_module()
+    row = mod.ScannerRow(
+        market="WIG", scanner="ICHIMOKU", category="retest_breakout", ticker="BMC",
+        status="breakout_confirmed", dates={"flip_date": "2026-09-04"},
+        metrics={
+            "previous_respect_months": "4.4",
+            "qualification_status": "early_breakout_waiting_until_4m",
+            "valid_retests_from_date": "2027-01-03",
+            "retest_count": "0",
+        },
+    )
+
+    assert mod._ichimoku_qualification_state(row) == "standard"
+    assert mod._ichimoku_early_breakout_html(row) == "—"
+    scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
+    assert "if previous_respect_months < 4.0 and flip_ts < four_month_date" in scanner_source

@@ -2596,18 +2596,27 @@ class LightweightChartLevelSelectorUI:
   function drawFiboAnchorBackground(ctx) {{
     const groups = new Map();
     drawnObjects.forEach(obj => {{
-      if (!obj?.group_id || hiddenLegendKeys.has(`fib-group:${{obj.group_id}}`)) return;
-      if (obj.type === 'fib-boundary') groups.set(obj.group_id, obj);
+      if (!obj?.group_id || !['fib', 'fib-boundary'].includes(obj.type) || hiddenLegendKeys.has(`fib-group:${{obj.group_id}}`)) return;
+      if (!groups.has(obj.group_id)) groups.set(obj.group_id, []);
+      groups.get(obj.group_id).push(obj);
     }});
-    groups.forEach(boundary => {{
-      const x0 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x0).slice(0, 10)) : null;
-      const x1 = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(boundary.x1).slice(0, 10)) : null;
+    groups.forEach(items => {{
+      const boundary = items.find(obj => obj.type === 'fib-boundary');
+      if (!boundary) return;
+      // Fill the complete rendered formation: the 0%/100% anchor levels are
+      // its horizontal borders, while the visible Fib lines define its width.
+      const xValues = items.flatMap(obj => [obj.x0, obj.x1]).filter(Boolean).map(value =>
+        chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(String(value).slice(0, 10)) : null
+      ).filter(Number.isFinite);
       const y0 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y0)) : null;
       const y1 = candleSeries.priceToCoordinate ? candleSeries.priceToCoordinate(Number(boundary.y1)) : null;
-      if (![x0, x1, y0, y1].every(Number.isFinite)) return;
+      if (!xValues.length || ![y0, y1].every(Number.isFinite)) return;
+      const left = Math.max(0, Math.min(...xValues));
+      const right = Math.min($('chart-wrap').clientWidth, Math.max(...xValues));
+      if (right <= left) return;
       ctx.save();
       ctx.fillStyle = 'rgba(148,163,184,0.075)';
-      ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+      ctx.fillRect(left, Math.min(y0, y1), right - left, Math.abs(y1 - y0));
       ctx.restore();
     }});
   }}
