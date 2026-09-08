@@ -225,7 +225,7 @@ def test_setup_information_visibility_does_not_depend_on_translated_option_text(
     assert "const showInfo = ['Kliny', 'Ichimoku', 'Fibo'].includes(tech)" in chart_source
 
 
-def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():
+def test_all_chart_sidebar_cards_collapse_together_and_remember_their_state():
     chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert chart_source.count('class="side-card-toggle"') == 3
@@ -234,10 +234,23 @@ def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():
     assert 'data-card="manual-card"' in chart_source
     assert 'aria-controls="instrument-card-body"' in chart_source
     assert "setSideCardCollapsed" in chart_source
-    assert "stockhelper-side-card-collapsed-" in chart_source
+    assert "setAllSideCardsCollapsed" in chart_source
+    assert "stockhelper-side-cards-collapsed" in chart_source
+    assert "stockhelper-side-card-collapsed-" not in chart_source
     assert '<section class="side-card instrument-switcher-card">' in chart_source
     assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
     assert POLISH_TRANSLATIONS["Expand section"] == "Rozwiń sekcję"
+
+
+def test_stock_cfd_control_is_part_of_manual_inputs_card():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    instrument_body = chart_source.split('id="instrument-card-body"', 1)[1].split("</section>", 1)[0]
+    manual_body = chart_source.split('id="manual-card-body"', 1)[1].split("</section>", 1)[0]
+    assert 'id="stock-cfd-toggle"' not in instrument_body
+    assert 'id="stock-cfd-toggle"' in manual_body
+    assert '.manual-card.collapsed' in chart_source
+    assert '.manual-card .side-card-head h4 {{ color:#f8fafc; font-size:16px' in chart_source
 
 
 def test_favorites_and_journal_are_fully_localized():

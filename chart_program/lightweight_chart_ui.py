@@ -549,11 +549,14 @@ class LightweightChartLevelSelectorUI:
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
     .instrument-card {{ position:relative; }}
     .instrument-hero {{ display:grid; grid-template-columns:42px minmax(0,1fr); gap:10px; align-items:center; margin-bottom:8px; }}
-    .side-card-toggle {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#94a3b8; font-size:24px; line-height:1; transition:transform .16s ease,color .16s ease; }}
+    .side-card-toggle {{ position:relative; top:-3px; flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#94a3b8; font-size:24px; line-height:1; transition:transform .16s ease,color .16s ease; }}
     .side-card-toggle:hover {{ color:#f8fafc; background:transparent; }}
     .collapsible-side-card.collapsed .side-card-toggle {{ transform:rotate(-90deg); }}
     .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
     .collapsible-side-card.collapsed .side-card-body {{ display:none; }}
+    .collapsible-side-card.collapsed .side-card-head {{ margin-bottom:0; }}
+    .manual-card.collapsed {{ padding:11px; border-radius:16px; }}
+    .manual-card.collapsed .side-card-head {{ padding-bottom:0; border-bottom:0; margin-bottom:0; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
@@ -573,7 +576,8 @@ class LightweightChartLevelSelectorUI:
     .instrument-switcher {{ grid-column:1/-1; padding:10px; border:1px solid rgba(56,189,248,.3); border-radius:12px; background:rgba(8,47,73,.28); }}
     .instrument-switch-row {{ display:block; }}
     #instrument-switch-status {{ display:block; min-height:16px; margin-top:5px; color:#93c5fd; font-size:11px; }}
-    #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
+    #stock-cfd-field {{ display:none; margin-top:10px; }}
+    #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:flex; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
     #stock-cfd-toggle::after {{ content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #stock-cfd-toggle::before {{ content:''; position:absolute; right:29px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
     #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
@@ -582,7 +586,7 @@ class LightweightChartLevelSelectorUI:
     .side-card-head h4 {{ flex:1 1 auto; }}
     .manual-card .side-card-head {{ padding-bottom:14px; border-bottom:1px solid rgba(148,163,184,.20); margin-bottom:14px; }}
     .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
-    .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:24px; letter-spacing:-.03em; }}
+    .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:16px; letter-spacing:normal; }}
     label {{ display: block; margin-top: 8px; }}
     input, select, textarea {{ width: 100%; min-height:38px; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 14px; padding: 8px 10px; border-radius: 11px; border: 1px solid #334155; }}
     .manual-card label {{ color:#cbd5e1; font-size:14px; margin-top:10px; }}
@@ -729,8 +733,7 @@ class LightweightChartLevelSelectorUI:
           <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button><button class="side-card-toggle" type="button" data-card="instrument-card" aria-controls="instrument-card-body" aria-expanded="true" title="Collapse section">⌄</button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
         <div class="meta-grid side-card-body" id="instrument-card-body">
-          <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
-          <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
+          <div class="meta-field full"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
         </div>
       </section>
@@ -753,6 +756,7 @@ class LightweightChartLevelSelectorUI:
         <div id="chart-context-info"></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
+        <div id="stock-cfd-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
         <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
@@ -825,13 +829,17 @@ class LightweightChartLevelSelectorUI:
     toggle.setAttribute('aria-expanded',collapsed?'false':'true');
     toggle.title=collapsed?'Expand section':'Collapse section';
   }}
+  const collapsibleSideCardIds=[...document.querySelectorAll('.side-card-toggle[data-card]')].map(toggle=>toggle.dataset.card);
+  const sideCardsCollapsedKey='stockhelper-side-cards-collapsed';
+  function setAllSideCardsCollapsed(collapsed) {{
+    collapsibleSideCardIds.forEach(cardId=>setSideCardCollapsed(cardId,collapsed));
+  }}
+  try{{setAllSideCardsCollapsed(localStorage.getItem(sideCardsCollapsedKey)==='1');}}catch(e){{}}
   document.querySelectorAll('.side-card-toggle[data-card]').forEach(toggle=>{{
-    const cardId=toggle.dataset.card,key='stockhelper-side-card-collapsed-'+cardId;
-    try{{setSideCardCollapsed(cardId,localStorage.getItem(key)==='1');}}catch(e){{}}
     toggle.addEventListener('click',()=>{{
-      const collapsed=!document.getElementById(cardId)?.classList.contains('collapsed');
-      setSideCardCollapsed(cardId,collapsed);
-      try{{localStorage.setItem(key,collapsed?'1':'0');}}catch(e){{}}
+      const collapsed=!document.getElementById(toggle.dataset.card)?.classList.contains('collapsed');
+      setAllSideCardsCollapsed(collapsed);
+      try{{localStorage.setItem(sideCardsCollapsedKey,collapsed?'1':'0');}}catch(e){{}}
     }});
   }});
 
@@ -3032,7 +3040,7 @@ class LightweightChartLevelSelectorUI:
     $('identity').textContent = `${{P.sourceName || P.symbol}}${{P.sourceTicker ? ` (${{P.sourceTicker}})` : ''}}`;
     $('instrument-title').textContent = `${{originalIsStock && stockCfdOn ? 'STOCK CFD' : (indexLike ? 'COMMODITY/INDEX' : P.instrumentType.toUpperCase())}}`;
     $('source').textContent = `${{P.sourceProvider}}`;
-    $('stock-cfd-toggle').style.display = originalIsStock ? 'flex' : 'none';
+    $('stock-cfd-field').style.display = originalIsStock ? 'block' : 'none';
     $('stock-cfd-toggle').textContent = `${{stockCfdOn ? 'ON' : 'OFF'}}`;
     $('stock-cfd-toggle').classList.toggle('active', stockCfdOn);
     const instrumentCurrency = () => {{
