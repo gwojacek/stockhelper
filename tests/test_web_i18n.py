@@ -263,8 +263,9 @@ def test_chart_png_button_sits_next_to_save_chart_with_matching_size():
     actions = chart_source.split('<div class="chart-save-actions">', 1)[1].split("</div>", 1)[0]
     assert 'id="saved-fibo-status"' in actions
     assert 'id="download-chart-png"' in actions
-    assert '.chart-save-actions button {{ width:122px; min-height:32px; }}' in chart_source
-    assert '#saved-fibo-status {{ flex:0 0 auto; width:122px;' in chart_source
+    assert '.chart-save-actions button {{ flex:0 0 150px; width:150px; min-height:32px; }}' in chart_source
+    assert '#saved-fibo-status {{ flex:0 0 auto; width:150px;' in chart_source
+    assert 'display:inline-flex; align-items:center; justify-content:center; gap:6px; overflow:hidden;' in chart_source
     assert '<span class="toolbar-label">Export</span>' not in chart_source
 
 

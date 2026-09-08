@@ -542,7 +542,7 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
     .chart-save-actions {{ display:flex; align-items:center; gap:7px; }}
-    .chart-save-actions button {{ width:122px; min-height:32px; }}
+    .chart-save-actions button {{ flex:0 0 150px; width:150px; min-height:32px; }}
     #cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); min-width:0; }}
     #cursor-box .cursor-stat {{ display:inline-flex; align-items:baseline; gap:5px; }}
     #cursor-box .cursor-label {{ color:#82a9ca; font-weight:700; }}
@@ -569,9 +569,9 @@ class LightweightChartLevelSelectorUI:
     #identity {{ min-width:0; flex:1 1 auto; margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
-    #saved-fibo-status {{ flex:0 0 auto; width:122px; margin-left:auto; padding:5px 8px; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status {{ flex:0 0 auto; width:150px; margin-left:auto; padding:5px 8px; display:inline-flex; align-items:center; justify-content:center; gap:6px; overflow:hidden; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
     #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
-    #saved-fibo-status .saved-remove {{ margin-left:5px; color:inherit; font-size:14px; }}
+    #saved-fibo-status .saved-remove {{ flex:0 0 auto; margin-left:0; color:inherit; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
