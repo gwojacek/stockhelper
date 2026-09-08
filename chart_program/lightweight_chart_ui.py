@@ -711,7 +711,7 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Export</span><span class="toolbar-hint">Save chart image</span><div class="toolbar-actions"><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></section>
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><button id="saved-fibo-status" type="button" title="Save these scanner drawings as my configuration"><span>💾 Save by me</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
+      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -799,7 +799,7 @@ class LightweightChartLevelSelectorUI:
   let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
   let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
-  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; btn.classList.toggle('active',saved); btn.title=saved?'Remove saved scanner configuration':'Save these scanner drawings as my configuration'; const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=saved?'💾 Saved by user':'💾 Save by me'; if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; btn.classList.toggle('active',saved); btn.title=saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'; const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=saved?'💾 Chart saved':'💾 Save chart'; if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -853,7 +853,7 @@ class LightweightChartLevelSelectorUI:
   }}
   function refreshChartContextInfo() {{
     const info=$('chart-context-info'); if(!info)return;
-    const saved=(savedFiboByUser||savedWedgeByUser) ? `<div><strong>💾 Saved by user:</strong> ${{savedFiboByUser?'Fibo':'Kliny'}} configuration.</div>` : '';
+    const saved=(savedFiboByUser||savedWedgeByUser) ? `<div><strong>💾 Chart saved:</strong> ${{savedFiboByUser?'Fibo':'Kliny'}} configuration remains active until it becomes invalid.</div>` : '';
     const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
     const converted=maxCapitalInSelectedCurrency();
     const capital=Number.isFinite(converted) ? `<div><strong>Max capital engagement:</strong> ${{money(converted,selected)}} (1% of 10-day average turnover)</div>` : '';
@@ -2539,7 +2539,7 @@ class LightweightChartLevelSelectorUI:
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
     const sizeText = candidate.biggerThanCurrent ? 'larger' : 'smaller';
-    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Use Save by me to keep it for future allsearch calculations.`);
+    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Use Save chart to keep it until it becomes invalid.`);
   }}
 
 
@@ -3825,7 +3825,7 @@ class LightweightChartLevelSelectorUI:
         initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
         refreshSavedFiboStatus();
         try {{ window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:savedWedgeByUser}}, '*'); }} catch(e) {{}}
-        $('result-box').textContent = 'Scanner configuration saved by user.';
+        $('result-box').textContent = 'Chart configuration saved until it becomes invalid.';
       }} else {{
         savedFiboByUser = false;
         savedWedgeByUser = false;

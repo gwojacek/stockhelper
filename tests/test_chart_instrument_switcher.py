@@ -87,7 +87,7 @@ def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
     assert 'id="max-capital-info"' in source
-    assert "💾 Saved by user:" in source
+    assert "💾 Chart saved:" in source
     assert "Max capital engagement:" in source
     assert "1% of 10-day average turnover" in source
     assert "['Fibo', '💾 SAVED BY USER']" in source
@@ -102,9 +102,10 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
-    assert '<button id="saved-fibo-status" type="button" title="Save these scanner drawings as my configuration"' in source
-    assert '💾 Saved by user' in source
-    assert '💾 Save by me' in source
+    assert '<button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"' in source
+    assert '💾 Chart saved' in source
+    assert '💾 Save chart' in source
+    assert 'Chart configuration saved until it becomes invalid; click to remove' in source
     assert 'class="saved-remove"' in source
     toolbar = source[source.index('<div class="toolbar">'):source.index('<div id="cursor-box">')]
     cursor_box = source[source.index('<div id="cursor-box">'):source.index('<div class="legend-row">')]
