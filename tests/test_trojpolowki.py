@@ -2041,3 +2041,12 @@ def test_four_month_previous_respect_overrides_stale_early_breakout_status():
     assert mod._ichimoku_early_breakout_html(row) == "—"
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert "if previous_respect_months < 4.0 and flip_ts < four_month_date" in scanner_source
+
+
+def test_allsearch_top_choice_separators_align_to_longest_reason_text():
+    source = Path(__file__).resolve().parents[1].joinpath("run").read_text(encoding="utf-8")
+
+    assert "function normalizeChoiceReasonColumns()" in source
+    assert "--choice-kind-width" in source
+    assert "--choice-detail-width" in source
+    assert "window.addEventListener('resize',normalizeChoiceReasonColumns)" in source

@@ -908,9 +908,9 @@ def run_level_selector(raw_args=None):
                     last_idx = len(chart_dates) - 1
                     if cross_idx <= last_idx:
                         return None
-                    # Keep the line long enough to show the wedge ending/cross, but
-                    # cap pathological projections so the chart remains usable.
-                    max_projection = last_idx + max(len(chart_dates), 80)
+                    # Never let a scanner wedge push its draggable end point more
+                    # than 30 candles beyond the available chart data.
+                    max_projection = last_idx + 30
                     return min(cross_idx + 5, max_projection)
 
                 common_wedge_end_idx = _wedge_cross_index() if args.wedge_right else None
@@ -923,9 +923,9 @@ def run_level_selector(raw_args=None):
                     first_idx = min(i0, i1)
                     second_idx = max(i0, i1)
                     if args.wedge_right:
-                        extension = max(abs(i1 - i0) * 2, 80)
-                        fallback_end_idx = (len(chart_dates) - 1) + extension
-                        end_idx = max(common_wedge_end_idx or fallback_end_idx, fallback_end_idx)
+                        last_idx = len(chart_dates) - 1
+                        projection_limit = last_idx + 30
+                        end_idx = min(common_wedge_end_idx or projection_limit, projection_limit)
                     else:
                         end_idx = second_idx
                     # Store only collinear points: both real candle anchors plus

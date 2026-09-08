@@ -2428,8 +2428,7 @@ class LightweightChartLevelSelectorUI:
     const dateForIdx = (idx) => rows[Math.max(0, Math.min(rows.length - 1, idx))]?.time;
     const lineAt = (a, b, idx) => a.price + (b.price - a.price) * ((idx - a.idx) / Math.max(1, b.idx - a.idx));
     const maxIdx = rows.length - 1;
-    const projection = Math.max(80, Math.abs(candidate.upper.b.idx - candidate.upper.a.idx) * 2, Math.abs(candidate.lower.b.idx - candidate.lower.a.idx) * 2);
-    let endIdx = maxIdx + projection;
+    let endIdx = maxIdx + 30;
     const us = (candidate.upper.b.price - candidate.upper.a.price) / Math.max(1, candidate.upper.b.idx - candidate.upper.a.idx);
     const ls = (candidate.lower.b.price - candidate.lower.a.price) / Math.max(1, candidate.lower.b.idx - candidate.lower.a.idx);
     const denom = us - ls;
@@ -2437,9 +2436,8 @@ class LightweightChartLevelSelectorUI:
       const ui = candidate.upper.a.price - us * candidate.upper.a.idx;
       const li = candidate.lower.a.price - ls * candidate.lower.a.idx;
       const cross = Math.ceil((li - ui) / denom);
-      if (cross > maxIdx) endIdx = Math.max(endIdx, cross + 5);
+      if (cross > maxIdx) endIdx = Math.min(endIdx, cross + 5);
     }}
-    endIdx = Math.min(endIdx, maxIdx + Math.max(rows.length, 180));
     const make = (side, color, label, id, line) => {{
       const anchorX = [dateForIdx(line.a.idx), dateForIdx(line.b.idx)];
       const anchorY = [roundPrice(line.a.price), roundPrice(line.b.price)];
