@@ -63,7 +63,7 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Export and customize output.": "Eksportuj i dostosuj wygląd.",
         "ALLSEARCH REPORT": "RAPORT ALLSEARCH",
         "Color instrument": "Pokoloruj",
-        "Choose instrument…": "Wybierz instrument…",
+        "Choose instrument…": "Wybierz…",
     }
 
     for english, polish in expected.items():
