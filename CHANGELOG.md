@@ -2,13 +2,45 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `7.5`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `8.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
 No unreleased changes are documented yet.
 
-Compare: [`7.5...HEAD`](https://github.com/gwojacek/stockhelper/compare/7.5...HEAD)
+Compare: [`8.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/8.0...HEAD)
+
+## [8.0] - 2026-09-08
+
+Tag: `8.0`
+Compare: [`7.5...8.0`](https://github.com/gwojacek/stockhelper/compare/7.5...8.0)
+
+### Added
+
+- Added an English-first, persistent English/Polish language selector across allsearch and 3P reports, chart controls, scanner diagnostics, favorites, and transaction-journal views.
+- Added report-table PNG export, including the table title and active report context, alongside the existing PDF/report export workflow.
+- Added report instrument coloring that persists across generated reports, plus a highlight visibility toggle and subtle Fibonacci anchor-range shading in charts.
+- Added a chart percentage-difference tool for comparing two candle anchors, with direction-aware values and reset controls.
+- Added collapsible chart sidebar cards and a redesigned, grouped chart toolbar for prices, stop/target levels, Fibonacci, wedges, scanner drawings, colors, and chart actions.
+- Added the `pd` helper for staging all repository changes, committing them as `data`, and pushing the current branch to its configured upstream.
+- Added a dedicated Fibonacci rules reference covering lifecycle columns, dropout behavior, anchor replacement, and pattern-window requirements.
+
+### Changed
+
+- Reorganized Ichimoku 3P classifications, moving cloud-position setups into their intended column and improving per-column top-choice qualification, ordering, reasons, and saved-state badges.
+- Refined Fibonacci lifecycle/dropout handling so active formations, replaced anchors, new extremes, invalid first-touch windows, and opposite-direction candidates are reflected consistently in current and recent-dropout cards.
+- Refined scanner pattern validation, including stricter bullish-harami qualification and clearer localized diagnostics for no-play and setup states.
+- Expanded favorites so instruments remain available across setup groups and directions, while report action columns, quick-chart filters, and journal presentation remain aligned and usable.
+- Updated the chart calculation workflow with clearer required-input guidance, localized errors, and compact cards that can be collapsed when more chart space is needed.
+- Capped scanner-provided falling wedges at 30 candles while preserving manually saved structures, and simplified scanner save/configuration actions so the relevant action remains visible.
+
+### Fixed
+
+- Fixed delayed report filtering after switching to Polish and completed translations for mixed labels in scanner, favorite, journal, chart-save, and market-status interfaces.
+- Fixed favorite icons, grouping, direction filters, and chart shortcuts disappearing or diverging between report tabs and scanner setup categories.
+- Fixed report top-choice alignment, duplicated or misleading reasons, and saved badges overlapping or appearing in the wrong position.
+- Fixed Fibonacci anchor shading and saved instrument colors being lost on refreshed reports, and corrected the four-month Ichimoku eligibility check used by report highlighting.
+- Fixed chart toolbar controls becoming inaccessible or redundant in scanner-launched sessions and corrected wedge rendering after enforcing the automatic length limit.
 
 ## [7.5] - 2026-08-25
 
