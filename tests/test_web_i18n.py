@@ -51,6 +51,24 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Open stockhelper chart": "Otwórz wykres StockHelper",
         "Open stooq chart": "Otwórz wykres Stooq",
         "Ichimoku information": "Informacje Ichimoku",
+        "Reports": "Raporty",
+        "Quick access": "Szybki dostęp",
+        "Display": "Widok",
+        "Info": "Informacje",
+        "Output & Style": "Eksport i wygląd",
+        "Levels": "Poziomy",
+        "Analysis": "Analiza",
+        "Tools": "Narzędzia",
+        "Reset": "Resetuj",
+        "Export": "Eksport",
+        "Choose a scanner workspace.": "Wybierz panel skanera.",
+        "Your saved tools, ready anytime.": "Twoje zapisane narzędzia, zawsze pod ręką.",
+        "Control what you see.": "Wybierz widoczne elementy.",
+        "Report information.": "Informacje o raporcie.",
+        "Export and customize output.": "Eksportuj i dostosuj wygląd.",
+        "ALLSEARCH REPORT": "RAPORT ALLSEARCH",
+        "Color instrument": "Pokoloruj",
+        "Choose instrument…": "Wybierz…",
     }
 
     for english, polish in expected.items():
@@ -76,6 +94,27 @@ def test_dynamic_favorites_are_translated_after_they_are_rendered():
     assert POLISH_TRANSLATIONS[
         "Saved favorites that do not occur in the current Allsearch, 3P, or Kliny results."
     ].startswith("Zapisane ulubione")
+
+
+def test_scanner_workspace_navigation_is_grouped_like_the_chart_toolbar():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    for label in ("Reports", "Quick access", "Display", "Info", "Output &amp; Style"):
+        assert f"class='scanner-nav-label'>{label}</span>" in report_source
+    assert "class='scanner-nav-actions'" in report_source
+    assert ".scanner-nav-group{display:flex;flex-direction:column" in report_source
+    assert "StockHelper scanner workspace</h2>" not in report_source
+    assert ".scanner-nav-group:first-child{padding-left:0;border-left:0}" in report_source
+    assert "Scan. Analyze." not in report_source
+
+
+def test_colored_instruments_do_not_override_favorite_star_colors():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert "body .instrument-colored .favorite-star{color:#64748b!important}" in report_source
+    assert "body .instrument-colored .favorite-star.active{color:#facc15!important}" in report_source
+    assert "const containsInstrument=!!el.querySelector('[data-ticker]:not(button):not(a)')" in report_source
+    assert "!containsInstrument&&colored.has" in report_source
 
 
 def test_missing_fibo_patterns_use_a_dash_in_report_columns():
@@ -117,6 +156,59 @@ def test_chart_has_two_candle_percent_difference_tool():
     assert 'id="line-color-toggle"' in chart_source
     assert 'class="line-color-menu"' in chart_source
     assert 'class="line-tool-group"' in chart_source
+
+
+def test_chart_toolbar_labels_have_polish_translations():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    expected = {"Levels": "Poziomy", "Analysis": "Analiza", "Tools": "Narzędzia", "Scanner": "Skaner", "Reset": "Resetuj", "Export": "Eksport"}
+    for english, polish in expected.items():
+        assert f'class="toolbar-label">{english}</span>' in chart_source
+        assert POLISH_TRANSLATIONS[english] == polish
+
+
+def test_chart_toolbar_hints_and_button_tooltips_have_polish_translations():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    hints = {
+        "Select key price levels": "Wybierz kluczowe poziomy cenowe",
+        "Validate and confirm levels": "Sprawdź i potwierdź poziomy",
+        "Drawing & measurement tools": "Narzędzia do rysowania i pomiarów",
+        "Find chart patterns": "Znajdź formacje na wykresie",
+        "Restore chart drawings": "Przywróć rysunki na wykresie",
+        "Save chart image": "Zapisz obraz wykresu",
+    }
+    for english, polish in hints.items():
+        assert f'class="toolbar-hint">{english}</span>' in chart_source.replace("&amp;", "&")
+        assert POLISH_TRANSLATIONS[english] == polish
+
+    toolbar = chart_source[chart_source.index('<div class="toolbar">'):chart_source.index('<div id="close-mode-panel">')]
+    literal_buttons = toolbar.split("<button ")[1:]
+    assert literal_buttons
+    assert all('title="' in button.split(">", 1)[0] for button in literal_buttons)
+    assert "b.title=levelButtonTitles[field]" in chart_source
+    for tooltip in (
+        "Draw a line on the chart", "Line color", "Yellow", "Purple", "Green",
+        "Draw Fibonacci 61.8 levels", "Set a half-distance stop loss",
+        "Select two candles to calculate the price difference", "Show or hide the Ichimoku overlay",
+        "Find a new upper wedge line", "Search for a larger valid alternative around the current wedge",
+        "Find a new lower wedge line", "Restore the original scanner-created drawings and remove manual drawing changes",
+        "Reset all chart values and drawings", "Download the current chart as a PNG image",
+        "Remove saved scanner configuration", "Select the high level", "Select the low level",
+        "Select the entry level", "Select the stop-loss level", "Check the selected ZR level",
+        "Select the line-cross level", "Select chart level",
+    ):
+        assert tooltip in chart_source
+        assert tooltip in POLISH_TRANSLATIONS
+
+
+def test_setup_information_visibility_does_not_depend_on_translated_option_text():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert '<option value="Kliny">Kliny</option>' in chart_source
+    assert '<option value="Ichimoku">Ichimoku</option>' in chart_source
+    assert '<option value="Fibo">Fibo</option>' in chart_source
+    assert '<option value="Manual">Manual</option>' in chart_source
+    assert "const showInfo = ['Kliny', 'Ichimoku', 'Fibo'].includes(tech)" in chart_source
 
 
 def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():

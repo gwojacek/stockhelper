@@ -44,6 +44,43 @@ def test_chart_has_save_and_save_close_actions():
     assert '@app.route("/save", methods=["POST"])' in source
 
 
+def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    for label in ("Levels", "Analysis", "Tools", "Scanner", "Reset", "Export"):
+        assert f'class="toolbar-label">{label}</span>' in source
+    assert 'class="level-grid" id="level-buttons"' in source
+    assert 'id="analysis-buttons"' in source
+    assert "? 'Fibo' : 'Wedges'" in source
+    assert "scannerToolbarGroup.style.display = hasWedgeObjects ? 'flex' : 'none'" in source
+    assert 'aria-label="Find a new upper wedge line">↑</button>' in source
+    assert 'aria-label="Find a new lower wedge line">↓</button>' in source
+    assert source.index('id="reset-all"') < source.index('id="download-chart-png"')
+
+
+def test_chart_ohlc_values_are_centered_and_individually_spaced():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "#cursor-box {{ min-height:52px; display:flex; align-items:center; justify-content:center;" in source
+    assert "gap:clamp(16px,2.2vw,34px)" in source
+    assert "font-variant-numeric:tabular-nums" in source
+    assert 'class="cursor-stat cursor-day"' in source
+    assert 'class="cursor-label">CURSOR:</span>' in source
+
+
+def test_line_color_menu_opens_upward_with_yellow_default():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert ".line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0;" in source
+    assert ".line-color-picker #line-color-toggle" in source
+    assert 'id="line-color-indicator"' in source
+    assert "#line-color-indicator {{ width:15px; height:15px;" in source
+    assert "background:#facc15" in source
+    assert "$('line-color-indicator').style.background=b.dataset.color" in source
+    assert "$('line-color-toggle').style.background=b.dataset.color" not in source
+    assert "let lineColor = P.lineColors.gold" in source
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
