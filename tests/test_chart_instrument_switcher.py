@@ -34,13 +34,14 @@ def test_chart_html_has_searchable_instrument_switcher():
     assert "url.searchParams.set('command', `python run -c ${{selected.symbol}}`)" in source
 
 
-def test_chart_has_save_and_save_close_actions():
+def test_chart_uses_cursor_save_control_instead_of_sidebar_save_actions():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert 'id="save-btn"' in source
-    assert '<span>Save &amp; Close</span>' in source
-    assert "$('save-btn').onclick = () => saveChart(false)" in source
-    assert "$('finish-btn').onclick = () => saveChart(true)" in source
+    assert 'id="save-btn"' not in source
+    assert 'id="finish-btn"' not in source
+    assert '<span>Save &amp; Close</span>' not in source
+    assert "function saveChart(" not in source
+    assert 'id="saved-fibo-status"' in source
     assert '@app.route("/save", methods=["POST"])' in source
 
 

@@ -644,11 +644,6 @@ class LightweightChartLevelSelectorUI:
     #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
-    .save-actions {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:9px; }}
-    .save-actions .side-action-btn {{ margin-top:0; min-height:66px; }}
-    #save-btn {{ background:linear-gradient(135deg,#047857,#0d9488) !important; border:1px solid #5eead4; box-shadow:0 18px 38px rgba(13,148,136,.22), inset 0 1px 0 rgba(255,255,255,.14); }}
-    #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
-    #save-btn .btn-icon,#finish-btn .btn-icon {{ background:rgba(219,234,254,.18); color:#dbeafe; }}
     #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
     #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
@@ -670,7 +665,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > .save-actions,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -771,10 +766,6 @@ class LightweightChartLevelSelectorUI:
         <div class="action-grid">
           <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Setup information</span></button>
           <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
-        </div>
-        <div class="save-actions">
-          <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save</span></button>
-          <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span>Save &amp; Close</span></button>
         </div>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
@@ -2548,7 +2539,7 @@ class LightweightChartLevelSelectorUI:
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
     const sizeText = candidate.biggerThanCurrent ? 'larger' : 'smaller';
-    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
+    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Use Save by me to keep it for future allsearch calculations.`);
   }}
 
 
@@ -3820,24 +3811,6 @@ class LightweightChartLevelSelectorUI:
   $('calculate-btn').onclick = () => calculatePosition(true);
   $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); window.dispatchEvent(new Event('resize')); }};
 
-  async function saveChart(closeAfterSave) {{
-    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) {{ savedFiboByUser = true; delete levels.__saved_fibo_invalid__; }}
-    if (drawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge')) savedWedgeByUser = true;
-    const calc = await calculatePosition(false);
-    levels = collectLevelsForSave(closeAfterSave);
-    if (calc && calc.ok) levels.position_calculations = calc;
-    let screenshot = null; try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{}}
-    const endpoint = closeAfterSave ? '/finish' : '/save';
-    const resp = await fetch(endpoint, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels, screenshot}})}});
-    const data = await resp.json().catch(() => ({{}}));
-    if (!resp.ok || !data.ok) {{ $('result-box').textContent = 'Save failed: ' + (data.error || resp.status); return; }}
-    try {{ window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:savedWedgeByUser}}, '*'); }} catch(e) {{}}
-    if (!closeAfterSave) {{ $('result-box').textContent = 'Saved. You can continue editing.'; return; }}
-    $('result-box').textContent = 'Saved. Closing app...';
-    setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250);
-  }}
-  $('save-btn').onclick = () => saveChart(false);
-  $('finish-btn').onclick = () => saveChart(true);
   $('saved-fibo-status').onclick = async () => {{
     if (!savedFiboByUser && !savedWedgeByUser) {{
       savedFiboByUser = drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
