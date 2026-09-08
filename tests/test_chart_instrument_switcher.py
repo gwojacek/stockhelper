@@ -101,8 +101,9 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
-    assert '<button id="saved-fibo-status" type="button" style="display:none"' in source
+    assert '<button id="saved-fibo-status" type="button" title="Save these scanner drawings as my configuration"' in source
     assert '💾 Saved by user' in source
+    assert '💾 Save by me' in source
     assert 'class="saved-remove"' in source
     toolbar = source[source.index('<div class="toolbar">'):source.index('<div id="cursor-box">')]
     cursor_box = source[source.index('<div id="cursor-box">'):source.index('<div class="legend-row">')]
@@ -111,6 +112,8 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert "$('cursor-stats').innerHTML" in source
     assert "$('cursor-box').innerHTML" not in source
     assert '#saved-fibo-status' in source and 'color:inherit' in source
+    assert "btn.classList.toggle('active',saved)" in source
+    assert "if (!savedFiboByUser && !savedWedgeByUser)" in source
     assert "savedWedgeByUser" in source
     assert "type:'stockhelper-saved-setup'" in source
     assert "__saved_wedge_by_user__:savedWedgeByUser" in source
