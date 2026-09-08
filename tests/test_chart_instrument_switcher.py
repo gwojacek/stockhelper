@@ -34,13 +34,14 @@ def test_chart_html_has_searchable_instrument_switcher():
     assert "url.searchParams.set('command', `python run -c ${{selected.symbol}}`)" in source
 
 
-def test_chart_has_save_and_save_close_actions():
+def test_chart_uses_cursor_save_control_instead_of_sidebar_save_actions():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert 'id="save-btn"' in source
-    assert '<span>Save &amp; Close</span>' in source
-    assert "$('save-btn').onclick = () => saveChart(false)" in source
-    assert "$('finish-btn').onclick = () => saveChart(true)" in source
+    assert 'id="save-btn"' not in source
+    assert 'id="finish-btn"' not in source
+    assert '<span>Save &amp; Close</span>' not in source
+    assert "function saveChart(" not in source
+    assert 'id="saved-fibo-status"' in source
     assert '@app.route("/save", methods=["POST"])' in source
 
 
@@ -61,7 +62,8 @@ def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
 def test_chart_ohlc_values_are_centered_and_individually_spaced():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert "#cursor-box {{ min-height:52px; display:flex; align-items:center; justify-content:center;" in source
+    assert "#cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px;" in source
+    assert "#cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center;" in source
     assert "gap:clamp(16px,2.2vw,34px)" in source
     assert "font-variant-numeric:tabular-nums" in source
     assert 'class="cursor-stat cursor-day"' in source
@@ -85,7 +87,7 @@ def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
     assert 'id="max-capital-info"' in source
-    assert "💾 Saved by user:" in source
+    assert "💾 Chart saved:" in source
     assert "Max capital engagement:" in source
     assert "1% of 10-day average turnover" in source
     assert "['Fibo', '💾 SAVED BY USER']" in source
@@ -100,11 +102,20 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert 'class="identity-row"><h2 id="identity"></h2><button id="favorite-star"' in source
-    assert '<button id="saved-fibo-status" type="button" style="display:none"' in source
-    assert '💾 Saved by user' in source
+    assert '<button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"' in source
+    assert '💾 Chart saved' in source
+    assert '💾 Save chart' in source
+    assert 'Chart configuration saved until it becomes invalid; click to remove' in source
     assert 'class="saved-remove"' in source
     toolbar = source[source.index('<div class="toolbar">'):source.index('<div id="cursor-box">')]
-    assert toolbar.index('id="download-chart-png"') < toolbar.index('id="saved-fibo-status"')
+    cursor_box = source[source.index('<div id="cursor-box">'):source.index('<div class="legend-row">')]
+    assert 'id="saved-fibo-status"' not in toolbar
+    assert cursor_box.index('id="cursor-stats"') < cursor_box.index('id="saved-fibo-status"')
+    assert "$('cursor-stats').innerHTML" in source
+    assert "$('cursor-box').innerHTML" not in source
+    assert '#saved-fibo-status' in source and 'color:inherit' in source
+    assert "btn.classList.toggle('active',saved)" in source
+    assert "if (!savedFiboByUser && !savedWedgeByUser)" in source
     assert "savedWedgeByUser" in source
     assert "type:'stockhelper-saved-setup'" in source
     assert "__saved_wedge_by_user__:savedWedgeByUser" in source

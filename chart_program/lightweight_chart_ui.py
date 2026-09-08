@@ -537,12 +537,13 @@ class LightweightChartLevelSelectorUI:
     .chart-icon.end {{ color:#0f172a; background:#f8fafc; }}
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
-    #cursor-box {{ min-height:52px; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+    #cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+    #cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); min-width:0; }}
     #cursor-box .cursor-stat {{ display:inline-flex; align-items:baseline; gap:5px; }}
     #cursor-box .cursor-label {{ color:#82a9ca; font-weight:700; }}
     #cursor-box .cursor-value {{ color:#dcecff; }}
     #cursor-box .cursor-day {{ padding-right:clamp(16px,2.2vw,34px); border-right:1px solid #285170; }}
-    @media(max-width:900px) {{ #cursor-box {{ justify-content:flex-start; gap:16px; overflow-x:auto; }} }}
+    @media(max-width:900px) {{ #cursor-box {{ gap:12px; overflow-x:auto; }} #cursor-stats {{ justify-content:flex-start; gap:16px; }} }}
     .side {{ border-left: 1px solid rgba(96,165,250,.18); padding: 14px; background: radial-gradient(circle at 20% 0, rgba(37,99,235,.12), transparent 34%), #020817; overflow-y: auto; }}
     .side-card {{ margin-bottom:10px; padding:11px; border:1px solid rgba(148,163,184,.28); border-radius:16px; background:linear-gradient(145deg, rgba(15,23,42,.94), rgba(2,6,23,.92)); box-shadow:0 14px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.04); }}
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
@@ -560,8 +561,9 @@ class LightweightChartLevelSelectorUI:
     #identity {{ min-width:0; flex:1 1 auto; margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
-    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin:0; padding:5px 8px; border:1px solid #a16207; border-radius:9px; background:#713f12; color:#fef3c7; font-size:11px; font-weight:800; white-space:nowrap; }}
-    #saved-fibo-status .saved-remove {{ margin-left:5px; color:#fecaca; font-size:14px; }}
+    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin-left:auto; padding:5px 8px; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
+    #saved-fibo-status .saved-remove {{ margin-left:5px; color:inherit; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
@@ -642,11 +644,6 @@ class LightweightChartLevelSelectorUI:
     #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
-    .save-actions {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:9px; }}
-    .save-actions .side-action-btn {{ margin-top:0; min-height:66px; }}
-    #save-btn {{ background:linear-gradient(135deg,#047857,#0d9488) !important; border:1px solid #5eead4; box-shadow:0 18px 38px rgba(13,148,136,.22), inset 0 1px 0 rgba(255,255,255,.14); }}
-    #finish-btn {{ background:linear-gradient(135deg,#1d4ed8,#7c3aed) !important; border:1px solid #93c5fd; box-shadow:0 18px 38px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.14); }}
-    #save-btn .btn-icon,#finish-btn .btn-icon {{ background:rgba(219,234,254,.18); color:#dbeafe; }}
     #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
     #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
@@ -668,7 +665,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > .save-actions,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -711,10 +708,10 @@ class LightweightChartLevelSelectorUI:
           <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line" aria-label="Find a new upper wedge line">↑</button><button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">△ Find new wedge</button><button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line" aria-label="Find a new lower wedge line">↓</button>
         </div></section>
         <section class="toolbar-group"><span class="toolbar-label">Reset</span><span class="toolbar-hint">Restore chart drawings</span><div class="toolbar-actions"><button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Fibo</button><button id="reset-all" title="Reset all chart values and drawings">All</button></div></section>
-        <section class="toolbar-group"><span class="toolbar-label">Export</span><span class="toolbar-hint">Save chart image</span><div class="toolbar-actions"><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button><button id="saved-fibo-status" type="button" style="display:none" title="Remove saved scanner configuration"><span>💾 Saved by user</span><span class="saved-remove" aria-hidden="true">×</span></button></div></section>
+        <section class="toolbar-group"><span class="toolbar-label">Export</span><span class="toolbar-hint">Save chart image</span><div class="toolbar-actions"><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></section>
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div class="chart-stage"><div id="cursor-box"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
+      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -770,10 +767,6 @@ class LightweightChartLevelSelectorUI:
           <button id="setup-debug-btn" class="side-action-btn"><span class="btn-icon">📈</span><span>Setup information</span></button>
           <button id="journal-toggle-btn" class="side-action-btn"><span class="btn-icon">🧾</span><span>Add journal entry</span></button>
         </div>
-        <div class="save-actions">
-          <button id="save-btn" class="side-action-btn"><span class="btn-icon">💾</span><span>Save</span></button>
-          <button id="finish-btn" class="side-action-btn"><span class="btn-icon">✓</span><span>Save &amp; Close</span></button>
-        </div>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
           <label>Technique</label><select id="journal-technique"><option value="Kliny">Kliny</option><option value="Ichimoku">Ichimoku</option><option value="Fibo">Fibo</option><option value="Manual">Manual</option></select>
@@ -806,7 +799,7 @@ class LightweightChartLevelSelectorUI:
   let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
   let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
-  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) btn.style.display=(savedFiboByUser||savedWedgeByUser)?'':'none'; refreshChartContextInfo(); }};
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; btn.classList.toggle('active',saved); btn.title=saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'; const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=saved?'💾 Chart saved':'💾 Save chart'; if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -860,7 +853,7 @@ class LightweightChartLevelSelectorUI:
   }}
   function refreshChartContextInfo() {{
     const info=$('chart-context-info'); if(!info)return;
-    const saved=(savedFiboByUser||savedWedgeByUser) ? `<div><strong>💾 Saved by user:</strong> ${{savedFiboByUser?'Fibo':'Kliny'}} configuration.</div>` : '';
+    const saved=(savedFiboByUser||savedWedgeByUser) ? `<div><strong>💾 Chart saved:</strong> ${{savedFiboByUser?'Fibo':'Kliny'}} configuration remains active until it becomes invalid.</div>` : '';
     const selected=String($('calculation-currency')?.value||levels.calculation_currency||'PLN').toUpperCase();
     const converted=maxCapitalInSelectedCurrency();
     const capital=Number.isFinite(converted) ? `<div><strong>Max capital engagement:</strong> ${{money(converted,selected)}} (1% of 10-day average turnover)</div>` : '';
@@ -2428,8 +2421,7 @@ class LightweightChartLevelSelectorUI:
     const dateForIdx = (idx) => rows[Math.max(0, Math.min(rows.length - 1, idx))]?.time;
     const lineAt = (a, b, idx) => a.price + (b.price - a.price) * ((idx - a.idx) / Math.max(1, b.idx - a.idx));
     const maxIdx = rows.length - 1;
-    const projection = Math.max(80, Math.abs(candidate.upper.b.idx - candidate.upper.a.idx) * 2, Math.abs(candidate.lower.b.idx - candidate.lower.a.idx) * 2);
-    let endIdx = maxIdx + projection;
+    let endIdx = maxIdx + 30;
     const us = (candidate.upper.b.price - candidate.upper.a.price) / Math.max(1, candidate.upper.b.idx - candidate.upper.a.idx);
     const ls = (candidate.lower.b.price - candidate.lower.a.price) / Math.max(1, candidate.lower.b.idx - candidate.lower.a.idx);
     const denom = us - ls;
@@ -2437,9 +2429,8 @@ class LightweightChartLevelSelectorUI:
       const ui = candidate.upper.a.price - us * candidate.upper.a.idx;
       const li = candidate.lower.a.price - ls * candidate.lower.a.idx;
       const cross = Math.ceil((li - ui) / denom);
-      if (cross > maxIdx) endIdx = Math.max(endIdx, cross + 5);
+      if (cross > maxIdx) endIdx = Math.min(endIdx, cross + 5);
     }}
-    endIdx = Math.min(endIdx, maxIdx + Math.max(rows.length, 180));
     const make = (side, color, label, id, line) => {{
       const anchorX = [dateForIdx(line.a.idx), dateForIdx(line.b.idx)];
       const anchorY = [roundPrice(line.a.price), roundPrice(line.b.price)];
@@ -2548,7 +2539,7 @@ class LightweightChartLevelSelectorUI:
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
     const sizeText = candidate.biggerThanCurrent ? 'larger' : 'smaller';
-    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Save & Close to keep it for future allsearch calculations.`);
+    updateSetupDebugPanel(`Found and loaded the next ${{sizeText}} valid wedge alternative. Click again to loop through remaining possibilities. Use Save chart to keep it until it becomes invalid.`);
   }}
 
 
@@ -3373,7 +3364,7 @@ class LightweightChartLevelSelectorUI:
     const row = nearest(time); let day = null; if (row.idx > 0) {{ const prev = P.ohlc[row.idx-1].close; if (prev) day = ((row.close-prev)/prev)*100; }}
     const dayText = day == null ? '--' : (day>=0?'+':'') + day.toFixed(2)+'%';
     const dayColor = day == null ? '#e5e7eb' : (day >= 0 ? '#22c55e' : '#ef4444');
-    $('cursor-box').innerHTML = `<span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">${{row.time}}</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">${{fmt(row.open)}}</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">${{fmt(row.high)}}</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">${{fmt(row.low)}}</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">${{fmt(row.close)}}</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value" style="color:${{dayColor}}">${{dayText}}</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">${{Number.isFinite(cursor) ? fmt(cursor) : '--'}}</span></span>`;
+    $('cursor-stats').innerHTML = `<span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">${{row.time}}</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">${{fmt(row.open)}}</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">${{fmt(row.high)}}</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">${{fmt(row.low)}}</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">${{fmt(row.close)}}</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value" style="color:${{dayColor}}">${{dayText}}</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">${{Number.isFinite(cursor) ? fmt(cursor) : '--'}}</span></span>`;
     if (activeTool === 'line' && lineAnchor && Number.isFinite(cursor)) updateLinePreview(time, cursor);
     if (activeTool === 'fib' && fibAnchor && time) updateFibPreview(time);
   }});
@@ -3820,25 +3811,29 @@ class LightweightChartLevelSelectorUI:
   $('calculate-btn').onclick = () => calculatePosition(true);
   $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); window.dispatchEvent(new Event('resize')); }};
 
-  async function saveChart(closeAfterSave) {{
-    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) {{ savedFiboByUser = true; delete levels.__saved_fibo_invalid__; }}
-    if (drawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge')) savedWedgeByUser = true;
-    const calc = await calculatePosition(false);
-    levels = collectLevelsForSave(closeAfterSave);
-    if (calc && calc.ok) levels.position_calculations = calc;
-    let screenshot = null; try {{ screenshot = chart.takeScreenshot(true, false).toDataURL('image/png'); }} catch(e) {{}}
-    const endpoint = closeAfterSave ? '/finish' : '/save';
-    const resp = await fetch(endpoint, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels, screenshot}})}});
-    const data = await resp.json().catch(() => ({{}}));
-    if (!resp.ok || !data.ok) {{ $('result-box').textContent = 'Save failed: ' + (data.error || resp.status); return; }}
-    try {{ window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:savedWedgeByUser}}, '*'); }} catch(e) {{}}
-    if (!closeAfterSave) {{ $('result-box').textContent = 'Saved. You can continue editing.'; return; }}
-    $('result-box').textContent = 'Saved. Closing app...';
-    setTimeout(() => {{ fetch('/shutdown', {{method:'POST', keepalive:true}}); try {{ window.close(); }} catch(e) {{}} }}, 250);
-  }}
-  $('save-btn').onclick = () => saveChart(false);
-  $('finish-btn').onclick = () => saveChart(true);
   $('saved-fibo-status').onclick = async () => {{
+    if (!savedFiboByUser && !savedWedgeByUser) {{
+      savedFiboByUser = drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
+      savedWedgeByUser = drawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+      levels.__saved_fibo_by_user__ = savedFiboByUser;
+      levels.__saved_wedge_by_user__ = savedWedgeByUser;
+      const payload = collectLevelsForSave(false);
+      const resp = await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload, screenshot:null}})}});
+      const data = await resp.json().catch(() => ({{}}));
+      if (resp.ok && data.ok) {{
+        initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
+        initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
+        refreshSavedFiboStatus();
+        try {{ window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:savedWedgeByUser}}, '*'); }} catch(e) {{}}
+        $('result-box').textContent = 'Chart configuration saved until it becomes invalid.';
+      }} else {{
+        savedFiboByUser = false;
+        savedWedgeByUser = false;
+        refreshSavedFiboStatus();
+        $('result-box').textContent = 'Could not save scanner configuration.';
+      }}
+      return;
+    }}
     savedFiboByUser = false;
     savedWedgeByUser = false;
     // The visible lines may remain as a reference, but from this point their

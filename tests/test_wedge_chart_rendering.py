@@ -51,3 +51,16 @@ def test_wedge_start_can_overlap_the_second_anchor_without_hiding_the_line():
     assert "const coincidentAnchors = compareTime(anchors.x0, anchors.x1) === 0;" in source
     assert "(obj.free_extension || coincidentAnchors) ? rawY1" in source
     assert "compareTime(x0, anchorsX[1]) !== 0" in start_drag
+
+
+def test_scanner_wedge_projection_is_capped_at_thirty_candles():
+    selector_source = (UI_SOURCE.parent / "level_selector.py").read_text(encoding="utf-8")
+    ui_source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "projection_limit = last_idx + 30" in selector_source
+    assert "max_projection = last_idx + 30" in selector_source
+    assert "let endIdx = maxIdx + 30;" in ui_source
+    assert "Math.max(rows.length, 180)" not in ui_source[
+        ui_source.index("function wedgeLineThroughExtremeObjects"):
+        ui_source.index("function findAlternativeWedgeCandidate")
+    ]
