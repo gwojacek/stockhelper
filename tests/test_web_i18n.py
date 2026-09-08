@@ -225,7 +225,7 @@ def test_setup_information_visibility_does_not_depend_on_translated_option_text(
     assert "const showInfo = ['Kliny', 'Ichimoku', 'Fibo'].includes(tech)" in chart_source
 
 
-def test_all_chart_sidebar_cards_collapse_together_and_remember_their_state():
+def test_instrument_card_toggle_is_global_and_other_card_toggles_are_local():
     chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
     assert chart_source.count('class="side-card-toggle"') == 3
@@ -235,8 +235,10 @@ def test_all_chart_sidebar_cards_collapse_together_and_remember_their_state():
     assert 'aria-controls="instrument-card-body"' in chart_source
     assert "setSideCardCollapsed" in chart_source
     assert "setAllSideCardsCollapsed" in chart_source
-    assert "stockhelper-side-cards-collapsed" in chart_source
-    assert "stockhelper-side-card-collapsed-" not in chart_source
+    assert "if(cardId==='instrument-card')" in chart_source
+    assert "else{{\n        setSideCardCollapsed(cardId,collapsed);" in chart_source
+    assert "stockhelper-side-card-collapsed-" in chart_source
+    assert "rememberSideCardCollapsed" in chart_source
     assert '<section class="side-card instrument-switcher-card">' in chart_source
     assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
     assert POLISH_TRANSLATIONS["Expand section"] == "Rozwiń sekcję"

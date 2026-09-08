@@ -830,16 +830,31 @@ class LightweightChartLevelSelectorUI:
     toggle.title=collapsed?'Expand section':'Collapse section';
   }}
   const collapsibleSideCardIds=[...document.querySelectorAll('.side-card-toggle[data-card]')].map(toggle=>toggle.dataset.card);
-  const sideCardsCollapsedKey='stockhelper-side-cards-collapsed';
+  const sideCardCollapsedKey=cardId=>'stockhelper-side-card-collapsed-'+cardId;
   function setAllSideCardsCollapsed(collapsed) {{
     collapsibleSideCardIds.forEach(cardId=>setSideCardCollapsed(cardId,collapsed));
   }}
-  try{{setAllSideCardsCollapsed(localStorage.getItem(sideCardsCollapsedKey)==='1');}}catch(e){{}}
+  function rememberSideCardCollapsed(cardId,collapsed) {{
+    try{{localStorage.setItem(sideCardCollapsedKey(cardId),collapsed?'1':'0');}}catch(e){{}}
+  }}
+  try{{
+    const legacyCollapsed=localStorage.getItem('stockhelper-side-cards-collapsed');
+    collapsibleSideCardIds.forEach(cardId=>{{
+      const saved=localStorage.getItem(sideCardCollapsedKey(cardId));
+      setSideCardCollapsed(cardId,(saved===null?legacyCollapsed:saved)==='1');
+    }});
+  }}catch(e){{}}
   document.querySelectorAll('.side-card-toggle[data-card]').forEach(toggle=>{{
     toggle.addEventListener('click',()=>{{
-      const collapsed=!document.getElementById(toggle.dataset.card)?.classList.contains('collapsed');
-      setAllSideCardsCollapsed(collapsed);
-      try{{localStorage.setItem(sideCardsCollapsedKey,collapsed?'1':'0');}}catch(e){{}}
+      const cardId=toggle.dataset.card;
+      const collapsed=!document.getElementById(cardId)?.classList.contains('collapsed');
+      if(cardId==='instrument-card'){{
+        setAllSideCardsCollapsed(collapsed);
+        collapsibleSideCardIds.forEach(id=>rememberSideCardCollapsed(id,collapsed));
+      }}else{{
+        setSideCardCollapsed(cardId,collapsed);
+        rememberSideCardCollapsed(cardId,collapsed);
+      }}
     }});
   }});
 
