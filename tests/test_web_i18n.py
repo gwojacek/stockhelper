@@ -193,12 +193,26 @@ def test_chart_toolbar_hints_and_button_tooltips_have_polish_translations():
         "Find a new upper wedge line", "Search for a larger valid alternative around the current wedge",
         "Find a new lower wedge line", "Restore the original scanner-created drawings and remove manual drawing changes",
         "Reset all chart values and drawings", "Download the current chart as a PNG image",
-        "Remove saved scanner configuration", "Select the high level", "Select the low level",
+        "Saves chart configuration until it becomes invalid", "Select the high level", "Select the low level",
         "Select the entry level", "Select the stop-loss level", "Check the selected ZR level",
         "Select the line-cross level", "Select chart level",
     ):
         assert tooltip in chart_source
         assert tooltip in POLISH_TRANSLATIONS
+
+
+def test_chart_save_control_has_complete_polish_translation():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    expected = {
+        "Save chart": "Zapisz wykres",
+        "Chart saved": "Wykres zapisany",
+        "Saves chart configuration until it becomes invalid": "Zapisuje konfigurację wykresu do czasu, aż stanie się nieaktualna",
+        "Chart configuration saved until it becomes invalid; click to remove": "Konfiguracja wykresu jest zapisana do czasu, aż stanie się nieaktualna; kliknij, aby usunąć",
+        "Chart configuration saved until it becomes invalid.": "Konfiguracja wykresu została zapisana do czasu, aż stanie się nieaktualna.",
+    }
+    for english, polish in expected.items():
+        assert english in chart_source
+        assert POLISH_TRANSLATIONS[english] == polish
 
 
 def test_setup_information_visibility_does_not_depend_on_translated_option_text():
