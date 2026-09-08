@@ -47,11 +47,11 @@ def test_chart_has_save_and_save_close_actions():
 def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    for label in ("Levels", "Analysis", "Tools", "Scanner", "Actions / Export"):
+    for label in ("Levels", "Analysis", "Tools", "Scanner", "Reset", "Export"):
         assert f'class="toolbar-label">{label}</span>' in source
     assert 'class="level-grid" id="level-buttons"' in source
     assert 'id="analysis-buttons"' in source
-    assert "? '↻ Reset Fibo' : '↻ Reset Wedges'" in source
+    assert "? 'Fibo' : 'Wedges'" in source
     assert "scannerToolbarGroup.style.display = hasWedgeObjects ? 'flex' : 'none'" in source
     assert 'aria-label="Find a new upper wedge line">↑</button>' in source
     assert 'aria-label="Find a new lower wedge line">↓</button>' in source
