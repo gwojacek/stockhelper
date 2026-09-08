@@ -78,6 +78,23 @@ def test_dynamic_favorites_are_translated_after_they_are_rendered():
     ].startswith("Zapisane ulubione")
 
 
+def test_scanner_workspace_navigation_is_grouped_like_the_chart_toolbar():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    for label in ("Reports", "Quick access", "Display", "Info", "Output &amp; Style"):
+        assert f"class='scanner-nav-label'>{label}</span>" in report_source
+    assert "class='scanner-nav-actions'" in report_source
+    assert ".scanner-nav-group{display:flex;flex-direction:column" in report_source
+    assert "Scan. Analyze." not in report_source
+
+
+def test_colored_instruments_do_not_override_favorite_star_colors():
+    report_source = Path("run").read_text(encoding="utf-8")
+
+    assert "body .instrument-colored .favorite-star{color:#64748b!important}" in report_source
+    assert "body .instrument-colored .favorite-star.active{color:#facc15!important}" in report_source
+
+
 def test_missing_fibo_patterns_use_a_dash_in_report_columns():
     report_source = Path("run").read_text(encoding="utf-8")
 
