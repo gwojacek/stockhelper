@@ -2050,3 +2050,4 @@ def test_allsearch_top_choice_separators_align_to_longest_reason_text():
     assert "--choice-kind-width" in source
     assert "--choice-detail-width" in source
     assert "window.addEventListener('resize',normalizeChoiceReasonColumns)" in source
+    assert "flex:0 0 14px;width:14px" in source
