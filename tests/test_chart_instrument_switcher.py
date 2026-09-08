@@ -73,7 +73,11 @@ def test_line_color_menu_opens_upward_with_yellow_default():
 
     assert ".line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0;" in source
     assert ".line-color-picker #line-color-toggle" in source
-    assert "background:#facc15; border-color:#fde047; color:#172033" in source
+    assert 'id="line-color-indicator"' in source
+    assert "#line-color-indicator {{ width:15px; height:15px;" in source
+    assert "background:#facc15" in source
+    assert "$('line-color-indicator').style.background=b.dataset.color" in source
+    assert "$('line-color-toggle').style.background=b.dataset.color" not in source
     assert "let lineColor = P.lineColors.gold" in source
 
 

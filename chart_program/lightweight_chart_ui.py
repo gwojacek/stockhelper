@@ -618,7 +618,9 @@ class LightweightChartLevelSelectorUI:
     .line-tool-group {{ display:inline-flex; align-items:stretch; gap:0; }}
     .line-tool-group #tool-line {{ border-radius:7px 0 0 7px; }}
     .line-color-picker {{ position:relative; display:inline-flex; margin-left:-1px; }}
-    .line-color-picker #line-color-toggle {{ border-radius:0 7px 7px 0; min-width:34px; padding-left:8px; padding-right:8px; background:#facc15; border-color:#fde047; color:#172033; }}
+    .line-color-picker #line-color-toggle {{ display:inline-flex; align-items:center; justify-content:center; gap:5px; border-radius:0 7px 7px 0; min-width:40px; padding-left:8px; padding-right:8px; }}
+    #line-color-indicator {{ width:15px; height:15px; flex:0 0 15px; border-radius:50%; background:#facc15; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 5px rgba(0,0,0,.45); }}
+    .line-color-chevron {{ color:#cbd5e1; font-size:10px; line-height:1; }}
     .line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
     .line-color-picker.open .line-color-menu {{ display:flex; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; min-height:48px; padding:12px 18px 9px; border-top:1px solid rgba(23,81,117,.75); }}
@@ -702,7 +704,7 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Levels</span><span class="toolbar-hint">Select key price levels</span><div class="level-grid" id="level-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Analysis</span><span class="toolbar-hint">Validate and confirm levels</span><div class="toolbar-actions" id="analysis-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Tools</span><span class="toolbar-hint">Drawing &amp; measurement tools</span><div class="toolbar-actions">
-          <span class="line-tool-group"><button id="tool-line"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color">●⌄</button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
+          <span class="line-tool-group"><button id="tool-line"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color"><span id="line-color-indicator" aria-hidden="true"></span><span class="line-color-chevron" aria-hidden="true">⌄</span></button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
           <button id="tool-fib">Fib 61.8</button><button id="tool-half">Half→SL</button><button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button><button id="ichimoku-toggle">Ichimoku</button>
         </div></section>
         <section class="toolbar-group" id="scanner-toolbar-group" style="display:none"><span class="toolbar-label">Scanner</span><span class="toolbar-hint">Find chart patterns</span><div class="toolbar-actions">
@@ -3214,7 +3216,7 @@ class LightweightChartLevelSelectorUI:
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
   $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');
-  document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => {{ lineColor = b.dataset.color; $('line-color-toggle').style.background=b.dataset.color; $('line-color-picker').classList.remove('open'); }});
+  document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => {{ lineColor = b.dataset.color; $('line-color-indicator').style.background=b.dataset.color; $('line-color-picker').classList.remove('open'); }});
   $('download-chart-png').onclick = async () => {{
     try {{
       const canvas = await captureChartPng();
