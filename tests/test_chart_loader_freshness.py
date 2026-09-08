@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 
@@ -891,6 +892,26 @@ def test_level_selector_refreshes_latest_then_does_not_rewrite_market_data_csv(m
     assert calls == [False, True]
     assert result["data_path"] == str(csv_path)
     assert "2026-06-10" in csv_path.read_text(encoding="utf-8")
+
+
+def test_level_selector_loads_authoritative_bare_ticker_stock_session(monkeypatch, tmp_path):
+    import chart_program.level_selector as selector
+
+    project_root = tmp_path
+    config_path = project_root / "configs" / "stocks" / "cri_wa.py"
+    sessions = project_root / "data" / "state" / "sessions"
+    sessions.mkdir(parents=True)
+    (sessions / "cri_wa.json").write_text(json.dumps({"capital": 1000}), encoding="utf-8")
+    (sessions / "cri.json").write_text(json.dumps({
+        "drawn_objects": [{"type": "wedge", "group_id": "auto-wedge"}],
+        "__saved_wedge_by_user__": True,
+    }), encoding="utf-8")
+    monkeypatch.setattr(selector, "PROJECT_ROOT", project_root)
+
+    state = selector._load_session_state(config_path)
+
+    assert state["__saved_wedge_by_user__"] is True
+    assert state["drawn_objects"][0]["type"] == "wedge"
 
 
 def test_yahoo_quote_page_row_fills_history_lag(monkeypatch):

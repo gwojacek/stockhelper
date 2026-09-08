@@ -45,6 +45,13 @@ def test_chart_uses_cursor_save_control_instead_of_sidebar_save_actions():
     assert '@app.route("/save", methods=["POST"])' in source
 
 
+def test_saved_wedge_validation_starts_after_all_four_anchors():
+    source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
+
+    assert "start_idx = max(upper_a[0], upper_b[0], lower_a[0], lower_b[0])" in source
+    assert "max(min(upper_a[0], upper_b[0]), min(lower_a[0], lower_b[0]))" not in source
+
+
 def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 

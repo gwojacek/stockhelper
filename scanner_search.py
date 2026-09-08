@@ -4911,6 +4911,10 @@ def _scanner_session_paths_for_ticker(ticker: str) -> tuple[Path, ...]:
     # anchor.
     config_stem = canonical.lower().replace("/", "").replace(".", "_")
     stems.extend((config_stem, config_stem.upper()))
+    # Report commands use exchange-qualified stock symbols (CRI.WA), while
+    # older chart sessions may use the bare WIG ticker (cri.json).  Search both
+    # names so the table badge and the chart button resolve the same decision.
+    stems.extend((f"{config_stem}_wa", f"{config_stem}_pl"))
     # Level selector configs for commodities/forex are direction-qualified
     # (``aluminium_long.py`` / ``aluminium_short.py``), and session state uses
     # that config stem even though scanner rows only contain ``ALUMINIUM``.
