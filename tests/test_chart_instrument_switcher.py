@@ -48,7 +48,7 @@ def test_chart_uses_cursor_save_control_instead_of_sidebar_save_actions():
 def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    for label in ("Levels", "Analysis", "Tools", "Scanner", "Reset", "Export"):
+    for label in ("Levels", "Analysis", "Tools", "Scanner", "Reset"):
         assert f'class="toolbar-label">{label}</span>' in source
     assert 'class="level-grid" id="level-buttons"' in source
     assert 'id="analysis-buttons"' in source

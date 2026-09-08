@@ -161,7 +161,7 @@ def test_chart_has_two_candle_percent_difference_tool():
 def test_chart_toolbar_labels_have_polish_translations():
     chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    expected = {"Levels": "Poziomy", "Analysis": "Analiza", "Tools": "Narzędzia", "Scanner": "Skaner", "Reset": "Resetuj", "Export": "Eksport"}
+    expected = {"Levels": "Poziomy", "Analysis": "Analiza", "Tools": "Narzędzia", "Scanner": "Skaner", "Reset": "Resetuj"}
     for english, polish in expected.items():
         assert f'class="toolbar-label">{english}</span>' in chart_source
         assert POLISH_TRANSLATIONS[english] == polish
@@ -175,7 +175,6 @@ def test_chart_toolbar_hints_and_button_tooltips_have_polish_translations():
         "Drawing & measurement tools": "Narzędzia do rysowania i pomiarów",
         "Find chart patterns": "Znajdź formacje na wykresie",
         "Restore chart drawings": "Przywróć rysunki na wykresie",
-        "Save chart image": "Zapisz obraz wykresu",
     }
     for english, polish in hints.items():
         assert f'class="toolbar-hint">{english}</span>' in chart_source.replace("&amp;", "&")
@@ -239,6 +238,9 @@ def test_instrument_card_toggle_is_global_and_other_card_toggles_are_local():
     assert "else{{\n        setSideCardCollapsed(cardId,collapsed);" in chart_source
     assert "stockhelper-side-card-collapsed-" in chart_source
     assert "rememberSideCardCollapsed" in chart_source
+    assert "persistSideCardStates" in chart_source
+    assert "fetch('/sidebar-card-state'" in chart_source
+    assert '@app.route("/sidebar-card-state", methods=["GET", "POST"])' in chart_source
     assert '<section class="side-card instrument-switcher-card">' in chart_source
     assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
     assert POLISH_TRANSLATIONS["Expand section"] == "Rozwiń sekcję"
@@ -253,6 +255,17 @@ def test_stock_cfd_control_is_part_of_manual_inputs_card():
     assert 'id="stock-cfd-toggle"' in manual_body
     assert '.manual-card.collapsed' in chart_source
     assert '.manual-card .side-card-head h4 {{ color:#f8fafc; font-size:16px' in chart_source
+
+
+def test_chart_png_button_sits_next_to_save_chart_with_matching_size():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    actions = chart_source.split('<div class="chart-save-actions">', 1)[1].split("</div>", 1)[0]
+    assert 'id="saved-fibo-status"' in actions
+    assert 'id="download-chart-png"' in actions
+    assert '.chart-save-actions button {{ width:122px; min-height:32px; }}' in chart_source
+    assert '#saved-fibo-status {{ flex:0 0 auto; width:122px;' in chart_source
+    assert '<span class="toolbar-label">Export</span>' not in chart_source
 
 
 def test_favorites_and_journal_are_fully_localized():

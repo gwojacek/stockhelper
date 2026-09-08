@@ -45,6 +45,9 @@ LINE_COLORS = {
     "green": "#22c55e",
 }
 
+USER_SETTINGS_LOCK = threading.Lock()
+USER_SETTINGS_PATH = Path(__file__).resolve().parent / "data" / "user_settings.json"
+
 
 class LightweightChartLevelSelectorUI:
     """TradingView Lightweight Charts based level selector.
@@ -538,6 +541,8 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+    .chart-save-actions {{ display:flex; align-items:center; gap:7px; }}
+    .chart-save-actions button {{ width:122px; min-height:32px; }}
     #cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); min-width:0; }}
     #cursor-box .cursor-stat {{ display:inline-flex; align-items:baseline; gap:5px; }}
     #cursor-box .cursor-label {{ color:#82a9ca; font-weight:700; }}
@@ -564,7 +569,7 @@ class LightweightChartLevelSelectorUI:
     #identity {{ min-width:0; flex:1 1 auto; margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
-    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin-left:auto; padding:5px 8px; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status {{ flex:0 0 auto; width:122px; margin-left:auto; padding:5px 8px; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
     #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
     #saved-fibo-status .saved-remove {{ margin-left:5px; color:inherit; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
@@ -712,10 +717,9 @@ class LightweightChartLevelSelectorUI:
           <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line" aria-label="Find a new upper wedge line">↑</button><button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">△ Find new wedge</button><button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line" aria-label="Find a new lower wedge line">↓</button>
         </div></section>
         <section class="toolbar-group"><span class="toolbar-label">Reset</span><span class="toolbar-hint">Restore chart drawings</span><div class="toolbar-actions"><button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Fibo</button><button id="reset-all" title="Reset all chart values and drawings">All</button></div></section>
-        <section class="toolbar-group"><span class="toolbar-label">Export</span><span class="toolbar-hint">Save chart image</span><div class="toolbar-actions"><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></section>
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
+      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -837,6 +841,14 @@ class LightweightChartLevelSelectorUI:
   function rememberSideCardCollapsed(cardId,collapsed) {{
     try{{localStorage.setItem(sideCardCollapsedKey(cardId),collapsed?'1':'0');}}catch(e){{}}
   }}
+  function persistSideCardStates(cardIds) {{
+    const states={{}};
+    cardIds.forEach(cardId=>{{
+      states[cardId]=document.getElementById(cardId)?.classList.contains('collapsed')||false;
+      rememberSideCardCollapsed(cardId,states[cardId]);
+    }});
+    fetch('/sidebar-card-state',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{states}})}}).catch(()=>{{}});
+  }}
   try{{
     const legacyCollapsed=localStorage.getItem('stockhelper-side-cards-collapsed');
     collapsibleSideCardIds.forEach(cardId=>{{
@@ -844,16 +856,25 @@ class LightweightChartLevelSelectorUI:
       setSideCardCollapsed(cardId,(saved===null?legacyCollapsed:saved)==='1');
     }});
   }}catch(e){{}}
+  fetch('/sidebar-card-state').then(response=>response.ok?response.json():null).then(data=>{{
+    if(!data?.states)return;
+    collapsibleSideCardIds.forEach(cardId=>{{
+      if(typeof data.states[cardId]==='boolean'){{
+        setSideCardCollapsed(cardId,data.states[cardId]);
+        rememberSideCardCollapsed(cardId,data.states[cardId]);
+      }}
+    }});
+  }}).catch(()=>{{}});
   document.querySelectorAll('.side-card-toggle[data-card]').forEach(toggle=>{{
     toggle.addEventListener('click',()=>{{
       const cardId=toggle.dataset.card;
       const collapsed=!document.getElementById(cardId)?.classList.contains('collapsed');
       if(cardId==='instrument-card'){{
         setAllSideCardsCollapsed(collapsed);
-        collapsibleSideCardIds.forEach(id=>rememberSideCardCollapsed(id,collapsed));
+        persistSideCardStates(collapsibleSideCardIds);
       }}else{{
         setSideCardCollapsed(cardId,collapsed);
-        rememberSideCardCollapsed(cardId,collapsed);
+        persistSideCardStates([cardId]);
       }}
     }});
   }});
@@ -4207,6 +4228,31 @@ class LightweightChartLevelSelectorUI:
             payload = request.get_json(silent=True) or {}
             levels = payload.get("levels") or {}
             return jsonify(self._position_calculation_payload(levels))
+
+        @app.route("/sidebar-card-state", methods=["GET", "POST"])
+        def _sidebar_card_state():
+            valid_ids = {"instrument-card", "selected-card", "manual-card"}
+            with USER_SETTINGS_LOCK:
+                try:
+                    settings = json.loads(USER_SETTINGS_PATH.read_text(encoding="utf-8"))
+                except (OSError, TypeError, json.JSONDecodeError):
+                    settings = {}
+                if not isinstance(settings, dict):
+                    settings = {}
+                states = settings.get("chart_sidebar_collapsed", {})
+                if not isinstance(states, dict):
+                    states = {}
+                states = {key: value for key, value in states.items() if key in valid_ids and isinstance(value, bool)}
+                if request.method == "POST":
+                    requested = (request.get_json(silent=True) or {}).get("states", {})
+                    if isinstance(requested, dict):
+                        states.update({key: value for key, value in requested.items() if key in valid_ids and isinstance(value, bool)})
+                    settings["chart_sidebar_collapsed"] = states
+                    USER_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = USER_SETTINGS_PATH.with_suffix(".tmp")
+                    temporary.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+                    temporary.replace(USER_SETTINGS_PATH)
+            return jsonify({"ok": True, "states": states})
 
         @app.route("/journal-entry", methods=["POST"])
         def _journal_entry():
