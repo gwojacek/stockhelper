@@ -3,7 +3,84 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": false,
-  "drawn_objects": [],
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (217.32001)",
+      "x0": "2026-08-25",
+      "x1": "2034-07-28",
+      "y0": 217.32001,
+      "y1": 217.32001,
+      "price": 217.32001,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (191.65725)",
+      "x0": "2026-07-21",
+      "x1": "2034-07-28",
+      "y0": 191.65725,
+      "y1": 191.65725,
+      "price": 191.65725,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (183.73001)",
+      "x0": "2026-07-09",
+      "x1": "2034-07-28",
+      "y0": 183.73001,
+      "y1": 183.73001,
+      "price": 183.73001,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (175.80276)",
+      "x0": "2026-06-26",
+      "x1": "2034-07-28",
+      "y0": 175.80276,
+      "y1": 175.80276,
+      "price": 175.80276,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (150.14)",
+      "x0": "2026-05-20",
+      "x1": "2034-07-28",
+      "y0": 150.14,
+      "y1": 150.14,
+      "price": 150.14,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-05-20",
+      "x1": "2026-08-25",
+      "y0": 150.14,
+      "y1": 217.32001,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
   "__journal_source_technique__": "Fibo",
   "__saved_fibo_by_user__": false
 }

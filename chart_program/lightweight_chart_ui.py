@@ -45,6 +45,9 @@ LINE_COLORS = {
     "green": "#22c55e",
 }
 
+USER_SETTINGS_LOCK = threading.Lock()
+USER_SETTINGS_PATH = Path(__file__).resolve().parent / "data" / "user_settings.json"
+
 
 class LightweightChartLevelSelectorUI:
     """TradingView Lightweight Charts based level selector.
@@ -538,6 +541,8 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.drawing-object {{ cursor: grabbing; }}
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+    .chart-save-actions {{ display:flex; align-items:center; gap:7px; }}
+    .chart-save-actions button {{ flex:0 0 150px; width:150px; min-height:32px; }}
     #cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); min-width:0; }}
     #cursor-box .cursor-stat {{ display:inline-flex; align-items:baseline; gap:5px; }}
     #cursor-box .cursor-label {{ color:#82a9ca; font-weight:700; }}
@@ -549,11 +554,14 @@ class LightweightChartLevelSelectorUI:
     .manual-card {{ padding:18px; border-radius:22px; background:linear-gradient(135deg,rgba(31,41,55,.78),rgba(15,23,42,.92) 52%,rgba(2,6,23,.96)); box-shadow:0 22px 60px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }}
     .instrument-card {{ position:relative; }}
     .instrument-hero {{ display:grid; grid-template-columns:42px minmax(0,1fr); gap:10px; align-items:center; margin-bottom:8px; }}
-    .side-card-toggle {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#94a3b8; font-size:24px; line-height:1; transition:transform .16s ease,color .16s ease; }}
+    .side-card-toggle {{ position:relative; top:-3px; flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#94a3b8; font-size:24px; line-height:1; transition:transform .16s ease,color .16s ease; }}
     .side-card-toggle:hover {{ color:#f8fafc; background:transparent; }}
     .collapsible-side-card.collapsed .side-card-toggle {{ transform:rotate(-90deg); }}
     .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
     .collapsible-side-card.collapsed .side-card-body {{ display:none; }}
+    .collapsible-side-card.collapsed .side-card-head {{ margin-bottom:0; }}
+    .manual-card.collapsed {{ padding:11px; border-radius:16px; }}
+    .manual-card.collapsed .side-card-head {{ padding-bottom:0; border-bottom:0; margin-bottom:0; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
     .hero-icon,.section-icon {{ display:grid; place-items:center; border-radius:12px; background:linear-gradient(135deg,#0b5ed7,#0ea5e9); color:white; box-shadow:0 10px 24px rgba(14,165,233,.20); font-size:22px; }}
     .hero-icon {{ width:42px; height:42px; }}
@@ -561,9 +569,9 @@ class LightweightChartLevelSelectorUI:
     #identity {{ min-width:0; flex:1 1 auto; margin:0; font-size:20px; line-height:1.08; color:#f8fafc; font-weight:900; letter-spacing:-.03em; }}
     #favorite-star {{ flex:0 0 auto; padding:0 2px; border:0; background:transparent; color:#64748b; font-size:24px; line-height:1; }}
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
-    #saved-fibo-status {{ flex:0 0 auto; width:auto; margin-left:auto; padding:5px 8px; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
+    #saved-fibo-status {{ flex:0 0 auto; width:150px; margin-left:auto; padding:5px 8px; display:inline-flex; align-items:center; justify-content:center; gap:6px; overflow:hidden; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
     #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
-    #saved-fibo-status .saved-remove {{ margin-left:5px; color:inherit; font-size:14px; }}
+    #saved-fibo-status .saved-remove {{ flex:0 0 auto; margin-left:0; color:inherit; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
@@ -573,7 +581,8 @@ class LightweightChartLevelSelectorUI:
     .instrument-switcher {{ grid-column:1/-1; padding:10px; border:1px solid rgba(56,189,248,.3); border-radius:12px; background:rgba(8,47,73,.28); }}
     .instrument-switch-row {{ display:block; }}
     #instrument-switch-status {{ display:block; min-height:16px; margin-top:5px; color:#93c5fd; font-size:11px; }}
-    #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:none; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
+    #stock-cfd-field {{ display:none; margin-top:10px; }}
+    #stock-cfd-toggle {{ width:100%; min-height:38px; margin:0; display:flex; justify-content:space-between; align-items:center; text-align:left; padding:8px 64px 8px 10px; border-radius:11px; border:1px solid #334155; background:rgba(2,6,23,.42); color:#f8fafc; position:relative; }}
     #stock-cfd-toggle::after {{ content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
     #stock-cfd-toggle::before {{ content:''; position:absolute; right:29px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
     #stock-cfd-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
@@ -582,7 +591,7 @@ class LightweightChartLevelSelectorUI:
     .side-card-head h4 {{ flex:1 1 auto; }}
     .manual-card .side-card-head {{ padding-bottom:14px; border-bottom:1px solid rgba(148,163,184,.20); margin-bottom:14px; }}
     .side-card-head h4 {{ margin:0; color:#dbeafe; font-size:16px; }}
-    .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:24px; letter-spacing:-.03em; }}
+    .manual-card .side-card-head h4 {{ color:#f8fafc; font-size:16px; letter-spacing:normal; }}
     label {{ display: block; margin-top: 8px; }}
     input, select, textarea {{ width: 100%; min-height:38px; color: #f8fafc; background: rgba(15,23,42,.86); font-size: 14px; padding: 8px 10px; border-radius: 11px; border: 1px solid #334155; }}
     .manual-card label {{ color:#cbd5e1; font-size:14px; margin-top:10px; }}
@@ -708,10 +717,9 @@ class LightweightChartLevelSelectorUI:
           <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line" aria-label="Find a new upper wedge line">↑</button><button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">△ Find new wedge</button><button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line" aria-label="Find a new lower wedge line">↓</button>
         </div></section>
         <section class="toolbar-group"><span class="toolbar-label">Reset</span><span class="toolbar-hint">Restore chart drawings</span><div class="toolbar-actions"><button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Fibo</button><button id="reset-all" title="Reset all chart values and drawings">All</button></div></section>
-        <section class="toolbar-group"><span class="toolbar-label">Export</span><span class="toolbar-hint">Save chart image</span><div class="toolbar-actions"><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></section>
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
+      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
       <section id="calc-drawer" aria-live="polite">
         <div id="calc-head">
           <h3 id="calc-title">Position calculation</h3>
@@ -729,8 +737,7 @@ class LightweightChartLevelSelectorUI:
           <div><div class="identity-row"><h2 id="identity"></h2><button id="favorite-star" type="button" aria-label="Add to favorites" aria-pressed="false">☆</button><button class="side-card-toggle" type="button" data-card="instrument-card" aria-controls="instrument-card-body" aria-expanded="true" title="Collapse section">⌄</button></div><div class="identity-sub">Name / Ticker</div></div>
         </div>
         <div class="meta-grid side-card-body" id="instrument-card-body">
-          <div class="meta-field"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
-          <div class="meta-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
+          <div class="meta-field full"><div class="meta-label">🏛 Instrument</div><div class="meta-value" id="instrument-title"></div></div>
           <div class="meta-field full"><div class="meta-label">📄 Source</div><div class="meta-value"><span id="source"></span></div></div>
         </div>
       </section>
@@ -753,6 +760,7 @@ class LightweightChartLevelSelectorUI:
         <div id="chart-context-info"></div>
         <label id="position-type-label">Position type</label>
         <select id="position-type"><option value="long">LONG</option><option value="short">SHORT</option></select>
+        <div id="stock-cfd-field"><div class="meta-label">🛡 CFD mode</div><button id="stock-cfd-toggle"></button></div>
         <label>Current balance</label><input id="capital" type="number" min="1" step="100" />
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
@@ -825,13 +833,49 @@ class LightweightChartLevelSelectorUI:
     toggle.setAttribute('aria-expanded',collapsed?'false':'true');
     toggle.title=collapsed?'Expand section':'Collapse section';
   }}
+  const collapsibleSideCardIds=[...document.querySelectorAll('.side-card-toggle[data-card]')].map(toggle=>toggle.dataset.card);
+  const sideCardCollapsedKey=cardId=>'stockhelper-side-card-collapsed-'+cardId;
+  function setAllSideCardsCollapsed(collapsed) {{
+    collapsibleSideCardIds.forEach(cardId=>setSideCardCollapsed(cardId,collapsed));
+  }}
+  function rememberSideCardCollapsed(cardId,collapsed) {{
+    try{{localStorage.setItem(sideCardCollapsedKey(cardId),collapsed?'1':'0');}}catch(e){{}}
+  }}
+  function persistSideCardStates(cardIds) {{
+    const states={{}};
+    cardIds.forEach(cardId=>{{
+      states[cardId]=document.getElementById(cardId)?.classList.contains('collapsed')||false;
+      rememberSideCardCollapsed(cardId,states[cardId]);
+    }});
+    fetch('/sidebar-card-state',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{states}})}}).catch(()=>{{}});
+  }}
+  try{{
+    const legacyCollapsed=localStorage.getItem('stockhelper-side-cards-collapsed');
+    collapsibleSideCardIds.forEach(cardId=>{{
+      const saved=localStorage.getItem(sideCardCollapsedKey(cardId));
+      setSideCardCollapsed(cardId,(saved===null?legacyCollapsed:saved)==='1');
+    }});
+  }}catch(e){{}}
+  fetch('/sidebar-card-state').then(response=>response.ok?response.json():null).then(data=>{{
+    if(!data?.states)return;
+    collapsibleSideCardIds.forEach(cardId=>{{
+      if(typeof data.states[cardId]==='boolean'){{
+        setSideCardCollapsed(cardId,data.states[cardId]);
+        rememberSideCardCollapsed(cardId,data.states[cardId]);
+      }}
+    }});
+  }}).catch(()=>{{}});
   document.querySelectorAll('.side-card-toggle[data-card]').forEach(toggle=>{{
-    const cardId=toggle.dataset.card,key='stockhelper-side-card-collapsed-'+cardId;
-    try{{setSideCardCollapsed(cardId,localStorage.getItem(key)==='1');}}catch(e){{}}
     toggle.addEventListener('click',()=>{{
+      const cardId=toggle.dataset.card;
       const collapsed=!document.getElementById(cardId)?.classList.contains('collapsed');
-      setSideCardCollapsed(cardId,collapsed);
-      try{{localStorage.setItem(key,collapsed?'1':'0');}}catch(e){{}}
+      if(cardId==='instrument-card'){{
+        setAllSideCardsCollapsed(collapsed);
+        persistSideCardStates(collapsibleSideCardIds);
+      }}else{{
+        setSideCardCollapsed(cardId,collapsed);
+        persistSideCardStates([cardId]);
+      }}
     }});
   }});
 
@@ -3032,7 +3076,7 @@ class LightweightChartLevelSelectorUI:
     $('identity').textContent = `${{P.sourceName || P.symbol}}${{P.sourceTicker ? ` (${{P.sourceTicker}})` : ''}}`;
     $('instrument-title').textContent = `${{originalIsStock && stockCfdOn ? 'STOCK CFD' : (indexLike ? 'COMMODITY/INDEX' : P.instrumentType.toUpperCase())}}`;
     $('source').textContent = `${{P.sourceProvider}}`;
-    $('stock-cfd-toggle').style.display = originalIsStock ? 'flex' : 'none';
+    $('stock-cfd-field').style.display = originalIsStock ? 'block' : 'none';
     $('stock-cfd-toggle').textContent = `${{stockCfdOn ? 'ON' : 'OFF'}}`;
     $('stock-cfd-toggle').classList.toggle('active', stockCfdOn);
     const instrumentCurrency = () => {{
@@ -4184,6 +4228,31 @@ class LightweightChartLevelSelectorUI:
             payload = request.get_json(silent=True) or {}
             levels = payload.get("levels") or {}
             return jsonify(self._position_calculation_payload(levels))
+
+        @app.route("/sidebar-card-state", methods=["GET", "POST"])
+        def _sidebar_card_state():
+            valid_ids = {"instrument-card", "selected-card", "manual-card"}
+            with USER_SETTINGS_LOCK:
+                try:
+                    settings = json.loads(USER_SETTINGS_PATH.read_text(encoding="utf-8"))
+                except (OSError, TypeError, json.JSONDecodeError):
+                    settings = {}
+                if not isinstance(settings, dict):
+                    settings = {}
+                states = settings.get("chart_sidebar_collapsed", {})
+                if not isinstance(states, dict):
+                    states = {}
+                states = {key: value for key, value in states.items() if key in valid_ids and isinstance(value, bool)}
+                if request.method == "POST":
+                    requested = (request.get_json(silent=True) or {}).get("states", {})
+                    if isinstance(requested, dict):
+                        states.update({key: value for key, value in requested.items() if key in valid_ids and isinstance(value, bool)})
+                    settings["chart_sidebar_collapsed"] = states
+                    USER_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = USER_SETTINGS_PATH.with_suffix(".tmp")
+                    temporary.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+                    temporary.replace(USER_SETTINGS_PATH)
+            return jsonify({"ok": True, "states": states})
 
         @app.route("/journal-entry", methods=["POST"])
         def _journal_entry():

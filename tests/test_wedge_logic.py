@@ -170,6 +170,23 @@ def test_saved_fibo_resolves_stock_config_session_with_market_suffix(tmp_path, m
     assert saved["__saved_fibo_by_user__"] is False
 
 
+def test_saved_wedge_resolves_exchange_qualified_stock_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    path = sessions / "cri_wa.json"
+    path.write_text(json.dumps({
+        "drawn_objects": [
+            {"type": "wedge", "label": "upper"},
+            {"type": "wedge", "label": "lower"},
+        ],
+        "__saved_wedge_by_user__": True,
+    }), encoding="utf-8")
+
+    assert scanner._scanner_session_path_for_ticker("CRI") == path
+    assert scanner._saved_drawing_kinds_for_ticker("CRI") == {"wedge"}
+
+
 def test_commodity_session_resolution_keeps_legacy_short_stem_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"

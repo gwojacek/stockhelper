@@ -750,6 +750,10 @@
     "checked_at": "2026-09-07T09:12:46.008640+00:00",
     "result": "attempted"
   },
+  "stooq_bulk:2026-09-08": {
+    "checked_at": "2026-09-08T13:55:42.006387+00:00",
+    "result": "attempted"
+  },
   "wig": {
     "last_remote_check": "2026-05-28T16:57:52.510319+02:00"
   }

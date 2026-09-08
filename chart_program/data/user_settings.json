@@ -1,16 +1,11 @@
 {
-  "current_balance": 295000.0,
+  "current_balance": 304000.0,
   "favorite_instruments": [
-    "ART",
-    "CDR",
-    "CRI",
-    "CRJ",
-    "ENA",
-    "EUR",
-    "GPW",
-    "LPP",
-    "PUM.DE",
-    "SILVER",
-    "USDJPY"
-  ]
+    "MRK.DE"
+  ],
+  "chart_sidebar_collapsed": {
+    "manual-card": false,
+    "instrument-card": true,
+    "selected-card": false
+  }
 }

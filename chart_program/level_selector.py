@@ -163,14 +163,33 @@ def _session_path(config_path: Path) -> Path:
     return PROJECT_ROOT / "data" / "state" / "sessions" / f"{config_path.stem}.json"
 
 
+def _session_paths(config_path: Path) -> tuple[Path, ...]:
+    """Return current and legacy session names for the same instrument."""
+    primary = _session_path(config_path)
+    stems = [config_path.stem]
+    if config_path.parent.name == "stocks":
+        normalized = config_path.stem.lower()
+        if normalized.endswith(("_wa", "_pl")):
+            stems.append(normalized.rsplit("_", 1)[0])
+    return tuple(dict.fromkeys(primary.parent / f"{stem}.json" for stem in stems))
+
+
 def _load_session_state(config_path: Path) -> dict:
-    path = _session_path(config_path)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    candidates = []
+    for path in _session_paths(config_path):
+        if not path.exists():
+            continue
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(state, dict):
+            continue
+        # Scanner save markers make a session authoritative.  Prefer those
+        # over an unmarked alias created by opening the same stock as CRI.WA.
+        marked = any(key in state for key in ("__saved_fibo_by_user__", "__saved_wedge_by_user__"))
+        candidates.append((marked, path.stat().st_mtime_ns, state))
+    return max(candidates, key=lambda item: (item[0], item[1]))[2] if candidates else {}
 
 
 def _save_session_state(config_path: Path, values: dict):
@@ -786,7 +805,10 @@ def run_level_selector(raw_args=None):
         closes = pd.to_numeric(df["Close"], errors="coerce").to_numpy()
         highs = pd.to_numeric(df["High"], errors="coerce").to_numpy()
         lows = pd.to_numeric(df["Low"], errors="coerce").to_numpy()
-        start_idx = max(min(upper_a[0], upper_b[0]), min(lower_a[0], lower_b[0]))
+        # A saved wedge does not exist until both boundaries have both anchor
+        # points.  Checking closes before the newest anchor can falsely mark a
+        # scanner-confirmed saved wedge as invalid when opening its chart.
+        start_idx = max(upper_a[0], upper_b[0], lower_a[0], lower_b[0])
         breakout_idx = None
         breakout_direction = None
         for idx in range(start_idx, len(df)):
