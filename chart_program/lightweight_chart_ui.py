@@ -776,7 +776,7 @@ class LightweightChartLevelSelectorUI:
         </div>
         <div id="journal-panel" style="display:none">
           <h4>Transaction journal <button id="journal-close-panel" type="button">Close</button></h4>
-          <label>Technique</label><select id="journal-technique"><option>Kliny</option><option>Ichimoku</option><option>Fibo</option><option>Manual</option></select>
+          <label>Technique</label><select id="journal-technique"><option value="Kliny">Kliny</option><option value="Ichimoku">Ichimoku</option><option value="Fibo">Fibo</option><option value="Manual">Manual</option></select>
           <label>Transaction amount</label><input id="journal-amount" placeholder="e.g. 5000" /><div id="journal-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button></div><input id="journal-currency" type="hidden" value="PLN" />
           <label>Reason</label><select id="journal-reason"></select>
           <div id="journal-touches-row"><label>Touches</label><input id="journal-touches" placeholder="e.g. 3" /></div>

@@ -201,6 +201,16 @@ def test_chart_toolbar_hints_and_button_tooltips_have_polish_translations():
         assert tooltip in POLISH_TRANSLATIONS
 
 
+def test_setup_information_visibility_does_not_depend_on_translated_option_text():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert '<option value="Kliny">Kliny</option>' in chart_source
+    assert '<option value="Ichimoku">Ichimoku</option>' in chart_source
+    assert '<option value="Fibo">Fibo</option>' in chart_source
+    assert '<option value="Manual">Manual</option>' in chart_source
+    assert "const showInfo = ['Kliny', 'Ichimoku', 'Fibo'].includes(tech)" in chart_source
+
+
 def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():
     chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
