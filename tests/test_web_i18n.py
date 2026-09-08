@@ -56,6 +56,11 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Display": "Widok",
         "Info": "Informacje",
         "Output & Style": "Eksport i wygląd",
+        "Levels": "Poziomy",
+        "Analysis": "Analiza",
+        "Tools": "Narzędzia",
+        "Reset": "Resetuj",
+        "Export": "Eksport",
         "Choose a scanner workspace.": "Wybierz panel skanera.",
         "Your saved tools, ready anytime.": "Twoje zapisane narzędzia, zawsze pod ręką.",
         "Control what you see.": "Wybierz widoczne elementy.",
@@ -149,6 +154,15 @@ def test_chart_has_two_candle_percent_difference_tool():
     assert 'id="line-color-toggle"' in chart_source
     assert 'class="line-color-menu"' in chart_source
     assert 'class="line-tool-group"' in chart_source
+
+
+def test_chart_toolbar_labels_have_polish_translations():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    expected = {"Levels": "Poziomy", "Analysis": "Analiza", "Tools": "Narzędzia", "Scanner": "Skaner", "Reset": "Resetuj", "Export": "Eksport"}
+    for english, polish in expected.items():
+        assert f'class="toolbar-label">{english}</span>' in chart_source
+        assert POLISH_TRANSLATIONS[english] == polish
 
 
 def test_all_chart_sidebar_cards_are_collapsible_and_remember_their_state():
