@@ -51,6 +51,19 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Open stockhelper chart": "Otwórz wykres StockHelper",
         "Open stooq chart": "Otwórz wykres Stooq",
         "Ichimoku information": "Informacje Ichimoku",
+        "Reports": "Raporty",
+        "Quick access": "Szybki dostęp",
+        "Display": "Widok",
+        "Info": "Informacje",
+        "Output & Style": "Eksport i wygląd",
+        "Choose a scanner workspace.": "Wybierz panel skanera.",
+        "Your saved tools, ready anytime.": "Twoje zapisane narzędzia, zawsze pod ręką.",
+        "Control what you see.": "Wybierz widoczne elementy.",
+        "Report information.": "Informacje o raporcie.",
+        "Export and customize output.": "Eksportuj i dostosuj wygląd.",
+        "ALLSEARCH REPORT": "RAPORT ALLSEARCH",
+        "Color instrument": "Pokoloruj instrument",
+        "Choose instrument…": "Wybierz instrument…",
     }
 
     for english, polish in expected.items():
