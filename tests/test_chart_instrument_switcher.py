@@ -58,6 +58,16 @@ def test_chart_controls_use_grouped_toolbar_with_contextual_scanner_reset():
     assert source.index('id="reset-all"') < source.index('id="download-chart-png"')
 
 
+def test_chart_ohlc_values_are_centered_and_individually_spaced():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "#cursor-box {{ min-height:52px; display:flex; align-items:center; justify-content:center;" in source
+    assert "gap:clamp(16px,2.2vw,34px)" in source
+    assert "font-variant-numeric:tabular-nums" in source
+    assert 'class="cursor-stat cursor-day"' in source
+    assert 'class="cursor-label">CURSOR:</span>' in source
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
