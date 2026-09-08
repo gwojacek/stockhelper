@@ -68,6 +68,15 @@ def test_chart_ohlc_values_are_centered_and_individually_spaced():
     assert 'class="cursor-label">CURSOR:</span>' in source
 
 
+def test_line_color_menu_opens_upward_with_yellow_default():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert ".line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0;" in source
+    assert ".line-color-picker #line-color-toggle" in source
+    assert "background:#facc15; border-color:#fde047; color:#172033" in source
+    assert "let lineColor = P.lineColors.gold" in source
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source

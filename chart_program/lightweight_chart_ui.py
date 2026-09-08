@@ -498,7 +498,7 @@ class LightweightChartLevelSelectorUI:
     button {{ background:linear-gradient(180deg,#17263b,#101d30); color:#e8eef8; border:1px solid #2d4663; border-radius:9px; padding:9px 12px; cursor:pointer; font-weight:800; box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }}
     button:hover {{ border-color:#4c78a8; background:linear-gradient(180deg,#1d314c,#13253d); }}
     button.active {{ background:linear-gradient(180deg,#1681ff,#0560db); border-color:#4da3ff; color:white; box-shadow:0 0 18px rgba(24,129,255,.32),inset 0 1px 0 rgba(255,255,255,.25); }}
-    .toolbar {{ display:flex; align-items:stretch; gap:0; margin:0 0 10px; padding:15px 16px; border:1px solid #0d4c73; border-radius:16px; background:linear-gradient(145deg,rgba(3,25,45,.98),rgba(2,17,33,.99)); box-shadow:inset 0 1px 0 rgba(125,211,252,.05); overflow-x:auto; }}
+    .toolbar {{ display:flex; align-items:stretch; gap:0; margin:0 0 10px; padding:15px 16px; border:1px solid #0d4c73; border-radius:16px; background:linear-gradient(145deg,rgba(3,25,45,.98),rgba(2,17,33,.99)); box-shadow:inset 0 1px 0 rgba(125,211,252,.05); overflow:visible; }}
     .toolbar-group {{ display:flex; flex-direction:column; min-width:max-content; padding:0 17px; border-left:1px solid #29415f; }}
     .toolbar-group:first-child {{ padding-left:0; border-left:0; }}
     .toolbar-group:last-child {{ padding-right:0; }}
@@ -511,7 +511,7 @@ class LightweightChartLevelSelectorUI:
     .tool-icon {{ margin-right:6px; color:#cfe4ff; font-size:15px; }}
     .wedge-mini-btn {{ display:none; min-width:38px; padding:8px 10px; font-size:18px; line-height:1; }}
     .toolbar-spacer {{ flex:1 1 auto; min-width:0; }}
-    @media(max-width:1100px) {{ .toolbar {{ border-radius:10px; }} .toolbar-group {{ padding:0 11px; }} }}
+    @media(max-width:1100px) {{ .toolbar {{ border-radius:10px; overflow-x:auto; overflow-y:hidden; }} .toolbar-group {{ padding:0 11px; }} }}
     .chart-stage {{ border:1px solid #0d4c73; border-radius:16px; overflow:hidden; background:linear-gradient(145deg,rgba(3,25,45,.90),rgba(2,12,27,.98)); }}
     #chart-wrap {{ position:relative; height:calc(100vh - 224px); min-height:360px; border-top:1px solid rgba(23,81,117,.75); overflow:hidden; }}
     body.close-mode .layout {{ grid-template-columns: 1fr; }}
@@ -618,8 +618,8 @@ class LightweightChartLevelSelectorUI:
     .line-tool-group {{ display:inline-flex; align-items:stretch; gap:0; }}
     .line-tool-group #tool-line {{ border-radius:7px 0 0 7px; }}
     .line-color-picker {{ position:relative; display:inline-flex; margin-left:-1px; }}
-    .line-color-picker #line-color-toggle {{ border-radius:0 7px 7px 0; min-width:34px; padding-left:8px; padding-right:8px; }}
-    .line-color-menu {{ display:none; position:absolute; z-index:30; top:calc(100% + 5px); left:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
+    .line-color-picker #line-color-toggle {{ border-radius:0 7px 7px 0; min-width:34px; padding-left:8px; padding-right:8px; background:#facc15; border-color:#fde047; color:#172033; }}
+    .line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
     .line-color-picker.open .line-color-menu {{ display:flex; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; min-height:48px; padding:12px 18px 9px; border-top:1px solid rgba(23,81,117,.75); }}
     #chart-legend {{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; min-height:20px; margin:0; font-size:12px; font-weight:700; }}
