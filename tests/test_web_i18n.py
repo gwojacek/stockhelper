@@ -85,6 +85,8 @@ def test_scanner_workspace_navigation_is_grouped_like_the_chart_toolbar():
         assert f"class='scanner-nav-label'>{label}</span>" in report_source
     assert "class='scanner-nav-actions'" in report_source
     assert ".scanner-nav-group{display:flex;flex-direction:column" in report_source
+    assert "StockHelper scanner workspace</h2>" not in report_source
+    assert ".scanner-nav-group:first-child{padding-left:0;border-left:0}" in report_source
     assert "Scan. Analyze." not in report_source
 
 
