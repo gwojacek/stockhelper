@@ -6603,12 +6603,21 @@ def _find_fibo_3p_steep_setup(
         post_days = i_peak - post_anchor if post_anchor >= 0 else 0
         post_gain = (fib_end - post_low) / max(abs(post_low), 1e-9) if post_anchor >= 0 else 0.0
         post_daily_gain = post_gain / max(post_days, 1)
+        tight_side_phases = _completed_month_side_trend_phases(
+            w.iloc[i_start:i_peak + 1].reset_index(drop=True),
+            band_pct=0.08,
+        )
         keep_exceptional_broad = (
             not _mirrored_short
             and broad_gain >= 0.65
             and broad_daily_gain >= 0.006
             and post_anchor >= 0
             and post_daily_gain < broad_daily_gain * 1.25
+            # Exceptional total performance can absorb one internal shelf,
+            # but not several distinct completed monthly ranges. Once two
+            # tight ranges separate the old bottom from the current incline,
+            # the structural reset must win (XTB Oct 2025 -> Aug 2026).
+            and len(tight_side_phases) < 2
         )
         if keep_exceptional_broad:
             _log(
@@ -6622,7 +6631,12 @@ def _find_fibo_3p_steep_setup(
         if post_anchor < 0:
             _log("Rejected 3P steep: completed side trend has no mature post-channel impulse.")
             return None
-        launch_left = max(int(i_start), int(post_anchor) - 22)
+        # After several completed ranges, do not widen the detected breakout
+        # through another full month: that would land back inside the final
+        # channel. Its last trading week contains the reaction low which
+        # actually launched the new incline (XTB 2026-06-26).
+        launch_lookback = 5 if len(tight_side_phases) >= 2 else 22
+        launch_left = max(int(i_start), int(post_anchor) - launch_lookback)
         launch_idx = int(low.iloc[launch_left:int(post_anchor) + 1].idxmin())
         launch_low = float(low.iloc[launch_idx])
         if i_peak - launch_idx >= min_incline_days and (fib_end - launch_low) / max(abs(launch_low), 1e-9) >= 0.15:

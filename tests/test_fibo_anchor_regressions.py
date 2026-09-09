@@ -471,6 +471,19 @@ def test_internal_pauses_do_not_replace_coherent_impulse_launch(
     assert any("retained coherent structural launch" in item for item in explain)
 
 
+def test_repeated_monthly_ranges_reset_xtb_to_latest_acceleration_low():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None, "\n".join(explain)
+    assert result.incline_start_date == "2026-06-26"
+    assert result.incline_end_date == "2026-08-28"
+    assert float(result.stop_loss) == pytest.approx(104.12, abs=0.01)
+    assert any("completed side trend invalidated pre-channel anchor" in item for item in explain)
+
+
 def test_hon_current_short_impulse_uses_newest_confirmed_low():
     frame = _fixture("data/csv/stocks/HON_US.csv")
 
