@@ -1541,6 +1541,51 @@ def _completed_sideways_reset_long(
     return channel_end, post_anchor
 
 
+def _repeated_range_acceleration_launch_long(
+    w: pd.DataFrame,
+    start_idx: int,
+    peak_idx: int,
+    min_impulse_days: int,
+) -> int | None:
+    """Find the first genuine launch after several completed tight ranges.
+
+    A very long stair-step advance can make the broad 15% channel detector
+    merge several distinct shelves into one continuous range.  In that case
+    ``_completed_sideways_reset_long`` has no single channel to reset from and
+    can leave the anchor months before the current impulse.  Two distinct 8%
+    month ranges are strong evidence that the old anchor belongs to an earlier
+    structure.  Re-anchor only at a confirmed local low whose following week
+    both expands sharply and breaks the preceding month's high; this avoids
+    selecting an arbitrary point in the middle of the incline.
+    """
+    leg = w.iloc[start_idx:peak_idx + 1].reset_index(drop=True)
+    phases = _completed_month_side_trend_phases(leg, band_pct=0.08)
+    if len(phases) < 2:
+        return None
+
+    lows = pd.to_numeric(w["Low"], errors="coerce")
+    highs = pd.to_numeric(w["High"], errors="coerce")
+    search_left = start_idx + phases[-1][1] + 1
+    search_right = peak_idx - min_impulse_days
+    for idx in range(search_left, search_right + 1):
+        local_left = max(search_left, idx - 3)
+        local_right = min(search_right, idx + 3)
+        candidate_low = float(lows.iloc[idx])
+        if candidate_low > float(lows.iloc[local_left:local_right + 1].min()) * 1.001:
+            continue
+        prior_left = max(start_idx, idx - 22)
+        prior_high = float(highs.iloc[prior_left:idx].max())
+        confirmation_high = float(highs.iloc[idx + 1:min(peak_idx, idx + 6) + 1].max())
+        if not math.isfinite(prior_high) or not math.isfinite(confirmation_high):
+            continue
+        weekly_expansion = (confirmation_high - candidate_low) / max(abs(candidate_low), 1e-9)
+        breaks_prior_month = confirmation_high >= prior_high * 1.03
+        total_gain = (float(highs.iloc[peak_idx]) - candidate_low) / max(abs(candidate_low), 1e-9)
+        if weekly_expansion >= 0.12 and breaks_prior_month and total_gain >= 0.15:
+            return idx
+    return None
+
+
 def _select_peak_long(
     w: pd.DataFrame,
     min_incline_days: int,
@@ -6590,6 +6635,19 @@ def _find_fibo_3p_steep_setup(
         )
         i_peak, fib_end = measured_peak_idx, measured_peak_high
 
+    repeated_range_launch = None
+    if not _mirrored_short:
+        repeated_range_launch = _repeated_range_acceleration_launch_long(
+            w, i_start, i_peak, min_incline_days,
+        )
+    if repeated_range_launch is not None and repeated_range_launch > i_start:
+        _log(
+            "3P steep: repeated completed month ranges replaced obsolete broad "
+            f"anchor idx={i_start} with confirmed acceleration low idx={repeated_range_launch}."
+        )
+        i_start = repeated_range_launch
+        fib_start = float(low.iloc[i_start])
+
     structural_reset = _completed_sideways_reset_long(
         w, i_start, i_peak, min_incline_days,
         band_pct=0.10 if _mirrored_short else 0.15,
@@ -6634,7 +6692,7 @@ def _find_fibo_3p_steep_setup(
         # After several completed ranges, do not widen the detected breakout
         # through another full month: that would land back inside the final
         # channel. Its last trading week contains the reaction low which
-        # actually launched the new incline (XTB 2026-06-26).
+        # actually launched the new incline (XTB 2026-06-29).
         launch_lookback = 5 if len(tight_side_phases) >= 2 else 22
         launch_left = max(int(i_start), int(post_anchor) - launch_lookback)
         launch_idx = int(low.iloc[launch_left:int(post_anchor) + 1].idxmin())

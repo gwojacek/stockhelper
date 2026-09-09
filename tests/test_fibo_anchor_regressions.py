@@ -478,10 +478,10 @@ def test_repeated_monthly_ranges_reset_xtb_to_latest_acceleration_low():
     result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
 
     assert result is not None, "\n".join(explain)
-    assert result.incline_start_date == "2026-06-26"
+    assert result.incline_start_date == "2026-06-29"
     assert result.incline_end_date == "2026-08-28"
-    assert float(result.stop_loss) == pytest.approx(104.12, abs=0.01)
-    assert any("completed side trend invalidated pre-channel anchor" in item for item in explain)
+    assert float(result.stop_loss) == pytest.approx(103.50, abs=0.01)
+    assert any("confirmed acceleration low" in item for item in explain)
 
 
 def test_hon_current_short_impulse_uses_newest_confirmed_low():
