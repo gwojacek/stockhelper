@@ -1999,15 +1999,20 @@ def test_market_filter_is_applied_to_favorite_occurrences():
 def test_report_supports_persistent_orange_instrument_coloring():
     source = Path("run").read_text(encoding="utf-8")
     assert "id='instrument-color-btn'" in source
-    assert "id='instrument-uncolor-btn'" not in source
-    assert "class='instrument-color-actions'" not in source
+    assert "id='instrument-uncolor-btn'" in source
+    assert "class='instrument-color-actions'" in source
     hero = source[source.index("html_parts.append(\"<div class='troj-hero'"):source.index("checked_lists_html =")]
-    assert hero.index("🗂 Checked") < hero.index("id='instrument-color-btn'")
-    assert "🖌 Color instrument</button>" in hero
+    assert hero.index("🗂 Checked") < hero.index("aria-label='Color instrument'")
+    assert ">🖌</button>" in hero
+    assert ">◻</button>" in hero
+    assert "🖌 Color instrument</button>" not in hero
     assert "stockhelper.colored-instruments.v1" in source
-    assert "function toggleInstrumentColorMode(btn)" in source
-    assert "colored.has(ticker)?colored.delete(ticker):colored.add(ticker)" in source
-    assert "refreshInstrumentColors();toggleInstrumentColorMode(document.getElementById('instrument-color-btn'))" in source
+    assert "function toggleInstrumentColorMode(btn,action)" in source
+    assert "if(instrumentColorAction==='color'){colored.has(ticker)?colored.delete(ticker):colored.add(ticker);}" in source
+    assert "else if(instrumentColorAction==='uncolor')colored.delete(ticker)" in source
+    assert "refreshInstrumentColors();toggleInstrumentColorMode" not in source
+    assert ".instrument-color-actions{display:inline-flex;gap:0}" in source
+    assert ".instrument-color-btn+.instrument-color-btn{margin-left:-1px}" in source
     assert ".instrument-color-mode [data-ticker]{cursor:url('data:image/svg+xml" in source
     assert "%F0%9F%96%8C%EF%B8%8F" in source
     assert "tr.instrument-colored>td{background:#968c6f!important;color:#1f2937}" in source

@@ -70,6 +70,7 @@ POLISH_TRANSLATIONS = {
     "Highlighting: OFF": "Wyróżnianie: WYŁ.",
     "Open journal": "Otwórz dziennik",
     "Color instrument": "Pokoloruj",
+    "Uncolor instrument": "Usuń kolor",
     "Choose instrument…": "Wybierz…",
     "Show": "Pokaż",
     "Hide": "Ukryj",
