@@ -664,6 +664,7 @@ def test_short_fibo_markets_and_chart_png_download_are_enabled():
     scanner_source = Path("scanner_search.py").read_text(encoding="utf-8")
     assert 'group_name in {"DAX40", "NDX100"}' in scanner_source
     assert 'if short_fibo_enabled:' in scanner_source
+    assert 'steep_3p_short = _find_fibo_3p_steep_setup(df, "short")' in scanner_source
     assert 'for direction in ("long", "short"):' in scanner_source
     ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="download-chart-png"' in ui_source
@@ -1996,7 +1997,10 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "id='instrument-color-btn'" in source
     assert "id='instrument-uncolor-btn'" in source
     hero = source[source.index("html_parts.append(\"<div class='troj-hero'"):source.index("checked_lists_html =")]
-    assert hero.index("🗂 Checked") < hero.index("🖌 Color instrument")
+    assert hero.index("🗂 Checked") < hero.index("aria-label='Color instrument'")
+    assert ">🖌</button>" in hero
+    assert ">◻</button>" in hero
+    assert "🖌 Color instrument</button>" not in hero
     assert "stockhelper.colored-instruments.v1" in source
     assert "function toggleInstrumentColorMode(btn,action)" in source
     assert "if(instrumentColorAction==='color')colored.add(ticker)" in source

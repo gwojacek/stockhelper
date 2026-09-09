@@ -3688,7 +3688,12 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
         start = anchor_start or "YYYY-MM-DD"
         end = anchor_end or "YYYY-MM-DD"
         pattern_args = ""
-        if pattern_date and pattern_date != "-" and pattern_name and pattern_name.lower() not in {"-", "none"}:
+        pattern_after_anchor = (
+            pd.notna(pd.to_datetime(pattern_date, errors="coerce"))
+            and pd.notna(pd.to_datetime(end, errors="coerce"))
+            and pd.to_datetime(pattern_date) > pd.to_datetime(end)
+        )
+        if pattern_after_anchor and pattern_name and pattern_name.lower() not in {"-", "none"}:
             pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern_name)}"
         return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
     if mode == "wedge" and wedge is not None:
@@ -6232,6 +6237,24 @@ def _select_fibo_long_impulse_base(
         original_days = i_peak - i_start
         original_gain = (fib_end - fib_start) / max(abs(fib_start), 1e-9)
         original_daily_gain = original_gain / max(original_days, 1)
+        coherent_steep_impulse = (
+            not preserve_deeper_short_continuation
+            and original_gain >= 0.15
+            and original_daily_gain >= 0.003
+            and _early_sideways_after_anchor_window(
+                w, i_start, direction="long", band_pct=0.08
+            ) is None
+        )
+        if coherent_steep_impulse:
+            # Rolling ranges can overlap ordinary pauses inside one forceful
+            # launch-to-top move. Do not replace its real bottom with a later
+            # mathematical acceleration point (ADBE/SHOP). Completed earlier
+            # 61.8 cycles were already rejected by the stale-cycle guard.
+            _log(
+                "Long: retained coherent structural launch across internal "
+                "monthly pauses."
+            )
+            return int(i_start), float(fib_start), float(fib_end)
         exceptional_broad_impulse = original_gain >= 0.65 and original_daily_gain >= 0.006
         selected_phases = side_phases if len(side_phases) >= 2 else anchor_side_phases
         if exceptional_broad_impulse and len(side_phases) >= 2:
@@ -7681,16 +7704,18 @@ def run_fibo_search(target: str) -> int:
                 steep_3p.latest_candle_date = latest_candle_date
                 steep_3p.expected_latest_session_date = expected_latest_session_date
                 out_rows.append(steep_3p)
+            # Column one is directional for every market. Stocks need the
+            # mirrored steep scan too (HON), while the more expensive historic
+            # short-offset search remains limited to its existing markets.
+            steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
+            if steep_3p_short:
+                steep_3p_short.ticker = ticker
+                if pd.notna(latest_close):
+                    steep_3p_short.current_close = latest_close
+                steep_3p_short.latest_candle_date = latest_candle_date
+                steep_3p_short.expected_latest_session_date = expected_latest_session_date
+                out_rows.append(steep_3p_short)
             short_fibo_enabled = instrument in {"forex", "commodity"} or group_name in {"DAX40", "NDX100"}
-            if short_fibo_enabled:
-                steep_3p_short = _find_fibo_3p_steep_setup(df, "short")
-                if steep_3p_short:
-                    steep_3p_short.ticker = ticker
-                    if pd.notna(latest_close):
-                        steep_3p_short.current_close = latest_close
-                    steep_3p_short.latest_candle_date = latest_candle_date
-                    steep_3p_short.expected_latest_session_date = expected_latest_session_date
-                    out_rows.append(steep_3p_short)
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:

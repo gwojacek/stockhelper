@@ -438,3 +438,58 @@ def test_sbux_sideways_range_spanning_marginal_peak_drops_fibo():
     )
     assert result is None
     assert any("selected high is inside" in item for item in explain)
+
+
+@pytest.mark.parametrize(
+    ("path", "peak_date", "expected_start"),
+    [
+        ("data/csv/stocks/ADBE_US.csv", "2026-08-28", "2026-06-18"),
+        ("data/csv/stocks/SHOP_US.csv", "2026-08-14", "2026-05-14"),
+    ],
+)
+def test_internal_pauses_do_not_replace_coherent_impulse_launch(
+    path, peak_date, expected_start
+):
+    frame = _fixture(path).tail(320).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    peak_idx = int(frame.index[dates == peak_date][0])
+    explain: list[str] = []
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=21,
+        log=explain.append,
+        stale_cycle_mode="reset",
+        max_lookback=260,
+        reset_after_sideways=False,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None
+    assert frame.iloc[base[0]]["Date"] == pd.Timestamp(expected_start)
+    assert any("retained coherent structural launch" in item for item in explain)
+
+
+def test_hon_current_short_impulse_uses_newest_confirmed_low():
+    frame = _fixture("data/csv/stocks/HON_US.csv")
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short")
+
+    assert result is not None
+    assert result.status == "3p_steep_incline"
+    assert result.incline_start_date == "2026-07-28"
+    assert result.incline_end_date == "2026-09-02"
+
+
+def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
+    command = scanner._build_chart_command(
+        "ADBE.US",
+        "fibo",
+        "2026-06-18",
+        "2026-08-28",
+        pattern_date="2026-07-07",
+        pattern_name="shooting_star",
+    )
+
+    assert "--scanner-pattern-date" not in command
