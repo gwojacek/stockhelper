@@ -393,14 +393,14 @@ def test_reversal_stop_uses_candle_extreme_instead_of_close():
 
 
 @pytest.mark.parametrize(
-    ("path", "peak_date", "latest_allowed_start"),
+    ("path", "peak_date", "expected_start"),
     [
-        ("data/csv/stocks/CSCO_US.csv", "2026-06-04", "2026-04-15"),
-        ("data/csv/stocks/PZU_WA.csv", "2026-09-04", "2026-06-15"),
+        ("data/csv/stocks/CSCO_US.csv", "2026-06-04", "2026-04-02"),
+        ("data/csv/stocks/PZU_WA.csv", "2026-09-04", "2026-06-08"),
     ],
 )
 def test_post_range_anchor_is_not_left_in_middle_of_incline(
-    path, peak_date, latest_allowed_start
+    path, peak_date, expected_start
 ):
     frame = _fixture(path).tail(320).reset_index(drop=True)
     peak_idx = int(
@@ -419,4 +419,22 @@ def test_post_range_anchor_is_not_left_in_middle_of_incline(
 
     assert base is not None
     start_idx, _start_low, _peak = base
-    assert frame.iloc[start_idx]["Date"] <= pd.Timestamp(latest_allowed_start)
+    assert frame.iloc[start_idx]["Date"] == pd.Timestamp(expected_start)
+
+
+def test_sbux_sideways_range_spanning_marginal_peak_drops_fibo():
+    frame = _fixture("data/csv/stocks/SBUX_US.csv").tail(320).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    peak_idx = int(frame.index[dates == "2026-08-13"][0])
+
+    assert scanner._sideways_range_spans_impulse_end(frame, peak_idx) is True
+
+    explain: list[str] = []
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-05", "2026-08-13"),
+        explain=explain,
+    )
+    assert result is None
+    assert any("selected high is inside" in item for item in explain)

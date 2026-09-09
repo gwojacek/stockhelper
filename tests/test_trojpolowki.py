@@ -1994,10 +1994,14 @@ def test_market_filter_is_applied_to_favorite_occurrences():
 def test_report_supports_persistent_orange_instrument_coloring():
     source = Path("run").read_text(encoding="utf-8")
     assert "id='instrument-color-btn'" in source
+    assert "id='instrument-uncolor-btn'" in source
     hero = source[source.index("html_parts.append(\"<div class='troj-hero'"):source.index("checked_lists_html =")]
     assert hero.index("🗂 Checked") < hero.index("🖌 Color instrument")
     assert "stockhelper.colored-instruments.v1" in source
-    assert "function toggleInstrumentColorMode(btn)" in source
+    assert "function toggleInstrumentColorMode(btn,action)" in source
+    assert "if(instrumentColorAction==='color')colored.add(ticker)" in source
+    assert "else if(instrumentColorAction==='uncolor')colored.delete(ticker)" in source
+    assert "refreshInstrumentColors();toggleInstrumentColorMode" not in source
     assert "tr.instrument-colored>td{background:#968c6f!important}" in source
     assert "body .instrument-colored :not(.btn):not(button){color:#1f2937!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source

@@ -570,6 +570,8 @@ def _fibo_has_minimum_small_impulse(result: FiboScanResult) -> bool:
 def _same_scale_fibo_formation(a: FiboScanResult, b: FiboScanResult) -> bool:
     if str(a.ticker).upper() != str(b.ticker).upper() or str(a.direction).lower() != str(b.direction).lower():
         return False
+    if a.incline_end_date == b.incline_end_date:
+        return True
     size_a = _fibo_formation_size(a)
     size_b = _fibo_formation_size(b)
     if size_a <= 0 or size_b <= 0:
@@ -639,6 +641,12 @@ def _dedupe_same_scale_fibo_formations(items: list[FiboScanResult]) -> list[Fibo
             return not candidate_steep
         candidate_anchor = float(candidate.stop_loss)
         current_anchor = float(current.stop_loss)
+        if candidate.incline_end_date == current.incline_end_date:
+            # Two starts for one unchanged top are alternate measurements of
+            # the same leg, not useful nested formations. Keep the earlier,
+            # broader structural launch instead of the faster interior point.
+            if candidate.incline_start_date != current.incline_start_date:
+                return candidate.incline_start_date < current.incline_start_date
         anchor_gap = abs(candidate_anchor - current_anchor) / max(abs(candidate_anchor), abs(current_anchor), 1e-9)
         candidate_size = _fibo_formation_size(candidate)
         current_size = _fibo_formation_size(current)
@@ -1265,6 +1273,30 @@ def _correction_settled_into_sideways(df_slice: pd.DataFrame) -> bool:
         max_outlier_candles=2,
     )
     return channel is not None and channel[1] >= len(df_slice) - 4
+
+
+def _sideways_range_spans_impulse_end(
+    df: pd.DataFrame, impulse_end_idx: int, *, min_before: int = 10, min_after: int = 8
+) -> bool:
+    """Detect a completed range which straddles a supposed impulse extreme.
+
+    Looking only before or after the selected high misses ranges whose marginal
+    high occurs inside the channel. SBUX is the representative case: its August
+    high does not split the July--September range into a fresh correction.
+    """
+    if impulse_end_idx < min_before or len(df) - impulse_end_idx - 1 < min_after:
+        return False
+    left = max(0, impulse_end_idx - 30)
+    right = min(len(df), impulse_end_idx + 31)
+    around = df.iloc[left:right].reset_index(drop=True)
+    relative_peak = impulse_end_idx - left
+    phases = _completed_month_side_trend_phases(around, band_pct=0.12)
+    return any(
+        start <= relative_peak - min_before
+        and end >= relative_peak + min_after
+        and end - start + 1 >= 30
+        for start, end in phases
+    )
 
 
 def _waiting_correction_is_stale(df_slice: pd.DataFrame, direction: str) -> bool:
@@ -6600,6 +6632,10 @@ def _find_fibo_3p_steep_setup(
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
+    if _sideways_range_spans_impulse_end(w, i_peak):
+        _log("Rejected 3P steep: selected high is inside a completed month-long side trend.")
+        return None
+
     early_sideways = _early_sideways_after_anchor_window(
         w,
         i_start,
@@ -6973,6 +7009,9 @@ def _find_fibo_setup(
         # incline; broad stale legs are pruned only when a materially smaller
         # current setup replaces them.
         impulse_seg = w.iloc[i_start:i_peak + 1].reset_index(drop=True)
+        if not _mirrored_short and _sideways_range_spans_impulse_end(w, i_peak):
+            _log("Rejected long: selected high is inside a completed month-long side trend.")
+            return None
         if not _mirrored_short and _impulse_stalls_before_peak(impulse_seg):
             _log(
                 "Rejected long: impulse stalled in a completed month-long side "
