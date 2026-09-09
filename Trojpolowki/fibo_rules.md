@@ -40,7 +40,7 @@ different pair merely to keep the instrument on the board.
 - A normal, short pause within a coherent impulse does not by itself move an
   anchor. Re-anchoring is allowed only when market structure creates a genuinely
   new impulse, not because another anchor pair happens to pass the Fibo filters.
-- Once price invalidates the 100% anchor, breaks the pattern stop, or completes
+- Once price invalidates the 100% anchor, trades through the pattern stop, or completes
   an old 61.8 cycle without a valid reversal, that formation is finished. It is
   not resurrected using arbitrary nearby extrema.
 - Long and short rules are exact mirrors. The descriptions below use a long
@@ -87,8 +87,9 @@ different pair merely to keep the instrument on the board.
   cloud, or morning/evening star in the appropriate direction).
 - The final pattern candle confirms on the correct side of 61.8.
 - The signal is recent (currently no older than 14 days).
-- No later close has crossed the pattern stop loss; for a long formation the
-  stop is the pattern low, and for a short formation it is the pattern high.
+- No later candle has traded through the pattern stop loss; for a long
+  formation the stop is the pattern low (checked against later lows), and for
+  a short formation it is the pattern high (checked against later highs).
 
 ## Non-goals
 

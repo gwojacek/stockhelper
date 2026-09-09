@@ -514,6 +514,29 @@ def _fibo_pre_61_8_status(direction: str, current_close: float, fib_23_6: float)
     return "returned_before_61_8" if returned_to_impulse_side else "reached_23_6_waiting_for_61_8"
 
 
+def _fibo_reversal_stop_broken(
+    df: pd.DataFrame, direction: str, pattern_date: str, stop_loss: float
+) -> bool:
+    """Return whether price traded through a confirmed pattern's stop."""
+    if not pattern_date:
+        return False
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    try:
+        confirmed_at = pd.to_datetime(pattern_date)
+    except Exception:
+        return False
+    after = df.loc[dates > confirmed_at]
+    if after.empty:
+        return False
+    # A stop is an executable price level. An intraday wick invalidates the
+    # formation even when that candle later closes back on the safe side.
+    if direction == "long":
+        extremes = pd.to_numeric(after["Low"], errors="coerce")
+        return bool((extremes < float(stop_loss)).any())
+    extremes = pd.to_numeric(after["High"], errors="coerce")
+    return bool((extremes > float(stop_loss)).any())
+
+
 def _fibo_formation_size(result: FiboScanResult) -> float:
     """Approximate absolute fib range from the 23.6 line and stop anchor."""
     try:
@@ -6255,6 +6278,32 @@ def _select_fibo_long_impulse_base(
             post_range_low,
             post_range_days,
         ) = max(launch_candidates)
+        # Acceleration is often detected after the actual reaction low. Search
+        # behind that point so a valid base breakout is anchored at the swing
+        # that launched it, rather than in the middle of the incline (CSCO/PZU).
+        structural_left = max(i_start, post_range_idx - 35)
+        if structural_left < post_range_idx:
+            structural_idx = int(low.iloc[structural_left:post_range_idx + 1].idxmin())
+            structural_low = float(low.iloc[structural_idx])
+            structural_days = i_peak - structural_idx
+            structural_gain = (fib_end - structural_low) / max(abs(structural_low), 1e-9)
+            structural_daily_gain = structural_gain / max(structural_days, 1)
+            if (
+                structural_idx < post_range_idx
+                and structural_low < post_range_low * 0.995
+                and structural_days >= min_incline_days
+                and structural_gain >= min_post_range_gain
+                and structural_daily_gain >= min_post_range_daily_gain
+            ):
+                _log(
+                    "Long: widened post-range acceleration point to its structural launch "
+                    f"idx={post_range_idx} -> {structural_idx}."
+                )
+                post_range_idx = structural_idx
+                post_range_low = structural_low
+                post_range_days = structural_days
+                post_range_gain = structural_gain
+                post_range_daily_gain = structural_daily_gain
         # A later shelf low should replace a powerful, coherent broad launch
         # only when the new leg is materially faster.  Otherwise a mathematically
         # shorter candidate hides the dominant formation (ASB and PCO).
@@ -7087,8 +7136,8 @@ def _find_fibo_setup(
             pattern_start_idx = max(i_peak, pattern_idx - 2)
         stop_loss = float(pd.to_numeric(low.iloc[pattern_start_idx:pattern_idx + 1], errors="coerce").min())
         future = w.iloc[pattern_idx + 1:]
-        if pattern != "none" and not future.empty and (pd.to_numeric(future["Close"], errors="coerce") < stop_loss).any():
-            _log("Rejected long: valid 61.8 pattern was invalidated by a later close below the pattern low.")
+        if pattern != "none" and not future.empty and (pd.to_numeric(future["Low"], errors="coerce") < stop_loss).any():
+            _log("Rejected long: valid 61.8 pattern was invalidated by a later low below the pattern stop.")
             return None
         decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
         decline_bars = decline_end_idx - i_peak
@@ -7316,8 +7365,8 @@ def _find_fibo_setup(
         pattern_start_idx = max(i_bottom, pattern_idx - 2)
     stop_loss = float(pd.to_numeric(high.iloc[pattern_start_idx:pattern_idx + 1], errors="coerce").max())
     future = w.iloc[pattern_idx + 1:]
-    if pattern != "none" and not future.empty and (pd.to_numeric(future["Close"], errors="coerce") > stop_loss).any():
-        _log("Rejected short: valid 61.8 pattern was invalidated by a later close above the pattern high.")
+    if pattern != "none" and not future.empty and (pd.to_numeric(future["High"], errors="coerce") > stop_loss).any():
+        _log("Rejected short: valid 61.8 pattern was invalidated by a later high above the pattern stop.")
         return None
     decline_end_idx = all_touch_idxs[0] if all_touch_idxs else i_end
     if (decline_end_idx - i_bottom) < 2:
@@ -7413,20 +7462,11 @@ def run_fibo_search(target: str) -> int:
     wedge_rows: list[WedgeScanResult] = []
     data_source_by_ticker: dict[str, str] = {}
     def _is_valid_reversal_invalidated(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
-        if cand.status != "valid_reversal" or not cand.first_61_8_touch_date:
+        if cand.status != "valid_reversal":
             return False
-        dts = pd.to_datetime(df_full["Date"], errors="coerce")
-        try:
-            touch_ts = pd.to_datetime(cand.first_61_8_touch_date)
-        except Exception:
-            return False
-        after = df_full.loc[dts > touch_ts]
-        if after.empty:
-            return False
-        close_after = pd.to_numeric(after["Close"], errors="coerce")
-        if cand.direction == "long":
-            return bool((close_after < float(cand.stop_loss)).any())
-        return bool((close_after > float(cand.stop_loss)).any())
+        return _fibo_reversal_stop_broken(
+            df_full, cand.direction, cand.reversal_pattern_date, float(cand.stop_loss)
+        )
 
     def _is_waiting_candidate_stale(df_full: pd.DataFrame, cand: FiboScanResult) -> bool:
         if cand.status not in {"returned_before_61_8", "reached_23_6_waiting_for_61_8", "touched_61_8_no_pattern"} or not cand.incline_end_date:
@@ -7709,7 +7749,6 @@ def run_fibo_search(target: str) -> int:
                     out_rows.append(c)
             if short_fibo_enabled:
                 short_candidates: list[FiboScanResult] = []
-                short_offset0 = _find_fibo_setup(df, "short", end_offset=0, allow_equal_third_close=(instrument == "forex"))
                 for off in [0, 5, 10, 15, 20, 30, 40]:
                     cand = _find_fibo_setup(df, "short", end_offset=off, allow_equal_third_close=(instrument == "forex"))
                     if cand:

@@ -348,12 +348,6 @@ def test_cdr_mature_post_base_leg_is_not_bdx_style_terminal_stall():
             "touched_61_8_no_pattern",
             "none",
         ),
-        (
-            "data/csv/stocks/CDR_WA.csv",
-            ("2026-06-26", "2026-08-13"),
-            "valid_reversal",
-            "bullish_harami",
-        ),
     ],
 )
 def test_live_first_touch_and_harami_keep_their_structural_anchors(
@@ -368,3 +362,61 @@ def test_live_first_touch_and_harami_keep_their_structural_anchors(
     assert result.incline_end_date == anchors[1]
     assert result.status == expected_status
     assert result.reversal_pattern_name == expected_pattern
+
+
+def test_cdr_harami_is_dropped_after_later_wick_breaks_pattern_stop():
+    frame = _fixture("data/csv/stocks/CDR_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-26", "2026-08-13"),
+        explain=explain,
+    )
+
+    assert result is None
+    assert any("later low below the pattern stop" in item for item in explain)
+
+
+def test_reversal_stop_uses_candle_extreme_instead_of_close():
+    frame = pd.DataFrame(
+        [
+            {"Date": "2026-08-28", "High": 236.6, "Low": 233.4, "Close": 236.5},
+            {"Date": "2026-09-04", "High": 235.5, "Low": 226.0, "Close": 232.0},
+        ]
+    )
+
+    assert scanner._fibo_reversal_stop_broken(
+        frame, "long", "2026-08-28", 230.27
+    ) is True
+
+
+@pytest.mark.parametrize(
+    ("path", "peak_date", "latest_allowed_start"),
+    [
+        ("data/csv/stocks/CSCO_US.csv", "2026-06-04", "2026-04-15"),
+        ("data/csv/stocks/PZU_WA.csv", "2026-09-04", "2026-06-15"),
+    ],
+)
+def test_post_range_anchor_is_not_left_in_middle_of_incline(
+    path, peak_date, latest_allowed_start
+):
+    frame = _fixture(path).tail(320).reset_index(drop=True)
+    peak_idx = int(
+        frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == peak_date][0]
+    )
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=21,
+        stale_cycle_mode="reset",
+        max_lookback=260,
+        reset_after_sideways=False,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None
+    start_idx, _start_low, _peak = base
+    assert frame.iloc[start_idx]["Date"] <= pd.Timestamp(latest_allowed_start)
