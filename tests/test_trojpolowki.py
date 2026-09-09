@@ -2020,6 +2020,14 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
 
 
+def test_wedge_report_uses_short_title_and_tighter_heading_spacing():
+    source = Path("run").read_text(encoding="utf-8")
+
+    assert "<h2>🔻 Kliny</h2>" in source
+    assert "Kliny opadające" not in source
+    assert "#wedge-report>h2{margin-top:6px}" in source
+
+
 def test_fibo_green_highlight_uses_pattern_completion_date_first():
     source = Path("run").read_text(encoding="utf-8")
     signal_dates = source[
