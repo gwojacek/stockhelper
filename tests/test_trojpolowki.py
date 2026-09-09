@@ -1627,6 +1627,9 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "🚀 breakout" in text
     assert ".today-signal td{background:#14532d!important}" in text
     assert ".troj-cell-card.today-signal{background:#14532d!important" in text
+    assert "body .instrument-colored.troj-cell-card.today-signal{background:#14532d!important" in text
+    assert "tr.instrument-colored.today-signal>td{background:#14532d!important" in text
+    assert "body .instrument-colored.today-signal :not(.btn):not(button){color:#dcfce7!important}" in text
     assert "data-scanner='WEDGE' data-status='🚀 breakout' data-breakout-date='2026-05-30' data-troj-direction='long' class='today-signal'" in text
     assert "class='market direction-filter-section saved-filter-section' id='wedge-report'" in text
     assert "setActiveReportDirection('long',this)" in text
@@ -2016,6 +2019,18 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "body .instrument-colored :not(.btn):not(button){color:#1f2937!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
     assert "refreshInstrumentColors();\n  window.translateStockhelperNode" in source
+
+
+def test_fibo_green_highlight_uses_pattern_completion_date_first():
+    source = Path("run").read_text(encoding="utf-8")
+    signal_dates = source[
+        source.index("def _row_signal_dates"):source.index("def _row_has_search_day_signal")
+    ]
+
+    assert 'row.dates.get("pattern_date")' in signal_dates
+    assert signal_dates.index('row.dates.get("pattern_date")') < signal_dates.index(
+        'row.dates.get("touch_61")'
+    )
     assert "refreshInstrumentColors();placeStooqColumnsNextToCharts()" in source
 
 
