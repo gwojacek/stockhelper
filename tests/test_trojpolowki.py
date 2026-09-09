@@ -2010,6 +2010,8 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "refreshInstrumentColors();toggleInstrumentColorMode" not in source
     assert ".instrument-color-actions{display:inline-flex;gap:0}" in source
     assert ".instrument-color-btn+.instrument-color-btn{margin-left:-1px}" in source
+    assert ".instrument-color-mode [data-ticker]{cursor:url('data:image/svg+xml" in source
+    assert "%F0%9F%96%8C%EF%B8%8F" in source
     assert "tr.instrument-colored>td{background:#968c6f!important}" in source
     assert "body .instrument-colored :not(.btn):not(button){color:#1f2937!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
