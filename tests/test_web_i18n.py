@@ -69,7 +69,11 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "ALLSEARCH REPORT": "RAPORT ALLSEARCH",
         "Color instrument": "Pokoloruj",
         "Color instrument — click an instrument to toggle its color": "Pokoloruj instrument — kliknij instrument, aby włączyć lub wyłączyć jego kolor",
-            "Choose instrument…": "Wybierz…",
+        "Choose instrument…": "Wybierz…",
+        "Dropouts": "Odrzucone",
+        "Show or hide recent Fibo dropouts": "Pokaż lub ukryj ostatnie odrzucone układy Fibo",
+        "Debug": "Diagnostyka",
+        "Show or hide Fibo debug controls": "Pokaż lub ukryj narzędzia diagnostyczne Fibo",
     }
 
     for english, polish in expected.items():

@@ -396,7 +396,7 @@ def test_all_fibo_cards_have_debug_and_saved_filter_controls():
     analyzer_block = source[source.index('analyzer_btn = ""'):source.index("controls =", source.index('analyzer_btn = ""'))]
     assert 'if "fibo" in section_id:' in analyzer_block
     assert 'and "❌" in raw' not in analyzer_block
-    assert "🧪 Show 3P debug" in source
+    assert "🧪 Debug" in source
     assert "💾 Saved by me" in source
     assert "savedOnly" in source
     assert "card.dataset.savedFibo==='1'" in source
@@ -2026,6 +2026,17 @@ def test_wedge_report_uses_short_title_and_tighter_heading_spacing():
     assert "<h2>🔻 Kliny</h2>" in source
     assert "Kliny opadające" not in source
     assert "#wedge-report>h2{margin-top:6px}" in source
+
+
+def test_3p_group_chart_button_is_beside_title_and_toolbar_labels_are_short():
+    source = Path("run").read_text(encoding="utf-8")
+
+    assert 'f"<h2>{title}{group_chart_button}</h2>"' in source
+    assert "group_chart_button = \" <button class='iconbtn'" in source
+    assert "onclick='toggleFiboDropouts(this)'>🕘 Dropouts</button>" in source
+    assert "onclick='toggleFiboDebug(this)'>🧪 Debug</button>" in source
+    assert "title='Show or hide recent Fibo dropouts'" in source
+    assert "title='Show or hide Fibo debug controls'" in source
 
 
 def test_fibo_green_highlight_uses_pattern_completion_date_first():
