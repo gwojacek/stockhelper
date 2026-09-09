@@ -6397,14 +6397,6 @@ def _find_fibo_3p_steep_setup(
         if explain is not None:
             explain.append(msg)
 
-    if direction == "short":
-        mirrored, axis = _mirror_ohlc_for_short(df)
-        mirrored_explain: list[str] | None = [] if explain is not None else None
-        result = _find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)
-        if explain is not None and mirrored_explain is not None:
-            explain.extend(msg.replace("long", "short").replace("Long", "Short") for msg in mirrored_explain)
-        return _unmirror_short_fibo(result, axis)
-
     if len(df) < 80:
         _log("Rejected 3P steep: less than 80 candles.")
         return None
@@ -6417,7 +6409,7 @@ def _find_fibo_3p_steep_setup(
         _log("Rejected 3P steep: missing OHLC data.")
         return None
 
-    if direction == "short":  # pragma: no cover - handled by mirrored long scan above
+    if direction == "short":
         min_decline_days = 21
         i_bottom_sel = _select_bottom_short(w, min_decline_days, min_tail_bars=2, max_lookback=260)
         if i_bottom_sel is None:
@@ -6447,6 +6439,14 @@ def _find_fibo_3p_steep_setup(
             return None
         status = "3p_steep_23_6_zone" if corr_high >= fib_236 else "3p_steep_incline"
         correction_bars = max(len(w) - 1 - i_bottom, 1)
+        gain_pct = rng / max(abs(fib_start), 1e-9)
+        daily_decline = gain_pct / max(i_bottom - i_start, 1)
+        if gain_pct < 0.15 or daily_decline < 0.003:
+            _log(
+                "Rejected short 3P steep: decline not steep enough "
+                f"(gain={gain_pct * 100:.2f}%, avg_daily={daily_decline * 100:.2f}%)."
+            )
+            return None
         return FiboScanResult(
             ticker="", direction="short", status=status,
             incline_start_date=str(pd.to_datetime(w.iloc[i_start]["Date"]).date()),

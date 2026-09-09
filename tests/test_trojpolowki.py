@@ -1797,7 +1797,8 @@ def test_short_fibo_uses_clear_top_selection_and_scanner_fibo_can_be_reset():
     assert "direction=\"short\", status=status" in scanner_source
     assert "def _mirror_ohlc_for_short(" in scanner_source
     assert '_find_fibo_setup(\n            mirrored,\n            direction="long"' in scanner_source
-    assert '_find_fibo_3p_steep_setup(mirrored, "long", mirrored_explain, _mirrored_short=True)' in scanner_source
+    assert 'if direction == "short":' in scanner_source
+    assert 'i_bottom_sel = _select_bottom_short(w, min_decline_days' in scanner_source
     assert "steep_min_gain = 0.025 if _mirrored_short else 0.15" in scanner_source
     assert "sideways_band_pct=0.02 if _mirrored_short else 0.08" in scanner_source
     assert "pre_start_left = max(0, i_start - 5)" in scanner_source
@@ -1996,6 +1997,7 @@ def test_report_supports_persistent_orange_instrument_coloring():
     source = Path("run").read_text(encoding="utf-8")
     assert "id='instrument-color-btn'" in source
     assert "id='instrument-uncolor-btn'" in source
+    assert "class='instrument-color-actions'" in source
     hero = source[source.index("html_parts.append(\"<div class='troj-hero'"):source.index("checked_lists_html =")]
     assert hero.index("🗂 Checked") < hero.index("aria-label='Color instrument'")
     assert ">🖌</button>" in hero
@@ -2003,9 +2005,11 @@ def test_report_supports_persistent_orange_instrument_coloring():
     assert "🖌 Color instrument</button>" not in hero
     assert "stockhelper.colored-instruments.v1" in source
     assert "function toggleInstrumentColorMode(btn,action)" in source
-    assert "if(instrumentColorAction==='color')colored.add(ticker)" in source
+    assert "if(instrumentColorAction==='color'){colored.has(ticker)?colored.delete(ticker):colored.add(ticker);}" in source
     assert "else if(instrumentColorAction==='uncolor')colored.delete(ticker)" in source
     assert "refreshInstrumentColors();toggleInstrumentColorMode" not in source
+    assert ".instrument-color-actions{display:inline-flex;gap:0}" in source
+    assert ".instrument-color-btn+.instrument-color-btn{margin-left:-1px}" in source
     assert "tr.instrument-colored>td{background:#968c6f!important}" in source
     assert "body .instrument-colored :not(.btn):not(button){color:#1f2937!important}" in source
     assert "data-ticker=\"' +escapeFavoriteHtml(o.ticker)+ '\"" in source
