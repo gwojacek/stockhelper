@@ -102,6 +102,16 @@ def test_additional_fibo_uses_a_distinct_persistent_palette():
     assert "fibColor(fibRatioValue(obj), fibPaletteIndex(obj))" in source
 
 
+def test_fibo_preview_does_not_shift_the_chart_viewport():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    preview = source[source.index("function drawFibPreview"):source.index("function updateFibPreview")]
+
+    assert "const viewport = captureViewport();" in preview
+    assert "const xEnd = P.ohlc[P.ohlc.length - 1].time;" in preview
+    assert "addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880" not in preview
+    assert "restoreViewport(viewport);" in preview
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source

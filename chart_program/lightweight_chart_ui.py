@@ -1192,13 +1192,17 @@ class LightweightChartLevelSelectorUI:
 
   function drawFibPreview(time) {{
     if (!fibAnchor) return;
+    const viewport = captureViewport();
     const row1 = nearest(fibAnchor.x), row2 = nearest(time);
     if (!row1 || !row2 || row1.time === row2.time) return;
     const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high) / 2;
     const isShort = secondMid < firstMid;
     const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
+    // A temporary preview must not introduce a far-future time point. Doing
+    // so makes Lightweight Charts expand/shift the visible time range after
+    // the first anchor click, only to jump back when the Fibo is committed.
+    const xEnd = P.ohlc[P.ohlc.length - 1].time;
     const needed = fibRatios.length + 1;
     while (fibPreviewSeries.length < needed) {{
       fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
@@ -1214,6 +1218,7 @@ class LightweightChartLevelSelectorUI:
     const boundary = fibPreviewSeries[fibRatios.length];
     const yA = fibPrice(low, high, 1, isShort), yB = fibPrice(low, high, 0, isShort);
     try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibPalette(paletteIndex).boundary, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
+    restoreViewport(viewport);
   }}
 
   function updateFibPreview(time) {{
