@@ -966,7 +966,26 @@ class LightweightChartLevelSelectorUI:
   const fibGoldenColor = '#facc15';
   const fibHighlightColor = '#22c55e';
   const fibLineColor = fibGoldenColor;
-  const fibColor = (ratio) => Math.abs(Number(ratio) - 0.618) < 0.0001 ? fibHighlightColor : fibGoldenColor;
+  const fibPalettes = [
+    {{level:fibGoldenColor, highlight:fibHighlightColor, boundary:fibLineColor}},
+    {{level:'#38bdf8', highlight:'#f472b6', boundary:'#0ea5e9'}},
+  ];
+  const fibPalette = (index = 0) => fibPalettes[Math.abs(Number(index) || 0) % fibPalettes.length];
+  const fibGroupKey = (obj) => obj?.group_id || obj?.id;
+  const fibGroupOrder = () => [...new Set(drawnObjects
+    .filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary')
+    .map(fibGroupKey)
+    .filter(Boolean))];
+  const fibPaletteIndex = (obj) => {{
+    const stored = Number(obj?.fib_palette);
+    if (Number.isInteger(stored) && stored >= 0) return stored % fibPalettes.length;
+    return Math.max(0, fibGroupOrder().indexOf(fibGroupKey(obj))) % fibPalettes.length;
+  }};
+  const nextFibPaletteIndex = () => fibGroupOrder().length % fibPalettes.length;
+  const fibColor = (ratio, paletteIndex = 0) => {{
+    const palette = fibPalette(paletteIndex);
+    return Math.abs(Number(ratio) - 0.618) < 0.0001 ? palette.highlight : palette.level;
+  }};
   const normalizeLineData = (data) => {{
     const seen = new Set();
     return data
@@ -1184,16 +1203,17 @@ class LightweightChartLevelSelectorUI:
     while (fibPreviewSeries.length < needed) {{
       fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
     }}
+    const paletteIndex = nextFibPaletteIndex();
     fibRatios.forEach((r, idx) => {{
       const y = fibPrice(low, high, r, isShort);
       const x0 = fibStartDate(row1, row2, r);
       const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%');
-      const opts = {{color:fibColor(r), lineWidth:r === 0.618 ? 1.4 : 1.0, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:true, title:pct}};
+      const opts = {{color:fibColor(r, paletteIndex), lineWidth:r === 0.618 ? 1.4 : 1.0, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:true, title:pct}};
       try {{ fibPreviewSeries[idx].setData(normalizeLineData([{{time:x0, value:y}}, {{time:xEnd, value:y}}])); fibPreviewSeries[idx].applyOptions?.(opts); }} catch(e) {{ console.warn('fib preview failed', e); }}
     }});
     const boundary = fibPreviewSeries[fibRatios.length];
     const yA = fibPrice(low, high, 1, isShort), yB = fibPrice(low, high, 0, isShort);
-    try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibLineColor, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
+    try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibPalette(paletteIndex).boundary, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
   }}
 
   function updateFibPreview(time) {{
@@ -2933,7 +2953,7 @@ class LightweightChartLevelSelectorUI:
     drawnObjects.forEach(obj => {{
       const isFib = obj.type === 'fib';
       const isFibBoundary = obj.type === 'fib-boundary';
-      const color = isFib ? fibColor(fibRatioValue(obj)) : (isFibBoundary ? fibLineColor : (obj.color || P.lineColors.gold));
+      const color = isFib ? fibColor(fibRatioValue(obj), fibPaletteIndex(obj)) : (isFibBoundary ? fibPalette(fibPaletteIndex(obj)).boundary : (obj.color || P.lineColors.gold));
       const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
       const fibKey = (isFib || isFibBoundary) ? `fib-group:${{obj.group_id || obj.id}}` : null;
       const objKey = isWedge ? `wedge:${{obj.id || obj.label || Math.random()}}` : ((isFib || isFibBoundary) ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
@@ -3393,9 +3413,10 @@ class LightweightChartLevelSelectorUI:
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
+      const paletteIndex = nextFibPaletteIndex();
       const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
-      fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, ratio:r, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
-      drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibLineColor, group_id:gid}});
+      fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, ratio:r, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r, paletteIndex), fib_palette:paletteIndex, group_id:gid, direction:isShort?'short':'long'}}); }});
+      drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibPalette(paletteIndex).boundary, fib_palette:paletteIndex, group_id:gid}});
       fibAnchor=null; clearPreviews(); render(); return;
     }}
     if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; refreshHalfSeries(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; refreshHalfSeries(); refreshLevelSeries('stop_loss'); return; }}

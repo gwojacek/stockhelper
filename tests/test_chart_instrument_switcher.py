@@ -90,6 +90,18 @@ def test_line_color_menu_opens_upward_with_yellow_default():
     assert "let lineColor = P.lineColors.gold" in source
 
 
+def test_additional_fibo_uses_a_distinct_persistent_palette():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "const fibPalettes = [" in source
+    assert "{{level:'#38bdf8', highlight:'#f472b6', boundary:'#0ea5e9'}}" in source
+    assert "const nextFibPaletteIndex = () => fibGroupOrder().length % fibPalettes.length" in source
+    assert "const paletteIndex = nextFibPaletteIndex();" in source
+    assert "color:fibColor(r, paletteIndex), fib_palette:paletteIndex" in source
+    assert "color:fibPalette(paletteIndex).boundary, fib_palette:paletteIndex" in source
+    assert "fibColor(fibRatioValue(obj), fibPaletteIndex(obj))" in source
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
