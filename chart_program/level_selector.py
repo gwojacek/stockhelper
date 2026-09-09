@@ -649,7 +649,9 @@ def run_level_selector(raw_args=None):
         obj for obj in existing.get("drawn_objects", [])
         if isinstance(obj, dict) and (obj.get("type") in {"fib", "fib-boundary"} or obj.get("group_id") == "auto-fibo")
     ] if isinstance(existing.get("drawn_objects"), list) else []
-    saved_fibo_active = bool(existing_fibo_objects) and not existing.get("__saved_fibo_invalid__") and existing.get("__saved_fibo_by_user__") is not False
+    # An invalid saved Fibo remains authoritative during its five-day warning
+    # period. Do not let a report preview overwrite it before lifecycle cleanup.
+    saved_fibo_active = bool(existing_fibo_objects) and existing.get("__saved_fibo_by_user__") is not False
 
     # Report links carry automatic anchors for preview, but those anchors must
     # never overwrite an authoritative saved formation. That overwrite also

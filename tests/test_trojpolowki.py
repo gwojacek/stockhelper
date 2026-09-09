@@ -885,7 +885,7 @@ def test_fibo_chart_recovers_missing_dropout_end_anchor():
 def test_fibo_chart_preload_keeps_authoritative_saved_geometry():
     source = Path("chart_program/level_selector.py").read_text(encoding="utf-8")
     assert 'existing.get("__saved_fibo_by_user__") is not False' in source
-    assert 'not existing.get("__saved_fibo_invalid__")' in source
+    assert 'saved_fibo_active = bool(existing_fibo_objects) and existing.get("__saved_fibo_by_user__") is not False' in source
     assert "retained authoritative user-saved Fibo; scanner preload ignored" in source
 
 

@@ -97,7 +97,7 @@ def test_chart_shows_saved_fibo_and_max_capital_context():
     assert "💾 Chart saved:" in source
     assert "Max capital engagement:" in source
     assert "1% of 10-day average turnover" in source
-    assert "['Fibo', '💾 SAVED BY USER']" in source
+    assert "levels.__saved_fibo_invalid__ ? '⚠ INVALID SAVE' : '💾 SAVED BY USER'" in source
     assert "['Max capital (1% Avg10d)'" in source
     assert '"volume": float(row["Volume"])' in source
     assert "maxCapitalInSelectedCurrency" in source
@@ -126,7 +126,10 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert "savedWedgeByUser" in source
     assert "type:'stockhelper-saved-setup'" in source
     assert "__saved_wedge_by_user__:savedWedgeByUser" in source
-    assert "!levels.__saved_fibo_invalid__" in source
+    assert "levels.__saved_fibo_invalid__" in source
+    assert "invalid-save" in source
+    assert "Invalid saved Fibo — will be dropped in" in source
+    assert "⚠ Invalid save" in source
     assert "delete levels.__saved_fibo_invalid__" in source
     assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source
     assert "localStorage.setItem(FAVORITES_KEY" in source

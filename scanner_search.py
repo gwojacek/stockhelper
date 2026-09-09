@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -5107,7 +5108,7 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
-    """Remove saved Fibos as soon as their edited anchors become invalid."""
+    """Warn for five days before removing an invalid saved Fibo."""
     path = _scanner_session_path_for_ticker(ticker)
     if not path.exists():
         return None
@@ -5126,11 +5127,38 @@ def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> st
         if state.pop("__saved_fibo_invalid__", None) is not None:
             path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         return None
+    fingerprint = hashlib.sha1(
+        json.dumps(fib_objects, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:16]
+    marker = state.get("__saved_fibo_invalid__")
+    if not isinstance(marker, dict) or marker.get("fingerprint") != fingerprint:
+        delete_on = as_of + timedelta(days=5)
+        state["__saved_fibo_invalid__"] = {
+            "since": as_of.isoformat(),
+            "delete_on": delete_on.isoformat(),
+            "fingerprint": fingerprint,
+        }
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return "invalid saved Fibo; scheduled for deletion in 5 days"
+    delete_on = pd.to_datetime(marker.get("delete_on"), errors="coerce")
+    if pd.isna(delete_on):
+        since = pd.to_datetime(marker.get("since"), errors="coerce")
+        delete_on = (
+            pd.Timestamp(as_of + timedelta(days=5))
+            if pd.isna(since)
+            else since + pd.Timedelta(days=5)
+        )
+        marker["delete_on"] = delete_on.date().isoformat()
+    remaining = (delete_on.date() - as_of).days
+    if remaining > 0:
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        unit = "day" if remaining == 1 else "days"
+        return f"invalid saved Fibo; scheduled for deletion in {remaining} {unit}"
     state["drawn_objects"] = [obj for obj in objects if not (isinstance(obj, dict) and obj.get("type") in {"fib", "fib-boundary"})]
     state["__saved_fibo_by_user__"] = False
     state.pop("__saved_fibo_invalid__", None)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    return "invalid saved Fibo deleted -> automatic fallback"
+    return "invalid saved Fibo deleted after 5-day warning -> automatic fallback"
 
 
 def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float]] | None:

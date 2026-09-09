@@ -99,3 +99,14 @@ different pair merely to keep the instrument on the board.
   rules solely for a named instrument.
 - Do not move either anchor when a setup advances from one board column to the
   next.
+
+## Saved setup lifecycle
+
+- A user-saved Fibo is revalidated against the same structural, side-trend,
+  pattern-stop, and anchor rules on every scan.
+- When it first becomes invalid, its chart badge turns red and shows the
+  remaining five-day grace period. The saved geometry remains visible and is
+  not replaced by automatic anchors during that warning period.
+- If it becomes valid again, the warning is cleared. If it remains invalid
+  through the deadline, the next scan removes the saved Fibo automatically and
+  returns the instrument to automatic discovery.

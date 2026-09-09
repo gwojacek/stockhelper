@@ -571,6 +571,7 @@ class LightweightChartLevelSelectorUI:
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
     #saved-fibo-status {{ flex:0 0 auto; width:150px; margin-left:auto; padding:5px 8px; display:inline-flex; align-items:center; justify-content:center; gap:6px; overflow:hidden; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
     #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
+    #saved-fibo-status.invalid-save {{ border-color:#ef4444; background:rgba(127,29,29,.72); color:#fee2e2; box-shadow:0 0 0 1px rgba(239,68,68,.2),0 0 16px rgba(239,68,68,.28); }}
     #saved-fibo-status .saved-remove {{ flex:0 0 auto; margin-left:0; color:inherit; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
@@ -804,10 +805,10 @@ class LightweightChartLevelSelectorUI:
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
-  let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
+  let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
   let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
-  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; btn.classList.toggle('active',saved); btn.title=saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'; const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=saved?'💾 Chart saved':'💾 Save chart'; if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; const invalid=savedFiboByUser&&levels.__saved_fibo_invalid__; btn.classList.toggle('active',saved); btn.classList.toggle('invalid-save',!!invalid); let invalidDays=0; if(invalid){{const due=Date.parse(invalid.delete_on||'');if(Number.isFinite(due))invalidDays=Math.max(0,Math.ceil((due-Date.now())/86400000));}} btn.title=invalid?`Invalid saved Fibo — will be dropped in ${{invalidDays}} day${{invalidDays===1?'':'s'}}; click to remove now`:(saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'); const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=invalid?'⚠ Invalid save':(saved?'💾 Chart saved':'💾 Save chart'); if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -3541,7 +3542,7 @@ class LightweightChartLevelSelectorUI:
     const values = [
       ['Balance', money(Number($('capital')?.value || levels.capital || 0), currency)],
       ['Position', position],
-      ...(savedFiboByUser ? [['Fibo', '💾 SAVED BY USER']] : []),
+      ...(savedFiboByUser ? [['Fibo', levels.__saved_fibo_invalid__ ? '⚠ INVALID SAVE' : '💾 SAVED BY USER']] : []),
       ...(Number.isFinite(maxCapitalInSelectedCurrency()) ? [['Max capital (1% Avg10d)', money(maxCapitalInSelectedCurrency(), currency)]] : []),
       ...selectedValues,
       ['Drawings', String(drawnObjects.length)],
