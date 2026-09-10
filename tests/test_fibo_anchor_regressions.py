@@ -556,6 +556,24 @@ def test_hon_current_short_impulse_uses_newest_confirmed_low():
     assert result.incline_end_date == "2026-09-02"
 
 
+def test_crj_short_drops_obsolete_bottom_inside_completed_sideways_cycle(monkeypatch):
+    frame = _fixture("data/csv/stocks/CRJ_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    obsolete_bottom = int(frame.index[dates == "2026-06-15"][0])
+    monkeypatch.setattr(
+        scanner,
+        "_select_bottom_short",
+        lambda *_args, **_kwargs: obsolete_bottom,
+    )
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short", explain)
+
+    assert result is None
+    assert any("moved obsolete second anchor to later lower low" in item for item in explain)
+    assert any("pullback already reached 61.8" in item for item in explain)
+
+
 def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     command = scanner._build_chart_command(
         "ADBE.US",

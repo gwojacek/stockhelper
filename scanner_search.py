@@ -6529,6 +6529,33 @@ def _find_fibo_3p_steep_setup(
         i_start = int(i_start_sel)
         fib_start = float(high.iloc[i_start])
         fib_end = float(low.iloc[i_bottom])
+        # Column-one short impulses remain live while price is extending the
+        # decline. The local-bottom selector deliberately asks for confirming
+        # candles, so it can initially return an older low. Never leave the
+        # second anchor there when a later candle has already traded lower:
+        # move it to the newest absolute low and rebuild the originating top.
+        # If the subsequent recovery has since crossed 61.8, the normal check
+        # below will then discard the completed/stale cycle (CRJ.WA).
+        later_lows = pd.to_numeric(low.iloc[i_bottom + 1:], errors="coerce").dropna()
+        if not later_lows.empty and float(later_lows.min()) < fib_end:
+            previous_bottom = i_bottom
+            i_bottom = int(later_lows.idxmin())
+            replacement_start = _select_impulse_start_short(
+                w, i_bottom, min_decline_days, max_lookback=260,
+            )
+            if replacement_start is None:
+                _log(
+                    "Rejected short 3P steep: a later lower low invalidated the "
+                    "second anchor but has no qualifying decline yet."
+                )
+                return None
+            i_start = int(replacement_start)
+            fib_start = float(high.iloc[i_start])
+            fib_end = float(low.iloc[i_bottom])
+            _log(
+                "Short 3P steep: moved obsolete second anchor to later lower low "
+                f"idx={previous_bottom} -> {i_bottom}."
+            )
         rng = fib_start - fib_end
         if rng <= 0 or i_bottom - i_start < min_decline_days:
             _log("Rejected short 3P steep: invalid decline range/duration.")
