@@ -3188,7 +3188,8 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             pattern = str(row.pattern or "").strip()
             if pattern and pattern.lower() not in {"-", "none"}:
                 pattern_date = row.dates.get("pattern_date", "") or row.dates.get("touch_61", "") or row.metrics.get("latest_date", "")
-                return (_top_choice_rank(f"pattern {pattern} {pattern_date}", row.category), f"Fibo pattern: {pattern}")
+                date_suffix = f" ({pattern_date})" if pattern_date and pattern_date != "-" else ""
+                return (_top_choice_rank(f"pattern {pattern} {pattern_date}", row.category), f"Fibo pattern: {pattern}{date_suffix}")
             if row.dates.get("touch_61") and row.dates.get("touch_61") != "-":
                 touch_date = row.dates.get("touch_61", "")
                 return (_top_choice_rank(f"61.8 reached {touch_date}", row.category), f"61.8 reached ({touch_date})")

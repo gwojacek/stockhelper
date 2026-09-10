@@ -1554,9 +1554,10 @@ def _repeated_range_acceleration_launch_long(
     ``_completed_sideways_reset_long`` has no single channel to reset from and
     can leave the anchor months before the current impulse.  Two distinct 8%
     month ranges are strong evidence that the old anchor belongs to an earlier
-    structure.  Re-anchor only at a confirmed local low whose following week
-    both expands sharply and breaks the preceding month's high; this avoids
-    selecting an arbitrary point in the middle of the incline.
+    structure.  Re-anchor only at a confirmed local low whose following
+    trading month both expands sharply and breaks the preceding month's high;
+    this avoids selecting an arbitrary point in the middle of the incline
+    while retaining the reaction low which launched a multi-stage advance.
     """
     leg = w.iloc[start_idx:peak_idx + 1].reset_index(drop=True)
     phases = _completed_month_side_trend_phases(leg, band_pct=0.08)
@@ -1571,17 +1572,17 @@ def _repeated_range_acceleration_launch_long(
         local_left = max(search_left, idx - 3)
         local_right = min(search_right, idx + 3)
         candidate_low = float(lows.iloc[idx])
-        if candidate_low > float(lows.iloc[local_left:local_right + 1].min()) * 1.001:
+        if candidate_low > float(lows.iloc[local_left:local_right + 1].min()):
             continue
         prior_left = max(start_idx, idx - 22)
         prior_high = float(highs.iloc[prior_left:idx].max())
-        confirmation_high = float(highs.iloc[idx + 1:min(peak_idx, idx + 6) + 1].max())
+        confirmation_high = float(highs.iloc[idx + 1:min(peak_idx, idx + 22) + 1].max())
         if not math.isfinite(prior_high) or not math.isfinite(confirmation_high):
             continue
-        weekly_expansion = (confirmation_high - candidate_low) / max(abs(candidate_low), 1e-9)
+        launch_expansion = (confirmation_high - candidate_low) / max(abs(candidate_low), 1e-9)
         breaks_prior_month = confirmation_high >= prior_high * 1.03
         total_gain = (float(highs.iloc[peak_idx]) - candidate_low) / max(abs(candidate_low), 1e-9)
-        if weekly_expansion >= 0.12 and breaks_prior_month and total_gain >= 0.15:
+        if launch_expansion >= 0.15 and breaks_prior_month and total_gain >= 0.15:
             return idx
     return None
 
@@ -6318,6 +6319,18 @@ def _select_fibo_long_impulse_base(
                 w, i_start, direction="long", band_pct=0.08
             ) is None
         )
+        repeated_range_launch = None
+        if not preserve_deeper_short_continuation and len(anchor_side_phases) >= 2:
+            repeated_range_launch = _repeated_range_acceleration_launch_long(
+                w, i_start, i_peak, min_incline_days,
+            )
+        if repeated_range_launch is not None and repeated_range_launch > i_start:
+            launch_low = float(low.iloc[repeated_range_launch])
+            _log(
+                "Long: repeated completed month ranges replaced obsolete broad "
+                f"anchor idx={i_start} with confirmed structural launch idx={repeated_range_launch}."
+            )
+            return repeated_range_launch, launch_low, float(fib_end)
         if coherent_steep_impulse:
             # Rolling ranges can overlap ordinary pauses inside one forceful
             # launch-to-top move. Do not replace its real bottom with a later

@@ -1582,6 +1582,8 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "wig_rank = 0 if market_rank == 0 and ticker in wig20 else 1" in run_source
     assert "return (market_rank, wig_rank, original_index)" in run_source
     assert 'reason = f"Fibo pattern: {pattern}"' in run_source
+    assert 'date_suffix = f" ({pattern_date})" if pattern_date and pattern_date != "-" else ""' in run_source
+    assert 'f"Fibo pattern: {pattern}{date_suffix}"' in run_source
     assert "freshness_rank = -(max(signal_dates).toordinal() if signal_dates else 0)" in run_source
     assert "def wedge_freshness_rank" in run_source
     assert "- _wedge_breakout_rank(r), wedge_freshness_rank(r)".replace("- ", "-") in run_source

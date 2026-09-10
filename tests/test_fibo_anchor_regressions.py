@@ -478,10 +478,34 @@ def test_repeated_monthly_ranges_reset_xtb_to_latest_acceleration_low():
     result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
 
     assert result is not None, "\n".join(explain)
-    assert result.incline_start_date == "2026-06-29"
+    assert result.incline_start_date == "2026-05-28"
     assert result.incline_end_date == "2026-08-28"
-    assert float(result.stop_loss) == pytest.approx(103.50, abs=0.01)
-    assert any("confirmed acceleration low" in item for item in explain)
+    assert float(result.stop_loss) == pytest.approx(95.45, abs=0.01)
+    assert any("confirmed structural launch" in item for item in explain)
+
+
+def test_regular_fibo_uses_xtb_post_range_structural_launch():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv").tail(220).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    peak_idx = int(frame.index[dates == "2026-08-28"][0])
+    explain: list[str] = []
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=10,
+        log=explain.append,
+        stale_cycle_mode="reset",
+        max_lookback=200,
+        reset_after_sideways=True,
+        sideways_band_pct=0.08,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None, "\n".join(explain)
+    assert frame.iloc[base[0]]["Date"] == pd.Timestamp("2026-05-28")
+    assert base[1] == pytest.approx(95.45, abs=0.01)
+    assert any("confirmed structural launch" in item for item in explain)
 
 
 def test_hon_current_short_impulse_uses_newest_confirmed_low():
