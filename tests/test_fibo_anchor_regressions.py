@@ -593,6 +593,20 @@ def test_short_impulse_keeps_dominant_top_across_lower_highs(
     assert result.incline_end_date == expected_end
 
 
+def test_hfg_reanchors_after_repeated_short_sideways_shelves():
+    frame = _fixture("data/csv/stocks/HFG_DE.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    bottom_idx = int(frame.index[dates == "2026-09-02"][0])
+
+    start_idx = scanner._select_impulse_start_short(
+        frame, bottom_idx, min_days=21, max_lookback=260,
+    )
+
+    assert start_idx is not None
+    assert frame.iloc[start_idx]["Date"] == pd.Timestamp("2026-07-01")
+    assert float(frame.iloc[start_idx]["High"]) == pytest.approx(4.33, abs=0.01)
+
+
 def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     command = scanner._build_chart_command(
         "ADBE.US",

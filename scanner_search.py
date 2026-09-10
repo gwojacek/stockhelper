@@ -1839,6 +1839,31 @@ def _select_impulse_start_short(
     # inside an uninterrupted decline is not a new first anchor (HFG/IFX).
     # Use the 3% fallback only when no 5% FX leg exists (GBP/USD May-June).
     pool = strong_candidates or candidates
+    range_launches: list[int] = []
+    for idx in pool:
+        if idx - left < 36:
+            continue
+        base = w.iloc[idx - 36:idx + 1]
+        base_high = float(pd.to_numeric(base["High"], errors="coerce").max())
+        base_low = float(pd.to_numeric(base["Low"], errors="coerce").min())
+        base_mid = (base_high + base_low) / 2.0
+        base_first = float(pd.to_numeric(base["Close"], errors="coerce").iloc[:3].median())
+        base_last = float(pd.to_numeric(base["Close"], errors="coerce").iloc[-3:].median())
+        base_band = (base_high - base_low) / max(abs(base_mid), 1e-9)
+        base_progress = abs(base_last - base_first) / max(abs(base_first), 1e-9)
+        if base_band > 0.23 or base_progress > 0.10:
+            continue
+        prior_low = float(low.iloc[max(left, idx - 22):idx].min())
+        confirmation_low = float(low.iloc[idx + 1:min(bottom_idx, idx + 22) + 1].min())
+        launch_decline = (float(high.iloc[idx]) - confirmation_low) / max(abs(float(high.iloc[idx])), 1e-9)
+        breaks_prior_month = confirmation_low <= prior_low * 0.97
+        if launch_decline >= 0.15 and breaks_prior_month:
+            range_launches.append(idx)
+    if range_launches:
+        # Multiple completed shelves split one visually enormous decline into
+        # separate structures. The latest base breakout owns the current Fibo
+        # even if an old historic high remains numerically dominant (HFG).
+        return max(range_launches)
     return max(pool, key=lambda idx: (float(high.iloc[idx]), idx)) if pool else None
 
 
