@@ -508,6 +508,24 @@ def test_regular_fibo_uses_xtb_post_range_structural_launch():
     assert any("confirmed structural launch" in item for item in explain)
 
 
+def test_xtb_extended_range_does_not_keep_april_pre_range_anchor():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == "2026-04-07"][0])
+    peak_idx = int(frame.index[dates == "2026-08-28"][0])
+
+    launch_idx = scanner._repeated_range_acceleration_launch_long(
+        frame,
+        start_idx,
+        peak_idx,
+        min_impulse_days=10,
+    )
+
+    assert launch_idx is not None
+    assert frame.iloc[launch_idx]["Date"] == pd.Timestamp("2026-05-28")
+    assert float(frame.iloc[launch_idx]["Low"]) == pytest.approx(95.45, abs=0.01)
+
+
 def test_hon_current_short_impulse_uses_newest_confirmed_low():
     frame = _fixture("data/csv/stocks/HON_US.csv")
 
