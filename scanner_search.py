@@ -1562,19 +1562,14 @@ def _repeated_range_acceleration_launch_long(
     """
     leg = w.iloc[start_idx:peak_idx + 1].reset_index(drop=True)
     phases = _completed_month_side_trend_phases(leg, band_pct=0.08)
-    extended_phase = len(phases) == 1 and phases[0][1] - phases[0][0] + 1 >= 38
-    phase_structure = len(phases) >= 2 or extended_phase
 
     lows = pd.to_numeric(w["Low"], errors="coerce")
     highs = pd.to_numeric(w["High"], errors="coerce")
-    # For one extended range the eventual launch low commonly forms inside
-    # the latter part of the range (XTB 2026-05-28), before its rolling-window
-    # endpoint. For distinct completed ranges, begin after the last one.
-    search_left = (
-        start_idx + (phases[0][0] if extended_phase else phases[-1][1] + 1)
-        if phase_structure
-        else start_idx + 36
-    )
+    # The eventual launch low may form inside the latter part of an extended
+    # range, before the final qualifying 8% rolling window ends. Do not begin
+    # the search after that endpoint: doing so skipped XTB's 2026-05-28 low
+    # whenever its Apr-Jun base happened to split into two tight sub-phases.
+    search_left = start_idx + 36
     search_right = peak_idx - min_impulse_days
     for idx in range(search_left, search_right + 1):
         local_left = max(search_left, idx - 3)
@@ -1582,22 +1577,23 @@ def _repeated_range_acceleration_launch_long(
         candidate_low = float(lows.iloc[idx])
         if candidate_low > float(lows.iloc[local_left:local_right + 1].min()):
             continue
-        if not phase_structure:
-            # A two-month base may be too volatile for an 8% rolling channel
-            # even though the complete structure makes almost no progress.
-            # Recognize that case directly, but only immediately before the
-            # candidate launch. This separates XTB's Apr-May base from a
-            # normal rising impulse such as SHOP's May-July advance.
-            base = w.iloc[idx - 36:idx + 1]
-            base_high = float(pd.to_numeric(base["High"], errors="coerce").max())
-            base_low = float(pd.to_numeric(base["Low"], errors="coerce").min())
-            base_mid = (base_high + base_low) / 2.0
-            base_first = float(pd.to_numeric(base["Close"], errors="coerce").iloc[:3].median())
-            base_last = float(pd.to_numeric(base["Close"], errors="coerce").iloc[-3:].median())
-            base_band = (base_high - base_low) / max(abs(base_mid), 1e-9)
-            base_progress = abs(base_last - base_first) / max(abs(base_first), 1e-9)
-            if base_band > 0.20 or base_progress > 0.08:
-                continue
+        # Evaluate the complete base even when narrower rolling windows found
+        # multiple phases. The phase count describes why the broad anchor is
+        # stale; it must not force the replacement to occur after the range.
+        base = w.iloc[idx - 36:idx + 1]
+        base_high = float(pd.to_numeric(base["High"], errors="coerce").max())
+        base_low = float(pd.to_numeric(base["Low"], errors="coerce").min())
+        base_mid = (base_high + base_low) / 2.0
+        base_first = float(pd.to_numeric(base["Close"], errors="coerce").iloc[:3].median())
+        base_last = float(pd.to_numeric(base["Close"], errors="coerce").iloc[-3:].median())
+        base_band = (base_high - base_low) / max(abs(base_mid), 1e-9)
+        base_progress = abs(base_last - base_first) / max(abs(base_first), 1e-9)
+        follows_last_tight_phase = (
+            len(phases) >= 2 and idx > start_idx + phases[-1][1]
+        )
+        completed_base = base_band <= 0.20 and base_progress <= 0.08
+        if not completed_base and not follows_last_tight_phase:
+            continue
         prior_left = max(start_idx, idx - 22)
         prior_high = float(highs.iloc[prior_left:idx].max())
         confirmation_high = float(highs.iloc[idx + 1:min(peak_idx, idx + 22) + 1].max())
