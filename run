@@ -265,6 +265,32 @@ def _legacy_fibo_pattern_date(row: ScannerRow, ticker: str, instrument: str) -> 
     return ""
 
 
+def _attach_latest_fibo_geometry(rows: list[ScannerRow]) -> None:
+    """Share each instrument's newest scanner Fibo with its other result rows."""
+    newest: dict[str, tuple[tuple[str, str], str]] = {}
+    for row in rows:
+        if row.scanner != "FIBO":
+            continue
+        incline = str(row.dates.get("incline") or "").strip()
+        if "->" not in incline and row.dates.get("incline_start") and row.dates.get("incline_end"):
+            incline = f"{row.dates['incline_start']}->{row.dates['incline_end']}"
+        if "->" not in incline:
+            continue
+        start, end = (part.strip() for part in incline.split("->", 1))
+        if not start or not end:
+            continue
+        key = (row.ticker or "").strip().upper()
+        rank = (end, start)
+        if key and (key not in newest or rank > newest[key][0]):
+            newest[key] = (rank, f"{start}->{end}")
+    for row in rows:
+        if row.scanner == "FIBO":
+            continue
+        geometry = newest.get((row.ticker or "").strip().upper())
+        if geometry:
+            row.metrics["canonical_fibo_incline"] = geometry[1]
+
+
 def _chart_command_for_row(row: ScannerRow) -> str:
     ticker = (row.ticker or "").strip()
     if not ticker:
@@ -284,6 +310,17 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         if not text or text == "-":
             return cmd
         return f"{cmd} {flag} {shlex.quote(text)}"
+    def _append_shared_fibo(cmd: str) -> str:
+        incline = str(row.metrics.get("canonical_fibo_incline") or "").strip()
+        if "->" not in incline:
+            return cmd
+        start, end = (part.strip() for part in incline.split("->", 1))
+        if not start or not end:
+            return cmd
+        return (
+            f"{cmd} --fibo-lines 5 --fibo-anchor-start {shlex.quote(start)} "
+            f"--fibo-anchor-end {shlex.quote(end)} --fibo-right"
+        )
     if row.scanner == "ICHIMOKU":
         cmd = f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode on"
         cmd = _append_optional(cmd, "--scanner-breakout-date", row.dates.get("flip_date") or row.dates.get("start_date"))
@@ -302,14 +339,14 @@ def _chart_command_for_row(row: ScannerRow) -> str:
             cmd = _append_optional(cmd, "--scanner-latest-retest-pattern", row.metrics.get("latest_retest_pattern"))
         cmd = _append_optional(cmd, "--scanner-previous-respect-months", row.metrics.get("previous_respect_months"))
         cmd = _append_optional(cmd, "--scanner-valid-retests-from-date", row.metrics.get("valid_retests_from_date"))
-        return cmd
+        return _append_shared_fibo(cmd)
     if row.scanner == "WEDGE":
         cmd = f"python run -c {ticker_cmd}{instrument_arg}"
         for arg_name, key in [("--wedge-upper-start", "upper_start"), ("--wedge-upper-end", "upper_end"), ("--wedge-lower-start", "lower_start"), ("--wedge-lower-end", "lower_end")]:
             value = (row.metrics.get(key, "") or "").strip()
             if value:
                 cmd += f" {arg_name} {value}"
-        return cmd + " --wedge-lines --wedge-right"
+        return _append_shared_fibo(cmd + " --wedge-lines --wedge-right")
     if row.scanner == "FIBO":
         incline = (row.dates.get("incline", "") or "").strip()
         if "->" not in incline and row.dates.get("incline_start") and row.dates.get("incline_end"):
@@ -2432,6 +2469,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
         date = r.dates.get("touch_61") or r.dates.get("flip_date") or r.dates.get("incline_end") or ""
         return (cat_order.get(r.category, 9), date)
     rows = sorted(rows, key=key, reverse=False)
+    _attach_latest_fibo_geometry(rows)
     counts = {
         "ichimoku_active": sum(1 for r in rows if r.scanner == "ICHIMOKU"),
         "ichimoku_retests": sum(1 for r in rows if r.category == "retest_breakout"),

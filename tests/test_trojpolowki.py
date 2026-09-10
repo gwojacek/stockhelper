@@ -633,6 +633,32 @@ def test_ichimoku_chart_command_forwards_current_scanner_direction():
     assert "--scanner-breakout-direction short" in mod._chart_command_for_row(short_row)
 
 
+def test_other_scanners_use_same_instruments_newest_fibo_geometry():
+    mod = load_run_module()
+    ichi = mod.ScannerRow(
+        market="DAX", scanner="ICHIMOKU", category="position", ticker="HFG.DE",
+        status="below", metrics={"current_side": "below"},
+    )
+    stale_fibo = mod.ScannerRow(
+        market="DAX", scanner="FIBO", category="waiting", ticker="HFG.DE",
+        status="waiting", dates={"incline": "2025-10-29->2026-08-20"},
+    )
+    current_fibo = mod.ScannerRow(
+        market="DAX", scanner="FIBO", category="steep", ticker="HFG.DE",
+        status="3p_steep_decline", dates={"incline": "2026-07-01->2026-09-02"},
+    )
+
+    rows = [ichi, stale_fibo, current_fibo]
+    mod._attach_latest_fibo_geometry(rows)
+    command = mod._chart_command_for_row(ichi)
+
+    assert ichi.metrics["canonical_fibo_incline"] == "2026-07-01->2026-09-02"
+    assert "--ichimoku-mode on" in command
+    assert "--fibo-anchor-start 2026-07-01" in command
+    assert "--fibo-anchor-end 2026-09-02" in command
+    assert "2025-10-29" not in command
+
+
 def test_zero_retest_count_drops_stale_pattern_from_chart_command():
     mod = load_run_module()
     row = mod.ScannerRow(
