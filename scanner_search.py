@@ -1784,7 +1784,7 @@ def _select_impulse_start_short(
     max_lookback: int = 140,
     min_decline_pct: float = 0.03,
 ) -> int | None:
-    """Return the latest clear trend top that produced the short decline.
+    """Return the dominant unbroken trend top that produced the short decline.
 
     This is the short-side mirror of clear-bottom selection.  It deliberately
     rejects ordinary pullback highs: a candidate must be a local wick high,
@@ -1834,10 +1834,12 @@ def _select_impulse_start_short(
         candidates.append(idx)
         if decline_pct >= 0.05:
             strong_candidates.append(idx)
-    # Prefer the latest full-size trend top.  Use the 3% fallback only when no
-    # 5% FX leg exists (for example GBP/USD's May-to-June decline).
+    # Once completed cycles have been removed above, prefer the highest
+    # remaining structural top rather than the latest lower high. A lower high
+    # inside an uninterrupted decline is not a new first anchor (HFG/IFX).
+    # Use the 3% fallback only when no 5% FX leg exists (GBP/USD May-June).
     pool = strong_candidates or candidates
-    return max(pool) if pool else None
+    return max(pool, key=lambda idx: (float(high.iloc[idx]), idx)) if pool else None
 
 
 

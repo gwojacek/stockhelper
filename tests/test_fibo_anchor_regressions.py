@@ -574,6 +574,25 @@ def test_crj_short_drops_obsolete_bottom_inside_completed_sideways_cycle(monkeyp
     assert any("pullback already reached 61.8" in item for item in explain)
 
 
+@pytest.mark.parametrize(
+    ("path", "expected_start", "expected_end"),
+    [
+        ("data/csv/stocks/HFG_DE.csv", "2026-07-01", "2026-09-02"),
+        ("data/csv/stocks/IFX_DE.csv", "2026-06-22", "2026-08-24"),
+    ],
+)
+def test_short_impulse_keeps_dominant_top_across_lower_highs(
+    path, expected_start, expected_end
+):
+    frame = _fixture(path)
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short")
+
+    assert result is not None
+    assert result.incline_start_date == expected_start
+    assert result.incline_end_date == expected_end
+
+
 def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     command = scanner._build_chart_command(
         "ADBE.US",
