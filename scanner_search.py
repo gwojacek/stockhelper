@@ -1123,6 +1123,28 @@ def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
     return len(_completed_month_side_trend_phases(df_slice))
 
 
+def _short_bottom_is_inside_month_side_trend(
+    df: pd.DataFrame,
+    impulse_start_idx: int,
+    impulse_bottom_idx: int,
+) -> bool:
+    """Return whether a short Fibo ends inside a month-scale shelf.
+
+    A decline may start correctly and then spend several weeks oscillating near
+    its low.  A marginal low made inside that shelf is not a completed impulse
+    extreme and must not become the second Fibo anchor (ENA and LWB).  Limit the
+    check to phases which reach the selected bottom; an older internal pause
+    followed by a decisive breakdown remains part of a valid current decline
+    (HFG).
+    """
+    if impulse_bottom_idx <= impulse_start_idx:
+        return False
+    leg = df.iloc[impulse_start_idx:impulse_bottom_idx + 1].reset_index(drop=True)
+    bottom_offset = len(leg) - 1
+    phases = _completed_month_side_trend_phases(leg)
+    return any(end >= bottom_offset - 2 for _start, end in phases)
+
+
 def _impulse_has_disqualifying_month_side_trend(
     df_slice: pd.DataFrame,
     *,
@@ -6589,6 +6611,12 @@ def _find_fibo_3p_steep_setup(
             return None
         if _early_sideways_after_anchor_window(w, i_start, direction="short") is not None:
             _log("Rejected short 3P steep: month-long sideways range after the top.")
+            return None
+        if _short_bottom_is_inside_month_side_trend(w, i_start, i_bottom):
+            _log(
+                "Rejected short 3P steep: selected bottom is inside a "
+                "completed month-long sideways range."
+            )
             return None
         fib_236 = fib_end + rng * 0.236
         fib_382 = fib_end + rng * 0.382

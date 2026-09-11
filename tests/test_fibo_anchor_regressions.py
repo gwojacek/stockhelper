@@ -607,6 +607,51 @@ def test_hfg_reanchors_after_repeated_short_sideways_shelves():
     assert float(frame.iloc[start_idx]["High"]) == pytest.approx(4.33, abs=0.01)
 
 
+@pytest.mark.parametrize(
+    ("path", "start_date", "bottom_date"),
+    [
+        ("data/csv/stocks/ENA_WA.csv", "2026-04-08", "2026-07-30"),
+        ("data/csv/stocks/LWB_WA.csv", "2026-04-07", "2026-06-24"),
+    ],
+)
+def test_short_bottom_inside_month_sideways_is_not_an_impulse_end(
+    path, start_date, bottom_date
+):
+    frame = _fixture(path)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == start_date][0])
+    bottom_idx = int(frame.index[dates == bottom_date][0])
+
+    assert scanner._short_bottom_is_inside_month_side_trend(
+        frame, start_idx, bottom_idx,
+    )
+
+
+def test_hfg_decisive_breakdown_after_old_shelves_keeps_current_bottom():
+    frame = _fixture("data/csv/stocks/HFG_DE.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == "2026-07-01"][0])
+    bottom_idx = int(frame.index[dates == "2026-09-02"][0])
+
+    assert not scanner._short_bottom_is_inside_month_side_trend(
+        frame, start_idx, bottom_idx,
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["data/csv/stocks/ENA_WA.csv", "data/csv/stocks/LWB_WA.csv"],
+)
+def test_short_3p_rejects_bottom_inside_month_sideways(path):
+    frame = _fixture(path)
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short", explain)
+
+    assert result is None
+    assert any("selected bottom is inside" in item for item in explain)
+
+
 def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     command = scanner._build_chart_command(
         "ADBE.US",
