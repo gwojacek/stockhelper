@@ -6133,6 +6133,43 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     same_state = (candidate.breakout_direction or "-") == (current.breakout_direction or "-")
                     comparable_touches = candidate_touches >= current_touches - 1
                     comparable_duration = candidate.duration_days >= current.duration_days * 0.55
+                    same_upper_broader_lower = (
+                        same_state
+                        and candidate.upper_start_date == current.upper_start_date
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date < current.lower_start_date
+                        and candidate.lower_end_date < current.lower_end_date
+                        and candidate.lower_start_price <= current.lower_start_price * 0.96
+                        and candidate.lower_touches >= current.lower_touches + 1
+                        and candidate.width_end_pct <= max(
+                            current.width_end_pct * 1.35,
+                            current.width_end_pct + 7.0,
+                        )
+                        and candidate.fit_quality >= current.fit_quality * 0.62
+                    )
+                    current_same_upper_broader_lower = (
+                        same_state
+                        and current.upper_start_date == candidate.upper_start_date
+                        and current.upper_end_date == candidate.upper_end_date
+                        and current.lower_start_date < candidate.lower_start_date
+                        and current.lower_end_date < candidate.lower_end_date
+                        and current.lower_start_price <= candidate.lower_start_price * 0.96
+                        and current.lower_touches >= candidate.lower_touches + 1
+                        and current.width_end_pct <= max(
+                            candidate.width_end_pct * 1.35,
+                            candidate.width_end_pct + 7.0,
+                        )
+                        and current.fit_quality >= candidate.fit_quality * 0.62
+                    )
+                    # With the same upper structure, prefer the lower boundary
+                    # beginning at the earlier/deeper swing extreme when it has
+                    # more confirmed touches. Formation duration alone cannot
+                    # express this because both candidates start at the same
+                    # old upper anchor (CRJ: July support vs August shelf).
+                    if same_upper_broader_lower:
+                        return True
+                    if current_same_upper_broader_lower:
+                        return False
                     contains_full_structure = (
                         same_state
                         and candidate.duration_days >= current.duration_days * 1.15

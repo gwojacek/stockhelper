@@ -537,7 +537,7 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     df = pd.read_csv(DATA_DIR / "CRJ_WA.csv")
     breakdown = pd.DataFrame([{
         "Date": "2026-09-11", "Open": 473.0, "High": 479.0,
-        "Low": 468.0, "Close": 472.0, "Volume": 544.0,
+        "Low": 468.0, "Close": 470.0, "Volume": 652.0,
     }])
     df = pd.concat([df, breakdown], ignore_index=True)
 
