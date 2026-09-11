@@ -3856,6 +3856,15 @@ def _write_md_table(
 def _daily_report_path(prefix: str, group_name: str) -> Path:
     day = datetime.now(UTC).strftime("%Y%m%d")
     return _search_output_dir(prefix) / f"{prefix}_{group_name.lower()}_{day}.md"
+
+
+def _report_scope_name(group_name: str, members: list[str]) -> str:
+    """Keep single-symbol output addressable by allsearch's scope reader."""
+    if group_name == "single" and len(members) == 1:
+        return str(members[0]).strip().lower()
+    return group_name
+
+
 def _prune_search_history(group_name: str, keep_last: int = 3) -> None:
     base = f"search_{group_name.lower()}_"
     files = [p for p in ICHIMOKU_SEARCH_OUTPUT_DIR.glob(f"{base}*.md") if p.is_file()]
@@ -4902,7 +4911,8 @@ def run_ichimoku_search(target: str) -> int:
     flip_results = [f for f in flip_results if _flip_still_actionable(f)]
     retest_by_ticker_side = {(f.ticker, f.current_side): (f"{f.retest_status} ({f.valid_retests_count})" if f.valid_retests_count > 0 else f.retest_status) for f in flip_results}
     ICHIMOKU_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_md = _daily_report_path("search", group_name)
+    report_scope = _report_scope_name(group_name, members)
+    out_md = _daily_report_path("search", report_scope)
     rows_md = []
     for row in sorted(results, key=lambda r: r.respect_days, reverse=True):
         if row.qualification_status == "early_breakout_waiting_until_4m":
@@ -4954,7 +4964,7 @@ def run_ichimoku_search(target: str) -> int:
         description="WYNIKI 2: instrumenty po flipie (zmiana strony chmury po wcześniejszym długim trendzie), z podsumowaniem retestów i patternów po wybiciu.",
     )
     print(f"Zapisano MD: {out_md_flip}")
-    _prune_search_history(group_name, keep_last=3)
+    _prune_search_history(report_scope, keep_last=3)
     all_links = links_primary + [x for x in links_flip if x not in links_primary]
     if all_links and os.environ.get("STOCKHELPER_DEFER_OPEN_LINKS") != "1":
         try:
@@ -8127,7 +8137,8 @@ def run_fibo_search(target: str) -> int:
         if STOP_SCAN_EVENT.is_set():
             return 1
     FIBO_SEARCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_md = _daily_report_path("fibo_search", group_name)
+    report_scope = _report_scope_name(group_name, members)
+    out_md = _daily_report_path("fibo_search", report_scope)
     today_ts = pd.Timestamp(datetime.now(UTC).date())
     valid_recent_cutoff = today_ts - pd.Timedelta(days=14)
     rows0 = [r for r in rows3p_steep if r.status == "3p_steep_incline"]

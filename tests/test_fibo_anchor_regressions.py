@@ -16,6 +16,11 @@ def _fixture(path: str):
     return frame.reset_index(drop=True)
 
 
+def test_single_symbol_reports_use_symbol_scope_instead_of_shared_single_file():
+    assert scanner._report_scope_name("single", ["ENA.WA"]) == "ena.wa"
+    assert scanner._report_scope_name("wig", ["ENA.WA"]) == "wig"
+
+
 def test_selected_silver_provider_alias_uses_canonical_xagusd_history():
     group, members, _source, _suffix = scanner._get_members(
         "selected__INSM.US__SI.F__PUR.WA"
