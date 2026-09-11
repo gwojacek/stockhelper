@@ -5884,7 +5884,17 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # have their two anchors; having three touches on both lines
                     # is better, but not mandatory.
                     breakout_side_count = up_count if breakout_direction == "long" else lo_count
-                    if min(up_count, lo_count) < 2 or breakout_side_count < 3:
+                    breakout_width = abs(
+                        _wedge_line_value(breakout_idx, upper_a, upper_b)
+                        - _wedge_line_value(breakout_idx, lower_a, lower_b)
+                    )
+                    apex_breakout = breakout_width <= max(abs(float(closes[breakout_idx])), 1e-9) * 0.06
+                    # Two clean anchors on each boundary are sufficient when
+                    # price breaks at a fully compressed apex. Requiring a
+                    # third pre-breakout touch on the broken side made CRI's
+                    # major May/December structure disappear on its signal.
+                    required_breakout_side_touches = 2 if apex_breakout else 3
+                    if min(up_count, lo_count) < 2 or breakout_side_count < required_breakout_side_touches:
                         continue
                 elif up_count < 2 or lo_count < 2:
                     # Unbroken wedges are watchlist candidates once both lines
@@ -6054,6 +6064,43 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     same_state = (candidate.breakout_direction or "-") == (current.breakout_direction or "-")
                     comparable_touches = candidate_touches >= current_touches - 1
                     comparable_duration = candidate.duration_days >= current.duration_days * 0.55
+                    contains_full_structure = (
+                        same_state
+                        and candidate.duration_days >= current.duration_days * 1.15
+                        and candidate.upper_start_date <= current.upper_start_date
+                        and candidate.lower_start_date < current.lower_start_date
+                        and (
+                            candidate.upper_start_date == current.upper_start_date
+                            or candidate.upper_start_price >= current.upper_start_price * 1.03
+                        )
+                        and candidate.lower_start_price <= current.lower_start_price * 0.96
+                        and candidate.upper_touches >= current.upper_touches - 1
+                        and candidate.lower_touches >= current.lower_touches - 1
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.35, current.width_end_pct + 7.0)
+                        and candidate.fit_quality >= current.fit_quality * 0.62
+                    )
+                    current_contains_full_structure = (
+                        same_state
+                        and current.duration_days >= candidate.duration_days * 1.15
+                        and current.upper_start_date <= candidate.upper_start_date
+                        and current.lower_start_date < candidate.lower_start_date
+                        and (
+                            current.upper_start_date == candidate.upper_start_date
+                            or current.upper_start_price >= candidate.upper_start_price * 1.03
+                        )
+                        and current.lower_start_price <= candidate.lower_start_price * 0.96
+                        and current.upper_touches >= candidate.upper_touches - 1
+                        and current.lower_touches >= candidate.lower_touches - 1
+                        and current.width_end_pct <= max(candidate.width_end_pct * 1.35, candidate.width_end_pct + 7.0)
+                        and current.fit_quality >= candidate.fit_quality * 0.62
+                    )
+                    # Structural containment is the primary comparison. A
+                    # nested flat shelf must not replace the broader candidate
+                    # merely because it is geometrically tighter.
+                    if contains_full_structure:
+                        return True
+                    if current_contains_full_structure:
+                        return False
                     oversized_current = current.width_end_pct > 30.0 or current.width_start_pct > 95.0
                     materially_tighter = (
                         candidate.width_end_pct <= current.width_end_pct * (0.92 if oversized_current else 0.78)
@@ -6075,40 +6122,6 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     )
                     if much_longer_with_better_upper:
                         return candidate.score >= current.score * 0.55
-                    contains_full_structure = (
-                        same_state
-                        and candidate.duration_days >= current.duration_days * 1.15
-                        and candidate.upper_start_date < current.upper_start_date
-                        and candidate.lower_start_date < current.lower_start_date
-                        and candidate.upper_start_price >= current.upper_start_price * 1.03
-                        and candidate.lower_start_price <= current.lower_start_price * 0.96
-                        and candidate.upper_touches >= current.upper_touches - 1
-                        and candidate.lower_touches >= current.lower_touches - 1
-                        and candidate.width_end_pct <= max(current.width_end_pct * 1.35, current.width_end_pct + 7.0)
-                        and candidate.fit_quality >= current.fit_quality * 0.62
-                    )
-                    if contains_full_structure:
-                        # Prefer the valid outer wedge when its lines begin at
-                        # the earlier high/low extremes and contain the nested
-                        # alternative.  All candidates reaching this point have
-                        # already passed boundary, convergence and active-price
-                        # checks, so the extra history is real structure rather
-                        # than an arbitrary lookback expansion.
-                        return True
-                    current_contains_full_structure = (
-                        same_state
-                        and current.duration_days >= candidate.duration_days * 1.15
-                        and current.upper_start_date < candidate.upper_start_date
-                        and current.lower_start_date < candidate.lower_start_date
-                        and current.upper_start_price >= candidate.upper_start_price * 1.03
-                        and current.lower_start_price <= candidate.lower_start_price * 0.96
-                        and current.upper_touches >= candidate.upper_touches - 1
-                        and current.lower_touches >= candidate.lower_touches - 1
-                        and current.width_end_pct <= max(candidate.width_end_pct * 1.35, candidate.width_end_pct + 7.0)
-                        and current.fit_quality >= candidate.fit_quality * 0.62
-                    )
-                    if current_contains_full_structure:
-                        return False
                     same_lower_newer_upper_anchor = (
                         same_state
                         and (candidate.breakout_direction or "-") == "-"

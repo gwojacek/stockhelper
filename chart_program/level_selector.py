@@ -34,6 +34,21 @@ def _trim_chart_window(df: pd.DataFrame, max_days: int = 548) -> pd.DataFrame:
     return trimmed if not trimmed.empty else out.tail(min(len(out), 400)).reset_index(drop=True)
 
 
+def _snap_fibo_second_anchor_to_extreme(
+    df: pd.DataFrame, start_idx: int, end_idx: int, is_short: bool,
+) -> int:
+    """Return the true price extreme between the two requested Fib dates."""
+    left, right = sorted((int(start_idx), int(end_idx)))
+    segment = df.iloc[left:right + 1]
+    if segment.empty:
+        return int(end_idx)
+    field = "Low" if is_short else "High"
+    prices = pd.to_numeric(segment[field], errors="coerce").dropna()
+    if prices.empty:
+        return int(end_idx)
+    return int(prices.idxmin() if is_short else prices.idxmax())
+
+
 def _canonical_scanner_breakout_date(df: pd.DataFrame, supplied_date: str, direction: str) -> str:
     """Advance a stale cloud-entry date to the first far-edge close."""
     raw_date = str(supplied_date or "").strip()[:10]
@@ -683,6 +698,13 @@ def run_level_selector(raw_args=None):
                     return (_row_price(row, "Low") + _row_price(row, "High")) / 2.0
 
                 is_short = _row_mid(e_row) < _row_mid(s_row)
+                # Scanner/report dates can lag behind the decisive extreme as
+                # an offset candidate ages. A Fib boundary must nevertheless
+                # terminate at the lowest low (short) or highest high (long)
+                # inside its measured leg; never draw an anchor on a lesser
+                # later candle such as CRI 2026-09-04 instead of 2026-07-30.
+                e_idx = _snap_fibo_second_anchor_to_extreme(df, s_idx, e_idx, is_short)
+                e_row = df.iloc[e_idx]
                 if is_short:
                     high_price = round(_row_price(s_row, "High"), 5)
                     low_price = round(_row_price(e_row, "Low"), 5)

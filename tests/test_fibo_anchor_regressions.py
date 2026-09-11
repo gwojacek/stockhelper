@@ -8,12 +8,27 @@ import pytest
 pd = pytest.importorskip("pandas")
 
 import scanner_search as scanner
+from chart_program.level_selector import _snap_fibo_second_anchor_to_extreme
 
 
 def _fixture(path: str):
     frame = pd.read_csv(Path(path))
     frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce")
     return frame.reset_index(drop=True)
+
+
+def test_cri_fibo_second_anchor_snaps_to_true_low_inside_requested_leg():
+    frame = _fixture("data/csv/stocks/CRI_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == "2026-05-29"][0])
+    requested_end_idx = int(frame.index[dates == "2026-09-04"][0])
+
+    end_idx = _snap_fibo_second_anchor_to_extreme(
+        frame, start_idx, requested_end_idx, is_short=True,
+    )
+
+    assert frame.iloc[end_idx]["Date"] == pd.Timestamp("2026-07-30")
+    assert float(frame.iloc[end_idx]["Low"]) == pytest.approx(635.0)
 
 
 def test_single_symbol_reports_use_symbol_scope_instead_of_shared_single_file():
