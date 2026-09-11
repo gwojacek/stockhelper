@@ -100,7 +100,7 @@ def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkey
     assert scanner._saved_drawing_kinds_for_ticker("KLIN") == set()
 
 
-def test_invalid_saved_fibo_is_deleted_immediately(tmp_path, monkeypatch):
+def test_invalid_saved_fibo_warns_for_five_days_before_deletion(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
     sessions.mkdir()
@@ -108,9 +108,17 @@ def test_invalid_saved_fibo_is_deleted_immediately(tmp_path, monkeypatch):
     fib = {"type": "fib-boundary", "group_id": "edited", "x0": "2026-02-02", "x1": "2026-06-05"}
     path.write_text(json.dumps({"drawn_objects": [fib, {"type": "line"}]}), encoding="utf-8")
 
-    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1)) == "invalid saved Fibo deleted -> automatic fallback"
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 1)) == "invalid saved Fibo; scheduled for deletion in 5 days"
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["drawn_objects"] == [fib, {"type": "line"}]
+    assert saved["__saved_fibo_invalid__"]["since"] == "2026-08-01"
+    assert saved["__saved_fibo_invalid__"]["delete_on"] == "2026-08-06"
+
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 5)) == "invalid saved Fibo; scheduled for deletion in 1 day"
+    assert scanner._update_saved_fibo_lifecycle("KLIN", valid=False, as_of=date(2026, 8, 6)) == "invalid saved Fibo deleted after 5-day warning -> automatic fallback"
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["drawn_objects"] == [{"type": "line"}]
+    assert saved["__saved_fibo_by_user__"] is False
     assert "__saved_fibo_invalid__" not in saved
 
 

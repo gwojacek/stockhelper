@@ -90,6 +90,28 @@ def test_line_color_menu_opens_upward_with_yellow_default():
     assert "let lineColor = P.lineColors.gold" in source
 
 
+def test_additional_fibo_uses_a_distinct_persistent_palette():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "const fibPalettes = [" in source
+    assert "{{level:'#38bdf8', highlight:'#f472b6', boundary:'#0ea5e9'}}" in source
+    assert "const nextFibPaletteIndex = () => fibGroupOrder().length % fibPalettes.length" in source
+    assert "const paletteIndex = nextFibPaletteIndex();" in source
+    assert "color:fibColor(r, paletteIndex), fib_palette:paletteIndex" in source
+    assert "color:fibPalette(paletteIndex).boundary, fib_palette:paletteIndex" in source
+    assert "fibColor(fibRatioValue(obj), fibPaletteIndex(obj))" in source
+
+
+def test_fibo_preview_does_not_shift_the_chart_viewport():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    preview = source[source.index("function drawFibPreview"):source.index("function updateFibPreview")]
+
+    assert "const viewport = captureViewport();" in preview
+    assert "const xEnd = P.ohlc[P.ohlc.length - 1].time;" in preview
+    assert "addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880" not in preview
+    assert "restoreViewport(viewport);" in preview
+
+
 def test_chart_shows_saved_fibo_and_max_capital_context():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     assert 'id="chart-context-info"' in source
@@ -97,7 +119,7 @@ def test_chart_shows_saved_fibo_and_max_capital_context():
     assert "💾 Chart saved:" in source
     assert "Max capital engagement:" in source
     assert "1% of 10-day average turnover" in source
-    assert "['Fibo', '💾 SAVED BY USER']" in source
+    assert "levels.__saved_fibo_invalid__ ? '⚠ INVALID SAVE' : '💾 SAVED BY USER'" in source
     assert "['Max capital (1% Avg10d)'" in source
     assert '"volume": float(row["Volume"])' in source
     assert "maxCapitalInSelectedCurrency" in source
@@ -126,7 +148,10 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
     assert "savedWedgeByUser" in source
     assert "type:'stockhelper-saved-setup'" in source
     assert "__saved_wedge_by_user__:savedWedgeByUser" in source
-    assert "!levels.__saved_fibo_invalid__" in source
+    assert "levels.__saved_fibo_invalid__" in source
+    assert "invalid-save" in source
+    assert "Invalid saved Fibo — will be dropped in" in source
+    assert "⚠ Invalid save" in source
     assert "delete levels.__saved_fibo_invalid__" in source
     assert "const FAVORITES_KEY = 'stockhelper.favorite-instruments.v1'" in source
     assert "localStorage.setItem(FAVORITES_KEY" in source

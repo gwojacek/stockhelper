@@ -16,6 +16,11 @@ def _fixture(path: str):
     return frame.reset_index(drop=True)
 
 
+def test_single_symbol_reports_use_symbol_scope_instead_of_shared_single_file():
+    assert scanner._report_scope_name("single", ["ENA.WA"]) == "ena.wa"
+    assert scanner._report_scope_name("wig", ["ENA.WA"]) == "wig"
+
+
 def test_selected_silver_provider_alias_uses_canonical_xagusd_history():
     group, members, _source, _suffix = scanner._get_members(
         "selected__INSM.US__SI.F__PUR.WA"
@@ -348,12 +353,6 @@ def test_cdr_mature_post_base_leg_is_not_bdx_style_terminal_stall():
             "touched_61_8_no_pattern",
             "none",
         ),
-        (
-            "data/csv/stocks/CDR_WA.csv",
-            ("2026-06-26", "2026-08-13"),
-            "valid_reversal",
-            "bullish_harami",
-        ),
     ],
 )
 def test_live_first_touch_and_harami_keep_their_structural_anchors(
@@ -368,3 +367,304 @@ def test_live_first_touch_and_harami_keep_their_structural_anchors(
     assert result.incline_end_date == anchors[1]
     assert result.status == expected_status
     assert result.reversal_pattern_name == expected_pattern
+
+
+def test_cdr_harami_is_dropped_after_later_wick_breaks_pattern_stop():
+    frame = _fixture("data/csv/stocks/CDR_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-26", "2026-08-13"),
+        explain=explain,
+    )
+
+    assert result is None
+    assert any("later low below the pattern stop" in item for item in explain)
+
+
+def test_reversal_stop_uses_candle_extreme_instead_of_close():
+    frame = pd.DataFrame(
+        [
+            {"Date": "2026-08-28", "High": 236.6, "Low": 233.4, "Close": 236.5},
+            {"Date": "2026-09-04", "High": 235.5, "Low": 226.0, "Close": 232.0},
+        ]
+    )
+
+    assert scanner._fibo_reversal_stop_broken(
+        frame, "long", "2026-08-28", 230.27
+    ) is True
+
+
+@pytest.mark.parametrize(
+    ("path", "peak_date", "expected_start"),
+    [
+        ("data/csv/stocks/CSCO_US.csv", "2026-06-04", "2026-04-02"),
+        ("data/csv/stocks/PZU_WA.csv", "2026-09-04", "2026-06-08"),
+    ],
+)
+def test_post_range_anchor_is_not_left_in_middle_of_incline(
+    path, peak_date, expected_start
+):
+    frame = _fixture(path).tail(320).reset_index(drop=True)
+    peak_idx = int(
+        frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == peak_date][0]
+    )
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=21,
+        stale_cycle_mode="reset",
+        max_lookback=260,
+        reset_after_sideways=False,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None
+    start_idx, _start_low, _peak = base
+    assert frame.iloc[start_idx]["Date"] == pd.Timestamp(expected_start)
+
+
+def test_sbux_sideways_range_spanning_marginal_peak_drops_fibo():
+    frame = _fixture("data/csv/stocks/SBUX_US.csv").tail(320).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    peak_idx = int(frame.index[dates == "2026-08-13"][0])
+
+    assert scanner._sideways_range_spans_impulse_end(frame, peak_idx) is True
+
+    explain: list[str] = []
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-05", "2026-08-13"),
+        explain=explain,
+    )
+    assert result is None
+    assert any("selected high is inside" in item for item in explain)
+
+
+@pytest.mark.parametrize(
+    ("path", "peak_date", "expected_start"),
+    [
+        ("data/csv/stocks/ADBE_US.csv", "2026-08-28", "2026-06-18"),
+        ("data/csv/stocks/SHOP_US.csv", "2026-08-14", "2026-05-14"),
+    ],
+)
+def test_internal_pauses_do_not_replace_coherent_impulse_launch(
+    path, peak_date, expected_start
+):
+    frame = _fixture(path).tail(320).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    peak_idx = int(frame.index[dates == peak_date][0])
+    explain: list[str] = []
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=21,
+        log=explain.append,
+        stale_cycle_mode="reset",
+        max_lookback=260,
+        reset_after_sideways=False,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None
+    assert frame.iloc[base[0]]["Date"] == pd.Timestamp(expected_start)
+    assert any("retained coherent structural launch" in item for item in explain)
+
+
+def test_repeated_monthly_ranges_reset_xtb_to_latest_acceleration_low():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None, "\n".join(explain)
+    assert result.incline_start_date == "2026-05-28"
+    assert result.incline_end_date == "2026-08-28"
+    assert float(result.stop_loss) == pytest.approx(95.45, abs=0.01)
+    assert any("confirmed structural launch" in item for item in explain)
+
+
+def test_regular_fibo_uses_xtb_post_range_structural_launch():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv").tail(220).reset_index(drop=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    peak_idx = int(frame.index[dates == "2026-08-28"][0])
+    explain: list[str] = []
+
+    base = scanner._select_fibo_long_impulse_base(
+        frame,
+        peak_idx,
+        min_incline_days=10,
+        log=explain.append,
+        stale_cycle_mode="reset",
+        max_lookback=200,
+        reset_after_sideways=True,
+        sideways_band_pct=0.08,
+        reset_after_extended_sideways=True,
+    )
+
+    assert base is not None, "\n".join(explain)
+    assert frame.iloc[base[0]]["Date"] == pd.Timestamp("2026-05-28")
+    assert base[1] == pytest.approx(95.45, abs=0.01)
+    assert any("confirmed structural launch" in item for item in explain)
+
+
+def test_xtb_extended_range_does_not_keep_april_pre_range_anchor():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == "2026-04-07"][0])
+    peak_idx = int(frame.index[dates == "2026-08-28"][0])
+
+    launch_idx = scanner._repeated_range_acceleration_launch_long(
+        frame,
+        start_idx,
+        peak_idx,
+        min_impulse_days=10,
+    )
+
+    assert launch_idx is not None
+    assert frame.iloc[launch_idx]["Date"] == pd.Timestamp("2026-05-28")
+    assert float(frame.iloc[launch_idx]["Low"]) == pytest.approx(95.45, abs=0.01)
+
+
+def test_xtb_launch_can_be_inside_last_overlapping_tight_phase(monkeypatch):
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == "2026-04-07"][0])
+    peak_idx = int(frame.index[dates == "2026-08-28"][0])
+    monkeypatch.setattr(
+        scanner,
+        "_completed_month_side_trend_phases",
+        lambda *_args, **_kwargs: [(0, 24), (20, 55)],
+    )
+
+    launch_idx = scanner._repeated_range_acceleration_launch_long(
+        frame, start_idx, peak_idx, min_impulse_days=10,
+    )
+
+    assert launch_idx is not None
+    assert frame.iloc[launch_idx]["Date"] == pd.Timestamp("2026-05-28")
+
+
+def test_hon_current_short_impulse_uses_newest_confirmed_low():
+    frame = _fixture("data/csv/stocks/HON_US.csv")
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short")
+
+    assert result is not None
+    assert result.status == "3p_steep_incline"
+    assert result.incline_start_date == "2026-07-28"
+    assert result.incline_end_date == "2026-09-02"
+
+
+def test_crj_short_drops_obsolete_bottom_inside_completed_sideways_cycle(monkeypatch):
+    frame = _fixture("data/csv/stocks/CRJ_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    obsolete_bottom = int(frame.index[dates == "2026-06-15"][0])
+    monkeypatch.setattr(
+        scanner,
+        "_select_bottom_short",
+        lambda *_args, **_kwargs: obsolete_bottom,
+    )
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short", explain)
+
+    assert result is None
+    assert any("moved obsolete second anchor to later lower low" in item for item in explain)
+    assert any("pullback already reached 61.8" in item for item in explain)
+
+
+@pytest.mark.parametrize(
+    ("path", "expected_start", "expected_end"),
+    [
+        ("data/csv/stocks/HFG_DE.csv", "2026-07-01", "2026-09-02"),
+        ("data/csv/stocks/IFX_DE.csv", "2026-06-22", "2026-08-24"),
+    ],
+)
+def test_short_impulse_keeps_dominant_top_across_lower_highs(
+    path, expected_start, expected_end
+):
+    frame = _fixture(path)
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short")
+
+    assert result is not None
+    assert result.incline_start_date == expected_start
+    assert result.incline_end_date == expected_end
+
+
+def test_hfg_reanchors_after_repeated_short_sideways_shelves():
+    frame = _fixture("data/csv/stocks/HFG_DE.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    bottom_idx = int(frame.index[dates == "2026-09-02"][0])
+
+    start_idx = scanner._select_impulse_start_short(
+        frame, bottom_idx, min_days=21, max_lookback=260,
+    )
+
+    assert start_idx is not None
+    assert frame.iloc[start_idx]["Date"] == pd.Timestamp("2026-07-01")
+    assert float(frame.iloc[start_idx]["High"]) == pytest.approx(4.33, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("path", "start_date", "bottom_date"),
+    [
+        ("data/csv/stocks/ENA_WA.csv", "2026-04-08", "2026-07-30"),
+        ("data/csv/stocks/LWB_WA.csv", "2026-04-07", "2026-06-24"),
+    ],
+)
+def test_short_bottom_inside_month_sideways_is_not_an_impulse_end(
+    path, start_date, bottom_date
+):
+    frame = _fixture(path)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == start_date][0])
+    bottom_idx = int(frame.index[dates == bottom_date][0])
+
+    assert scanner._short_bottom_is_inside_month_side_trend(
+        frame, start_idx, bottom_idx,
+    )
+
+
+def test_hfg_decisive_breakdown_after_old_shelves_keeps_current_bottom():
+    frame = _fixture("data/csv/stocks/HFG_DE.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start_idx = int(frame.index[dates == "2026-07-01"][0])
+    bottom_idx = int(frame.index[dates == "2026-09-02"][0])
+
+    assert not scanner._short_bottom_is_inside_month_side_trend(
+        frame, start_idx, bottom_idx,
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["data/csv/stocks/ENA_WA.csv", "data/csv/stocks/LWB_WA.csv"],
+)
+def test_short_3p_rejects_bottom_inside_month_sideways(path):
+    frame = _fixture(path)
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "short", explain)
+
+    assert result is None
+    assert any("selected bottom is inside" in item for item in explain)
+
+
+def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
+    command = scanner._build_chart_command(
+        "ADBE.US",
+        "fibo",
+        "2026-06-18",
+        "2026-08-28",
+        pattern_date="2026-07-07",
+        pattern_name="shooting_star",
+    )
+
+    assert "--scanner-pattern-date" not in command

@@ -571,6 +571,7 @@ class LightweightChartLevelSelectorUI:
     #favorite-star.active {{ color:#facc15; text-shadow:0 0 8px rgba(250,204,21,.35); }}
     #saved-fibo-status {{ flex:0 0 auto; width:150px; margin-left:auto; padding:5px 8px; display:inline-flex; align-items:center; justify-content:center; gap:6px; overflow:hidden; border:1px solid #f59e0b; border-radius:9px; background:rgba(245,158,11,.16); color:inherit; box-shadow:0 0 0 1px rgba(245,158,11,.12),0 0 14px rgba(245,158,11,.16); font-size:11px; font-weight:800; white-space:nowrap; }}
     #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
+    #saved-fibo-status.invalid-save {{ border-color:#ef4444; background:rgba(127,29,29,.72); color:#fee2e2; box-shadow:0 0 0 1px rgba(239,68,68,.2),0 0 16px rgba(239,68,68,.28); }}
     #saved-fibo-status .saved-remove {{ flex:0 0 auto; margin-left:0; color:inherit; font-size:14px; }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
@@ -804,10 +805,10 @@ class LightweightChartLevelSelectorUI:
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
   let drawnObjects = Array.isArray(levels.drawn_objects) ? deepClone(levels.drawn_objects) : [];
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
-  let savedFiboByUser = !levels.__saved_fibo_invalid__ && (levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]'));
+  let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
   let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
-  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; btn.classList.toggle('active',saved); btn.title=saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'; const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=saved?'💾 Chart saved':'💾 Save chart'; if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
+  const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; const invalid=savedFiboByUser&&levels.__saved_fibo_invalid__; btn.classList.toggle('active',saved); btn.classList.toggle('invalid-save',!!invalid); let invalidDays=0; if(invalid){{const due=Date.parse(invalid.delete_on||'');if(Number.isFinite(due))invalidDays=Math.max(0,Math.ceil((due-Date.now())/86400000));}} btn.title=invalid?`Invalid saved Fibo — will be dropped in ${{invalidDays}} day${{invalidDays===1?'':'s'}}; click to remove now`:(saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'); const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=invalid?'⚠ Invalid save':(saved?'💾 Chart saved':'💾 Save chart'); if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
   let activeTool = 'level';
@@ -965,7 +966,26 @@ class LightweightChartLevelSelectorUI:
   const fibGoldenColor = '#facc15';
   const fibHighlightColor = '#22c55e';
   const fibLineColor = fibGoldenColor;
-  const fibColor = (ratio) => Math.abs(Number(ratio) - 0.618) < 0.0001 ? fibHighlightColor : fibGoldenColor;
+  const fibPalettes = [
+    {{level:fibGoldenColor, highlight:fibHighlightColor, boundary:fibLineColor}},
+    {{level:'#38bdf8', highlight:'#f472b6', boundary:'#0ea5e9'}},
+  ];
+  const fibPalette = (index = 0) => fibPalettes[Math.abs(Number(index) || 0) % fibPalettes.length];
+  const fibGroupKey = (obj) => obj?.group_id || obj?.id;
+  const fibGroupOrder = () => [...new Set(drawnObjects
+    .filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary')
+    .map(fibGroupKey)
+    .filter(Boolean))];
+  const fibPaletteIndex = (obj) => {{
+    const stored = Number(obj?.fib_palette);
+    if (Number.isInteger(stored) && stored >= 0) return stored % fibPalettes.length;
+    return Math.max(0, fibGroupOrder().indexOf(fibGroupKey(obj))) % fibPalettes.length;
+  }};
+  const nextFibPaletteIndex = () => fibGroupOrder().length % fibPalettes.length;
+  const fibColor = (ratio, paletteIndex = 0) => {{
+    const palette = fibPalette(paletteIndex);
+    return Math.abs(Number(ratio) - 0.618) < 0.0001 ? palette.highlight : palette.level;
+  }};
   const normalizeLineData = (data) => {{
     const seen = new Set();
     return data
@@ -1172,27 +1192,33 @@ class LightweightChartLevelSelectorUI:
 
   function drawFibPreview(time) {{
     if (!fibAnchor) return;
+    const viewport = captureViewport();
     const row1 = nearest(fibAnchor.x), row2 = nearest(time);
     if (!row1 || !row2 || row1.time === row2.time) return;
     const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high) / 2;
     const isShort = secondMid < firstMid;
     const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
+    // A temporary preview must not introduce a far-future time point. Doing
+    // so makes Lightweight Charts expand/shift the visible time range after
+    // the first anchor click, only to jump back when the Fibo is committed.
+    const xEnd = P.ohlc[P.ohlc.length - 1].time;
     const needed = fibRatios.length + 1;
     while (fibPreviewSeries.length < needed) {{
       fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
     }}
+    const paletteIndex = nextFibPaletteIndex();
     fibRatios.forEach((r, idx) => {{
       const y = fibPrice(low, high, r, isShort);
       const x0 = fibStartDate(row1, row2, r);
       const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%');
-      const opts = {{color:fibColor(r), lineWidth:r === 0.618 ? 1.4 : 1.0, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:true, title:pct}};
+      const opts = {{color:fibColor(r, paletteIndex), lineWidth:r === 0.618 ? 1.4 : 1.0, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:true, title:pct}};
       try {{ fibPreviewSeries[idx].setData(normalizeLineData([{{time:x0, value:y}}, {{time:xEnd, value:y}}])); fibPreviewSeries[idx].applyOptions?.(opts); }} catch(e) {{ console.warn('fib preview failed', e); }}
     }});
     const boundary = fibPreviewSeries[fibRatios.length];
     const yA = fibPrice(low, high, 1, isShort), yB = fibPrice(low, high, 0, isShort);
-    try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibLineColor, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
+    try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibPalette(paletteIndex).boundary, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
+    restoreViewport(viewport);
   }}
 
   function updateFibPreview(time) {{
@@ -2932,7 +2958,7 @@ class LightweightChartLevelSelectorUI:
     drawnObjects.forEach(obj => {{
       const isFib = obj.type === 'fib';
       const isFibBoundary = obj.type === 'fib-boundary';
-      const color = isFib ? fibColor(fibRatioValue(obj)) : (isFibBoundary ? fibLineColor : (obj.color || P.lineColors.gold));
+      const color = isFib ? fibColor(fibRatioValue(obj), fibPaletteIndex(obj)) : (isFibBoundary ? fibPalette(fibPaletteIndex(obj)).boundary : (obj.color || P.lineColors.gold));
       const isWedge = obj.type === 'wedge' || obj.group_id === 'auto-wedge';
       const fibKey = (isFib || isFibBoundary) ? `fib-group:${{obj.group_id || obj.id}}` : null;
       const objKey = isWedge ? `wedge:${{obj.id || obj.label || Math.random()}}` : ((isFib || isFibBoundary) ? fibKey : `obj:${{obj.id || obj.label || Math.random()}}`);
@@ -3392,9 +3418,10 @@ class LightweightChartLevelSelectorUI:
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
+      const paletteIndex = nextFibPaletteIndex();
       const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
-      fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, ratio:r, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r), group_id:gid, direction:isShort?'short':'long'}}); }});
-      drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibLineColor, group_id:gid}});
+      fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, ratio:r, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r, paletteIndex), fib_palette:paletteIndex, group_id:gid, direction:isShort?'short':'long'}}); }});
+      drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibPalette(paletteIndex).boundary, fib_palette:paletteIndex, group_id:gid}});
       fibAnchor=null; clearPreviews(); render(); return;
     }}
     if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; refreshHalfSeries(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; refreshHalfSeries(); refreshLevelSeries('stop_loss'); return; }}
@@ -3541,7 +3568,7 @@ class LightweightChartLevelSelectorUI:
     const values = [
       ['Balance', money(Number($('capital')?.value || levels.capital || 0), currency)],
       ['Position', position],
-      ...(savedFiboByUser ? [['Fibo', '💾 SAVED BY USER']] : []),
+      ...(savedFiboByUser ? [['Fibo', levels.__saved_fibo_invalid__ ? '⚠ INVALID SAVE' : '💾 SAVED BY USER']] : []),
       ...(Number.isFinite(maxCapitalInSelectedCurrency()) ? [['Max capital (1% Avg10d)', money(maxCapitalInSelectedCurrency(), currency)]] : []),
       ...selectedValues,
       ['Drawings', String(drawnObjects.length)],

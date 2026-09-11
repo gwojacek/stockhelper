@@ -68,7 +68,12 @@ def test_polish_dictionary_covers_reports_journal_and_chart_columns():
         "Export and customize output.": "Eksportuj i dostosuj wygląd.",
         "ALLSEARCH REPORT": "RAPORT ALLSEARCH",
         "Color instrument": "Pokoloruj",
+        "Color instrument — click an instrument to toggle its color": "Pokoloruj instrument — kliknij instrument, aby włączyć lub wyłączyć jego kolor",
         "Choose instrument…": "Wybierz…",
+        "Dropouts": "Odrzucone",
+        "Show or hide recent Fibo dropouts": "Pokaż lub ukryj ostatnie odrzucone układy Fibo",
+        "Debug": "Diagnostyka",
+        "Show or hide Fibo debug controls": "Pokaż lub ukryj narzędzia diagnostyczne Fibo",
     }
 
     for english, polish in expected.items():
@@ -269,15 +274,17 @@ def test_chart_png_button_sits_next_to_save_chart_with_matching_size():
     assert '<span class="toolbar-label">Export</span>' not in chart_source
 
 
-def test_selected_3p_controls_and_chart_buttons_are_highlighted():
+def test_selected_3p_controls_are_highlighted_but_group_chart_buttons_are_not():
     report_source = Path("run").read_text(encoding="utf-8")
 
-    assert ".compactbtn.active,.iconbtn.active,.stockhelper-chart-btn.active" in report_source
+    assert ".compactbtn.active,.iconbtn.active{" in report_source
+    assert ".stockhelper-chart-btn.active" not in report_source
     assert "btn.classList.toggle('active',visible)" in report_source
     assert "btn.classList.toggle('active',active)" in report_source
-    assert "function openTrojColumnStockhelperCharts(btn,col){btn?.classList.add('active')" in report_source
-    assert "function openClosestStockhelperCharts(btn){btn?.classList.add('active')" in report_source
-    assert "chart.addEventListener('click',()=>{chart.classList.add('active')" in report_source
+    assert "function openTrojColumnStockhelperCharts(btn,col){btn?.classList.add('active')" not in report_source
+    assert "function openClosestStockhelperCharts(btn){btn?.classList.add('active')" not in report_source
+    assert "function openClosestStockhelperCharts(btn){_openStockhelperButtons" in report_source
+    assert "chart.addEventListener('click',()=>{chart.classList.add('active')" not in report_source
 
 
 def test_favorites_and_journal_are_fully_localized():
