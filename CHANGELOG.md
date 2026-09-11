@@ -24,6 +24,9 @@ Compare: [`7.5...8.0`](https://github.com/gwojacek/stockhelper/compare/7.5...8.0
 - Added collapsible chart sidebar cards and a redesigned, grouped chart toolbar for prices, stop/target levels, Fibonacci, wedges, scanner drawings, colors, and chart actions.
 - Added the `pd` helper for staging all repository changes, committing them as `data`, and pushing the current branch to its configured upstream.
 - Added a dedicated Fibonacci rules reference covering lifecycle columns, dropout behavior, anchor replacement, and pattern-window requirements.
+- Added a five-day invalid-save lifecycle for user-authored Fibo drawings: an invalid setup remains visible with a red warning/countdown before its saved status and geometry are removed automatically.
+- Added persistent, automatically alternating color palettes for multiple Fibonacci groups on the same chart.
+- Added short-direction 3P impulse discovery for stocks, with the same current-extreme and structural-anchor validation used by long candidates.
 
 ### Changed
 
@@ -33,6 +36,11 @@ Compare: [`7.5...8.0`](https://github.com/gwojacek/stockhelper/compare/7.5...8.0
 - Expanded favorites so instruments remain available across setup groups and directions, while report action columns, quick-chart filters, and journal presentation remain aligned and usable.
 - Updated the chart calculation workflow with clearer required-input guidance, localized errors, and compact cards that can be collapsed when more chart space is needed.
 - Capped scanner-provided falling wedges at 30 candles while preserving manually saved structures, and simplified scanner save/configuration actions so the relevant action remains visible.
+- Strengthened Fibo anchor selection in both directions: anchors must be genuine local extremes, later higher highs/lower lows supersede obsolete endpoints, and completed monthly shelves reset or invalidate a formation instead of being absorbed into an artificial multi-month impulse.
+- Changed confirmed Fibo stop validation to use post-pattern candle highs/lows, so an intraday wick through the stop invalidates the setup even when the candle closes back inside it.
+- Kept saved Fibo geometry authoritative during its warning period, including report-launched previews, while allowing automatic discovery to resume after expiry.
+- Updated chart previews to preserve the visible time range and assign the next available Fibo palette without moving the chart after the first anchor click.
+- Shared the newest scanner Fibo geometry across report rows for the same instrument, so Ichimoku and Fibo result charts open with the same current anchors.
 
 ### Fixed
 
@@ -41,6 +49,10 @@ Compare: [`7.5...8.0`](https://github.com/gwojacek/stockhelper/compare/7.5...8.0
 - Fixed report top-choice alignment, duplicated or misleading reasons, and saved badges overlapping or appearing in the wrong position.
 - Fixed Fibonacci anchor shading and saved instrument colors being lost on refreshed reports, and corrected the four-month Ichimoku eligibility check used by report highlighting.
 - Fixed chart toolbar controls becoming inaccessible or redundant in scanner-launched sessions and corrected wedge rendering after enforcing the automatic length limit.
+- Fixed long and short Fibo candidates spanning completed month-scale ranges, ending at marginal extrema inside sideways phases, or starting part-way through an impulse; this includes the XTB, CRJ, HFG, IFX, PUM, ENA, and LWB regression cases.
+- Fixed single-instrument allsearch runs writing scanner Markdown under the shared `single` name. Results are now stored under the requested ticker scope, so terminal matches also appear in Allsearch and Trójpolówki reports.
+- Fixed report-launched charts for an instrument showing stale Fibo anchors from another scanner category when a newer formation was already available.
+- Fixed manual Fibo preview actions temporarily shifting the chart horizontally between the first and second anchor clicks.
 
 ## [7.5] - 2026-08-25
 
