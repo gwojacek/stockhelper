@@ -515,12 +515,41 @@ def test_bmc_wa_falling_wedge_prefers_recent_extreme_upper_anchor():
 
 def test_cri_wa_falling_wedge_prefers_major_extremes_over_nested_recent_wedge():
     df = pd.read_csv(DATA_DIR / "CRI_WA.csv")
+    breakout = pd.DataFrame([{
+        "Date": "2026-09-11", "Open": 710.0, "High": 760.0,
+        "Low": 700.0, "Close": 750.0, "Volume": 5000.0,
+    }])
+    df = pd.concat([df, breakout], ignore_index=True)
 
     setup = scanner._find_falling_wedge_setup(df)
 
     assert setup is not None
     assert setup.upper_start_date == "2026-05-29"
     assert setup.upper_start_price == pytest.approx(1086.0)
-    assert setup.lower_start_date == "2025-12-18"
-    assert setup.lower_start_price == pytest.approx(292.059)
+    assert setup.lower_start_date == "2025-12-19"
+    assert setup.lower_start_price == pytest.approx(293.728)
     assert setup.duration_days >= 170
+    assert setup.breakout_date == "2026-09-11"
+    assert setup.breakout_direction == "long"
+
+
+def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
+    df = pd.read_csv(DATA_DIR / "CRJ_WA.csv")
+    breakdown = pd.DataFrame([{
+        "Date": "2026-09-11", "Open": 473.0, "High": 479.0,
+        "Low": 472.0, "Close": 475.0, "Volume": 277.0,
+    }])
+    df = pd.concat([df, breakdown], ignore_index=True)
+
+    setup = scanner._find_falling_wedge_setup(df)
+
+    assert setup is not None
+    assert setup.upper_start_date == "2026-03-11"
+    assert setup.upper_start_price == pytest.approx(680.0)
+    assert setup.upper_end_date == "2026-09-02"
+    assert setup.lower_start_date == "2026-07-02"
+    assert setup.lower_start_price == pytest.approx(459.0)
+    assert setup.lower_end_date == "2026-07-21"
+    assert setup.lower_end_price == pytest.approx(474.0)
+    assert setup.breakout_date == "2026-09-11"
+    assert setup.breakout_direction == "short"
