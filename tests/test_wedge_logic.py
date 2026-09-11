@@ -511,3 +511,16 @@ def test_bmc_wa_falling_wedge_prefers_recent_extreme_upper_anchor():
     assert setup.lower_start_price == pytest.approx(16.02)
     assert setup.lower_end_date == "2026-06-26"
     assert setup.lower_end_price == pytest.approx(15.34)
+
+
+def test_cri_wa_falling_wedge_prefers_major_extremes_over_nested_recent_wedge():
+    df = pd.read_csv(DATA_DIR / "CRI_WA.csv")
+
+    setup = scanner._find_falling_wedge_setup(df)
+
+    assert setup is not None
+    assert setup.upper_start_date == "2026-05-29"
+    assert setup.upper_start_price == pytest.approx(1086.0)
+    assert setup.lower_start_date == "2025-12-18"
+    assert setup.lower_start_price == pytest.approx(292.059)
+    assert setup.duration_days >= 170

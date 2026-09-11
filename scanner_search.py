@@ -5587,7 +5587,16 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         lower_anchor_pairs = sorted(
             set(lower_anchor_pairs),
             key=lambda pair: (min(abs(end - pair[1]), 80), 0 if pair[0] == low_abs else 1, float(lows[pair[1]]), pair[0]),
-        )[:72]
+        )
+        # Keep the major structural low represented even when many recent
+        # local-low combinations fill the normal candidate budget.  Without
+        # this reservation a long rising support line can disappear before it
+        # is scored, leaving only a small wedge nested in the final few weeks.
+        # The reserved pairs still go through every interruption, convergence,
+        # width and proximity check below; this only prevents candidate pruning
+        # from deciding that a recent anchor is inherently more meaningful.
+        structural_low_pairs = [pair for pair in lower_anchor_pairs if pair[0] == low_abs][:16]
+        lower_anchor_pairs = list(dict.fromkeys(lower_anchor_pairs[:72] + structural_low_pairs))
         if not lower_anchor_pairs:
             continue
 
@@ -6021,6 +6030,40 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     )
                     if much_longer_with_better_upper:
                         return candidate.score >= current.score * 0.55
+                    contains_full_structure = (
+                        same_state
+                        and candidate.duration_days >= current.duration_days * 1.45
+                        and candidate.upper_start_date < current.upper_start_date
+                        and candidate.lower_start_date < current.lower_start_date
+                        and candidate.upper_start_price >= current.upper_start_price * 1.08
+                        and candidate.lower_start_price <= current.lower_start_price * 0.92
+                        and candidate.upper_touches >= current.upper_touches - 1
+                        and candidate.lower_touches >= current.lower_touches - 1
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.35, current.width_end_pct + 7.0)
+                        and candidate.fit_quality >= current.fit_quality * 0.62
+                    )
+                    if contains_full_structure:
+                        # Prefer the valid outer wedge when its lines begin at
+                        # the earlier high/low extremes and contain the nested
+                        # alternative.  All candidates reaching this point have
+                        # already passed boundary, convergence and active-price
+                        # checks, so the extra history is real structure rather
+                        # than an arbitrary lookback expansion.
+                        return True
+                    current_contains_full_structure = (
+                        same_state
+                        and current.duration_days >= candidate.duration_days * 1.45
+                        and current.upper_start_date < candidate.upper_start_date
+                        and current.lower_start_date < candidate.lower_start_date
+                        and current.upper_start_price >= candidate.upper_start_price * 1.08
+                        and current.lower_start_price <= candidate.lower_start_price * 0.92
+                        and current.upper_touches >= candidate.upper_touches - 1
+                        and current.lower_touches >= candidate.lower_touches - 1
+                        and current.width_end_pct <= max(candidate.width_end_pct * 1.35, candidate.width_end_pct + 7.0)
+                        and current.fit_quality >= candidate.fit_quality * 0.62
+                    )
+                    if current_contains_full_structure:
+                        return False
                     same_lower_newer_upper_anchor = (
                         same_state
                         and (candidate.breakout_direction or "-") == "-"
