@@ -5575,10 +5575,25 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 continue
             if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
                 lower_anchor1_candidates.append(j)
-        lower_anchor1_candidates = sorted(
-            set(lower_anchor1_candidates),
+        all_lower_anchor1_candidates = set(lower_anchor1_candidates)
+        # Preserve both recent lows and the deepest swing lows. Ranking only by
+        # recency discarded CRJ's July 2 structural low before pair validation,
+        # leaving the scanner with only the later flat 500 shelf.
+        recent_lower_starts = sorted(
+            all_lower_anchor1_candidates,
             key=lambda j: (0 if j in structural_low_starts else 1, abs(end - j), float(lows[j])),
+        )[:16]
+        deep_lower_starts = sorted(
+            all_lower_anchor1_candidates,
+            key=lambda j: (0 if j in structural_low_starts else 1, float(lows[j]), abs(end - j)),
+        )[:16]
+        active_deep_lower_starts = sorted(
+            (j for j in all_lower_anchor1_candidates if j >= end - 126),
+            key=lambda j: (float(lows[j]), abs(end - j)),
         )[:12]
+        lower_anchor1_candidates = list(dict.fromkeys(
+            recent_lower_starts + deep_lower_starts + active_deep_lower_starts
+        ))
         lower_anchor_pairs: list[tuple[int, int]] = []
         for lh1 in lower_anchor1_candidates:
             lower_anchor2_candidates: list[int] = []
@@ -5605,7 +5620,19 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         # width and proximity check below; this only prevents candidate pruning
         # from deciding that a recent anchor is inherently more meaningful.
         structural_low_pairs = [pair for pair in lower_anchor_pairs if pair[0] in structural_low_starts][:24]
-        lower_anchor_pairs = list(dict.fromkeys(lower_anchor_pairs[:72] + structural_low_pairs))
+        # Flat shelves produce many equivalent pairs and can crowd out a
+        # well-spaced rising boundary. Reserve the pairs with the largest
+        # relative move/span so CRJ's July 2 -> July 21 support is scored.
+        shaped_lower_pairs = sorted(
+            lower_anchor_pairs,
+            key=lambda pair: (
+                -abs(float(lows[pair[1]]) - float(lows[pair[0]]))
+                / max((abs(float(lows[pair[0]])) + abs(float(lows[pair[1]]))) / 2.0, 1e-9),
+                -abs(pair[1] - pair[0]),
+                abs(end - pair[1]),
+            ),
+        )[:48]
+        lower_anchor_pairs = list(dict.fromkeys(lower_anchor_pairs[:72] + structural_low_pairs + shaped_lower_pairs))
         if not lower_anchor_pairs:
             continue
 

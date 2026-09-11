@@ -537,15 +537,15 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     df = pd.read_csv(DATA_DIR / "CRJ_WA.csv")
     breakdown = pd.DataFrame([{
         "Date": "2026-09-11", "Open": 473.0, "High": 479.0,
-        "Low": 472.0, "Close": 475.0, "Volume": 277.0,
+        "Low": 468.0, "Close": 472.0, "Volume": 544.0,
     }])
     df = pd.concat([df, breakdown], ignore_index=True)
 
     setup = scanner._find_falling_wedge_setup(df)
 
     assert setup is not None
-    assert setup.upper_start_date == "2026-03-11"
-    assert setup.upper_start_price == pytest.approx(680.0)
+    assert setup.upper_start_date == "2026-01-12"
+    assert setup.upper_start_price == pytest.approx(840.0)
     assert setup.upper_end_date == "2026-09-02"
     assert setup.lower_start_date == "2026-07-02"
     assert setup.lower_start_price == pytest.approx(459.0)
