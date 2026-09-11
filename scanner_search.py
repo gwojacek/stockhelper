@@ -6155,8 +6155,12 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         and candidate.upper_end_date == current.upper_end_date
                         and candidate.lower_start_date < current.lower_start_date
                         and candidate.lower_end_date < current.lower_end_date
-                        and candidate.lower_start_price <= current.lower_start_price * 0.96
-                        and candidate.lower_touches >= current.lower_touches + 1
+                        # Prefer the earlier local extreme even when it is only
+                        # modestly deeper. CRJ's true July 2 bottom (459) is
+                        # 3.2% below the later July 21 anchor (474), so the old
+                        # 4% threshold still selected the nested lower line.
+                        and candidate.lower_start_price <= current.lower_start_price * 0.99
+                        and candidate.lower_touches >= current.lower_touches
                         and candidate.width_end_pct <= max(
                             current.width_end_pct * 1.35,
                             current.width_end_pct + 7.0,
@@ -6169,8 +6173,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         and current.upper_end_date == candidate.upper_end_date
                         and current.lower_start_date < candidate.lower_start_date
                         and current.lower_end_date < candidate.lower_end_date
-                        and current.lower_start_price <= candidate.lower_start_price * 0.96
-                        and current.lower_touches >= candidate.lower_touches + 1
+                        and current.lower_start_price <= candidate.lower_start_price * 0.99
+                        and current.lower_touches >= candidate.lower_touches
                         and current.width_end_pct <= max(
                             candidate.width_end_pct * 1.35,
                             candidate.width_end_pct + 7.0,
