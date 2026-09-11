@@ -4999,6 +4999,7 @@ def _wedge_probable_stop_touched_after_breakout(
     highs: Sequence[float],
     lows: Sequence[float],
     eps: float = 0.0,
+    x_coordinates: Sequence[float] | None = None,
 ) -> bool:
     """Return True when a post-breakout candle touches the midpoint stop.
 
@@ -5009,8 +5010,15 @@ def _wedge_probable_stop_touched_after_breakout(
     """
     if breakout_idx is None or i <= breakout_idx:
         return False
-    breakout_upper = _wedge_line_value(breakout_idx, upper_a, upper_b)
-    breakout_lower = _wedge_line_value(breakout_idx, lower_a, lower_b)
+    def _value(anchor_a: tuple[int, float], anchor_b: tuple[int, float]) -> float:
+        if x_coordinates is None:
+            return _wedge_line_value(breakout_idx, anchor_a, anchor_b)
+        mapped_a = (float(x_coordinates[anchor_a[0]]), anchor_a[1])
+        mapped_b = (float(x_coordinates[anchor_b[0]]), anchor_b[1])
+        return _wedge_line_value(float(x_coordinates[breakout_idx]), mapped_a, mapped_b)
+
+    breakout_upper = _value(upper_a, upper_b)
+    breakout_lower = _value(lower_a, lower_b)
     probable_stop = (breakout_upper + breakout_lower) / 2.0
     stop_eps = max(float(eps), abs(probable_stop) * 1e-6)
     if breakout_direction == "long":
@@ -5488,6 +5496,23 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     dates = w["Date"]
     n = len(w)
     global_high = max(float(pd.Series(highs).max()), 1e-9)
+    # Auto wedges are rendered against real date/time coordinates. Use the
+    # same calendar-day geometry while validating/scoring them; trading-row
+    # interpolation drifts across weekends and made CRJ's Sep 7 touch appear
+    # below the line, then misclassified Sep 8 as a line-breaking new high.
+    day_coordinates = (
+        (dates - dates.iloc[0]).dt.total_seconds().to_numpy(dtype=float)
+        / 86400.0
+    )
+
+    def _auto_wedge_line_value(
+        idx: int,
+        anchor_a: tuple[int, float],
+        anchor_b: tuple[int, float],
+    ) -> float:
+        mapped_a = (float(day_coordinates[anchor_a[0]]), anchor_a[1])
+        mapped_b = (float(day_coordinates[anchor_b[0]]), anchor_b[1])
+        return _wedge_line_value(float(day_coordinates[idx]), mapped_a, mapped_b)
 
 
     def _fmt_date(i: int) -> str:
@@ -5639,13 +5664,17 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         for uh1, uh2 in upper_anchor_pairs:
             upper_a = (uh1, float(highs[uh1]))
             upper_b = (uh2, float(highs[uh2]))
-            upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
+            upper_slope = (upper_b[1] - upper_a[1]) / (
+                day_coordinates[upper_b[0]] - day_coordinates[upper_a[0]]
+            )
             if upper_slope >= 0:
                 continue
             for lh1, lh2 in lower_anchor_pairs:
                 lower_a = (lh1, float(lows[lh1]))
                 lower_b = (lh2, float(lows[lh2]))
-                lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
+                lower_slope = (lower_b[1] - lower_a[1]) / (
+                    day_coordinates[lower_b[0]] - day_coordinates[lower_a[0]]
+                )
                 upper_anchor_span = abs(uh2 - uh1)
                 lower_anchor_span = abs(lh2 - lh1)
                 lower_anchor_move_pct = abs(lower_b[1] - lower_a[1]) / max(
@@ -5685,7 +5714,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         return True
                     eps = max(tol * 0.05, max(abs(anchor_a[1]), abs(anchor_b[1]), 1e-9) * 1e-6)
                     for k in range(left + 1, right):
-                        line_value = _wedge_line_value(k, anchor_a, anchor_b)
+                        line_value = _auto_wedge_line_value(k, anchor_a, anchor_b)
                         if side == "upper" and highs[k] > line_value + eps:
                             return False
                         if side == "lower" and lows[k] < line_value - eps:
@@ -5708,7 +5737,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 breakout_direction = "-"
                 breakout_reentered = False
                 invalid = False
-                width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
+                width_start = _auto_wedge_line_value(first_validation, upper_a, upper_b) - _auto_wedge_line_value(first_validation, lower_a, lower_b)
                 if width_start <= 0:
                     continue
                 close_eps = max(tol * 0.02, max(abs(float(closes[end])), 1e-9) * 1e-6)
@@ -5753,6 +5782,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         highs,
                         lows,
                         close_eps,
+                        day_coordinates,
                     )
 
                 # Each boundary must remain valid from its own first anchor. If
@@ -5760,14 +5790,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # five candles, this candidate was already broken and another
                 # anchor set must be found instead.
                 for i in range(min(high_abs, uh2), end + 1):
-                    if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
+                    if closes[i] > _auto_wedge_line_value(i, upper_a, upper_b) + close_eps:
                         if i < end - 5:
                             invalid = True
                             break
                 if invalid:
                     continue
                 for i in range(min(lh1, lh2), end + 1):
-                    if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
+                    if closes[i] < _auto_wedge_line_value(i, lower_a, lower_b) - close_eps:
                         if i < end - 5:
                             invalid = True
                             break
@@ -5775,8 +5805,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     continue
 
                 for i in range(first_validation, end + 1):
-                    up = _wedge_line_value(i, upper_a, upper_b)
-                    lo = _wedge_line_value(i, lower_a, lower_b)
+                    up = _auto_wedge_line_value(i, upper_a, upper_b)
+                    lo = _auto_wedge_line_value(i, lower_a, lower_b)
                     if lo >= up:
                         # A fresh breakout may print on the apex candle (or on
                         # the first candle after the mathematical intersection).
@@ -5869,11 +5899,11 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # discard the already-completed formation.
                 compression_end = (breakout_idx - 1) if breakout_idx is not None else end
                 while compression_end > first_validation:
-                    width_end = _wedge_line_value(compression_end, upper_a, upper_b) - _wedge_line_value(compression_end, lower_a, lower_b)
+                    width_end = _auto_wedge_line_value(compression_end, upper_a, upper_b) - _auto_wedge_line_value(compression_end, lower_a, lower_b)
                     if width_end > 0:
                         break
                     compression_end -= 1
-                width_end = _wedge_line_value(compression_end, upper_a, upper_b) - _wedge_line_value(compression_end, lower_a, lower_b)
+                width_end = _auto_wedge_line_value(compression_end, upper_a, upper_b) - _auto_wedge_line_value(compression_end, lower_a, lower_b)
                 if width_end <= 0 or width_end >= width_start * 0.92:
                     continue
 
@@ -5924,8 +5954,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # is better, but not mandatory.
                     breakout_side_count = up_count if breakout_direction == "long" else lo_count
                     breakout_width = abs(
-                        _wedge_line_value(breakout_idx, upper_a, upper_b)
-                        - _wedge_line_value(breakout_idx, lower_a, lower_b)
+                        _auto_wedge_line_value(breakout_idx, upper_a, upper_b)
+                        - _auto_wedge_line_value(breakout_idx, lower_a, lower_b)
                     )
                     apex_breakout = breakout_width <= max(abs(float(closes[breakout_idx])), 1e-9) * 0.06
                     # Two clean anchors on each boundary are sufficient when
@@ -5960,8 +5990,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 recent_lower_gaps: list[float] = []
                 recent_min_gaps: list[float] = []
                 for k in range(recent_from, quality_end + 1):
-                    up_k = _wedge_line_value(k, upper_a, upper_b)
-                    lo_k = _wedge_line_value(k, lower_a, lower_b)
+                    up_k = _auto_wedge_line_value(k, upper_a, upper_b)
+                    lo_k = _auto_wedge_line_value(k, lower_a, lower_b)
                     width_k = max(up_k - lo_k, 1e-9)
                     recent_widths.append(width_k)
                     upper_gap = max(0.0, up_k - highs[k]) / width_k
@@ -5972,9 +6002,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
                 median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
                 median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
-                current_width = max(_wedge_line_value(quality_end, upper_a, upper_b) - _wedge_line_value(quality_end, lower_a, lower_b), 1e-9)
-                current_upper_gap = max(0.0, _wedge_line_value(quality_end, upper_a, upper_b) - highs[quality_end]) / current_width
-                current_lower_gap = max(0.0, lows[quality_end] - _wedge_line_value(quality_end, lower_a, lower_b)) / current_width
+                current_width = max(_auto_wedge_line_value(quality_end, upper_a, upper_b) - _auto_wedge_line_value(quality_end, lower_a, lower_b), 1e-9)
+                current_upper_gap = max(0.0, _auto_wedge_line_value(quality_end, upper_a, upper_b) - highs[quality_end]) / current_width
+                current_lower_gap = max(0.0, lows[quality_end] - _auto_wedge_line_value(quality_end, lower_a, lower_b)) / current_width
                 # Prefer wedges whose active boundaries are both close enough to
                 # current price to be realistically breakable soon. A top line far
                 # above price or a bottom line far below price is less actionable.
