@@ -4999,6 +4999,7 @@ def _wedge_probable_stop_touched_after_breakout(
     highs: Sequence[float],
     lows: Sequence[float],
     eps: float = 0.0,
+    x_coordinates: Sequence[float] | None = None,
 ) -> bool:
     """Return True when a post-breakout candle touches the midpoint stop.
 
@@ -5009,8 +5010,15 @@ def _wedge_probable_stop_touched_after_breakout(
     """
     if breakout_idx is None or i <= breakout_idx:
         return False
-    breakout_upper = _wedge_line_value(breakout_idx, upper_a, upper_b)
-    breakout_lower = _wedge_line_value(breakout_idx, lower_a, lower_b)
+    def _value(anchor_a: tuple[int, float], anchor_b: tuple[int, float]) -> float:
+        if x_coordinates is None:
+            return _wedge_line_value(breakout_idx, anchor_a, anchor_b)
+        mapped_a = (float(x_coordinates[anchor_a[0]]), anchor_a[1])
+        mapped_b = (float(x_coordinates[anchor_b[0]]), anchor_b[1])
+        return _wedge_line_value(float(x_coordinates[breakout_idx]), mapped_a, mapped_b)
+
+    breakout_upper = _value(upper_a, upper_b)
+    breakout_lower = _value(lower_a, lower_b)
     probable_stop = (breakout_upper + breakout_lower) / 2.0
     stop_eps = max(float(eps), abs(probable_stop) * 1e-6)
     if breakout_direction == "long":
@@ -5488,6 +5496,23 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     dates = w["Date"]
     n = len(w)
     global_high = max(float(pd.Series(highs).max()), 1e-9)
+    # Auto wedges are rendered against real date/time coordinates. Use the
+    # same calendar-day geometry while validating/scoring them; trading-row
+    # interpolation drifts across weekends and made CRJ's Sep 7 touch appear
+    # below the line, then misclassified Sep 8 as a line-breaking new high.
+    day_coordinates = (
+        (dates - dates.iloc[0]).dt.total_seconds().to_numpy(dtype=float)
+        / 86400.0
+    )
+
+    def _auto_wedge_line_value(
+        idx: int,
+        anchor_a: tuple[int, float],
+        anchor_b: tuple[int, float],
+    ) -> float:
+        mapped_a = (float(day_coordinates[anchor_a[0]]), anchor_a[1])
+        mapped_b = (float(day_coordinates[anchor_b[0]]), anchor_b[1])
+        return _wedge_line_value(float(day_coordinates[idx]), mapped_a, mapped_b)
 
 
     def _fmt_date(i: int) -> str:
@@ -5560,16 +5585,40 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
             continue
 
         lower_anchor1_candidates: list[int] = [low_abs]
+        # A structural bottom is often a two- or three-candle cluster.  The
+        # useful trendline can begin on the small rebound candle rather than on
+        # the absolute-low wick (CRI.WA is such a case), because that later
+        # extreme is the one respected by the rest of the formation.
+        structural_low_starts = {low_abs}
+        for j in range(low_abs + 1, min(end - 7, low_abs + 4) + 1):
+            if lows[j] <= lows[low_abs] * 1.025:
+                lower_anchor1_candidates.append(j)
+                structural_low_starts.add(j)
         lower_anchor1_latest = min(end - 8, start + int(length * 0.95))
         for j in range(start + 2, lower_anchor1_latest + 1):
             if j == low_abs:
                 continue
             if lows[j] <= lows[j - 1] and lows[j] <= lows[j + 1]:
                 lower_anchor1_candidates.append(j)
-        lower_anchor1_candidates = sorted(
-            set(lower_anchor1_candidates),
-            key=lambda j: (0 if j == low_abs else 1, abs(end - j), float(lows[j])),
+        all_lower_anchor1_candidates = set(lower_anchor1_candidates)
+        # Preserve both recent lows and the deepest swing lows. Ranking only by
+        # recency discarded CRJ's July 2 structural low before pair validation,
+        # leaving the scanner with only the later flat 500 shelf.
+        recent_lower_starts = sorted(
+            all_lower_anchor1_candidates,
+            key=lambda j: (0 if j in structural_low_starts else 1, abs(end - j), float(lows[j])),
+        )[:16]
+        deep_lower_starts = sorted(
+            all_lower_anchor1_candidates,
+            key=lambda j: (0 if j in structural_low_starts else 1, float(lows[j]), abs(end - j)),
+        )[:16]
+        active_deep_lower_starts = sorted(
+            (j for j in all_lower_anchor1_candidates if j >= end - 126),
+            key=lambda j: (float(lows[j]), abs(end - j)),
         )[:12]
+        lower_anchor1_candidates = list(dict.fromkeys(
+            recent_lower_starts + deep_lower_starts + active_deep_lower_starts
+        ))
         lower_anchor_pairs: list[tuple[int, int]] = []
         for lh1 in lower_anchor1_candidates:
             lower_anchor2_candidates: list[int] = []
@@ -5587,20 +5636,61 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
         lower_anchor_pairs = sorted(
             set(lower_anchor_pairs),
             key=lambda pair: (min(abs(end - pair[1]), 80), 0 if pair[0] == low_abs else 1, float(lows[pair[1]]), pair[0]),
-        )[:72]
+        )
+        # Keep the major structural low represented even when many recent
+        # local-low combinations fill the normal candidate budget.  Without
+        # this reservation a long rising support line can disappear before it
+        # is scored, leaving only a small wedge nested in the final few weeks.
+        # The reserved pairs still go through every interruption, convergence,
+        # width and proximity check below; this only prevents candidate pruning
+        # from deciding that a recent anchor is inherently more meaningful.
+        structural_low_pairs = [pair for pair in lower_anchor_pairs if pair[0] in structural_low_starts][:24]
+        # Flat shelves produce many equivalent pairs and can crowd out a
+        # well-spaced rising boundary. Reserve the pairs with the largest
+        # relative move/span so CRJ's July 2 -> July 21 support is scored.
+        shaped_lower_pairs = sorted(
+            lower_anchor_pairs,
+            key=lambda pair: (
+                -abs(float(lows[pair[1]]) - float(lows[pair[0]]))
+                / max((abs(float(lows[pair[0]])) + abs(float(lows[pair[1]]))) / 2.0, 1e-9),
+                -abs(pair[1] - pair[0]),
+                abs(end - pair[1]),
+            ),
+        )[:48]
+        # For every deep low in the active structure, retain its earliest
+        # follow-up swing pairs as well. Global move/recency ranking favored
+        # later steep or flat alternatives and still pruned CRJ's valid
+        # July 2 -> July 21 pair before validation could count its August touch.
+        early_active_pairs: list[tuple[int, int]] = []
+        for lower_start in active_deep_lower_starts:
+            start_pairs = sorted(
+                (pair for pair in lower_anchor_pairs if pair[0] == lower_start),
+                key=lambda pair: pair[1],
+            )
+            early_active_pairs.extend(start_pairs[:8])
+        lower_anchor_pairs = list(dict.fromkeys(
+            lower_anchor_pairs[:72]
+            + structural_low_pairs
+            + shaped_lower_pairs
+            + early_active_pairs
+        ))
         if not lower_anchor_pairs:
             continue
 
         for uh1, uh2 in upper_anchor_pairs:
             upper_a = (uh1, float(highs[uh1]))
             upper_b = (uh2, float(highs[uh2]))
-            upper_slope = (upper_b[1] - upper_a[1]) / (upper_b[0] - upper_a[0])
+            upper_slope = (upper_b[1] - upper_a[1]) / (
+                day_coordinates[upper_b[0]] - day_coordinates[upper_a[0]]
+            )
             if upper_slope >= 0:
                 continue
             for lh1, lh2 in lower_anchor_pairs:
                 lower_a = (lh1, float(lows[lh1]))
                 lower_b = (lh2, float(lows[lh2]))
-                lower_slope = (lower_b[1] - lower_a[1]) / (lower_b[0] - lower_a[0])
+                lower_slope = (lower_b[1] - lower_a[1]) / (
+                    day_coordinates[lower_b[0]] - day_coordinates[lower_a[0]]
+                )
                 upper_anchor_span = abs(uh2 - uh1)
                 lower_anchor_span = abs(lh2 - lh1)
                 lower_anchor_move_pct = abs(lower_b[1] - lower_a[1]) / max(
@@ -5640,7 +5730,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         return True
                     eps = max(tol * 0.05, max(abs(anchor_a[1]), abs(anchor_b[1]), 1e-9) * 1e-6)
                     for k in range(left + 1, right):
-                        line_value = _wedge_line_value(k, anchor_a, anchor_b)
+                        line_value = _auto_wedge_line_value(k, anchor_a, anchor_b)
                         if side == "upper" and highs[k] > line_value + eps:
                             return False
                         if side == "lower" and lows[k] < line_value - eps:
@@ -5663,9 +5753,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 breakout_direction = "-"
                 breakout_reentered = False
                 invalid = False
-                width_start = _wedge_line_value(first_validation, upper_a, upper_b) - _wedge_line_value(first_validation, lower_a, lower_b)
-                width_end = _wedge_line_value(end, upper_a, upper_b) - _wedge_line_value(end, lower_a, lower_b)
-                if width_start <= 0 or width_end <= 0 or width_end >= width_start * 0.92:
+                width_start = _auto_wedge_line_value(first_validation, upper_a, upper_b) - _auto_wedge_line_value(first_validation, lower_a, lower_b)
+                if width_start <= 0:
                     continue
                 close_eps = max(tol * 0.02, max(abs(float(closes[end])), 1e-9) * 1e-6)
                 exact_tol = max(tol * 0.12, max(abs(float(closes[end])), 1e-9) * 1e-6)
@@ -5709,6 +5798,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         highs,
                         lows,
                         close_eps,
+                        day_coordinates,
                     )
 
                 # Each boundary must remain valid from its own first anchor. If
@@ -5716,14 +5806,14 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # five candles, this candidate was already broken and another
                 # anchor set must be found instead.
                 for i in range(min(high_abs, uh2), end + 1):
-                    if closes[i] > _wedge_line_value(i, upper_a, upper_b) + close_eps:
+                    if closes[i] > _auto_wedge_line_value(i, upper_a, upper_b) + close_eps:
                         if i < end - 5:
                             invalid = True
                             break
                 if invalid:
                     continue
                 for i in range(min(lh1, lh2), end + 1):
-                    if closes[i] < _wedge_line_value(i, lower_a, lower_b) - close_eps:
+                    if closes[i] < _auto_wedge_line_value(i, lower_a, lower_b) - close_eps:
                         if i < end - 5:
                             invalid = True
                             break
@@ -5731,11 +5821,31 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     continue
 
                 for i in range(first_validation, end + 1):
-                    up = _wedge_line_value(i, upper_a, upper_b)
-                    lo = _wedge_line_value(i, lower_a, lower_b)
+                    up = _auto_wedge_line_value(i, upper_a, upper_b)
+                    lo = _auto_wedge_line_value(i, lower_a, lower_b)
                     if lo >= up:
-                        invalid = True
-                        break
+                        # A fresh breakout may print on the apex candle (or on
+                        # the first candle after the mathematical intersection).
+                        # Rejecting the pair before breakout handling made the
+                        # strongest fully-compressed wedges disappear exactly
+                        # when they triggered.  Once crossed, accept only a
+                        # recent close clearly outside both extrapolated lines.
+                        if breakout_idx is None:
+                            if closes[i] > max(up, lo) + close_eps:
+                                if not _accept_or_reject_breakout(i, "long"):
+                                    invalid = True
+                                    break
+                            elif closes[i] < min(up, lo) - close_eps:
+                                if not _accept_or_reject_breakout(i, "short"):
+                                    invalid = True
+                                    break
+                            else:
+                                invalid = True
+                                break
+                        elif _breakout_stop_loss_touched(i):
+                            invalid = True
+                            break
+                        continue
                     # No candle may close on the other side of a still-valid wedge.
                     # The only accepted outside close is the first breakout/breakdown
                     # candle, and it must be very recent (latest candle or up to the
@@ -5766,12 +5876,20 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
                         upper_exact_tol = min(exact_tol, upper_touch_tol)
-                        if _is_local_extreme(i, "upper") and highs[i] > up + upper_exact_tol:
+                        continues_touch_cluster = bool(upper_contacts) and i - max(upper_contacts) <= 1
+                        if (
+                            _is_local_extreme(i, "upper")
+                            and highs[i] > up + upper_exact_tol
+                            and not continues_touch_cluster
+                        ):
                             # A later local high that sits visibly above an older
                             # upper line is a new candidate anchor, not an extra
                             # tolerated touch of the stale line. Reject this
                             # candidate so anchor selection can move to that
-                            # candle extreme (e.g. BMC.WA 2026-07-06).
+                            # candle extreme (e.g. BMC.WA 2026-07-06). An
+                            # adjacent wick probe belongs to the same touch
+                            # cluster, however, and remains valid when it closes
+                            # back inside (CRJ.WA 2026-09-07/08).
                             invalid = True
                             break
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
@@ -5790,11 +5908,30 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if invalid:
                     continue
 
-                def _drop_pre_breakout_touch_cluster(indices: list[int]) -> list[int]:
+                # Measure final compression on the last candle where the wedge
+                # still had a positive interior.  For an apex breakout this is
+                # normally the candle immediately before the signal; using the
+                # latest extrapolated width would be zero/negative and wrongly
+                # discard the already-completed formation.
+                compression_end = (breakout_idx - 1) if breakout_idx is not None else end
+                while compression_end > first_validation:
+                    width_end = _auto_wedge_line_value(compression_end, upper_a, upper_b) - _auto_wedge_line_value(compression_end, lower_a, lower_b)
+                    if width_end > 0:
+                        break
+                    compression_end -= 1
+                width_end = _auto_wedge_line_value(compression_end, upper_a, upper_b) - _auto_wedge_line_value(compression_end, lower_a, lower_b)
+                if width_end <= 0 or width_end >= width_start * 0.92:
+                    continue
+
+                def _drop_pre_breakout_touch_cluster(indices: list[int], side: str) -> list[int]:
                     # A candle or glued group of candles that the line passes
                     # through immediately before breakout is breakout noise, not
-                    # an independent touchpoint confirming the wedge.
-                    if breakout_idx is None:
+                    # an independent touchpoint confirming the broken boundary.
+                    # Keep a recent touch of the opposite boundary: that is a
+                    # genuine final rejection before price crosses the other
+                    # side (CRJ's Sep 7/8 upper touch before its short break).
+                    broken_side = "upper" if breakout_direction == "long" else "lower"
+                    if breakout_idx is None or side != broken_side:
                         return indices
                     ordered = [idx for idx in sorted(set(indices)) if idx < breakout_idx]
                     if not ordered or breakout_idx - ordered[-1] > 1:
@@ -5804,10 +5941,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         cut -= 1
                     return ordered[:cut]
 
-                upper_contacts = _drop_pre_breakout_touch_cluster(upper_contacts)
-                lower_contacts = _drop_pre_breakout_touch_cluster(lower_contacts)
-                upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
-                lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
+                upper_contacts = _drop_pre_breakout_touch_cluster(upper_contacts, "upper")
+                lower_contacts = _drop_pre_breakout_touch_cluster(lower_contacts, "lower")
+                upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts, "upper")
+                lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts, "lower")
 
                 def _structural_contacts(
                     contacts: list[int],
@@ -5832,7 +5969,17 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     # have their two anchors; having three touches on both lines
                     # is better, but not mandatory.
                     breakout_side_count = up_count if breakout_direction == "long" else lo_count
-                    if min(up_count, lo_count) < 2 or breakout_side_count < 3:
+                    breakout_width = abs(
+                        _auto_wedge_line_value(breakout_idx, upper_a, upper_b)
+                        - _auto_wedge_line_value(breakout_idx, lower_a, lower_b)
+                    )
+                    apex_breakout = breakout_width <= max(abs(float(closes[breakout_idx])), 1e-9) * 0.06
+                    # Two clean anchors on each boundary are sufficient when
+                    # price breaks at a fully compressed apex. Requiring a
+                    # third pre-breakout touch on the broken side made CRI's
+                    # major May/December structure disappear on its signal.
+                    required_breakout_side_touches = 2 if apex_breakout else 3
+                    if min(up_count, lo_count) < 2 or breakout_side_count < required_breakout_side_touches:
                         continue
                 elif up_count < 2 or lo_count < 2:
                     # Unbroken wedges are watchlist candidates once both lines
@@ -5859,8 +6006,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 recent_lower_gaps: list[float] = []
                 recent_min_gaps: list[float] = []
                 for k in range(recent_from, quality_end + 1):
-                    up_k = _wedge_line_value(k, upper_a, upper_b)
-                    lo_k = _wedge_line_value(k, lower_a, lower_b)
+                    up_k = _auto_wedge_line_value(k, upper_a, upper_b)
+                    lo_k = _auto_wedge_line_value(k, lower_a, lower_b)
                     width_k = max(up_k - lo_k, 1e-9)
                     recent_widths.append(width_k)
                     upper_gap = max(0.0, up_k - highs[k]) / width_k
@@ -5871,9 +6018,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 median_upper_gap = float(pd.Series(recent_upper_gaps).median()) if recent_upper_gaps else 1.0
                 median_lower_gap = float(pd.Series(recent_lower_gaps).median()) if recent_lower_gaps else 1.0
                 median_min_gap = float(pd.Series(recent_min_gaps).median()) if recent_min_gaps else 1.0
-                current_width = max(_wedge_line_value(quality_end, upper_a, upper_b) - _wedge_line_value(quality_end, lower_a, lower_b), 1e-9)
-                current_upper_gap = max(0.0, _wedge_line_value(quality_end, upper_a, upper_b) - highs[quality_end]) / current_width
-                current_lower_gap = max(0.0, lows[quality_end] - _wedge_line_value(quality_end, lower_a, lower_b)) / current_width
+                current_width = max(_auto_wedge_line_value(quality_end, upper_a, upper_b) - _auto_wedge_line_value(quality_end, lower_a, lower_b), 1e-9)
+                current_upper_gap = max(0.0, _auto_wedge_line_value(quality_end, upper_a, upper_b) - highs[quality_end]) / current_width
+                current_lower_gap = max(0.0, lows[quality_end] - _auto_wedge_line_value(quality_end, lower_a, lower_b)) / current_width
                 # Prefer wedges whose active boundaries are both close enough to
                 # current price to be realistically breakable soon. A top line far
                 # above price or a bottom line far below price is less actionable.
@@ -5899,7 +6046,9 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     or (breakout_direction == "short" and last_upper_contact_age > 70)
                     or width_end_pct > (40.0 if breakout_idx is not None else 28.0)
                     or width_start_pct > (130.0 if breakout_idx is not None else 95.0)
-                    or width_ratio > (8.0 if breakout_idx is not None else 5.5)
+                    # Very high compression is expected at a fresh breakout;
+                    # retain the ratio guard only for still-unbroken wedges.
+                    or (breakout_idx is None and width_ratio > 5.5)
                     or (breakout_idx is None and breakout_potential_quality < 0.18)
                 ):
                     continue
@@ -6000,6 +6149,94 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     same_state = (candidate.breakout_direction or "-") == (current.breakout_direction or "-")
                     comparable_touches = candidate_touches >= current_touches - 1
                     comparable_duration = candidate.duration_days >= current.duration_days * 0.55
+                    same_upper_broader_lower = (
+                        same_state
+                        and candidate.upper_start_date == current.upper_start_date
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date < current.lower_start_date
+                        and candidate.lower_end_date < current.lower_end_date
+                        and candidate.lower_start_price < current.lower_start_price
+                        and candidate.lower_touches >= 2
+                    )
+                    current_same_upper_broader_lower = (
+                        same_state
+                        and current.upper_start_date == candidate.upper_start_date
+                        and current.upper_end_date == candidate.upper_end_date
+                        and current.lower_start_date < candidate.lower_start_date
+                        and current.lower_end_date < candidate.lower_end_date
+                        and current.lower_start_price < candidate.lower_start_price
+                        and current.lower_touches >= 2
+                    )
+                    same_lower_extreme_earlier_confirmation = (
+                        same_state
+                        and candidate.upper_start_date == current.upper_start_date
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_start_price == current.lower_start_price
+                        and candidate.lower_end_date < current.lower_end_date
+                        and candidate.lower_touches >= current.lower_touches - 1
+                    )
+                    current_same_lower_extreme_earlier_confirmation = (
+                        same_state
+                        and current.upper_start_date == candidate.upper_start_date
+                        and current.upper_end_date == candidate.upper_end_date
+                        and current.lower_start_date == candidate.lower_start_date
+                        and current.lower_start_price == candidate.lower_start_price
+                        and current.lower_end_date < candidate.lower_end_date
+                        and current.lower_touches >= candidate.lower_touches - 1
+                    )
+                    # Both candidates already passed the hard interruption,
+                    # convergence, width, proximity, touch and breakout checks.
+                    # With the same upper structure, the lower boundary that
+                    # begins at the earlier/deeper local extreme contains the
+                    # nested alternative and is therefore authoritative. Do
+                    # not let soft score/fit preferences move CRJ's support
+                    # from the July 2 extreme to July 21 or a later shelf.
+                    if same_upper_broader_lower:
+                        return True
+                    if current_same_upper_broader_lower:
+                        return False
+                    if same_lower_extreme_earlier_confirmation:
+                        return True
+                    if current_same_lower_extreme_earlier_confirmation:
+                        return False
+                    contains_full_structure = (
+                        same_state
+                        and candidate.duration_days >= current.duration_days * 1.15
+                        and candidate.upper_start_date <= current.upper_start_date
+                        and candidate.lower_start_date < current.lower_start_date
+                        and (
+                            candidate.upper_start_date == current.upper_start_date
+                            or candidate.upper_start_price >= current.upper_start_price * 1.03
+                        )
+                        and candidate.lower_start_price <= current.lower_start_price * 0.96
+                        and candidate.upper_touches >= current.upper_touches - 1
+                        and candidate.lower_touches >= current.lower_touches - 1
+                        and candidate.width_end_pct <= max(current.width_end_pct * 1.35, current.width_end_pct + 7.0)
+                        and candidate.fit_quality >= current.fit_quality * 0.62
+                    )
+                    current_contains_full_structure = (
+                        same_state
+                        and current.duration_days >= candidate.duration_days * 1.15
+                        and current.upper_start_date <= candidate.upper_start_date
+                        and current.lower_start_date < candidate.lower_start_date
+                        and (
+                            current.upper_start_date == candidate.upper_start_date
+                            or current.upper_start_price >= candidate.upper_start_price * 1.03
+                        )
+                        and current.lower_start_price <= candidate.lower_start_price * 0.96
+                        and current.upper_touches >= candidate.upper_touches - 1
+                        and current.lower_touches >= candidate.lower_touches - 1
+                        and current.width_end_pct <= max(candidate.width_end_pct * 1.35, candidate.width_end_pct + 7.0)
+                        and current.fit_quality >= candidate.fit_quality * 0.62
+                    )
+                    # Structural containment is the primary comparison. A
+                    # nested flat shelf must not replace the broader candidate
+                    # merely because it is geometrically tighter.
+                    if contains_full_structure:
+                        return True
+                    if current_contains_full_structure:
+                        return False
                     oversized_current = current.width_end_pct > 30.0 or current.width_start_pct > 95.0
                     materially_tighter = (
                         candidate.width_end_pct <= current.width_end_pct * (0.92 if oversized_current else 0.78)
