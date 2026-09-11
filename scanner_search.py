@@ -6155,17 +6155,8 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         and candidate.upper_end_date == current.upper_end_date
                         and candidate.lower_start_date < current.lower_start_date
                         and candidate.lower_end_date < current.lower_end_date
-                        # Prefer the earlier local extreme even when it is only
-                        # modestly deeper. CRJ's true July 2 bottom (459) is
-                        # 3.2% below the later July 21 anchor (474), so the old
-                        # 4% threshold still selected the nested lower line.
-                        and candidate.lower_start_price <= current.lower_start_price * 0.99
-                        and candidate.lower_touches >= current.lower_touches
-                        and candidate.width_end_pct <= max(
-                            current.width_end_pct * 1.35,
-                            current.width_end_pct + 7.0,
-                        )
-                        and candidate.fit_quality >= current.fit_quality * 0.62
+                        and candidate.lower_start_price < current.lower_start_price
+                        and candidate.lower_touches >= 2
                     )
                     current_same_upper_broader_lower = (
                         same_state
@@ -6173,22 +6164,41 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         and current.upper_end_date == candidate.upper_end_date
                         and current.lower_start_date < candidate.lower_start_date
                         and current.lower_end_date < candidate.lower_end_date
-                        and current.lower_start_price <= candidate.lower_start_price * 0.99
-                        and current.lower_touches >= candidate.lower_touches
-                        and current.width_end_pct <= max(
-                            candidate.width_end_pct * 1.35,
-                            candidate.width_end_pct + 7.0,
-                        )
-                        and current.fit_quality >= candidate.fit_quality * 0.62
+                        and current.lower_start_price < candidate.lower_start_price
+                        and current.lower_touches >= 2
                     )
-                    # With the same upper structure, prefer the lower boundary
-                    # beginning at the earlier/deeper swing extreme when it has
-                    # more confirmed touches. Formation duration alone cannot
-                    # express this because both candidates start at the same
-                    # old upper anchor (CRJ: July support vs August shelf).
+                    same_lower_extreme_earlier_confirmation = (
+                        same_state
+                        and candidate.upper_start_date == current.upper_start_date
+                        and candidate.upper_end_date == current.upper_end_date
+                        and candidate.lower_start_date == current.lower_start_date
+                        and candidate.lower_start_price == current.lower_start_price
+                        and candidate.lower_end_date < current.lower_end_date
+                        and candidate.lower_touches >= current.lower_touches - 1
+                    )
+                    current_same_lower_extreme_earlier_confirmation = (
+                        same_state
+                        and current.upper_start_date == candidate.upper_start_date
+                        and current.upper_end_date == candidate.upper_end_date
+                        and current.lower_start_date == candidate.lower_start_date
+                        and current.lower_start_price == candidate.lower_start_price
+                        and current.lower_end_date < candidate.lower_end_date
+                        and current.lower_touches >= candidate.lower_touches - 1
+                    )
+                    # Both candidates already passed the hard interruption,
+                    # convergence, width, proximity, touch and breakout checks.
+                    # With the same upper structure, the lower boundary that
+                    # begins at the earlier/deeper local extreme contains the
+                    # nested alternative and is therefore authoritative. Do
+                    # not let soft score/fit preferences move CRJ's support
+                    # from the July 2 extreme to July 21 or a later shelf.
                     if same_upper_broader_lower:
                         return True
                     if current_same_upper_broader_lower:
+                        return False
+                    if same_lower_extreme_earlier_confirmation:
+                        return True
+                    if current_same_lower_extreme_earlier_confirmation:
                         return False
                     contains_full_structure = (
                         same_state
