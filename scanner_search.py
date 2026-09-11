@@ -5657,7 +5657,23 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 abs(end - pair[1]),
             ),
         )[:48]
-        lower_anchor_pairs = list(dict.fromkeys(lower_anchor_pairs[:72] + structural_low_pairs + shaped_lower_pairs))
+        # For every deep low in the active structure, retain its earliest
+        # follow-up swing pairs as well. Global move/recency ranking favored
+        # later steep or flat alternatives and still pruned CRJ's valid
+        # July 2 -> July 21 pair before validation could count its August touch.
+        early_active_pairs: list[tuple[int, int]] = []
+        for lower_start in active_deep_lower_starts:
+            start_pairs = sorted(
+                (pair for pair in lower_anchor_pairs if pair[0] == lower_start),
+                key=lambda pair: pair[1],
+            )
+            early_active_pairs.extend(start_pairs[:8])
+        lower_anchor_pairs = list(dict.fromkeys(
+            lower_anchor_pairs[:72]
+            + structural_low_pairs
+            + shaped_lower_pairs
+            + early_active_pairs
+        ))
         if not lower_anchor_pairs:
             continue
 
