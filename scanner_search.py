@@ -5830,12 +5830,20 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     if i not in upper_anchor_indices and i > max(upper_anchor_indices) and closes[i] <= up + close_eps:
                         upper_touch_tol = min(tol, _post_anchor_touch_tolerance(up))
                         upper_exact_tol = min(exact_tol, upper_touch_tol)
-                        if _is_local_extreme(i, "upper") and highs[i] > up + upper_exact_tol:
+                        continues_touch_cluster = bool(upper_contacts) and i - max(upper_contacts) <= 1
+                        if (
+                            _is_local_extreme(i, "upper")
+                            and highs[i] > up + upper_exact_tol
+                            and not continues_touch_cluster
+                        ):
                             # A later local high that sits visibly above an older
                             # upper line is a new candidate anchor, not an extra
                             # tolerated touch of the stale line. Reject this
                             # candidate so anchor selection can move to that
-                            # candle extreme (e.g. BMC.WA 2026-07-06).
+                            # candle extreme (e.g. BMC.WA 2026-07-06). An
+                            # adjacent wick probe belongs to the same touch
+                            # cluster, however, and remains valid when it closes
+                            # back inside (CRJ.WA 2026-09-07/08).
                             invalid = True
                             break
                         if _is_local_extreme(i, "upper") and abs(highs[i] - up) <= upper_exact_tol:
@@ -5869,11 +5877,15 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 if width_end <= 0 or width_end >= width_start * 0.92:
                     continue
 
-                def _drop_pre_breakout_touch_cluster(indices: list[int]) -> list[int]:
+                def _drop_pre_breakout_touch_cluster(indices: list[int], side: str) -> list[int]:
                     # A candle or glued group of candles that the line passes
                     # through immediately before breakout is breakout noise, not
-                    # an independent touchpoint confirming the wedge.
-                    if breakout_idx is None:
+                    # an independent touchpoint confirming the broken boundary.
+                    # Keep a recent touch of the opposite boundary: that is a
+                    # genuine final rejection before price crosses the other
+                    # side (CRJ's Sep 7/8 upper touch before its short break).
+                    broken_side = "upper" if breakout_direction == "long" else "lower"
+                    if breakout_idx is None or side != broken_side:
                         return indices
                     ordered = [idx for idx in sorted(set(indices)) if idx < breakout_idx]
                     if not ordered or breakout_idx - ordered[-1] > 1:
@@ -5883,10 +5895,10 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                         cut -= 1
                     return ordered[:cut]
 
-                upper_contacts = _drop_pre_breakout_touch_cluster(upper_contacts)
-                lower_contacts = _drop_pre_breakout_touch_cluster(lower_contacts)
-                upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts)
-                lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts)
+                upper_contacts = _drop_pre_breakout_touch_cluster(upper_contacts, "upper")
+                lower_contacts = _drop_pre_breakout_touch_cluster(lower_contacts, "lower")
+                upper_exact_contacts = _drop_pre_breakout_touch_cluster(upper_exact_contacts, "upper")
+                lower_exact_contacts = _drop_pre_breakout_touch_cluster(lower_exact_contacts, "lower")
 
                 def _structural_contacts(
                     contacts: list[int],

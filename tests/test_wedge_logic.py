@@ -547,9 +547,11 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.upper_start_date == "2026-01-12"
     assert setup.upper_start_price == pytest.approx(840.0)
     assert setup.upper_end_date == "2026-09-02"
+    assert setup.upper_touches == 3
     assert setup.lower_start_date == "2026-07-02"
     assert setup.lower_start_price == pytest.approx(459.0)
     assert setup.lower_end_date == "2026-07-21"
     assert setup.lower_end_price == pytest.approx(474.0)
+    assert setup.lower_touches == 3
     assert setup.breakout_date == "2026-09-11"
     assert setup.breakout_direction == "short"
