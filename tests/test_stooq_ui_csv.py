@@ -144,6 +144,14 @@ def test_commodity_tail_repair_limits_stooq_scrape_to_first_page():
     assert "max_page = 1 if tail_refresh" in source
 
 
+def test_paginated_scraper_uses_canonical_first_page_url():
+    source = inspect.getsource(
+        __import__("utilities.stooq_playwright", fromlist=["update_stooq_history_with_playwright"])
+        .update_stooq_history_with_playwright
+    )
+    assert 'page_suffix = "" if page_num == 1 else f"&l={page_num}"' in source
+
+
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):
     class FakePage:
         url = "https://stooq.pl/q/d/?s=usdjpy"

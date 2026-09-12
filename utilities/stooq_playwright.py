@@ -2684,7 +2684,14 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         f"Timeout while fetching Stooq history for {symbol} "
                         f"(>{max_runtime_s}s without progress, last_page={page_num})."
                     )
-                url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}&i=d&l={page_num}"
+                # Page one is the canonical history URL.  In some Stooq edge/
+                # anti-bot responses an explicit ``l=1`` is returned with an
+                # attachment disposition, which makes Playwright abort goto()
+                # with "Download is starting" before we can inspect the page.
+                # A normal desktop browser canonicalizes to the same first
+                # page, so omit the redundant pagination parameter there.
+                page_suffix = "" if page_num == 1 else f"&l={page_num}"
+                url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}&i=d{page_suffix}"
                 attempted_urls.append(url)
                 if verbose:
                     print(f"[stooq-web] page={page_num} goto={url}")
