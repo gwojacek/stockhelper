@@ -802,6 +802,20 @@ control-port attempts. With one Tor endpoint, allsearch defaults to one Stooq
 worker to avoid rate-limiting a single exit; configure
 `STOCKHELPER_STOOQ_PROXY_POOL` to use parallel independent exits.
 
+To make the working Tor control password permanent for every Forex and
+commodity command, keep it in the gitignored local launcher file rather than in
+the repository or shell history:
+
+```bash
+cp .stockhelper.env.example .stockhelper.env
+sed -i "s/replace-with-your-tor-control-password/MySecret123/" .stockhelper.env
+chmod 600 .stockhelper.env
+```
+
+The `stock` launcher sources `.stockhelper.env` before forwarding all
+`STOCKHELPER_*` variables into Docker. Do not commit `.stockhelper.env`; only
+the safe `.stockhelper.env.example` template is versioned.
+
 **Common variants:**
 
 ```bash

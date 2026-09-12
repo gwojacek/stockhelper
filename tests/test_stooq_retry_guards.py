@@ -93,5 +93,7 @@ def test_forex_uses_table_ui_only_and_reports_fetch_paths():
 
 def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():
     assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
+    assert 'source "$_stockhelper_local_env"' in STOCK_SOURCE
+    assert '.stockhelper.env' in Path(".gitignore").read_text(encoding="utf-8")
     assert 'label=com.docker.compose.service=stockhelper' in STOCK_SOURCE
     assert 'docker compose run --rm will delete this one-shot container' in RUN_SOURCE

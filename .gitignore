@@ -24,5 +24,8 @@ data/downloads/stooq/*.zip
 
 .docker-home/
 
+# Local launcher secrets/settings (for example the Tor control password).
+.stockhelper.env
+
 # Playwright failure screenshots/HTML are recreated for each allsearch run.
 debug/stooq/
