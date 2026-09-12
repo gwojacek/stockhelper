@@ -782,6 +782,14 @@ stock --debug-stooq CB.F
 - `debug/stooq/<symbol>.html`
 - `debug/stooq/<symbol>.png`
 
+The debug command also verifies the configured SOCKS route through Tor's check
+API and prints `Tor route verification: WORKING` with the Tor exit IP, or
+`FAILED` with the connection error. A white Chromium tab can be expected when
+Stooq answers the navigation with a CSV attachment: Playwright cancels the tab
+navigation to start a download. StockHelper now parses that attachment directly;
+check `response_kind=csv_attachment` and `rows_count` in the debug JSON rather
+than treating the white tab as proof that Tor failed.
+
 **Common variants:**
 
 ```bash

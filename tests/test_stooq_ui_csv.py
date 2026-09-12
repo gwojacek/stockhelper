@@ -85,6 +85,23 @@ def test_history_navigation_returns_csv_attachment_rows():
     assert recovered.iloc[0]["Date"] == pd.Timestamp("2026-09-11")
 
 
+def test_debug_frame_merge_accepts_attachment_csv(monkeypatch, tmp_path):
+    from utilities.stooq_playwright import _merge_debug_frame_into_csv
+
+    csv_path = tmp_path / "CB_F.csv"
+    old = pd.DataFrame({"Date": ["2026-09-10"], "Open": [1], "High": [2], "Low": [0], "Close": [1.5], "Volume": [5]})
+    old.to_csv(csv_path, index=False)
+    attachment = _parse_stooq_ui_csv(
+        b"Date,Open,High,Low,Close,Volume\n2026-09-11,2,3,1,2.5,10\n"
+    )
+
+    written, latest = _merge_debug_frame_into_csv(attachment, csv_path)
+
+    assert written == 1
+    assert latest == "2026-09-11"
+    assert len(pd.read_csv(csv_path)) == 2
+
+
 def test_forced_rebase_drops_yahoo_only_rows_from_remote_tail():
     local = pd.DataFrame(
         {

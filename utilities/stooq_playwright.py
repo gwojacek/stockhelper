@@ -1159,8 +1159,8 @@ def _stooq_history_urls(symbol: str) -> list[str]:
 def _goto_stooq_history_page(page, url: str) -> pd.DataFrame | None:
     """Navigate to a history page, including Stooq's attachment response variant.
 
-    Stooq sometimes sends the normal history HTML with ``Content-Disposition:
-    attachment`` to automated/proxied Chromium sessions.  Playwright deliberately
+    Stooq sometimes sends CSV (or HTML) with ``Content-Disposition: attachment``
+    to automated/proxied Chromium sessions.  Playwright deliberately
     cancels a navigation response with that header and raises "Download is
     starting".  The browser context request client does not turn that response
     into a download, and it uses the same proxy/cookies, so load its HTML into the
@@ -2963,6 +2963,11 @@ def _rows_to_daily_df(rows: list[list[str]]) -> pd.DataFrame:
 
 def _merge_debug_rows_into_csv(rows: list[list[str]], csv_path: Path) -> tuple[int, str]:
     remote = _rows_to_daily_df(rows)
+    return _merge_debug_frame_into_csv(remote, csv_path)
+
+
+def _merge_debug_frame_into_csv(remote: pd.DataFrame, csv_path: Path) -> tuple[int, str]:
+    """Merge already-parsed debug data, including attachment CSV responses."""
     if remote.empty:
         return 0, ""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3009,11 +3014,37 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     with sync_playwright() as p:
         initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
         browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        proxy = _stooq_proxy_config(symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        tor_check = {"configured": bool(proxy), "server": (proxy or {}).get("server", ""), "verified": False}
+        if _stooq_tor_enabled():
+            try:
+                check = page.context.request.get("https://check.torproject.org/api/ip", timeout=15_000)
+                check_payload = check.json() if check.ok else {}
+                tor_check.update(
+                    status=check.status,
+                    verified=bool(check_payload.get("IsTor")),
+                    exit_ip=str(check_payload.get("IP", "")),
+                )
+            except Exception as exc:
+                tor_check["error"] = str(exc)
+            print(
+                f"[stooq-web] Tor route verification: {'WORKING' if tor_check['verified'] else 'FAILED'} "
+                f"proxy={tor_check['server'] or '-'} exit_ip={tor_check.get('exit_ip') or '-'}"
+                + (f" error={tor_check['error']}" if tor_check.get("error") else ""),
+                flush=True,
+            )
+        payload["tor_check"] = tor_check
         response = None
+        attachment_frame: pd.DataFrame | None = None
         interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
         for u in urls:
             try:
-                response = page.goto(u, wait_until="domcontentloaded")
+                attachment_frame = _goto_stooq_history_page(page, u)
+                if attachment_frame is not None:
+                    payload["attempted_urls"].append(
+                        {"url": u, "attachment_csv_rows": len(attachment_frame), "goto_error": None}
+                    )
+                    break
                 _accept_consent_if_present(page, first_page=True)
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
@@ -3029,10 +3060,11 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                 continue
             if page.locator("#fth1").count() > 0:
                 break
-        try:
-            page.wait_for_selector("table#fth1", timeout=6000)
-        except Exception:
-            pass
+        if attachment_frame is None:
+            try:
+                page.wait_for_selector("table#fth1", timeout=6000)
+            except Exception:
+                pass
 
         html = page.content()
         html_path = out_dir / f"{_stooq_debug_symbol(symbol)}.html"
@@ -3041,18 +3073,28 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         page.screenshot(path=str(png_path), full_page=True)
         print(f"[stooq-web] debug page artifacts saved for {symbol}: {png_path.resolve()} (html: {html_path.resolve()})", flush=True)
 
-        rows = _extract_rows_from_frame(page)
+        rows = _extract_rows_from_frame(page) if attachment_frame is None else []
         frame_rows = {}
-        if not rows:
+        if not rows and attachment_frame is None:
             for fr in page.frames:
                 fr_rows = _extract_rows_from_frame(fr)
                 frame_rows[fr.url] = len(fr_rows)
                 if fr_rows and not rows:
                     rows = fr_rows
-        payload["rows_count"] = len(rows)
-        payload["rows_preview"] = rows[:8]
+        payload["rows_count"] = len(attachment_frame) if attachment_frame is not None else len(rows)
+        if attachment_frame is not None:
+            preview = attachment_frame.head(8).copy()
+            preview["Date"] = pd.to_datetime(preview["Date"]).dt.strftime("%Y-%m-%d")
+            payload["rows_preview"] = preview.to_dict("records")
+            payload["response_kind"] = "csv_attachment"
+        else:
+            payload["rows_preview"] = rows[:8]
+            payload["response_kind"] = "html_page"
         if csv_path is not None:
-            written_rows, latest_date = _merge_debug_rows_into_csv(rows, csv_path)
+            if attachment_frame is not None:
+                written_rows, latest_date = _merge_debug_frame_into_csv(attachment_frame, csv_path)
+            else:
+                written_rows, latest_date = _merge_debug_rows_into_csv(rows, csv_path)
             payload["csv_path"] = str(csv_path)
             payload["csv_rows_merged_from_debug"] = written_rows
             payload["csv_latest_date_after_merge"] = latest_date
