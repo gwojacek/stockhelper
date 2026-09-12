@@ -3753,7 +3753,15 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     # Allsearch performs commodity and forex Stooq UI downloads concurrently.
     # Keep explicit caller settings, otherwise use a practical Tor-backed default.
     os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")
-    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "8")
+    # One Tor SOCKS endpoint normally means one shared exit. Parallel browser
+    # workers rapidly trigger Stooq's blank decoy response on that exit.
+    # A real proxy pool can remain parallel; callers can also override these.
+    if not os.getenv("STOCKHELPER_STOOQ_PROXY_POOL", "").strip():
+        os.environ.setdefault("STOCKHELPER_SCAN_WORKERS", "1")
+        os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "1")
+        os.environ.setdefault("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
+    else:
+        os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "8")
     tor_proxy = os.getenv('STOCKHELPER_STOOQ_TOR_PROXY', 'socks5://127.0.0.1:9050')
     tor_reachable = False
     try:

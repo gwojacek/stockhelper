@@ -50,6 +50,8 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'STOCKHELPER_STOOQ_TOR' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_PROXY' in SOURCE
     assert 'SIGNAL NEWNYM' in SOURCE
+    assert 'STOCKHELPER_STOOQ_TOR_CONTROL", "auto"' in SOURCE
+    assert "STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE" in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_AUTO' in SOURCE
     assert 'def _stooq_tor_proxy_reachable' in SOURCE
 

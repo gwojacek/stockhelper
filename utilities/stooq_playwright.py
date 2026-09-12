@@ -1244,7 +1244,8 @@ def _stooq_tor_enabled() -> bool:
 def _signal_tor_newnym(symbol: str, reason: str) -> bool:
     if not _stooq_tor_enabled():
         return False
-    control_requested = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL", "0").strip().lower() in {"1", "true", "yes", "on"}
+    control_mode = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL", "auto").strip().lower()
+    control_requested = control_mode not in {"0", "false", "no", "off"}
     control_requested = control_requested or any(
         key in os.environ
         for key in ("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD")
@@ -1257,7 +1258,17 @@ def _signal_tor_newnym(symbol: str, reason: str) -> bool:
     except ValueError:
         port = 9051
     password = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD", "")
-    auth = f'AUTHENTICATE "{password}"\r\n' if password else "AUTHENTICATE\r\n"
+    cookie_path = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE", "").strip()
+    if password:
+        auth = f'AUTHENTICATE "{password}"\r\n'
+    elif cookie_path:
+        try:
+            auth = f"AUTHENTICATE {Path(cookie_path).read_bytes().hex()}\r\n"
+        except OSError as exc:
+            print(f"[stooq-web] Tor control cookie unavailable for {symbol}: {exc}", flush=True)
+            return False
+    else:
+        auth = "AUTHENTICATE\r\n"
     try:
         with socket.create_connection((host, port), timeout=4) as conn:
             conn.sendall(auth.encode("utf-8"))
@@ -1273,7 +1284,12 @@ def _signal_tor_newnym(symbol: str, reason: str) -> bool:
                 return True
             print(f"[stooq-web] Tor NEWNYM failed for {symbol}: {reply.strip()}", flush=True)
     except Exception as exc:
-        print(f"[stooq-web] Tor NEWNYM unavailable for {symbol} at {host}:{port}: {exc}", flush=True)
+        print(
+            f"[stooq-web] Tor NEWNYM unavailable for {symbol} at {host}:{port}: {exc}. "
+            "Enable Tor ControlPort 9051 and set STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD "
+            "(or STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE) to rotate blocked exits.",
+            flush=True,
+        )
     return False
 
 
