@@ -1156,6 +1156,33 @@ def _stooq_history_urls(symbol: str) -> list[str]:
     return dedup
 
 
+def _goto_stooq_history_page(page, url: str) -> None:
+    """Navigate to a history page, including Stooq's attachment response variant.
+
+    Stooq sometimes sends the normal history HTML with ``Content-Disposition:
+    attachment`` to automated/proxied Chromium sessions.  Playwright deliberately
+    cancels a navigation response with that header and raises "Download is
+    starting".  The browser context request client does not turn that response
+    into a download, and it uses the same proxy/cookies, so load its HTML into the
+    existing page and continue through the normal CAPTCHA/table checks.
+    """
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+        return
+    except Exception as exc:
+        if "download is starting" not in str(exc).lower():
+            raise
+
+    response = page.context.request.get(url, timeout=20_000)
+    if not response.ok:
+        raise ValueError(f"Stooq attachment-response recovery returned HTTP {response.status}")
+    html = response.text()
+    if not html.strip():
+        raise ValueError("Stooq attachment-response recovery returned an empty body")
+    page.set_content(html, wait_until="domcontentloaded")
+    print(f"[stooq-web] recovered attachment-style navigation response for {url}", flush=True)
+
+
 
 def _is_metal_stooq_symbol(symbol: str | None) -> bool:
     return (symbol or "").strip().lower() in {"xauusd", "xagusd", "pl.f", "pa.f"}
@@ -2696,7 +2723,7 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 if verbose:
                     print(f"[stooq-web] page={page_num} goto={url}")
                 try:
-                    page.goto(url, wait_until="domcontentloaded")
+                    _goto_stooq_history_page(page, url)
                 except Exception as exc:
                     if page_num == 1:
                         shot = _debug_fail_screenshot(symbol, page, suffix="_goto_failed")

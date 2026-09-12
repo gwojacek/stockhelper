@@ -342,6 +342,28 @@ def test_literal_commodity_falls_back_to_cached_history_plus_yahoo_when_stooq_is
     assert "preserved cached Stooq history" in reason
 
 
+def test_forex_falls_back_to_cached_history_plus_yahoo_when_stooq_is_blocked(monkeypatch, tmp_path):
+    csv_path = tmp_path / "EURGBP.csv"
+    _df("2026-06-08").to_csv(csv_path, index=False)
+    monkeypatch.setattr(loader, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setattr(loader, "_force_remote_refresh_enabled", lambda: True)
+    monkeypatch.setattr(loader, "update_stooq_history_with_playwright", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("Download is starting")))
+    monkeypatch.setattr(
+        loader,
+        "_merge_yahoo_fresh_candle",
+        lambda base, *_args, **_kwargs: (_df("2026-06-08", "2026-06-09"), "EURGBP=X", None, 1),
+    )
+
+    df, source, source_symbol, _name, reason = loader._download_remote(
+        symbol="EURGBP", instrument_type="forex", api_key=None, data_source="auto"
+    )
+
+    assert source == "cache+yahoo"
+    assert source_symbol == "EURGBP=X"
+    assert df["Date"].max() == pd.Timestamp("2026-06-09")
+    assert "preserved cached Stooq history" in reason
+
+
 def test_yahoo_merge_appends_only_newer_rows_and_preserves_stooq_overlap():
     base = pd.DataFrame(
         [

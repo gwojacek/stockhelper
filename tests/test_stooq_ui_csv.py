@@ -11,8 +11,42 @@ from utilities.stooq_playwright import (
     _drop_local_tail_covered_by_remote,
     _stooq_history_urls,
     _stooq_query_symbol,
+    _goto_stooq_history_page,
     _trim_stooq_ui_history_to_window,
 )
+
+
+def test_history_navigation_recovers_download_starting_response():
+    class Response:
+        ok = True
+        status = 200
+
+        def text(self):
+            return "<html><table><tr><td>history</td></tr></table></html>"
+
+    class Request:
+        def get(self, url, timeout):
+            assert url == "https://stooq.pl/q/d/?s=eurgbp&i=d"
+            assert timeout == 20_000
+            return Response()
+
+    class Context:
+        request = Request()
+
+    class Page:
+        context = Context()
+        content = None
+
+        def goto(self, *_args, **_kwargs):
+            raise RuntimeError("Page.goto: Download is starting")
+
+        def set_content(self, html, *, wait_until):
+            self.content = html
+            assert wait_until == "domcontentloaded"
+
+    page = Page()
+    _goto_stooq_history_page(page, "https://stooq.pl/q/d/?s=eurgbp&i=d")
+    assert "history" in page.content
 
 
 def test_forced_rebase_drops_yahoo_only_rows_from_remote_tail():

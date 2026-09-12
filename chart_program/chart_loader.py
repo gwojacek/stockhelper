@@ -1269,14 +1269,38 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         )
         # Forex follows the same simple paginated history-table workflow as
         # literal commodities. Avoid Stooq's CSV download endpoint entirely.
-        df = update_stooq_history_with_playwright(
-            symbol=stooq_forex_symbol.lower(),
-            csv_path=csv_path_ref,
-            lookback_days=lookback,
-            end_date=older_anchor if fetch_older_data else None,
-            verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-            interactive_captcha=True,
-        )
+        try:
+            df = update_stooq_history_with_playwright(
+                symbol=stooq_forex_symbol.lower(),
+                csv_path=csv_path_ref,
+                lookback_days=lookback,
+                end_date=older_anchor if fetch_older_data else None,
+                verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                interactive_captcha=True,
+            )
+        except Exception as web_exc:
+            if csv_path_ref.exists() and not fetch_older_data:
+                try:
+                    local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+                    merged, candidate, display_name, added = _merge_yahoo_fresh_candle(
+                        local_df, symbol, "forex", trim_to_last_year=False
+                    )
+                    return (
+                        merged,
+                        "cache+yahoo",
+                        candidate,
+                        display_name,
+                        f"Stooq web failed ({web_exc}); preserved cached Stooq history and appended {added} newer Yahoo candle(s).",
+                    )
+                except Exception as yahoo_exc:
+                    raise ValueError(f"Stooq web failed: {web_exc}; Yahoo fallback failed: {yahoo_exc}") from web_exc
+            if not fetch_older_data:
+                try:
+                    yahoo_df, candidate, display_name = _yahoo_download(symbol, "forex")
+                    return yahoo_df, "yahoo", candidate, display_name, f"Stooq web failed ({web_exc}); Yahoo full-history fallback used."
+                except Exception as yahoo_exc:
+                    raise ValueError(f"Stooq web failed: {web_exc}; Yahoo fallback failed: {yahoo_exc}") from web_exc
+            raise
         reason = "Used paginated Stooq UI table fetching for forex."
         if not fetch_older_data:
             yahoo_merged = _try_yahoo_fresh_candle_merge(
