@@ -24,6 +24,9 @@ def test_history_navigation_recovers_download_starting_response():
         def text(self):
             return "<html><table><tr><td>history</td></tr></table></html>"
 
+        def body(self):
+            return self.text().encode()
+
     class Request:
         def get(self, url, timeout):
             assert url == "https://stooq.pl/q/d/?s=eurgbp&i=d"
@@ -45,8 +48,41 @@ def test_history_navigation_recovers_download_starting_response():
             assert wait_until == "domcontentloaded"
 
     page = Page()
-    _goto_stooq_history_page(page, "https://stooq.pl/q/d/?s=eurgbp&i=d")
+    recovered = _goto_stooq_history_page(page, "https://stooq.pl/q/d/?s=eurgbp&i=d")
+    assert recovered is None
     assert "history" in page.content
+
+
+def test_history_navigation_returns_csv_attachment_rows():
+    csv_body = b"Date,Open,High,Low,Close\n2026-09-11,1.1,1.2,1.0,1.15\n"
+
+    class Response:
+        ok = True
+        status = 200
+
+        def body(self):
+            return csv_body
+
+    class Request:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    class Context:
+        request = Request()
+
+    class Page:
+        context = Context()
+
+        def goto(self, *_args, **_kwargs):
+            raise RuntimeError("Page.goto: Download is starting")
+
+        def set_content(self, *_args, **_kwargs):
+            raise AssertionError("CSV attachment must not be loaded as HTML")
+
+    recovered = _goto_stooq_history_page(Page(), "https://stooq.pl/q/d/?s=eurgbp&i=d")
+    assert recovered is not None
+    assert len(recovered) == 1
+    assert recovered.iloc[0]["Date"] == pd.Timestamp("2026-09-11")
 
 
 def test_forced_rebase_drops_yahoo_only_rows_from_remote_tail():

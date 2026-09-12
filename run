@@ -23,7 +23,7 @@ if not _BOOTSTRAP_RUNNING_IN_DOCKER:
     _bootstrap_os.chdir(_BOOTSTRAP_PROJECT_ROOT)
     _bootstrap_os.execv(str(_stock_launcher), [str(_stock_launcher), *_bootstrap_sys.argv[1:]])
 
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib, shlex
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib, shlex, socket
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 from datetime import UTC, date, datetime, timedelta
@@ -3754,9 +3754,18 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     # Keep explicit caller settings, otherwise use a practical Tor-backed default.
     os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")
     os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "8")
+    tor_proxy = os.getenv('STOCKHELPER_STOOQ_TOR_PROXY', 'socks5://127.0.0.1:9050')
+    tor_reachable = False
+    try:
+        from urllib.parse import urlparse
+        parsed_tor = urlparse(tor_proxy)
+        with socket.create_connection((parsed_tor.hostname or "127.0.0.1", parsed_tor.port or 9050), timeout=1):
+            tor_reachable = True
+    except (OSError, ValueError):
+        pass
     print(
         f"[allsearch] Stooq Playwright Tor mode={os.environ['STOCKHELPER_STOOQ_TOR']} "
-        f"proxy={os.getenv('STOCKHELPER_STOOQ_TOR_PROXY', 'socks5://127.0.0.1:9050')}",
+        f"proxy={tor_proxy} reachable={'yes' if tor_reachable else 'NO'}",
         flush=True,
     )
     report_dir = ALL_REPORT_DIR / "allsearch"

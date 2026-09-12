@@ -1156,7 +1156,7 @@ def _stooq_history_urls(symbol: str) -> list[str]:
     return dedup
 
 
-def _goto_stooq_history_page(page, url: str) -> None:
+def _goto_stooq_history_page(page, url: str) -> pd.DataFrame | None:
     """Navigate to a history page, including Stooq's attachment response variant.
 
     Stooq sometimes sends the normal history HTML with ``Content-Disposition:
@@ -1168,7 +1168,7 @@ def _goto_stooq_history_page(page, url: str) -> None:
     """
     try:
         page.goto(url, wait_until="domcontentloaded")
-        return
+        return None
     except Exception as exc:
         if "download is starting" not in str(exc).lower():
             raise
@@ -1176,11 +1176,23 @@ def _goto_stooq_history_page(page, url: str) -> None:
     response = page.context.request.get(url, timeout=20_000)
     if not response.ok:
         raise ValueError(f"Stooq attachment-response recovery returned HTTP {response.status}")
-    html = response.text()
-    if not html.strip():
+    body = response.body()
+    if not body.strip():
         raise ValueError("Stooq attachment-response recovery returned an empty body")
+    try:
+        downloaded = _parse_stooq_ui_csv(body)
+    except Exception:
+        downloaded = pd.DataFrame()
+    if not downloaded.empty:
+        print(
+            f"[stooq-web] recovered {len(downloaded)} CSV rows from attachment-style response for {url}",
+            flush=True,
+        )
+        return downloaded
+    html = _stooq_ui_payload_preview(body, limit=max(500, len(body)))
     page.set_content(html, wait_until="domcontentloaded")
-    print(f"[stooq-web] recovered attachment-style navigation response for {url}", flush=True)
+    print(f"[stooq-web] recovered attachment-style HTML response for {url}", flush=True)
+    return None
 
 
 
@@ -2723,11 +2735,15 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                 if verbose:
                     print(f"[stooq-web] page={page_num} goto={url}")
                 try:
-                    _goto_stooq_history_page(page, url)
+                    attachment_rows = _goto_stooq_history_page(page, url)
                 except Exception as exc:
                     if page_num == 1:
                         shot = _debug_fail_screenshot(symbol, page, suffix="_goto_failed")
                         raise ValueError(f"Stooq page load failed. URL: {url} error={exc} Screenshot: {shot}")
+                    break
+                if attachment_rows is not None:
+                    rows.extend(attachment_rows.to_dict("records"))
+                    last_progress_at = time.monotonic()
                     break
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
