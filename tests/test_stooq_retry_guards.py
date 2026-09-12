@@ -95,5 +95,9 @@ def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_clean
     assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
     assert 'source "$_stockhelper_local_env"' in STOCK_SOURCE
     assert '.stockhelper.env' in Path(".gitignore").read_text(encoding="utf-8")
+    assert 'STOCKHELPER_MANAGE_TOR_SERVICE' in STOCK_SOURCE
+    assert 'trap _stockhelper_stop_tor EXIT' in STOCK_SOURCE
+    assert '_stockhelper_systemctl start tor' in STOCK_SOURCE
+    assert '_stockhelper_systemctl stop tor' in STOCK_SOURCE
     assert 'label=com.docker.compose.service=stockhelper' in STOCK_SOURCE
     assert 'docker compose run --rm will delete this one-shot container' in RUN_SOURCE

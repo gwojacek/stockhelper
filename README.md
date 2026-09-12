@@ -816,6 +816,13 @@ The `stock` launcher sources `.stockhelper.env` before forwarding all
 `STOCKHELPER_*` variables into Docker. Do not commit `.stockhelper.env`; only
 the safe `.stockhelper.env.example` template is versioned.
 
+With `STOCKHELPER_MANAGE_TOR_SERVICE=auto` (included in the template), the host
+Tor service is started automatically for Forex, commodity, and `--debug-stooq`
+commands and stopped when the command exits, including after Ctrl+C. Other
+market commands do not start Tor. Starting and stopping a system service may
+invoke `sudo`; set `STOCKHELPER_MANAGE_TOR_SERVICE=0` if Tor is managed outside
+StockHelper.
+
 **Common variants:**
 
 ```bash
