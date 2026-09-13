@@ -103,8 +103,10 @@ def test_commodity_health_repair_precedes_ichimoku_calculation():
         SCANNER_SOURCE.index("def run_fibo_search(")
     ]
     health = ichimoku_source.index("unresolved = _commodity_csv_health_check(members)")
+    targets_cleared = ichimoku_source.index('os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)')
+    audited_targets_cleared = ichimoku_source.index('os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)')
     scan_start = ichimoku_source.index("def _record_scan_error(")
-    assert health < scan_start
+    assert health < targets_cleared < audited_targets_cleared < scan_start
     assert "aborting Ichimoku: commodity history is still unhealthy after repair" in ichimoku_source
     assert ichimoku_source.count("_commodity_csv_health_check(members)") == 1
 

@@ -2087,10 +2087,6 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         # handlers are always ready. Use a wall-clock wait here,
                         # rather than a page promise which Chrome may resolve
                         # unexpectedly while Inspector instrumentation starts.
-                        print(
-                            f"[stooq-web] consent visible; waiting {first_dialog_settle_ms / 1000:g}s before first click.",
-                            flush=True,
-                        )
                         time.sleep(first_dialog_settle_ms / 1000)
                     first_click_pending = False
                     # Prefer a real trusted pointer click. ``force=True`` can
@@ -2102,7 +2098,6 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         # If an animation/overlay blocks Playwright's pointer
                         # checks, invoke the button itself rather than its child.
                         loc.evaluate("button => button.click()")
-                    print(f"[stooq-web] consent click attempted with selector: {sel}", flush=True)
                     clicked = True
                     break
                 except Exception:
@@ -2116,7 +2111,6 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
             except Exception:
                 pass
             if not _consent_overlay_visible(page):
-                print("[stooq-web] consent overlay cleared.", flush=True)
                 if consent_pass >= 1:
                     return
                 print("[stooq-web] checking once more for follow-up consent dialog.", flush=True)

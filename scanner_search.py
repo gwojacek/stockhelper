@@ -2897,6 +2897,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             os.environ["STOCKHELPER_COMMODITIES_REFRESH_TICKERS"] = ",".join(stale_tickers)
             return True
         os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
         if state.get(bucket):
             print(f"[refresh-check] commodities {phase}: already checked today -> cache-only mode ON")
             os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
@@ -4787,12 +4788,16 @@ def run_ichimoku_search(target: str) -> int:
         # use a cache containing several Yahoo fallback rows while the corrected
         # Stooq tail was only made available to the following Fibo phase.
         unresolved = _commodity_csv_health_check(members)
+        # The preflight has already consumed every targeted Stooq refresh.
+        # Leaving this set makes _load_full_cached_history_for_scan force the
+        # same instruments through Playwright again during calculation.
+        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
         if unresolved:
             print(
                 "[commodity-check] aborting Ichimoku: commodity history is still unhealthy after repair: "
                 f"{', '.join(unresolved)}"
             )
-            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
             return 1
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
