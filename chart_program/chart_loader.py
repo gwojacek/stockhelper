@@ -979,6 +979,11 @@ def _force_remote_refresh_enabled() -> bool:
     return os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
 
 
+def _stooq_interactive_captcha_enabled() -> bool:
+    """Keep inspector/manual CAPTCHA pauses out of unattended scan commands."""
+    return os.environ.get("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") == "1"
+
+
 def _data_dir_for_symbol(symbol: str, instrument_type: str) -> Path:
     if instrument_type == "index" or (instrument_type == "commodity" and _is_index_like_commodity(symbol)):
         return DATA_DIR_BY_INSTRUMENT["index"]
@@ -1276,7 +1281,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=lookback,
                 end_date=older_anchor if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=True,
+                interactive_captcha=_stooq_interactive_captcha_enabled(),
             )
         except Exception as web_exc:
             if csv_path_ref.exists() and not fetch_older_data:
@@ -1354,7 +1359,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=True,
+                interactive_captcha=_stooq_interactive_captcha_enabled(),
             )
             reason = "Stooq web used as primary source for commodity."
             if use_commodity_yahoo_freshness:
@@ -1453,7 +1458,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=True,
+                interactive_captcha=_stooq_interactive_captcha_enabled(),
             )
             reason = f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
             if use_commodity_yahoo_freshness:

@@ -805,10 +805,16 @@ with the loaded table instead of treating the page as a failed download.
 StockHelper also blocks the nonessential Google Funding Choices contributor
 bundle under Stooq's `/_mss/boq-content-ads-contributor/` path. That bundle can
 fail with `_DumpException is not a function` or `Cannot read properties of
-undefined (reading 'tagName')` and leave the consent button inert. Set
-`STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT=1` only to reproduce that browser
-error. Stooq debug JSON now includes captured console and uncaught page errors
-under `browser_errors`.
+undefined (reading 'tagName')` and leave the consent button inert. The broken
+bundle is always disabled for every Stooq browser context. Stooq debug JSON
+includes captured console and uncaught page errors under `browser_errors`.
+
+The same Chrome context, service-worker block, contributor-script block,
+consent handling, attachment recovery, and direct-to-SOCKS fallback are used by
+charts, Forex searches, commodity searches, and allsearch. Ordinary scans never
+open or wait for an Inspector; only `--debug-stooq ... --inspector` (or the
+explicit `STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1` diagnostic override) enables
+manual CAPTCHA pauses.
 
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but

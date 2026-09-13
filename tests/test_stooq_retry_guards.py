@@ -34,6 +34,7 @@ def test_stooq_no_display_inspector_guard_is_present():
     assert '"boq-content-ads-contributor"' in SOURCE
     assert '"bog-content-ads-contributor"' in SOURCE
     assert 'context.route(f"**/{contributor_path}/**"' in SOURCE
+    assert "STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT" not in SOURCE
     assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
     assert 'debug page artifacts saved' in SOURCE
@@ -84,6 +85,7 @@ def test_forex_uses_table_ui_only_and_reports_fetch_paths():
     forex_branch = LOADER_SOURCE[LOADER_SOURCE.index('if instrument_type == "forex":'):]
     forex_branch = forex_branch[:forex_branch.index('if instrument_type == "commodity" and _is_index_like_commodity')]
     assert "update_stooq_history_with_playwright" in forex_branch
+    assert "interactive_captcha=_stooq_interactive_captcha_enabled()" in forex_branch
     assert "update_stooq_history_from_ui_csv" not in forex_branch
     assert "attempts = 2" not in forex_branch
     assert 'return "downloaded_csv"' in SCANNER_SOURCE
