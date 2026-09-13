@@ -2130,13 +2130,15 @@ def _commodity_refresh_target_matches(ticker: str, fetch_symbol: str, refresh_ta
     return ticker.upper() in refresh_targets or fetch_symbol.upper() in refresh_targets
 
 
-def _commodity_csv_health_check(members: Sequence[str]) -> None:
+def _commodity_csv_health_check(members: Sequence[str]) -> list[str]:
     try:
         min_rows = max(1, int(os.getenv("STOCKHELPER_COMMODITIES_MIN_ROWS", "250")))
     except ValueError:
         min_rows = 250
 
-    def _health_row(ticker: str) -> tuple[str, Path, int, str, int, Exception | None]:
+    expected_latest = get_expected_latest_session_date("commodity", "COMMODITIES", datetime.now(UTC))
+
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, int, int, Exception | None]:
         raw = (ticker or "").strip().upper()
         csv_path = local_csv_path_for_symbol(raw, "commodity")
         if not csv_path.exists():
@@ -2148,29 +2150,35 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
             df = pd.read_csv(csv_path)
             rows = len(df)
             dates = pd.to_datetime(df.get("Date"), errors="coerce").dropna() if "Date" in df.columns else pd.Series(dtype="datetime64[ns]")
-            latest = dates.max().date().isoformat() if not dates.empty else "-"
+            latest_date = dates.max().date() if not dates.empty else None
+            latest = latest_date.isoformat() if latest_date else "-"
+            missing = (
+                _forex_missing_session_count(latest_date, expected_latest)
+                if latest_date is not None
+                else 0
+            )
             yahoo_like = _recent_high_precision_candle_count(df)
-            return raw, csv_path, rows, latest, yahoo_like, None
+            return raw, csv_path, rows, latest, missing, yahoo_like, None
         except Exception as exc:
-            return raw, csv_path, 0, "-", 0, exc
+            return raw, csv_path, 0, "-", 0, 0, exc
 
-    print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
-    def _print_summary(checked: Sequence[tuple[str, Path, int, str, int, Exception | None]]) -> list[str]:
+    print(f"[commodity-check] CSV row-count and freshness check (min_rows={min_rows}, expected_latest={expected_latest})")
+    def _print_summary(checked: Sequence[tuple[str, Path, int, str, int, int, Exception | None]]) -> list[str]:
         ok_count = 0
         retry_tickers: list[str] = []
-        for raw, csv_path, rows, latest, yahoo_like, exc in checked:
+        for raw, csv_path, rows, latest, missing, yahoo_like, exc in checked:
             if exc is not None:
                 retry_tickers.append(raw)
                 print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
                 continue
             contaminated = yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
-            status = "OK" if rows >= min_rows and not contaminated else "WARN"
+            status = "OK" if rows >= min_rows and missing == 0 and not contaminated else "WARN"
             if status == "OK":
                 ok_count += 1
             else:
                 retry_tickers.append(raw)
             print(
-                f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, "
+                f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, missing_candles={missing}, "
                 f"yahoo_like_last20={yahoo_like}, csv={csv_path}"
             )
         print(f"[commodity-check] summary: ok={ok_count}, warn={len(retry_tickers)}, total={len(checked)}")
@@ -2181,12 +2189,18 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
 
     if retry_tickers and os.getenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "1") != "0":
         print(f"[commodity-check] repairing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
+        old_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
         old_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
         try:
+            # The probe can put the whole group in automatic cache-only mode
+            # because Yahoo's newest rows match.  Health repair is stricter:
+            # multiple Yahoo-like tail rows or missing sessions must still
+            # reach Stooq, so temporarily override that automatic decision.
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
-                _raw, csv_path, rows, _latest, yahoo_like, health_exc = _health_row(raw)
+                _raw, csv_path, rows, _latest, missing, yahoo_like, health_exc = _health_row(raw)
                 backup = csv_path.read_bytes() if csv_path.exists() else None
                 try:
                     contaminated_tail = health_exc is None and rows >= min_rows and yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
@@ -2199,12 +2213,22 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                             f"[commodity-check] {raw}: healthy {rows}-row history; "
                             "refreshing only newest Stooq page before Yahoo latest-candle merge"
                         )
-                    else:
+                    elif health_exc is not None or rows < min_rows:
                         # Missing/short/unreadable caches still require a clean
                         # full-window replacement rather than a tail repair.
                         os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
                         print(f"[commodity-check] {raw}: incomplete/unreadable history; performing full replacement")
                         csv_path.unlink(missing_ok=True)
+                    else:
+                        # Keep a complete but stale Stooq base.  The loader can
+                        # append newer Yahoo candles if Stooq remains blocked;
+                        # deleting it would turn a recoverable freshness issue
+                        # into a needless full-history outage.
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        print(
+                            f"[commodity-check] {raw}: healthy {rows}-row history but "
+                            f"missing {missing} session(s); preserving base for Stooq/Yahoo refresh"
+                        )
                     load_or_update_daily_data(symbol=raw, instrument_type="commodity", persist=True, fetch_older_data=False)
                     if not csv_path.exists():
                         raise FileNotFoundError(f"repair did not create {csv_path}")
@@ -2214,6 +2238,10 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                         csv_path.parent.mkdir(parents=True, exist_ok=True)
                         csv_path.write_bytes(backup)
         finally:
+            if old_cache_only is None:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            else:
+                os.environ["STOCKHELPER_CACHE_ONLY"] = old_cache_only
             if old_force is None:
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
@@ -2222,8 +2250,27 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                 os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = old_tail_refresh
-        print("[commodity-check] post-retry CSV row-count check")
-        _print_summary([_health_row(ticker) for ticker in members])
+        # Do not print all 16 rows a second time. Show the repaired subset, then
+        # one final aggregate for the complete commodity group.
+        print("[commodity-check] post-retry results for repaired CSV(s)")
+        repaired_checked = [_health_row(ticker) for ticker in retry_tickers]
+        _print_summary(repaired_checked)
+        final_checked = [_health_row(ticker) for ticker in members]
+        final_retry = [
+            raw
+            for raw, _path, rows, _latest, missing, yahoo_like, exc in final_checked
+            if exc is not None
+            or rows < min_rows
+            or missing != 0
+            or yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+        ]
+        print(
+            f"[commodity-check] final group summary: ok={len(final_checked) - len(final_retry)}, "
+            f"warn={len(final_retry)}, total={len(final_checked)}"
+        )
+        return final_retry
+
+    return retry_tickers
 
 
 def _forex_missing_session_count(latest: date, expected_latest: date) -> int:
@@ -2568,6 +2615,15 @@ def _latest_candle_signatures_match(cached: tuple | None, yahoo: tuple | None) -
     )
 
 
+def _recent_yahoo_dates_missing_from_cache(cached: pd.DataFrame, yahoo: pd.DataFrame) -> list[str]:
+    """Return recent Yahoo session dates absent from the local history."""
+    if cached is None or yahoo is None or "Date" not in cached or "Date" not in yahoo:
+        return []
+    cached_dates = set(pd.to_datetime(cached["Date"], errors="coerce").dropna().dt.date)
+    yahoo_dates = set(pd.to_datetime(yahoo["Date"], errors="coerce").dropna().dt.date)
+    return [day.isoformat() for day in sorted(yahoo_dates - cached_dates)]
+
+
 def _allsearch_ichimoku_yahoo_probe(
     group_name: str,
     members: list[str],
@@ -2592,6 +2648,7 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             cached_signature = _latest_candle_signature(cached)
             yahoo_signature = _latest_candle_signature(remote)
+            missing_recent_dates = _recent_yahoo_dates_missing_from_cache(cached, remote)
             if (
                 cached_signature is not None
                 and yahoo_signature is not None
@@ -2607,10 +2664,14 @@ def _allsearch_ichimoku_yahoo_probe(
                 )
                 continue
             compared += 1
-            matches = _latest_candle_signatures_match(cached_signature, yahoo_signature)
+            matches = (
+                _latest_candle_signatures_match(cached_signature, yahoo_signature)
+                and not missing_recent_dates
+            )
             print(
                 f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature}, "
-                f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
+                f"cached newest={cached_signature}, missing_recent_dates={missing_recent_dates or 'none'} "
+                f"-> {'exact match' if matches else 'DIFFERENT'}"
             )
             if not matches:
                 if (
@@ -2836,6 +2897,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             os.environ["STOCKHELPER_COMMODITIES_REFRESH_TICKERS"] = ",".join(stale_tickers)
             return True
         os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
         if state.get(bucket):
             print(f"[refresh-check] commodities {phase}: already checked today -> cache-only mode ON")
             os.environ["STOCKHELPER_CACHE_ONLY"] = "1"
@@ -4720,6 +4782,23 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     _should_refresh_group_data(group_name, members, exchange_suffix)
+    if group_name == "commodities":
+        # Validate and repair the market-data snapshot before any indicator is
+        # calculated.  Running this after the result report allowed Ichimoku to
+        # use a cache containing several Yahoo fallback rows while the corrected
+        # Stooq tail was only made available to the following Fibo phase.
+        unresolved = _commodity_csv_health_check(members)
+        # The preflight has already consumed every targeted Stooq refresh.
+        # Leaving this set makes _load_full_cached_history_for_scan force the
+        # same instruments through Playwright again during calculation.
+        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
+        if unresolved:
+            print(
+                "[commodity-check] aborting Ichimoku: commodity history is still unhealthy after repair: "
+                f"{', '.join(unresolved)}"
+            )
+            return 1
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -4938,13 +5017,9 @@ def run_ichimoku_search(target: str) -> int:
     if group_name == "forex":
         _print_forex_source_summary("search", members, data_source_by_ticker)
     if group_name == "commodities":
-        try:
-            _commodity_csv_health_check(members)
-        finally:
-            # Refresh targets belong to this completed Ichimoku pass. Leaving
-            # them set makes the following allsearch Fibo snapshot reopen the
-            # Stooq downloader for the formerly stale commodities.
-            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        # Refresh targets belong to this completed Ichimoku pass. Leaving them
+        # set makes the following allsearch Fibo snapshot reopen the downloader.
+        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
     elif group_name == "forex":
         _forex_csv_health_check(members, data_source_by_ticker)
 

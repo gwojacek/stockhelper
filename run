@@ -3750,15 +3750,11 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     # Preserve a shell-provided request across both batch phases; each phase
     # otherwise cleans its temporary environment at completion.
     force_remote_refresh = force_remote_refresh or os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
-    # Allsearch performs commodity and forex Stooq UI downloads concurrently.
-    # Keep explicit caller settings, otherwise use a practical Tor-backed default.
-    os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")
-    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "8")
-    print(
-        f"[allsearch] Stooq Playwright Tor mode={os.environ['STOCKHELPER_STOOQ_TOR']} "
-        f"proxy={os.getenv('STOCKHELPER_STOOQ_TOR_PROXY', 'socks5://127.0.0.1:9050')}",
-        flush=True,
-    )
+    # Stooq starts with the normal connection and switches to the local Tor
+    # SOCKS proxy only when the history table is missing.
+    os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")
+    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "6")
+    print("[allsearch] Stooq connection mode=direct-first, Tor SOCKS fallback=socks5://127.0.0.1:9050", flush=True)
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)
     for old in report_dir.glob("*.txt"):

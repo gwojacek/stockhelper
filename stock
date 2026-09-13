@@ -52,6 +52,54 @@ fi
 export STOCKHELPER_UID="${STOCKHELPER_UID:-$(id -u)}"
 export STOCKHELPER_GID="${STOCKHELPER_GID:-$(id -g)}"
 
+# Keep Tor isolated to a disposable Compose service. It may be running while a
+# Forex/commodity command executes, but Playwright always tries the direct
+# connection first and uses SOCKS only after Stooq returns no history table.
+_stockhelper_needs_stooq=0
+for _stockhelper_arg in "$@"; do
+  case "${_stockhelper_arg,,}" in
+    --debug-stooq|forex|commodities|commodity|all|*.f|coffee|cocoa|sugar|wheat|corn|soybean|soyoil|copper|aluminium|platinum|palladium|wti|oil|natural_gas|gold|silver)
+      _stockhelper_needs_stooq=1
+      break
+      ;;
+  esac
+  if [[ "${_stockhelper_arg,,}" =~ ^(aud|eur|gbp|usd|chf|jpy|pln|cad)(aud|eur|gbp|usd|chf|jpy|pln|cad)$ ]]; then
+    _stockhelper_needs_stooq=1
+    break
+  fi
+done
+
+_stockhelper_tor_started=0
+_stockhelper_stop_tor() {
+  if [[ "$_stockhelper_tor_started" == "1" ]]; then
+    docker compose stop tor >/dev/null 2>&1 || true
+    _stockhelper_tor_started=0
+  fi
+}
+if [[ "$_stockhelper_needs_stooq" == "1" ]]; then
+  if (echo >/dev/tcp/127.0.0.1/9050) >/dev/null 2>&1; then
+    echo "[stock] using existing Tor SOCKS fallback (initial Stooq request stays direct)."
+  else
+    echo "[stock] starting disposable Tor SOCKS fallback (initial Stooq request stays direct)..."
+    docker compose up -d --no-deps tor
+    _stockhelper_tor_started=1
+    trap _stockhelper_stop_tor EXIT
+    trap '_stockhelper_stop_tor; exit 130' HUP INT TERM
+    _stockhelper_tor_ready=0
+    for _stockhelper_wait in {1..50}; do
+      if (echo >/dev/tcp/127.0.0.1/9050) >/dev/null 2>&1; then
+        _stockhelper_tor_ready=1
+        break
+      fi
+      sleep 0.2
+    done
+    if [[ "$_stockhelper_tor_ready" != "1" ]]; then
+      echo "stock: disposable Tor SOCKS service did not become ready on 127.0.0.1:9050." >&2
+      exit 1
+    fi
+  fi
+fi
+
 # `docker compose run` only applies variables declared by the Compose service;
 # it does not automatically copy ad-hoc host variables into the container.
 # Forward every StockHelper setting so invocations such as
@@ -61,6 +109,17 @@ _stockhelper_env_args=()
 while IFS= read -r _stockhelper_env_name; do
   [[ -n "$_stockhelper_env_name" ]] && _stockhelper_env_args+=( -e "$_stockhelper_env_name" )
 done < <(compgen -e | LC_ALL=C sort | awk '/^STOCKHELPER_[A-Za-z0-9_]+$/')
+
+_stockhelper_gui_args=()
+for _stockhelper_arg in "$@"; do
+  if [[ "$_stockhelper_arg" == "--inspector" || "$_stockhelper_arg" == "-inspector" ]]; then
+    if [[ -n "${DISPLAY:-}" && -d /tmp/.X11-unix ]]; then
+      _stockhelper_gui_args+=( -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix )
+      [[ -n "${XAUTHORITY:-}" && -f "$XAUTHORITY" ]] && _stockhelper_gui_args+=( -e XAUTHORITY -v "$XAUTHORITY:$XAUTHORITY:ro" )
+    fi
+    break
+  fi
+done
 
 _stop_old_report_containers() {
   if [[ "${STOCKHELPER_KEEP_OLD_REPORTS:-0}" == "1" ]]; then
@@ -83,7 +142,7 @@ done
 if [[ "$_should_watch_for_report_url" == "1" ]]; then
   _stop_old_report_containers
   _opened_url=""
-  docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" stockhelper "$@" 2>&1 | while IFS= read -r line; do
+  docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" "${_stockhelper_gui_args[@]}" stockhelper "$@" 2>&1 | while IFS= read -r line; do
     printf '%s\n' "$line"
     if [[ -z "$_opened_url" && "$line" =~ (https?://(127\.0\.0\.1|localhost):[0-9]+[^[:space:]]*) ]]; then
       _opened_url="${BASH_REMATCH[1]}"
@@ -103,4 +162,8 @@ if [[ "$_should_watch_for_report_url" == "1" ]]; then
   exit "${PIPESTATUS[0]}"
 fi
 
-exec docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" stockhelper "$@"
+if [[ "$_stockhelper_tor_started" == "1" ]]; then
+  docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" "${_stockhelper_gui_args[@]}" stockhelper "$@"
+  exit $?
+fi
+exec docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" "${_stockhelper_gui_args[@]}" stockhelper "$@"

@@ -21,7 +21,7 @@ Use this table as the fastest path to the commands you will run most often. The 
 
 | Use case | Recommended command | Short description |
 | --- | --- | --- |
-| Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Chromium, CPU PyTorch/EasyOCR, and native runtime libraries. |
+| Build Docker image | `docker compose build` | Builds the StockHelper image with Python, Playwright Google Chrome, CPU PyTorch/EasyOCR, and native runtime libraries. |
 | Install/update `stock` shortcut | `./scripts/install-stock-command.sh` | Installs `~/.local/bin/stock`; rerun after `git pull` so the wrapper has the latest behavior. |
 | Commit and push new data | `./pd` | Stages all changes, creates a commit named `data`, and pushes the current branch to its configured upstream. Run it from `master` to update `master`. |
 | Show launcher help | `stock --help` | Confirms the Docker-backed shortcut works and prints available launcher options. |
@@ -168,7 +168,7 @@ stockhelper/
 
 ```bash
 poetry install
-poetry run playwright install chromium
+poetry run playwright install chrome
 ```
 
 Use `poetry run ...` for commands, or activate the Poetry environment first:
@@ -182,9 +182,9 @@ poetry shell
 Docker is the recommended installation path if you do not want to manage a local Python/Poetry/Playwright setup. The image contains:
 
 - Python 3.12 runtime dependencies needed by StockHelper.
-- Playwright Chromium installed inside the image at `/ms-playwright`.
+- Google Chrome installed through Playwright inside the image.
 - CPU-only PyTorch plus EasyOCR for Stooq CAPTCHA OCR, avoiding the multi-GB GPU/CUDA wheel stack.
-- Native libraries needed by OpenCV, EasyOCR, Playwright/Chromium, and the local chart/report web UIs.
+- Native libraries needed by OpenCV, EasyOCR, Playwright/Google Chrome, and the local chart/report web UIs.
 
 The Compose setup mounts this repository into the container at `/app`, so generated CSVs, reports, screenshots, journal files, configs, and code changes from `git pull` stay on your host machine. It also runs the container as your host UID/GID so newly generated files are editable and deletable from your IDE/terminal.
 
@@ -347,7 +347,7 @@ There is no `requirements.txt` in this repository. If you do not use Poetry, ins
 python -m venv .venv
 source .venv/bin/activate
 pip install colorama dash flask numpy pandas plotly tabulate tenacity playwright yfinance opencv-python easyocr
-python -m playwright install chromium
+python -m playwright install chrome
 ```
 
 ### Optional/system dependencies
@@ -402,6 +402,18 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_FETCH_ONE_TIMEOUT_S` | `90` | Per-symbol timeout for `--fetch-older-data`. Default is `90`, minimum is `15`. |
 | `STOCKHELPER_FETCH_VPN_PAUSE_S` | `120` | Pause before the retry pass in `--fetch-older-data` when no symbol was extended. |
 | `STOCKHELPER_FETCH_RETRY_ON_ZERO_BACKFILL` | `0` | Set to `0` to disable the automatic retry pass when `--fetch-older-data` adds no older rows. |
+
+Each WIG bulk attempt clears `debug/stooq_bulk` before opening the page. The
+bulk download directory retains only its newest valid ZIP as an emergency
+fallback. The legacy `data/debug` path is not used by the application and can
+be deleted if it exists from an older installation.
+The WIG bulk browser also uses the direct-first Stooq strategy: after consent it
+waits for the real `d_pl_txt` link, then retries the page through the configured
+Tor SOCKS proxy only when that link never appears.
+For Warsaw stocks, an equal-date Yahoo candle may replace the cached row only
+during that same weekday's live session. On weekends, the newest row imported
+from the Stooq bulk archive remains authoritative; Yahoo is appended only when
+it has a strictly newer date.
 
 ### API keys
 
@@ -791,6 +803,91 @@ stock --debug-stooq CB.F --inspector
 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 stock --debug-stooq CB.F
 ```
 
+`--inspector` always pauses after the direct/Tor navigation attempts, even when
+Stooq returned an unrecognized blank page rather than a known CAPTCHA. Inspect
+the final DOM or Network panel, then click **Resume** in Playwright Inspector to
+let StockHelper save its debug artifacts and exit.
+
+If the visible Funding Choices **Zgadzam się** button is inert, StockHelper first
+tries a trusted Playwright pointer click and then a DOM button click. When the
+consent script is broken but the Stooq history rows are already present behind
+the overlay, it removes only the unresponsive consent overlay and continues
+with the loaded table instead of treating the page as a failed download.
+
+Before the first actual Funding Choices click, StockHelper keeps the dialog visible
+for at least three wall-clock seconds before clicking, giving its JavaScript
+time to attach the consent handler. This also applies when the dialog mounts
+after the first detection pass. It then checks for and
+accepts re-mounted consent dialogs up to six times without refreshing the page.
+Use `STOCKHELPER_STOOQ_CONSENT_SETTLE_MS` to adjust the initial delay.
+
+StockHelper also blocks the nonessential Google Funding Choices contributor
+bundle under Stooq's `/_mss/boq-content-ads-contributor/` path. That bundle can
+fail with `_DumpException is not a function` or `Cannot read properties of
+undefined (reading 'tagName')` and leave the consent button inert. The broken
+bundle is always disabled for every Stooq browser context. Stooq debug JSON
+includes captured console and uncaught page errors under `browser_errors`.
+The request is blocked at both Playwright context/page routing and Chrome's
+DevTools Protocol network layer because Chrome did not consistently match the
+generated `/_mss/.../_/js?...` URL with a normal glob route.
+
+The same Chrome context, service-worker block, contributor-script block,
+consent handling, attachment recovery, and direct-to-SOCKS fallback are used by
+charts, Forex searches, commodity searches, and allsearch. Ordinary scans never
+open or wait for an Inspector; only `--debug-stooq ... --inspector` (or the
+explicit `STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1` diagnostic override) enables
+manual CAPTCHA pauses.
+
+Freshness probes compare the recent Yahoo date set as well as the newest OHLCV
+row. A matching newest candle no longer hides missing sessions inside the cache;
+if Stooq remains unavailable, the cache+Yahoo fallback fills those absent recent
+dates instead of appending only the final candle.
+
+After consent clears, the scraper waits up to 8 seconds for an actual Stooq
+history row (not merely one of the page's layout/consent tables) before deciding
+that the direct connection needs the SOCKS fallback. Override this settling
+window with `STOCKHELPER_STOOQ_TABLE_WAIT_MS` when a slower connection needs
+more time. The blank-page check is deliberately performed only after this wait,
+so ordinary allsearch uses the same consent → table wait → fallback order as
+the successful interactive debug flow.
+
+If Stooq displays its daily-limit code challenge, ordinary unattended Forex and
+commodity scans run the OCR solver before failing the instrument. The
+`STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA` option controls only the headed/manual
+inspector fallback; it is not required for automatic OCR.
+The CAPTCHA preprocessor supports both Stooq's older red-letter challenge and
+the current black-letter challenge by removing its square background grid
+before sending the enlarged image to EasyOCR/Tesseract.
+
+Stooq table navigation is **direct-first**. For Forex, commodities, and
+`--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
+Playwright uses it only if the normal connection finishes without a history
+table. The Tor container is stopped automatically when the command finishes or
+is interrupted, and no Tor control password is required. If something already
+listens on `127.0.0.1:9050`, the launcher reuses it and does not stop it.
+
+After changing the Docker image dependencies, build once:
+
+```bash
+docker compose build --no-cache
+```
+
+The image installs Google Chrome through the resolved Playwright
+version, so rebuilding is required after a Playwright constraint update; merely
+pulling Python source changes does not replace `/ms-playwright` in an existing
+image.
+
+The dependency baselines intentionally follow `pyproject.toml` and Docker's pip
+ranges. Regenerate `poetry.lock` with `poetry lock` in an online environment
+before using Poetry-managed installation; Docker resolves the same declared
+ranges directly during its build.
+
+Expected recovery output is:
+
+```text
+[stooq-web] ... direct connection had no table, retrying through Tor SOCKS.
+```
+
 ### 10. Fetch older cached history
 
 ```bash
@@ -908,13 +1005,13 @@ Or activate your virtualenv and install the packages listed in `pyproject.toml`.
 Install the browser binaries:
 
 ```bash
-poetry run playwright install chromium
+poetry run playwright install chrome
 ```
 
 If using `venv`:
 
 ```bash
-python -m playwright install chromium
+python -m playwright install chrome
 ```
 
 ### Chart UI opens but snapshot export fails
@@ -977,7 +1074,7 @@ STOCKHELPER_STOOQ_DEBUG=1 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 stock --debug-stooq 
 
 Check `debug/stooq/` for JSON, HTML, and screenshots. If visible rows are correct and you want to merge them into commodity CSV cache, add `--debug-stooq-fetch`.
 
-For `stock -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=6`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1` or lower the worker count. Blank/no-table pages and CAPTCHA/limit states just before Playwright inspector are refreshed automatically (`STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES=3`), then a Firefox Playwright fallback can be tried for blank Chromium pages before the headed inspector. Set `STOCKHELPER_STOOQ_BLANK_PROMPT=1` only when you explicitly want the old pause-before-retry behavior. After commodities scans, StockHelper prints a `[commodity-check]` CSV row-count summary using `STOCKHELPER_COMMODITIES_MIN_ROWS` (default `250`).
+For `stock -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=6`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1` or lower the worker count. Blank/no-table pages and CAPTCHA/limit states just before Playwright inspector are refreshed automatically (`STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES=3`), then a Firefox Playwright fallback can be tried for blank Chrome pages before the headed inspector. Set `STOCKHELPER_STOOQ_BLANK_PROMPT=1` only when you explicitly want the old pause-before-retry behavior. After commodities scans, StockHelper prints a `[commodity-check]` CSV row-count summary using `STOCKHELPER_COMMODITIES_MIN_ROWS` (default `250`).
 
 #### Stooq Playwright proxies
 

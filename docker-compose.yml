@@ -1,4 +1,13 @@
 services:
+  tor:
+    build:
+      context: .
+    image: stockhelper:latest
+    network_mode: host
+    user: "0:0"
+    entrypoint: ["tor"]
+    command: ["--SocksPort", "127.0.0.1:9050", "--DataDirectory", "/tmp/stockhelper-tor"]
+
   stockhelper:
     build:
       context: .

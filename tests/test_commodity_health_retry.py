@@ -64,9 +64,11 @@ def test_health_check_warns_and_retries_yahoo_contaminated_tail(monkeypatch, tmp
     })
     frame.to_csv(csv_path, index=False)
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")
 
     def replace_csv(**_kwargs):
         assert csv_path.exists(), "healthy history must remain for a tail-only repair"
+        assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") is None
         assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"
         clean = frame.copy()
         clean["Open"] = clean["Open"].round(3)
@@ -81,6 +83,8 @@ def test_health_check_warns_and_retries_yahoo_contaminated_tail(monkeypatch, tmp
     assert "yahoo_like_last20=2" in output
     assert "healthy 260-row history; refreshing only newest Stooq page" in output
     assert output.rfind("summary: ok=1, warn=0, total=1") > output.index("WARN PALLADIUM")
+    assert "final group summary: ok=1, warn=0, total=1" in output
+    assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
 
 
@@ -99,3 +103,19 @@ def test_short_commodity_cache_still_uses_full_replacement(monkeypatch, tmp_path
     scanner._commodity_csv_health_check(["SOYOIL"])
 
     assert len(pd.read_csv(csv_path)) == 260
+
+
+def test_health_check_warns_when_full_commodity_cache_is_stale(monkeypatch, tmp_path, capsys):
+    csv_path = tmp_path / "COCOA.csv"
+    expected = scanner.get_expected_latest_session_date("commodity", "COMMODITIES", scanner.datetime.now(scanner.UTC))
+    stale = expected - pd.Timedelta(days=4)
+    pd.DataFrame({"Date": pd.date_range(stale - pd.Timedelta(days=365), stale)}).to_csv(csv_path, index=False)
+    monkeypatch.setenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "0")
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+
+    scanner._commodity_csv_health_check(["COCOA"])
+
+    output = capsys.readouterr().out
+    assert "WARN COCOA" in output
+    assert "missing_candles=" in output
+    assert "summary: ok=0, warn=1, total=1" in output

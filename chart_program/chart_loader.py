@@ -504,6 +504,7 @@ def _merge_yahoo_fresh_candle(
     period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
     trim_to_last_year: bool = True,
     replace_same_date: bool = False,
+    fill_missing_dates: bool = False,
 ) -> tuple[pd.DataFrame, str, str | None, int]:
     yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
     yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
@@ -517,14 +518,22 @@ def _merge_yahoo_fresh_candle(
             yahoo_new_rows = yahoo_df
         else:
             yahoo_dates = pd.to_datetime(yahoo_df["Date"], errors="coerce")
-            yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
+            if fill_missing_dates:
+                local_dates = set(pd.to_datetime(sanitized_base["Date"], errors="coerce").dropna().dt.date)
+                yahoo_new_rows = yahoo_df.loc[~yahoo_dates.dt.date.isin(local_dates)].copy()
+            else:
+                yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
         added_count = len(yahoo_new_rows)
         if added_count > 0:
             # Stooq remains the historical source.  A Yahoo probe may contain
             # several days when Stooq is behind, but only the newest/live day
             # is allowed into the cache.
-            yahoo_newest_row = yahoo_new_rows.sort_values("Date").tail(1)
-            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True))
+            yahoo_rows_to_merge = (
+                yahoo_new_rows.sort_values("Date")
+                if fill_missing_dates
+                else yahoo_new_rows.sort_values("Date").tail(1)
+            )
+            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_rows_to_merge], ignore_index=True))
         elif replace_same_date and local_latest is not None and not yahoo_df.empty:
             yahoo_newest_row = yahoo_df.sort_values("Date").tail(1)
             yahoo_latest = _latest_date_from_df(yahoo_newest_row)
@@ -694,11 +703,23 @@ def _stock_local_cache_or_yahoo_download(
         local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
         if not local_df.empty:
             try:
+                local_latest = _latest_date_from_df(local_df)
+                warsaw_now = datetime.now(WARSAW_TZ)
+                # A same-date Yahoo replacement is useful only for today's
+                # still-forming Warsaw session. On weekends (and when the bulk
+                # latest row is from an earlier session), Stooq's downloaded
+                # OHLCV is authoritative and must remain in place rather than
+                # being replaced by Yahoo float values.
+                replace_live_same_date = bool(
+                    local_latest is not None
+                    and warsaw_now.weekday() < 5
+                    and local_latest.date() == warsaw_now.date()
+                )
                 merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
                     local_df,
                     symbol,
                     "stock",
-                    replace_same_date=True,
+                    replace_same_date=replace_live_same_date,
                 )
             except Exception as yahoo_exc:
                 return (
@@ -977,6 +998,11 @@ def _local_csv_has_min_year(csv_path: Path) -> bool:
 
 def _force_remote_refresh_enabled() -> bool:
     return os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
+
+
+def _stooq_interactive_captcha_enabled() -> bool:
+    """Keep inspector/manual CAPTCHA pauses out of unattended scan commands."""
+    return os.environ.get("STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA", "0") == "1"
 
 
 def _data_dir_for_symbol(symbol: str, instrument_type: str) -> Path:
@@ -1269,14 +1295,38 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         )
         # Forex follows the same simple paginated history-table workflow as
         # literal commodities. Avoid Stooq's CSV download endpoint entirely.
-        df = update_stooq_history_with_playwright(
-            symbol=stooq_forex_symbol.lower(),
-            csv_path=csv_path_ref,
-            lookback_days=lookback,
-            end_date=older_anchor if fetch_older_data else None,
-            verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-            interactive_captcha=True,
-        )
+        try:
+            df = update_stooq_history_with_playwright(
+                symbol=stooq_forex_symbol.lower(),
+                csv_path=csv_path_ref,
+                lookback_days=lookback,
+                end_date=older_anchor if fetch_older_data else None,
+                verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
+                interactive_captcha=_stooq_interactive_captcha_enabled(),
+            )
+        except Exception as web_exc:
+            if csv_path_ref.exists() and not fetch_older_data:
+                try:
+                    local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+                    merged, candidate, display_name, added = _merge_yahoo_fresh_candle(
+                        local_df, symbol, "forex", trim_to_last_year=False, fill_missing_dates=True
+                    )
+                    return (
+                        merged,
+                        "cache+yahoo",
+                        candidate,
+                        display_name,
+                        f"Stooq web failed ({web_exc}); preserved cached Stooq history and appended {added} newer Yahoo candle(s).",
+                    )
+                except Exception as yahoo_exc:
+                    raise ValueError(f"Stooq web failed: {web_exc}; Yahoo fallback failed: {yahoo_exc}") from web_exc
+            if not fetch_older_data:
+                try:
+                    yahoo_df, candidate, display_name = _yahoo_download(symbol, "forex")
+                    return yahoo_df, "yahoo", candidate, display_name, f"Stooq web failed ({web_exc}); Yahoo full-history fallback used."
+                except Exception as yahoo_exc:
+                    raise ValueError(f"Stooq web failed: {web_exc}; Yahoo fallback failed: {yahoo_exc}") from web_exc
+            raise
         reason = "Used paginated Stooq UI table fetching for forex."
         if not fetch_older_data:
             yahoo_merged = _try_yahoo_fresh_candle_merge(
@@ -1315,7 +1365,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         and not is_index_like_commodity_symbol
         and not fetch_older_data
     )
-    if use_commodity_yahoo_freshness:
+    if use_commodity_yahoo_freshness and not _force_remote_refresh_enabled():
         yahoo_only = _try_local_commodity_yahoo_only_merge(symbol, csv_path_ref)
         if yahoo_only is not None:
             return yahoo_only
@@ -1330,7 +1380,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=True,
+                interactive_captcha=_stooq_interactive_captcha_enabled(),
             )
             reason = "Stooq web used as primary source for commodity."
             if use_commodity_yahoo_freshness:
@@ -1348,7 +1398,30 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                     return merged_df, merged_source, merged_symbol, merged_name, merged_reason
             return df, "stooq_web", symbol, None, reason
         except Exception as web_exc:
-            raise ValueError(f"Stooq web failed: {web_exc}") from web_exc
+            # Stooq occasionally serves a blank/attachment anti-bot response
+            # to Playwright even while the same URL works in a user's desktop
+            # browser.  Preserve the cached Stooq history and use Yahoo only
+            # for candles newer than that base instead of failing the scan.
+            if csv_path_ref.exists():
+                try:
+                    local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
+                    merged, candidate, display_name, added = _merge_yahoo_fresh_candle(
+                        local_df, symbol, "commodity", trim_to_last_year=False, fill_missing_dates=True
+                    )
+                    return (
+                        merged,
+                        "cache+yahoo",
+                        candidate,
+                        display_name,
+                        f"Stooq web failed ({web_exc}); preserved cached Stooq history and appended {added} newer Yahoo candle(s).",
+                    )
+                except Exception as yahoo_exc:
+                    raise ValueError(f"Stooq web failed: {web_exc}; Yahoo fallback failed: {yahoo_exc}") from web_exc
+            try:
+                df, candidate, display_name = _yahoo_download(symbol, instrument_type)
+                return df, "yahoo", candidate, display_name, f"Stooq web failed ({web_exc}); Yahoo full-history fallback used."
+            except Exception as yahoo_exc:
+                raise ValueError(f"Stooq web failed: {web_exc}; Yahoo fallback failed: {yahoo_exc}") from web_exc
 
     primary_error = None
     try:
@@ -1406,7 +1479,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 lookback_days=older_days if fetch_older_data else _incremental_lookback_days(csv_path),
                 end_date=_older_fetch_anchor(csv_path) if fetch_older_data else None,
                 verbose=os.getenv("STOCKHELPER_STOOQ_DEBUG", "0") == "1",
-                interactive_captcha=True,
+                interactive_captcha=_stooq_interactive_captcha_enabled(),
             )
             reason = f"Stooq API failed, fallback to Stooq web scraping: {primary_error}"
             if use_commodity_yahoo_freshness:
