@@ -199,6 +199,9 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     assert 'STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "3000"' in source
     assert "time.sleep(first_dialog_settle_ms / 1000)" in source
     assert "consent visible; waiting" in source
+    assert "first_click_pending = True" in source
+    assert "if first_click_pending and first_dialog_settle_ms:" in source
+    assert source.index("first_click_pending = False") < source.index("loc.click(timeout=3000)")
 
 
 def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():

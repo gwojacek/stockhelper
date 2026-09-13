@@ -2055,6 +2055,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
     except ValueError:
         first_dialog_settle_ms = 3000
 
+    first_click_pending = True
     for consent_pass in range(6):
         try:
             contexts = [page] + list(page.frames)
@@ -2073,7 +2074,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         if loc.count() == 0:
                             continue
                         loc.wait_for(state='visible', timeout=1500)
-                    if consent_pass == 0 and first_dialog_settle_ms:
+                    if first_click_pending and first_dialog_settle_ms:
                         # Funding Choices renders the button before its event
                         # handlers are always ready. Use a wall-clock wait here,
                         # rather than a page promise which Chrome may resolve
@@ -2083,6 +2084,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                             flush=True,
                         )
                         time.sleep(first_dialog_settle_ms / 1000)
+                    first_click_pending = False
                     # Prefer a real trusted pointer click. ``force=True`` can
                     # target the decorative Funding Choices background child
                     # while bypassing the CMP's normal actionability path.
