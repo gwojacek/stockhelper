@@ -3122,6 +3122,39 @@ def _members_from_configs(scope: str) -> list[str]:
     return dedup
 
 
+def _configured_scanner_symbols() -> set[str]:
+    """Return canonical symbols that may be scanned by an explicit request."""
+    symbols = {
+        *(ticker.upper() for ticker in WIG_SEARCH_TICKERS),
+        *(f"{ticker.upper()}.WA" for ticker in WIG_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in DAX40_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in NDX100_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in ETFS_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in INDEXES_SEARCH_TICKERS),
+        *(_normalize_commodity_symbol(ticker).upper() for ticker in COMMODITIES_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in _members_from_configs("forex")),
+    }
+    if INDEX_MEMBERS_FILE.exists():
+        try:
+            payload = json.loads(INDEX_MEMBERS_FILE.read_text(encoding="utf-8"))
+            for index_data in payload.get("indices", {}).values():
+                symbols.update(str(ticker).upper() for ticker in index_data.get("tickers", []))
+        except (OSError, TypeError, ValueError):
+            pass
+    return symbols
+
+
+def _validate_explicit_scanner_members(members: Sequence[str]) -> None:
+    configured = _configured_scanner_symbols()
+    outside = [str(member).upper() for member in members if str(member).upper() not in configured]
+    if outside:
+        raise ValueError(
+            "Stopped before downloading market data: instrument(s) outside configured "
+            f"WIG/US100/DAX/ETF/forex/commodity/index scopes: {', '.join(outside)}. "
+            "Add the instrument to the appropriate scanner universe before searching it."
+        )
+
+
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
     if normalized.startswith("selected__"):
@@ -3132,6 +3165,7 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         ]
         if not members:
             raise ValueError("Selected allsearch requires at least one instrument.")
+        _validate_explicit_scanner_members(members)
         return normalized, members, "explicit instrument selection", None
     if normalized == "wig":
         print("[search] WIG has a large universe. For VPN/rate-limit safety use: wig_part1, wig_part2, wig_part3.")
@@ -3167,7 +3201,9 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     # Fallback: traktuj input jako pojedynczy ticker/symbol do skanowania.
     raw = (target or "").strip()
     if raw:
-        return "single", [_normalize_commodity_symbol(raw)], "direct symbol", None
+        members = [_normalize_commodity_symbol(raw)]
+        _validate_explicit_scanner_members(members)
+        return "single", members, "direct symbol", None
     raise ValueError(f"Brak skonfigurowanej listy instrumentów dla: {target}")
 
 

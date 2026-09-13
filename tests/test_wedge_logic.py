@@ -576,3 +576,16 @@ def test_stale_data_warning_ignores_non_stock_groups(monkeypatch):
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: pytest.fail("must not read CSV"))
 
     assert scanner._stale_stock_data_warnings("forex", ["EURUSD"], None) == []
+
+
+def test_explicit_retired_or_unknown_symbol_stops_before_data_loading(monkeypatch):
+    monkeypatch.setattr(
+        scanner,
+        "local_csv_path_for_symbol",
+        lambda *_args: pytest.fail("validation must happen before market-data loading"),
+    )
+
+    with pytest.raises(ValueError, match="Stopped before downloading market data.*SHO.WA"):
+        scanner._get_members("SHO.WA")
+
+    assert scanner._get_members("TXT.WA")[:2] == ("single", ["TXT.WA"])
