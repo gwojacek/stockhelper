@@ -2171,6 +2171,7 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
             page.pause()
             if state is not None:
                 state["done"] = True
+                state["inspector_paused"] = True
         except Exception as exc:
             print(f"[stooq-web] Unable to open inspector automatically: {exc}")
             print("[stooq-web] Tip: run with STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1 and desktop session/X server.")
@@ -2180,7 +2181,7 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
 def _force_interactive_pause(page, symbol: str, state: dict | None = None, interactive_captcha: bool = False) -> None:
     if not interactive_captcha:
         return
-    if state is not None and state.get("forced_pause_done"):
+    if state is not None and (state.get("forced_pause_done") or state.get("inspector_paused")):
         return
     if not _headed_display_available():
         if _stooq_verbose_enabled():
@@ -3032,6 +3033,17 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                 page.wait_for_selector("table#fth1", timeout=6000)
             except Exception:
                 pass
+
+        # ``--inspector`` is an explicit debugging request, not merely
+        # permission to open an inspector if a recognized CAPTCHA happens to
+        # appear. Always pause after navigation/recovery so the user can inspect
+        # the final DOM and Network panel, including unknown blank/decoy pages.
+        _force_interactive_pause(
+            page,
+            symbol,
+            state=interactive_state,
+            interactive_captcha=interactive_captcha,
+        )
 
         html = page.content()
         html_path = out_dir / f"{_stooq_debug_symbol(symbol)}.html"

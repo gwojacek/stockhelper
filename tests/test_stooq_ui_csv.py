@@ -206,6 +206,17 @@ def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
     assert "mandatory second consent" in source
 
 
+def test_debug_inspector_always_pauses_after_navigation():
+    source = inspect.getsource(
+        __import__("utilities.stooq_playwright", fromlist=["debug_stooq_page"]).debug_stooq_page
+    )
+    wait = source.index('page.wait_for_selector("table#fth1"')
+    pause = source.index("_force_interactive_pause(")
+    capture = source.index("html = page.content()")
+    assert wait < pause < capture
+    assert "interactive_captcha=interactive_captcha" in source[pause:capture]
+
+
 def test_forex_browser_uses_exact_download_url_before_ui_fallback():
     from utilities.stooq_playwright import update_stooq_history_from_ui_csv
 

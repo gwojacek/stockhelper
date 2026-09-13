@@ -791,6 +791,11 @@ stock --debug-stooq CB.F --inspector
 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 stock --debug-stooq CB.F
 ```
 
+`--inspector` always pauses after the direct/Tor navigation attempts, even when
+Stooq returned an unrecognized blank page rather than a known CAPTCHA. Inspect
+the final DOM or Network panel, then click **Resume** in Playwright Inspector to
+let StockHelper save its debug artifacts and exit.
+
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
 Playwright uses it only if the normal connection finishes without a history
