@@ -2189,9 +2189,15 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
 
     if retry_tickers and os.getenv("STOCKHELPER_COMMODITIES_HEALTH_RETRY", "1") != "0":
         print(f"[commodity-check] repairing and retrying {len(retry_tickers)} warned commodity CSV(s) once: {', '.join(retry_tickers[:8])}{' ...' if len(retry_tickers) > 8 else ''}")
+        old_cache_only = os.environ.get("STOCKHELPER_CACHE_ONLY")
         old_force = os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH")
         old_tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH")
         try:
+            # The probe can put the whole group in automatic cache-only mode
+            # because Yahoo's newest rows match.  Health repair is stricter:
+            # multiple Yahoo-like tail rows or missing sessions must still
+            # reach Stooq, so temporarily override that automatic decision.
+            os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
                 _raw, csv_path, rows, _latest, missing, yahoo_like, health_exc = _health_row(raw)
@@ -2232,6 +2238,10 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                         csv_path.parent.mkdir(parents=True, exist_ok=True)
                         csv_path.write_bytes(backup)
         finally:
+            if old_cache_only is None:
+                os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
+            else:
+                os.environ["STOCKHELPER_CACHE_ONLY"] = old_cache_only
             if old_force is None:
                 os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
             else:
@@ -2240,8 +2250,24 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                 os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
             else:
                 os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = old_tail_refresh
-        print("[commodity-check] post-retry CSV row-count check")
-        _print_summary([_health_row(ticker) for ticker in members])
+        # Do not print all 16 rows a second time. Show the repaired subset, then
+        # one final aggregate for the complete commodity group.
+        print("[commodity-check] post-retry results for repaired CSV(s)")
+        repaired_checked = [_health_row(ticker) for ticker in retry_tickers]
+        _print_summary(repaired_checked)
+        final_checked = [_health_row(ticker) for ticker in members]
+        final_warn = sum(
+            1
+            for _raw, _path, rows, _latest, missing, yahoo_like, exc in final_checked
+            if exc is not None
+            or rows < min_rows
+            or missing != 0
+            or yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
+        )
+        print(
+            f"[commodity-check] final group summary: ok={len(final_checked) - final_warn}, "
+            f"warn={final_warn}, total={len(final_checked)}"
+        )
 
 
 def _forex_missing_session_count(latest: date, expected_latest: date) -> int:
