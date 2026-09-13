@@ -14,6 +14,7 @@ def test_stooq_blank_retry_defaults_are_small_and_wait_helper_does_not_reload_by
     assert 'attempts = 1 + (retries if retries is not None else _stooq_wait_reload_retries_default())' in SOURCE
     assert 'STOCKHELPER_STOOQ_TABLE_WAIT_MS", "8000"' in SOURCE
     assert 'tr[id^=\'t\']:has(td:nth-child(8))' in SOURCE
+    assert 'reloading here only recreated the dialog' in SOURCE
 
 
 def test_stooq_no_display_inspector_guard_is_present():

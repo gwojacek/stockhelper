@@ -186,7 +186,7 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     from utilities.stooq_playwright import _accept_consent_if_present
 
     source = inspect.getsource(_accept_consent_if_present)
-    assert "for consent_pass in range(4)" in source
+    assert "for consent_pass in range(6)" in source
     assert "consent_pass == 1 and sel == selectors[0]" in source
     assert "loc.wait_for(state='visible', timeout=3000)" in source
     assert "checking once more for follow-up consent dialog" in source
@@ -196,6 +196,8 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     assert 'loc.evaluate("button => button.click()")' in source
     assert "if _page_has_history_rows(page):" in source
     assert "consent manager was unresponsive" in source
+    assert 'STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "2000"' in source
+    assert "new Promise(resolve => setTimeout(resolve, ms))" in source
 
 
 def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():

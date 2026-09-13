@@ -2034,7 +2034,12 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
     # Stooq can mount a second Funding Choices dialog immediately after the
     # first consent disappears.  Always perform at least two detection passes;
     # later passes are fallbacks for a dialog that is re-mounted again.
-    for consent_pass in range(4):
+    try:
+        first_dialog_settle_ms = max(0, int(os.getenv("STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "2000")))
+    except ValueError:
+        first_dialog_settle_ms = 2000
+
+    for consent_pass in range(6):
         try:
             contexts = [page] + list(page.frames)
         except Exception:
@@ -2052,6 +2057,14 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         if loc.count() == 0:
                             continue
                         loc.wait_for(state='visible', timeout=1500)
+                    if consent_pass == 0 and first_dialog_settle_ms:
+                        # Funding Choices renders the button before its event
+                        # handlers are always ready. Let its own event loop run
+                        # before the first trusted click.
+                        loc.evaluate(
+                            "(button, ms) => new Promise(resolve => setTimeout(resolve, ms))",
+                            first_dialog_settle_ms,
+                        )
                     # Prefer a real trusted pointer click. ``force=True`` can
                     # target the decorative Funding Choices background child
                     # while bypassing the CMP's normal actionability path.
@@ -2084,7 +2097,7 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
         else:
             # The first pass may find no dialog just before Funding Choices
             # mounts it.  The mandatory second pass waits for that case.
-            if consent_pass >= 1:
+            if consent_pass >= 5:
                 break
 
     if _consent_overlay_visible(page):
@@ -2188,10 +2201,14 @@ def _wait_for_table_or_limit_with_retry(page, retries: int | None = None) -> boo
             return False
         if attempts <= 1:
             break
-        try:
-            page.reload(wait_until="domcontentloaded")
-        except Exception:
-            pass
+        # A follow-up Funding Choices dialog may mount while rows are loading.
+        # Re-accept it in-place; reloading here only recreated the dialog and
+        # prevented the table from ever reaching its settled state.
+        if _consent_overlay_visible(page):
+            try:
+                _accept_consent_if_present(page, first_page=True)
+            except Exception:
+                pass
     try:
         if page.locator("table#fth1 tr[id^='t']").count() > 0:
             return True
