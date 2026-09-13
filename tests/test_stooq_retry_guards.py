@@ -72,6 +72,14 @@ def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert "lookback_days: int = 548" in SOURCE
     assert "remote = _trim_stooq_ui_history_to_window(remote, start)" in SOURCE
 
+    switch_source = SOURCE[
+        SOURCE.index("def _switch_to_inspector_for_captcha("):
+        SOURCE.index("def _accept_consent_if_present(")
+    ]
+    auto_solver = switch_source.index("_try_solve_stooq_captcha(page, symbol)")
+    interactive_guard = switch_source.index("if not interactive_captcha:")
+    assert auto_solver < interactive_guard
+
 
 def test_allsearch_uses_direct_connection_before_tor_fallback():
     assert 'os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")' in RUN_SOURCE

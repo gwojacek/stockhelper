@@ -1966,6 +1966,14 @@ def _switch_to_inspector_for_captcha(
     blank_or_no_rows = _page_is_blank_or_without_captcha_and_rows(page)
     if suspected and not blocked and not captcha_image_visible and not blank_or_no_rows:
         return browser, page, False
+
+    # OCR is an unattended recovery mechanism, not an inspector feature.  The
+    # scanner normally passes interactive_captcha=False, so putting this call
+    # below that guard silently disabled the existing solver for allsearch.
+    # Try it whenever Stooq actually presents the limit challenge; reserve the
+    # flag for the manual headed pause only.
+    if (blocked or captcha_image_visible) and _try_solve_stooq_captcha(page, symbol):
+        return browser, page, False
     if not interactive_captcha:
         return browser, page, True
 

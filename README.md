@@ -839,6 +839,11 @@ more time. The blank-page check is deliberately performed only after this wait,
 so ordinary allsearch uses the same consent → table wait → fallback order as
 the successful interactive debug flow.
 
+If Stooq displays its daily-limit code challenge, ordinary unattended Forex and
+commodity scans run the OCR solver before failing the instrument. The
+`STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA` option controls only the headed/manual
+inspector fallback; it is not required for automatic OCR.
+
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
 Playwright uses it only if the normal connection finishes without a history
