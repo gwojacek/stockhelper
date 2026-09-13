@@ -19,11 +19,20 @@ Compare: [`8.0...8.1`](https://github.com/gwojacek/stockhelper/compare/8.0...8.1
 
 - Added bold red end-of-run warnings for stock CSVs lagging the newest stock in the same scan scope by at least three calendar days; non-stock markets are excluded from this peer comparison.
 - Added configured-universe validation for direct and comma-separated explicit scans. Unknown or retired symbols now stop before Yahoo/Stooq probing, with an intentional one-run `--force-outside-scope` override that prints a data-quality warning.
+- Added recovery for Stooq history pages returned as attachment-style CSV or HTML responses, allowing usable payloads and rendered tables to continue through the normal cache merge.
 
 ### Changed
 
 - Retired acquired WSE ticker SHO from the WIG universe, deleted its cached CSV, and made future Stooq bulk imports remove an existing SHO cache and skip its archived member rather than restoring it.
+- Made Stooq UI history fetching try a direct browser connection before Tor/proxy fallback, wait for actual market-data rows, and handle repeated or unresponsive consent overlays without confusing layout tables for candle history.
+- Automated blocked-page retries and CAPTCHA OCR for unattended Stooq scans while preserving `--inspector` as the explicit interactive debugging flow.
+- Repaired stale or Yahoo-precision-contaminated commodity tails before Ichimoku scanning and reused the repaired snapshot for the Fibonacci phase instead of fetching the same history twice.
+- Updated WIG bulk fetching to use Google Chrome with the same direct-first recovery, preserve valid same-date candles, and reuse successful downloads where possible.
 - Bumped the package minor version to `0.2.0`.
+
+### Fixed
+
+- Fixed forex and commodity history refreshes failing when Stooq returned a download response during browser navigation, delayed the real history rows, or left a consent overlay above an already-loaded table.
 
 ## [8.0] - 2026-09-08
 
