@@ -2816,6 +2816,11 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     # and accept it before deciding the direct page is blank.
                     _accept_consent_if_present(page, first_page=True)
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
+                # Consent disappearing does not mean the history table has
+                # finished rendering. Wait for a real data row before running
+                # the blank-page test or switching the direct connection to
+                # Tor SOCKS.
+                ready = _wait_for_table_or_limit_with_retry(page, retries=0)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
                     browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
                     if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
@@ -2831,7 +2836,8 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     if still_blocked:
                         shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_p{page_num}")
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
-                ready = _wait_for_table_or_limit_with_retry(page, retries=3)
+                if not ready:
+                    ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha):
                     ready = True
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):

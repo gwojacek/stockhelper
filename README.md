@@ -835,7 +835,9 @@ After consent clears, the scraper waits up to 8 seconds for an actual Stooq
 history row (not merely one of the page's layout/consent tables) before deciding
 that the direct connection needs the SOCKS fallback. Override this settling
 window with `STOCKHELPER_STOOQ_TABLE_WAIT_MS` when a slower connection needs
-more time.
+more time. The blank-page check is deliberately performed only after this wait,
+so ordinary allsearch uses the same consent → table wait → fallback order as
+the successful interactive debug flow.
 
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
