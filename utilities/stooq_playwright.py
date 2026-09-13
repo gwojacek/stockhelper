@@ -483,6 +483,22 @@ def _bulk_download_link(page):
     )
 
 
+def _wait_for_stooq_bulk_link(page, timeout_ms: int = 10000) -> bool:
+    """Wait for the real bulk anchor, allowing consent/scripts to settle."""
+    deadline = time.monotonic() + max(0, timeout_ms) / 1000
+    while time.monotonic() < deadline:
+        for ctx in _stooq_bulk_contexts(page):
+            try:
+                if ctx.locator("a[href*='d_pl_txt'], a[onclick*='d_pl_txt'], a[oncontextmenu*='d_pl_txt']").count() > 0:
+                    return True
+            except Exception:
+                continue
+        if _stooq_bulk_consent_visible(page):
+            _clear_stooq_bulk_consent_manager(page, reason="while waiting for bulk link")
+        page.wait_for_timeout(250)
+    return False
+
+
 def _click_bulk_link_for_optional_download(page, download_dir: Path, *, timeout: int, purpose: str = "download") -> Path | None:
     """Click the exact d_pl_txt bulk link and return a zip path only when download starts."""
     _return_to_stooq_bulk_history_if_redirected(page, f"before {purpose}")
@@ -775,15 +791,16 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
     _clear_stooq_bulk_debug_dir()
     _prune_stooq_bulk_downloads(download_dir)
     with sync_playwright() as p:
-        # The image installs Playwright's Google Chrome channel, not the
-        # separate chromium-headless-shell executable.
-        browser = p.chromium.launch(
-            channel="chrome",
-            headless=not interactive,
-            slow_mo=150 if interactive else 0,
+        direct_first = os.getenv("STOCKHELPER_STOOQ_DIRECT_FIRST", "1") != "0"
+        browser, page = _open_page(
+            p,
+            interactive=interactive,
+            browser_name="chrome",
+            symbol="wig_bulk",
+            use_proxy=not direct_first,
+            accept_downloads=True,
         )
-        context = browser.new_context(accept_downloads=True)
-        page = context.new_page()
+        context = page.context
 
         def _close_unexpected_popup(popup):
             if popup == page:
@@ -801,6 +818,30 @@ def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) 
             page.goto(STOOQ_BULK_HISTORY_URL, wait_until="domcontentloaded")
             _return_to_stooq_bulk_history_if_redirected(page, "initial load")
             _clear_stooq_bulk_consent_manager(page, reason="initial load")
+
+            # Use the same direct-first recovery as Forex/commodities. A blank
+            # bulk page often needs a few seconds after consent; only after that
+            # wait fails do we rebuild the Chrome context through Tor SOCKS.
+            if not _wait_for_stooq_bulk_link(page) and direct_first and _stooq_tor_enabled():
+                print("[stooq-bulk] bulk link missing on direct connection; retrying through Tor SOCKS.", flush=True)
+                context.close()
+                browser.close()
+                browser, page = _open_page(
+                    p,
+                    interactive=interactive,
+                    browser_name="chrome",
+                    symbol="wig_bulk",
+                    use_proxy=True,
+                    accept_downloads=True,
+                )
+                context = page.context
+                context.on("page", _close_unexpected_popup)
+                page.set_default_timeout(20000)
+                page.set_default_navigation_timeout(30000)
+                page.goto(STOOQ_BULK_HISTORY_URL, wait_until="domcontentloaded")
+                _return_to_stooq_bulk_history_if_redirected(page, "Tor fallback load")
+                _clear_stooq_bulk_consent_manager(page, reason="Tor fallback load")
+                _wait_for_stooq_bulk_link(page)
 
             # First required click usually opens Stooq's download captcha. If the
             # captcha is already trusted and a download starts immediately, keep it.
@@ -1364,7 +1405,7 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
     return cfg
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chrome", symbol: str | None = None, proxy_index: int | None = None, use_proxy: bool = True):
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chrome", symbol: str | None = None, proxy_index: int | None = None, use_proxy: bool = True, accept_downloads: bool = False):
     # Playwright's branded Chrome channel uses the installed Google Chrome
     # binary while retaining the Chromium automation API.
     browser_type = playwright.chromium if browser_name == "chrome" else getattr(playwright, browser_name)
@@ -1387,6 +1428,7 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
         # Service workers can hide requests from Playwright routing and retain
         # a previously broken Funding Choices/ads bundle between navigations.
         "service_workers": "block",
+        "accept_downloads": accept_downloads,
     }
     if proxy:
         # Keep the proxy scoped to this context.  To change IP, close this

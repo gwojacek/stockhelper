@@ -407,6 +407,9 @@ Each WIG bulk attempt clears `debug/stooq_bulk` before opening the page. The
 bulk download directory retains only its newest valid ZIP as an emergency
 fallback. The legacy `data/debug` path is not used by the application and can
 be deleted if it exists from an older installation.
+The WIG bulk browser also uses the direct-first Stooq strategy: after consent it
+waits for the real `d_pl_txt` link, then retries the page through the configured
+Tor SOCKS proxy only when that link never appears.
 
 ### API keys
 

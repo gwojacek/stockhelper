@@ -42,8 +42,7 @@ def test_stooq_no_display_inspector_guard_is_present():
     assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
     assert 'debug page artifacts saved' in SOURCE
-    assert 'browser = p.chromium.launch(' in SOURCE
-    assert 'channel="chrome"' in SOURCE
+    assert 'browser = browser_type.launch(**launch_kwargs)' in SOURCE
 
 
 def test_stooq_bulk_download_retains_only_newest_archive_and_clears_debug():
@@ -55,7 +54,12 @@ def test_stooq_bulk_download_retains_only_newest_archive_and_clears_debug():
     ]
     assert "_clear_stooq_bulk_debug_dir()" in bulk_download
     assert "_prune_stooq_bulk_downloads(download_dir)" in bulk_download
-    assert 'channel="chrome"' in bulk_download
+    assert 'browser_name="chrome"' in bulk_download
+    assert "def _wait_for_stooq_bulk_link(" in SOURCE
+    assert "bulk link missing on direct connection; retrying through Tor SOCKS" in bulk_download
+    assert "use_proxy=not direct_first" in bulk_download
+    assert "use_proxy=True" in bulk_download
+    assert "accept_downloads=True" in bulk_download
 
 
 def test_stooq_proxy_pool_configuration_is_supported():
