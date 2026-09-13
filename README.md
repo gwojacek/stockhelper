@@ -988,6 +988,28 @@ Use this after editing Python files. It compiles files but does not run imports/
 - Scanner mode usually probes remote freshness first, then decides whether to refresh or use local cache; it refreshes the current window only and does not run older-history backfill implicitly.
 - `--data-source auto|yahoo|stooq` is available in `chart_program` flows.
 
+### Stooq UI table fetching
+
+When a Stooq history download cannot be used, StockHelper can read the actual
+paginated history table rendered in the browser. Version 8.1 makes this path
+more resilient for forex and commodities:
+
+- a direct browser connection is tried first, with Tor/proxy rotation used only
+  when the page is blocked or contains no market-data rows;
+- the browser waits for real history rows rather than mistaking consent/layout
+  tables for price data, and it handles repeated or unresponsive consent
+  overlays before falling back;
+- CSV or HTML returned as an attachment-style navigation response is parsed
+  instead of being treated as a failed page load;
+- unattended scans can retry blocked pages and solve Stooq CAPTCHAs with OCR;
+  `--inspector` remains the explicit interactive debugging path; and
+- repaired commodity history is applied before the Ichimoku phase and reused
+  by the Fibonacci phase, avoiding a second fetch of the same snapshot.
+
+The final CSV is still written to the normal `data/csv/forex/` or
+`data/csv/commodities/` cache. Fetch diagnostics report whether the data came
+from a downloaded CSV, the rendered UI table, or the existing cache.
+
 ## Troubleshooting
 
 ### `ModuleNotFoundError: No module named 'pandas'` or `tabulate`
