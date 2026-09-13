@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Runtime libraries for OpenCV, Playwright/Chromium, EasyOCR, and Tk/web helpers used by chart workflows.
+# Runtime libraries for OpenCV, Playwright/Google Chrome, EasyOCR, and Tk/web helpers used by chart workflows.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -70,7 +70,7 @@ RUN pip install \
     && pip install --no-deps "easyocr==1.7.2" \
     && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
     && rm -rf /root/.cache/pip
-RUN python -m playwright install chromium \
+RUN python -m playwright install chrome \
     && chmod -R a+rX /ms-playwright \
     && apt-get purge -y --auto-remove build-essential curl \
     && rm -rf /var/lib/apt/lists/* /tmp/*

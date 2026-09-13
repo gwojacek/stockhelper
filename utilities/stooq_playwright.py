@@ -1324,8 +1324,10 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
     return cfg
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None, use_proxy: bool = True):
-    browser_type = getattr(playwright, browser_name)
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chrome", symbol: str | None = None, proxy_index: int | None = None, use_proxy: bool = True):
+    # Playwright's branded Chrome channel uses the installed Google Chrome
+    # binary while retaining the Chromium automation API.
+    browser_type = playwright.chromium if browser_name == "chrome" else getattr(playwright, browser_name)
     launch_interactive = bool(interactive and _headed_display_available())
     if interactive and not launch_interactive:
         print(
@@ -1335,6 +1337,8 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
             flush=True,
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
+    if browser_name == "chrome":
+        launch_kwargs["channel"] = "chrome"
     proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index) if use_proxy else None
     browser = browser_type.launch(**launch_kwargs)
     context_kwargs = {"viewport": {"width": 1440, "height": 1000}, "locale": "pl-PL"}
@@ -1801,7 +1805,7 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
         fallback_interactive = interactive and _headed_display_available()
         if interactive and not fallback_interactive:
             print(f"[stooq-web] headed Chromium fallback skipped for {symbol} because DISPLAY/WAYLAND_DISPLAY is not set.", flush=True)
-        browser, page = _open_page(playwright, interactive=fallback_interactive, browser_name="chromium", symbol=symbol)
+        browser, page = _open_page(playwright, interactive=fallback_interactive, browser_name="chrome", symbol=symbol)
         return browser, page, False
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
@@ -1847,7 +1851,7 @@ def _reopen_stooq_page(playwright, browser, page, url: str, symbol: str, interac
         browser.close()
     except Exception:
         pass
-    browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol, proxy_index=proxy_index)
+    browser, page = _open_page(playwright, interactive=interactive, browser_name="chrome", symbol=symbol, proxy_index=proxy_index)
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
     try:
