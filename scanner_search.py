@@ -234,7 +234,7 @@ WIG_SEARCH_TICKERS = [
     "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
     "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CAP","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
     "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
-    "GMT","CTX","VRC","SHO","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
+    "GMT","CTX","VRC","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
     "DGN","ARL",
 ]
 
@@ -3047,6 +3047,50 @@ def _scan_workers_override() -> int | None:
         return None
 
 
+def _stale_stock_data_warnings(
+    group_name: str,
+    members: Sequence[str],
+    exchange_suffix: str | None,
+    *,
+    stale_after_days: int = 3,
+) -> list[str]:
+    """Return stocks whose last local candle trails the group's newest stock."""
+    latest_by_ticker: dict[str, date] = {}
+    for ticker in members:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+        if instrument != "stock":
+            continue
+        csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+        try:
+            dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+        except (OSError, ValueError, KeyError, pd.errors.ParserError):
+            continue
+        if not dates.empty:
+            latest_by_ticker[str(ticker).upper()] = dates.max().date()
+    if len(latest_by_ticker) < 2:
+        return []
+    newest = max(latest_by_ticker.values())
+    return [
+        f"{ticker} (last candle {latest.isoformat()}, group newest {newest.isoformat()})"
+        for ticker, latest in sorted(latest_by_ticker.items())
+        if (newest - latest).days >= stale_after_days
+    ]
+
+
+def _print_stale_stock_data_warning(
+    group_name: str,
+    members: Sequence[str],
+    exchange_suffix: str | None,
+) -> None:
+    stale = _stale_stock_data_warnings(group_name, members, exchange_suffix)
+    if stale:
+        print(
+            "\033[31;1m[DATA WARNING] No new stock data for at least 3 days versus "
+            f"the newest stock in this run. Check and remove: {'; '.join(stale)}\033[0m",
+            flush=True,
+        )
+
+
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
     if not spec or not spec.loader:
@@ -3078,6 +3122,46 @@ def _members_from_configs(scope: str) -> list[str]:
     return dedup
 
 
+def _configured_scanner_symbols() -> set[str]:
+    """Return canonical symbols that may be scanned by an explicit request."""
+    symbols = {
+        *(ticker.upper() for ticker in WIG_SEARCH_TICKERS),
+        *(f"{ticker.upper()}.WA" for ticker in WIG_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in DAX40_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in NDX100_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in ETFS_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in INDEXES_SEARCH_TICKERS),
+        *(_normalize_commodity_symbol(ticker).upper() for ticker in COMMODITIES_SEARCH_TICKERS),
+        *(ticker.upper() for ticker in _members_from_configs("forex")),
+    }
+    if INDEX_MEMBERS_FILE.exists():
+        try:
+            payload = json.loads(INDEX_MEMBERS_FILE.read_text(encoding="utf-8"))
+            for index_data in payload.get("indices", {}).values():
+                symbols.update(str(ticker).upper() for ticker in index_data.get("tickers", []))
+        except (OSError, TypeError, ValueError):
+            pass
+    return symbols
+
+
+def _validate_explicit_scanner_members(members: Sequence[str]) -> None:
+    configured = _configured_scanner_symbols()
+    outside = [str(member).upper() for member in members if str(member).upper() not in configured]
+    if outside:
+        if os.environ.get("STOCKHELPER_FORCE_OUTSIDE_SCOPE") == "1":
+            print(
+                "[scope-check] WARNING: forcing scan outside configured universes: "
+                f"{', '.join(outside)}. Remote data may be incomplete or unsuitable.",
+                flush=True,
+            )
+            return
+        raise ValueError(
+            "Stopped before downloading market data: instrument(s) outside configured "
+            f"WIG/US100/DAX/ETF/forex/commodity/index scopes: {', '.join(outside)}. "
+            "Add it to the appropriate scanner universe or rerun with --force-outside-scope."
+        )
+
+
 def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     normalized = (target or "").strip().lower()
     if normalized.startswith("selected__"):
@@ -3088,6 +3172,7 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         ]
         if not members:
             raise ValueError("Selected allsearch requires at least one instrument.")
+        _validate_explicit_scanner_members(members)
         return normalized, members, "explicit instrument selection", None
     if normalized == "wig":
         print("[search] WIG has a large universe. For VPN/rate-limit safety use: wig_part1, wig_part2, wig_part3.")
@@ -3123,7 +3208,9 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
     # Fallback: traktuj input jako pojedynczy ticker/symbol do skanowania.
     raw = (target or "").strip()
     if raw:
-        return "single", [_normalize_commodity_symbol(raw)], "direct symbol", None
+        members = [_normalize_commodity_symbol(raw)]
+        _validate_explicit_scanner_members(members)
+        return "single", members, "direct symbol", None
     raise ValueError(f"Brak skonfigurowanej listy instrumentów dla: {target}")
 
 
@@ -5049,6 +5136,7 @@ def run_ichimoku_search(target: str) -> int:
         if open_all == "y":
             for link in all_links:
                 webbrowser.open_new_tab(link)
+    _print_stale_stock_data_warning(group_name, members, exchange_suffix)
     return 0
 
 
@@ -8692,6 +8780,7 @@ def run_fibo_search(target: str) -> int:
         if open_all == "y":
             for link in links:
                 webbrowser.open_new_tab(link)
+    _print_stale_stock_data_warning(group_name, members, exchange_suffix)
     return 0
 
 

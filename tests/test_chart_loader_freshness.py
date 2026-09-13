@@ -668,6 +668,31 @@ def test_stooq_bulk_import_includes_wse_indices(tmp_path):
     assert pd.read_csv(wig20_csv)["Close"].iloc[-1] == 2805
 
 
+def test_stooq_bulk_import_skips_retired_sho_and_removes_old_csv(tmp_path):
+    import zipfile
+    from utilities.stooq_playwright import import_stooq_wig_bulk_zip
+
+    zip_path = tmp_path / "d_pl_txt.zip"
+    header = "<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>\n"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("data/daily/pl/wse stocks/abc.txt", header + "ABC,D,20260911,000000,1,2,0.5,1.5,100,0\n")
+        zf.writestr("data/daily/pl/wse stocks/sho.txt", header + "SHO,D,20260722,000000,42,43,41,42,100,0\n")
+    stocks_dir = tmp_path / "stocks"
+    stocks_dir.mkdir()
+    (stocks_dir / "SHO_WA.csv").write_text("obsolete", encoding="utf-8")
+
+    result = import_stooq_wig_bulk_zip(
+        zip_path,
+        stocks_dir=stocks_dir,
+        commodities_dir=tmp_path / "commodities",
+        indexes_dir=tmp_path / "indexes",
+    )
+
+    assert (stocks_dir / "ABC_WA.csv").exists()
+    assert not (stocks_dir / "SHO_WA.csv").exists()
+    assert result["retired_removed"] == 1
+
+
 def test_index_like_commodity_csv_path_uses_indexes_folder():
     from chart_program.chart_loader import local_csv_path_for_symbol
 

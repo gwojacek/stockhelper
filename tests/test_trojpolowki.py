@@ -189,6 +189,7 @@ def test_allsearch_accepts_comma_separated_selected_instruments():
     source = Path("run").read_text(encoding="utf-8")
     assert "dest='allsearch_target', nargs='*', default=None" in source
     assert "if args.allsearch_target is not None:" in source
+    assert "--force-outside-scope" in source
     assert 'selected_scope = any(str(scope).lower().startswith("selected__")' in source
     assert "{r.market for r in rows} | set(_selected_scope_markets(scopes))" in source
 

@@ -555,3 +555,44 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.lower_touches == 3
     assert setup.breakout_date == "2026-09-11"
     assert setup.breakout_direction == "short"
+
+
+def test_stale_stock_warning_compares_stock_dates_and_uses_three_day_cutoff(tmp_path, monkeypatch):
+    for ticker, latest in (("FRESH", "2026-09-11"), ("TWO", "2026-09-09"), ("STALE", "2026-09-08")):
+        pd.DataFrame([{"Date": latest}]).to_csv(tmp_path / f"{ticker}_WA.csv", index=False)
+
+    monkeypatch.setattr(
+        scanner,
+        "local_csv_path_for_symbol",
+        lambda symbol, _instrument: tmp_path / f"{symbol.removesuffix('.WA')}_WA.csv",
+    )
+
+    warnings = scanner._stale_stock_data_warnings("WIG", ["FRESH", "TWO", "STALE"], ".WA")
+
+    assert warnings == ["STALE (last candle 2026-09-08, group newest 2026-09-11)"]
+
+
+def test_stale_data_warning_ignores_non_stock_groups(monkeypatch):
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: pytest.fail("must not read CSV"))
+
+    assert scanner._stale_stock_data_warnings("forex", ["EURUSD"], None) == []
+
+
+def test_explicit_retired_or_unknown_symbol_stops_before_data_loading(monkeypatch):
+    monkeypatch.setattr(
+        scanner,
+        "local_csv_path_for_symbol",
+        lambda *_args: pytest.fail("validation must happen before market-data loading"),
+    )
+
+    with pytest.raises(ValueError, match="Stopped before downloading market data.*SHO.WA"):
+        scanner._get_members("SHO.WA")
+
+    assert scanner._get_members("TXT.WA")[:2] == ("single", ["TXT.WA"])
+
+
+def test_force_outside_scope_allows_explicit_unknown_symbol(monkeypatch, capsys):
+    monkeypatch.setenv("STOCKHELPER_FORCE_OUTSIDE_SCOPE", "1")
+
+    assert scanner._get_members("SHO.WA")[:2] == ("single", ["SHO.WA"])
+    assert "forcing scan outside configured universes: SHO.WA" in capsys.readouterr().out

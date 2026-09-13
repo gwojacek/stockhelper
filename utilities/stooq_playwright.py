@@ -38,6 +38,7 @@ _POLISH_MONTHS_BY_NUMBER = {
 STOOQ_BULK_HISTORY_URL = "https://stooq.com/db/h/"
 STOOQ_WIG_BULK_LINK_SELECTOR = "#t4 a[href*='d_pl_txt']"
 STOOQ_BULK_TXT_COLUMNS = ["<TICKER>", "<PER>", "<DATE>", "<TIME>", "<OPEN>", "<HIGH>", "<LOW>", "<CLOSE>", "<VOL>", "<OPENINT>"]
+RETIRED_WIG_TICKERS = frozenset({"SHO"})
 
 
 class StooqUIDownloadDenied(ValueError):
@@ -1073,11 +1074,20 @@ def import_stooq_wig_bulk_zip(
     skipped = 0
     indices_written = 0
     indices_skipped = 0
+    retired_removed = 0
+    for ticker in RETIRED_WIG_TICKERS:
+        retired_path = stocks_dir / f"{ticker}_WA.csv"
+        if retired_path.exists():
+            retired_path.unlink()
+            retired_removed += 1
     with zipfile.ZipFile(zip_path) as zf:
         for member in stock_members:
             try:
                 ticker, df = _stooq_bulk_txt_to_ohlcv_df(zf.read(member))
                 if not ticker or df.empty:
+                    skipped += 1
+                    continue
+                if ticker in RETIRED_WIG_TICKERS:
                     skipped += 1
                     continue
                 safe_ticker = ticker.replace("/", "").replace(".", "_")
@@ -1113,6 +1123,7 @@ def import_stooq_wig_bulk_zip(
         "members": len(stock_members),
         "written": written,
         "skipped": skipped,
+        "retired_removed": retired_removed,
         "stocks_dir": str(stocks_dir),
         "indices_members": len(index_members),
         "indices_written": indices_written,
