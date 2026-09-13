@@ -557,14 +557,22 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.breakout_direction == "short"
 
 
-def test_sho_wa_zero_volume_flat_placeholder_does_not_create_breakout():
-    df = pd.read_csv(DATA_DIR / "SHO_WA.csv")
+def test_stale_stock_warning_compares_stock_dates_and_uses_three_day_cutoff(tmp_path, monkeypatch):
+    for ticker, latest in (("FRESH", "2026-09-11"), ("TWO", "2026-09-09"), ("STALE", "2026-09-08")):
+        pd.DataFrame([{"Date": latest}]).to_csv(tmp_path / f"{ticker}_WA.csv", index=False)
 
-    setup = scanner._find_falling_wedge_setup(df)
+    monkeypatch.setattr(
+        scanner,
+        "local_csv_path_for_symbol",
+        lambda symbol, _instrument: tmp_path / f"{symbol.removesuffix('.WA')}_WA.csv",
+    )
 
-    assert setup is not None
-    assert setup.upper_start_date == "2026-05-25"
-    assert setup.upper_end_date == "2026-07-06"
-    assert setup.breakout_date == "-"
-    assert setup.breakout_direction == "-"
-    assert setup.end_date == "2026-07-22"
+    warnings = scanner._stale_stock_data_warnings("WIG", ["FRESH", "TWO", "STALE"], ".WA")
+
+    assert warnings == ["STALE (last candle 2026-09-08, group newest 2026-09-11)"]
+
+
+def test_stale_data_warning_ignores_non_stock_groups(monkeypatch):
+    monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: pytest.fail("must not read CSV"))
+
+    assert scanner._stale_stock_data_warnings("forex", ["EURUSD"], None) == []

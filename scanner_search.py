@@ -234,7 +234,7 @@ WIG_SEARCH_TICKERS = [
     "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
     "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CAP","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
     "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
-    "GMT","CTX","VRC","SHO","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
+    "GMT","CTX","VRC","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
     "DGN","ARL",
 ]
 
@@ -3047,6 +3047,50 @@ def _scan_workers_override() -> int | None:
         return None
 
 
+def _stale_stock_data_warnings(
+    group_name: str,
+    members: Sequence[str],
+    exchange_suffix: str | None,
+    *,
+    stale_after_days: int = 3,
+) -> list[str]:
+    """Return stocks whose last local candle trails the group's newest stock."""
+    latest_by_ticker: dict[str, date] = {}
+    for ticker in members:
+        fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
+        if instrument != "stock":
+            continue
+        csv_path = local_csv_path_for_symbol(fetch_symbol, instrument)
+        try:
+            dates = pd.to_datetime(pd.read_csv(csv_path, usecols=["Date"])["Date"], errors="coerce").dropna()
+        except (OSError, ValueError, KeyError, pd.errors.ParserError):
+            continue
+        if not dates.empty:
+            latest_by_ticker[str(ticker).upper()] = dates.max().date()
+    if len(latest_by_ticker) < 2:
+        return []
+    newest = max(latest_by_ticker.values())
+    return [
+        f"{ticker} (last candle {latest.isoformat()}, group newest {newest.isoformat()})"
+        for ticker, latest in sorted(latest_by_ticker.items())
+        if (newest - latest).days >= stale_after_days
+    ]
+
+
+def _print_stale_stock_data_warning(
+    group_name: str,
+    members: Sequence[str],
+    exchange_suffix: str | None,
+) -> None:
+    stale = _stale_stock_data_warnings(group_name, members, exchange_suffix)
+    if stale:
+        print(
+            "\033[31;1m[DATA WARNING] No new stock data for at least 3 days versus "
+            f"the newest stock in this run. Check and remove: {'; '.join(stale)}\033[0m",
+            flush=True,
+        )
+
+
 def _load_py_module(path: Path):
     spec = util.spec_from_file_location(f"cfg_{path.stem}", path)
     if not spec or not spec.loader:
@@ -5049,6 +5093,7 @@ def run_ichimoku_search(target: str) -> int:
         if open_all == "y":
             for link in all_links:
                 webbrowser.open_new_tab(link)
+    _print_stale_stock_data_warning(group_name, members, exchange_suffix)
     return 0
 
 
@@ -5061,26 +5106,6 @@ def _wedge_line_value(idx: int, anchor_a: tuple[int, float], anchor_b: tuple[int
     if ib == ia:
         return float(ya)
     return float(ya) + (float(yb) - float(ya)) * ((idx - ia) / (ib - ia))
-
-
-def _drop_untraded_wedge_placeholders(df: pd.DataFrame) -> pd.DataFrame:
-    """Exclude zero-volume, zero-range placeholders from wedge geometry.
-
-    Some delayed stock feeds publish an as-of-date row by repeating one price
-    in every OHLC field with volume zero.  It is not a traded candle and must
-    not confirm a breakout merely because a trend line moved past that price
-    during a long data gap.  Genuine zero-volume price bars (notably FX data)
-    retain a range and remain eligible.
-    """
-    if "Volume" not in df.columns:
-        return df
-    volume = pd.to_numeric(df["Volume"], errors="coerce")
-    high = pd.to_numeric(df["High"], errors="coerce")
-    low = pd.to_numeric(df["Low"], errors="coerce")
-    scale = pd.concat((high.abs(), low.abs()), axis=1).max(axis=1).clip(lower=1.0)
-    zero_range = (high - low).abs() <= scale * 1e-9
-    placeholder = volume.fillna(0).le(0) & zero_range
-    return df.loc[~placeholder].copy()
 
 
 def _wedge_probable_stop_touched_after_breakout(
@@ -5444,7 +5469,7 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     required = {"Date", "Open", "High", "Low", "Close"}
     if df is None or df.empty or not required.issubset(df.columns):
         return None
-    w = _drop_untraded_wedge_placeholders(df)
+    w = df.copy()
     w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
     for col in ["Open", "High", "Low", "Close"]:
         w[col] = pd.to_numeric(w[col], errors="coerce")
@@ -5573,7 +5598,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     required = {"Date", "Open", "High", "Low", "Close"}
     if df is None or df.empty or not required.issubset(df.columns) or len(df) < 55:
         return None
-    w = _drop_untraded_wedge_placeholders(df)
+    w = df.copy()
     w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
     for col in ["Open", "High", "Low", "Close"]:
         w[col] = pd.to_numeric(w[col], errors="coerce")
@@ -8712,6 +8737,7 @@ def run_fibo_search(target: str) -> int:
         if open_all == "y":
             for link in links:
                 webbrowser.open_new_tab(link)
+    _print_stale_stock_data_warning(group_name, members, exchange_suffix)
     return 0
 
 
