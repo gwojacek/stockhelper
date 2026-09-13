@@ -219,6 +219,9 @@ def test_debug_inspector_always_pauses_after_navigation():
     capture = source.index("html = page.content()")
     assert wait < pause < capture
     assert "interactive_captcha=interactive_captcha" in source[pause:capture]
+    assert 'page.on("console", _record_console)' in source
+    assert 'page.on("pageerror", _record_page_error)' in source
+    assert 'payload["browser_errors"] = browser_errors' in source
 
 
 def test_forex_browser_uses_exact_download_url_before_ui_fallback():

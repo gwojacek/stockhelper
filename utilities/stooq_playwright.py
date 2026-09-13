@@ -1341,12 +1341,24 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
         launch_kwargs["channel"] = "chrome"
     proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index) if use_proxy else None
     browser = browser_type.launch(**launch_kwargs)
-    context_kwargs = {"viewport": {"width": 1440, "height": 1000}, "locale": "pl-PL"}
+    context_kwargs = {
+        "viewport": {"width": 1440, "height": 1000},
+        "locale": "pl-PL",
+        # Service workers can hide requests from Playwright routing and retain
+        # a previously broken Funding Choices/ads bundle between navigations.
+        "service_workers": "block",
+    }
     if proxy:
         # Keep the proxy scoped to this context.  To change IP, close this
         # context/browser and create a new one with the next pool slot.
         context_kwargs["proxy"] = proxy
     context = browser.new_context(**context_kwargs)
+    if os.getenv("STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT", "0") != "1":
+        # This Google Funding Choices contributor bundle is unrelated to the
+        # history table and currently throws ``_DumpException is not a
+        # function`` before Stooq finishes initializing the page. Desktop
+        # profiles may have a cached working copy, explaining the discrepancy.
+        context.route("**/bog-content-ads-contributor/**", lambda route: route.abort())
     page = context.new_page()
     try:
         page.__stockhelper_browser_name = browser_name
@@ -3021,6 +3033,18 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
         direct_first = os.getenv("STOCKHELPER_STOOQ_DIRECT_FIRST", "1") != "0"
         browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None, use_proxy=not direct_first)
+        browser_errors: list[dict[str, str]] = []
+
+        def _record_console(message) -> None:
+            if message.type == "error" and len(browser_errors) < 50:
+                browser_errors.append({"kind": "console", "text": message.text})
+
+        def _record_page_error(error) -> None:
+            if len(browser_errors) < 50:
+                browser_errors.append({"kind": "pageerror", "text": str(error)})
+
+        page.on("console", _record_console)
+        page.on("pageerror", _record_page_error)
         proxy = _stooq_proxy_config(symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
         tor_check = {"configured": bool(proxy), "server": (proxy or {}).get("server", ""), "verified": False, "initial_connection": "direct" if direct_first else "proxy"}
         if not direct_first and _stooq_tor_enabled():
@@ -3128,6 +3152,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         payload["frame_rows"] = frame_rows
         payload["contains_fth1_text"] = "fth1" in html.lower()
         payload["rate_limited"] = _is_rate_limited_html(html)
+        payload["browser_errors"] = browser_errors
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

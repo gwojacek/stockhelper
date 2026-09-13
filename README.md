@@ -802,6 +802,13 @@ consent script is broken but the Stooq history rows are already present behind
 the overlay, it removes only the unresponsive consent overlay and continues
 with the loaded table instead of treating the page as a failed download.
 
+StockHelper also blocks the nonessential Google Funding Choices contributor
+bundle that can fail with `_DumpException is not a function` and prevent Stooq
+from finishing page initialization. Set
+`STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT=1` only to reproduce that browser
+error. Stooq debug JSON now includes captured console and uncaught page errors
+under `browser_errors`.
+
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
 Playwright uses it only if the normal connection finishes without a history
