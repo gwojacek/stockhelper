@@ -801,8 +801,13 @@ listens on `127.0.0.1:9050`, the launcher reuses it and does not stop it.
 After changing the Docker image dependencies, build once:
 
 ```bash
-docker compose build
+docker compose build --no-cache
 ```
+
+The image installs the Chromium build bundled for the resolved Playwright
+version, so rebuilding is required after a Playwright constraint update; merely
+pulling Python source changes does not replace `/ms-playwright` in an existing
+image.
 
 Expected recovery output is:
 

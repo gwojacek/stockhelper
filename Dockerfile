@@ -46,13 +46,13 @@ COPY pyproject.toml poetry.lock ./
 RUN pip install \
         "colorama>=0.4.6,<0.5.0" \
         "dash>=4.1.0,<5.0.0" \
-        "flask>=3.1.1,<4.0.0" \
+        "flask>=3.1.3,<4.0.0" \
         "numpy>=2.2.6,<3.0" \
         "pandas>=2.3.3,<4.0" \
-        "plotly>=6.0.1,<7.0.0" \
+        "plotly>=6.7.0,<7.0.0" \
         "tabulate>=0.9.0,<0.11.0" \
         "tenacity>=9.1.2,<10.0.0" \
-        "playwright>=1.55.0,<2.0.0" \
+        "playwright>=1.60.0,<2.0.0" \
         "yfinance>=1.3.0,<2.0.0" \
         "opencv-python>=4.13.0.92,<5.0.0" \
     && pip install --index-url https://download.pytorch.org/whl/cpu \
