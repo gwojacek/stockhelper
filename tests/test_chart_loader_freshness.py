@@ -419,6 +419,26 @@ def test_yahoo_merge_appends_only_newer_rows_and_preserves_stooq_overlap():
     assert float(june_10["Volume"]) == 23547.0
 
 
+def test_yahoo_fallback_fills_internal_recent_date_gaps(monkeypatch):
+    base = _df("2026-09-03", "2026-09-04", "2026-09-07", "2026-09-13")
+    yahoo = _df("2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-13")
+    monkeypatch.setattr(
+        loader,
+        "_yahoo_download_window",
+        lambda *_args, **_kwargs: (yahoo, "AUDUSD=X", None),
+    )
+
+    merged, _symbol, _name, added = loader._merge_yahoo_fresh_candle(
+        base, "AUDUSD", "forex", trim_to_last_year=False, fill_missing_dates=True
+    )
+
+    assert added == 4
+    assert pd.to_datetime(merged["Date"]).dt.strftime("%Y-%m-%d").tolist() == [
+        "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08",
+        "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-13",
+    ]
+
+
 def test_yahoo_merge_keeps_only_newest_when_stooq_is_multiple_days_behind(monkeypatch):
     base = _df("2026-06-08")
     yahoo = _df("2026-06-09", "2026-06-10", "2026-06-11")

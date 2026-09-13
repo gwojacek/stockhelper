@@ -209,11 +209,11 @@ def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
 
     source = inspect.getsource(update_stooq_history_with_playwright)
     consent = source.index("_accept_consent_if_present(page, first_page=True)")
+    blank_recovery = source.index("_recover_blank_page_with_proxy_rotation")
     extraction = source.index("_extract_rows_from_frame(page)")
 
-    assert consent < extraction
-    assert "shared by literal commodities and" in source
-    assert "mandatory second consent" in source
+    assert consent < blank_recovery < extraction
+    assert "Match the proven debug flow" in source
 
 
 def test_debug_inspector_always_pauses_after_navigation():

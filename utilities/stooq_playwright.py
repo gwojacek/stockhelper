@@ -2811,13 +2811,17 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     rows.extend(attachment_rows.to_dict("records"))
                     last_progress_at = time.monotonic()
                     break
+                if page_num == 1:
+                    # Match the proven debug flow: let Funding Choices settle
+                    # and accept it before deciding the direct page is blank.
+                    _accept_consent_if_present(page, first_page=True)
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                    browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page before consent")
+                    browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
                     if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
                         pass
                     elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
-                        page, url, symbol, "Blank/no-table Stooq page before consent", pre_vpn_refreshes=2, retry_state=interactive_state
+                        page, url, symbol, "Blank/no-table Stooq page after consent", pre_vpn_refreshes=2, retry_state=interactive_state
                     ):
                         pass
                     elif not interactive_captcha:
@@ -2827,23 +2831,6 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                     if still_blocked:
                         shot = _debug_fail_screenshot(symbol, page, suffix=f"_limit_p{page_num}")
                         raise ValueError(f"Stooq rate limit/captcha detected on page {page_num}. URL: {url} Screenshot: {shot}")
-                if page_num == 1:
-                    # This paginated path is shared by literal commodities and
-                    # Forex.  The helper performs the mandatory second consent
-                    # pass, so commodity table extraction cannot begin while a
-                    # follow-up Funding Choices dialog is still mounted.
-                    _accept_consent_if_present(page, first_page=True)
-                    _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
-                    if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
-                        browser, page, _proxy_rotated = _recover_blank_page_with_proxy_rotation(p, browser, page, url, symbol, interactive_captcha, interactive_state, "Blank/no-table Stooq page after consent")
-                        if _proxy_rotated and (_page_has_history_rows(page) or _page_has_captcha_image(page)):
-                            pass
-                        elif interactive_captcha and _retry_blank_page_with_vpn_before_inspector(
-                            page, url, symbol, "Blank/no-table Stooq page after consent", retry_state=interactive_state
-                        ):
-                            pass
-                        elif not interactive_captcha:
-                            browser, page, _alt_helped = _retry_blank_page_with_firefox(p, browser, page, url, symbol, interactive=False)
                 ready = _wait_for_table_or_limit_with_retry(page, retries=3)
                 if _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha):
                     ready = True

@@ -504,6 +504,7 @@ def _merge_yahoo_fresh_candle(
     period: str = f"{YAHOO_STOCK_FRESHNESS_PROBE_DAYS}d",
     trim_to_last_year: bool = True,
     replace_same_date: bool = False,
+    fill_missing_dates: bool = False,
 ) -> tuple[pd.DataFrame, str, str | None, int]:
     yahoo_df, yahoo_symbol, display_name = _yahoo_download_window(symbol, instrument_type, period=period)
     yahoo_df = _sanitize_ohlc_dataframe(yahoo_df)
@@ -517,14 +518,22 @@ def _merge_yahoo_fresh_candle(
             yahoo_new_rows = yahoo_df
         else:
             yahoo_dates = pd.to_datetime(yahoo_df["Date"], errors="coerce")
-            yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
+            if fill_missing_dates:
+                local_dates = set(pd.to_datetime(sanitized_base["Date"], errors="coerce").dropna().dt.date)
+                yahoo_new_rows = yahoo_df.loc[~yahoo_dates.dt.date.isin(local_dates)].copy()
+            else:
+                yahoo_new_rows = yahoo_df.loc[yahoo_dates.dt.date > local_latest.date()].copy()
         added_count = len(yahoo_new_rows)
         if added_count > 0:
             # Stooq remains the historical source.  A Yahoo probe may contain
             # several days when Stooq is behind, but only the newest/live day
             # is allowed into the cache.
-            yahoo_newest_row = yahoo_new_rows.sort_values("Date").tail(1)
-            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_newest_row], ignore_index=True))
+            yahoo_rows_to_merge = (
+                yahoo_new_rows.sort_values("Date")
+                if fill_missing_dates
+                else yahoo_new_rows.sort_values("Date").tail(1)
+            )
+            merged = _sanitize_ohlc_dataframe(pd.concat([sanitized_base, yahoo_rows_to_merge], ignore_index=True))
         elif replace_same_date and local_latest is not None and not yahoo_df.empty:
             yahoo_newest_row = yahoo_df.sort_values("Date").tail(1)
             yahoo_latest = _latest_date_from_df(yahoo_newest_row)
@@ -1288,7 +1297,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 try:
                     local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
                     merged, candidate, display_name, added = _merge_yahoo_fresh_candle(
-                        local_df, symbol, "forex", trim_to_last_year=False
+                        local_df, symbol, "forex", trim_to_last_year=False, fill_missing_dates=True
                     )
                     return (
                         merged,
@@ -1385,7 +1394,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
                 try:
                     local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path_ref))
                     merged, candidate, display_name, added = _merge_yahoo_fresh_candle(
-                        local_df, symbol, "commodity", trim_to_last_year=False
+                        local_df, symbol, "commodity", trim_to_last_year=False, fill_missing_dates=True
                     )
                     return (
                         merged,

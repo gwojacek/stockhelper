@@ -9,6 +9,15 @@ pd = pytest.importorskip("pandas")
 scanner = pytest.importorskip("scanner_search")
 
 
+def test_recent_yahoo_gap_detection_finds_internal_missing_sessions():
+    cached = pd.DataFrame({"Date": ["2026-09-07", "2026-09-13"]})
+    yahoo = pd.DataFrame({"Date": ["2026-09-07", "2026-09-08", "2026-09-09", "2026-09-13"]})
+
+    assert scanner._recent_yahoo_dates_missing_from_cache(cached, yahoo) == [
+        "2026-09-08", "2026-09-09"
+    ]
+
+
 def test_forced_commodity_refresh_ignores_daily_refresh_state(monkeypatch, capsys):
     monkeypatch.setenv("STOCKHELPER_FORCE_REMOTE_REFRESH", "1")
     monkeypatch.setenv("STOCKHELPER_CACHE_ONLY", "1")

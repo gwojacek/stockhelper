@@ -826,6 +826,11 @@ open or wait for an Inspector; only `--debug-stooq ... --inspector` (or the
 explicit `STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1` diagnostic override) enables
 manual CAPTCHA pauses.
 
+Freshness probes compare the recent Yahoo date set as well as the newest OHLCV
+row. A matching newest candle no longer hides missing sessions inside the cache;
+if Stooq remains unavailable, the cache+Yahoo fallback fills those absent recent
+dates instead of appending only the final candle.
+
 After consent clears, the scraper waits up to 8 seconds for an actual Stooq
 history row (not merely one of the page's layout/consent tables) before deciding
 that the direct connection needs the SOCKS fallback. Override this settling

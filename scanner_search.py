@@ -2586,6 +2586,15 @@ def _latest_candle_signatures_match(cached: tuple | None, yahoo: tuple | None) -
     )
 
 
+def _recent_yahoo_dates_missing_from_cache(cached: pd.DataFrame, yahoo: pd.DataFrame) -> list[str]:
+    """Return recent Yahoo session dates absent from the local history."""
+    if cached is None or yahoo is None or "Date" not in cached or "Date" not in yahoo:
+        return []
+    cached_dates = set(pd.to_datetime(cached["Date"], errors="coerce").dropna().dt.date)
+    yahoo_dates = set(pd.to_datetime(yahoo["Date"], errors="coerce").dropna().dt.date)
+    return [day.isoformat() for day in sorted(yahoo_dates - cached_dates)]
+
+
 def _allsearch_ichimoku_yahoo_probe(
     group_name: str,
     members: list[str],
@@ -2610,6 +2619,7 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             cached_signature = _latest_candle_signature(cached)
             yahoo_signature = _latest_candle_signature(remote)
+            missing_recent_dates = _recent_yahoo_dates_missing_from_cache(cached, remote)
             if (
                 cached_signature is not None
                 and yahoo_signature is not None
@@ -2625,10 +2635,14 @@ def _allsearch_ichimoku_yahoo_probe(
                 )
                 continue
             compared += 1
-            matches = _latest_candle_signatures_match(cached_signature, yahoo_signature)
+            matches = (
+                _latest_candle_signatures_match(cached_signature, yahoo_signature)
+                and not missing_recent_dates
+            )
             print(
                 f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature}, "
-                f"cached newest={cached_signature} -> {'exact match' if matches else 'DIFFERENT'}"
+                f"cached newest={cached_signature}, missing_recent_dates={missing_recent_dates or 'none'} "
+                f"-> {'exact match' if matches else 'DIFFERENT'}"
             )
             if not matches:
                 if (
