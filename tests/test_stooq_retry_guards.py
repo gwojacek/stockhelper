@@ -42,6 +42,20 @@ def test_stooq_no_display_inspector_guard_is_present():
     assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
     assert 'debug page artifacts saved' in SOURCE
+    assert 'browser = p.chromium.launch(' in SOURCE
+    assert 'channel="chrome"' in SOURCE
+
+
+def test_stooq_bulk_download_retains_only_newest_archive_and_clears_debug():
+    assert "def _clear_stooq_bulk_debug_dir()" in SOURCE
+    assert "def _prune_stooq_bulk_downloads(" in SOURCE
+    bulk_download = SOURCE[
+        SOURCE.index("def _download_stooq_wig_bulk_zip("):
+        SOURCE.index("def _find_wse_txt_members(")
+    ]
+    assert "_clear_stooq_bulk_debug_dir()" in bulk_download
+    assert "_prune_stooq_bulk_downloads(download_dir)" in bulk_download
+    assert 'channel="chrome"' in bulk_download
 
 
 def test_stooq_proxy_pool_configuration_is_supported():

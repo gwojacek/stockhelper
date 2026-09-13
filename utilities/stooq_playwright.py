@@ -9,6 +9,7 @@ import warnings
 import zipfile
 import re
 import socket
+import shutil
 from pathlib import Path
 from urllib.parse import urlparse, unquote
 from io import BytesIO
@@ -85,6 +86,39 @@ def _stooq_bulk_debug_dir() -> Path:
     return out_dir
 
 
+def _clear_stooq_bulk_debug_dir() -> None:
+    """Remove artifacts from the previous bulk attempt before a new run."""
+    out_dir = _stooq_bulk_debug_dir()
+    for path in out_dir.iterdir():
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _prune_stooq_bulk_downloads(download_dir: Path, keep: Path | None = None) -> None:
+    """Keep at most the newest valid bulk ZIP and discard other downloads."""
+    valid_zips = sorted(
+        (path for path in download_dir.glob("*.zip") if path.is_file() and zipfile.is_zipfile(path)),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    retained = keep if keep is not None and keep.exists() else (valid_zips[0] if valid_zips else None)
+    for path in download_dir.iterdir():
+        if path == retained:
+            continue
+        try:
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+        except FileNotFoundError:
+            pass
+
+
 def _latest_existing_stooq_bulk_zip(download_dir: Path) -> Path | None:
     candidates = sorted(
         (path for path in download_dir.glob("*.zip") if path.is_file() and zipfile.is_zipfile(path)),
@@ -110,6 +144,7 @@ def _save_stooq_bulk_download_if_zip(download, download_dir: Path, source: str) 
     path = download_dir / suggested
     download.save_as(str(path))
     if zipfile.is_zipfile(path):
+        _prune_stooq_bulk_downloads(download_dir, keep=path)
         print(f"[stooq-bulk] zip download saved from {source}: {path}", flush=True)
         return path
     preview = ""
@@ -737,8 +772,16 @@ def _solve_stooq_bulk_download_captcha(page, symbol: str = "wig_bulk", download_
 
 def _download_stooq_wig_bulk_zip(download_dir: Path, interactive: bool = False) -> Path:
     download_dir.mkdir(parents=True, exist_ok=True)
+    _clear_stooq_bulk_debug_dir()
+    _prune_stooq_bulk_downloads(download_dir)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=not interactive, slow_mo=150 if interactive else 0)
+        # The image installs Playwright's Google Chrome channel, not the
+        # separate chromium-headless-shell executable.
+        browser = p.chromium.launch(
+            channel="chrome",
+            headless=not interactive,
+            slow_mo=150 if interactive else 0,
+        )
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
 
@@ -1019,13 +1062,10 @@ def import_stooq_wig_bulk_zip(
                 if _stooq_verbose_enabled():
                     print(f"[stooq-bulk] skipped index {member}: {exc}", flush=True)
     trim_result = trim_wig_stock_csvs(stocks_dir=stocks_dir, years=2)
-    try:
-        zip_path.unlink(missing_ok=True)
-        zip_deleted = True
-    except Exception as exc:
-        zip_deleted = False
-        if _stooq_verbose_enabled():
-            print(f"[stooq-bulk] could not delete {zip_path}: {exc}", flush=True)
+    # Downloaded archives are pruned by the downloader after a newer valid ZIP
+    # is saved. Do not delete or prune here because callers may import a ZIP
+    # supplied from an unrelated user directory.
+    zip_deleted = False
     return {
         "zip_path": str(zip_path),
         "zip_deleted": str(zip_deleted),

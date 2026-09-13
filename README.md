@@ -403,6 +403,11 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_FETCH_VPN_PAUSE_S` | `120` | Pause before the retry pass in `--fetch-older-data` when no symbol was extended. |
 | `STOCKHELPER_FETCH_RETRY_ON_ZERO_BACKFILL` | `0` | Set to `0` to disable the automatic retry pass when `--fetch-older-data` adds no older rows. |
 
+Each WIG bulk attempt clears `debug/stooq_bulk` before opening the page. The
+bulk download directory retains only its newest valid ZIP as an emergency
+fallback. The legacy `data/debug` path is not used by the application and can
+be deleted if it exists from an older installation.
+
 ### API keys
 
 The chart tool has an `--api-key` option that is forwarded to Stooq query parameters:
