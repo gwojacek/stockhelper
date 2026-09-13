@@ -1241,58 +1241,6 @@ def _stooq_tor_enabled() -> bool:
     return _stooq_tor_proxy_reachable()
 
 
-def _signal_tor_newnym(symbol: str, reason: str) -> bool:
-    if not _stooq_tor_enabled():
-        return False
-    control_mode = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL", "auto").strip().lower()
-    control_requested = control_mode not in {"0", "false", "no", "off"}
-    control_requested = control_requested or any(
-        key in os.environ
-        for key in ("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD")
-    )
-    if not control_requested:
-        return False
-    host = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "127.0.0.1").strip()
-    try:
-        port = int(os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "9051"))
-    except ValueError:
-        port = 9051
-    password = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD", "")
-    cookie_path = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE", "").strip()
-    if password:
-        auth = f'AUTHENTICATE "{password}"\r\n'
-    elif cookie_path:
-        try:
-            auth = f"AUTHENTICATE {Path(cookie_path).read_bytes().hex()}\r\n"
-        except OSError as exc:
-            print(f"[stooq-web] Tor control cookie unavailable for {symbol}: {exc}", flush=True)
-            return False
-    else:
-        auth = "AUTHENTICATE\r\n"
-    try:
-        with socket.create_connection((host, port), timeout=4) as conn:
-            conn.sendall(auth.encode("utf-8"))
-            auth_reply = conn.recv(1024).decode("utf-8", errors="replace")
-            if not auth_reply.startswith("250"):
-                print(f"[stooq-web] Tor NEWNYM auth failed for {symbol}: {auth_reply.strip()}", flush=True)
-                return False
-            conn.sendall(b"SIGNAL NEWNYM\r\n")
-            reply = conn.recv(1024).decode("utf-8", errors="replace")
-            conn.sendall(b"QUIT\r\n")
-            if reply.startswith("250"):
-                print(f"[stooq-web] {reason} for {symbol}; requested new Tor circuit via {host}:{port}.", flush=True)
-                return True
-            print(f"[stooq-web] Tor NEWNYM failed for {symbol}: {reply.strip()}", flush=True)
-    except Exception as exc:
-        print(
-            f"[stooq-web] Tor NEWNYM unavailable for {symbol} at {host}:{port}: {exc}. "
-            "Enable Tor ControlPort 9051 and set STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD "
-            "(or STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE) to rotate blocked exits.",
-            flush=True,
-        )
-    return False
-
-
 def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = None) -> dict | None:
     """Return Playwright proxy config from environment, optionally symbol-specific.
 
@@ -1376,7 +1324,7 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
     return cfg
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None):
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None, use_proxy: bool = True):
     browser_type = getattr(playwright, browser_name)
     launch_interactive = bool(interactive and _headed_display_available())
     if interactive and not launch_interactive:
@@ -1387,7 +1335,7 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
             flush=True,
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
-    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index)
+    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index) if use_proxy else None
     browser = browser_type.launch(**launch_kwargs)
     context_kwargs = {"viewport": {"width": 1440, "height": 1000}, "locale": "pl-PL"}
     if proxy:
@@ -1936,12 +1884,13 @@ def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, i
 
 def _recover_blank_page_with_proxy_rotation(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
     pool_size = _stooq_proxy_pool_size()
+    if retry_state is not None and not retry_state.get("using_proxy", True):
+        if _stooq_tor_proxy_reachable():
+            retry_state["using_proxy"] = True
+            print(f"[stooq-web] {reason} for {symbol}; direct connection had no table, retrying through Tor SOCKS.", flush=True)
+            return _reopen_stooq_page(playwright, browser, page, url, symbol, interactive, None)
+        print(f"[stooq-web] {reason} for {symbol}; Tor SOCKS fallback is not reachable.", flush=True)
     if pool_size <= 1:
-        if _signal_tor_newnym(symbol, reason):
-            browser, page, changed = _reopen_stooq_page(playwright, browser, page, url, symbol, interactive, None)
-            if changed and (_try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page)):
-                return browser, page, True
-            return browser, page, changed and not _page_is_blank_or_without_captcha_and_rows(page)
         if retry_state is None or not retry_state.get("proxy_rotation_skip_logged"):
             if _stooq_verbose_enabled():
                 print(
@@ -2720,13 +2669,14 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             start_page = 1
     with sync_playwright() as p:
         initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
-        browser, page = _open_page(p, interactive=False, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        direct_first = os.getenv("STOCKHELPER_STOOQ_DIRECT_FIRST", "1") != "0"
+        browser, page = _open_page(p, interactive=False, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None, use_proxy=not direct_first)
         try:
             page.set_default_timeout(15000)
             page.set_default_navigation_timeout(20000)
             page_num = start_page
             empty_pages = 0
-            interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
+            interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx, "using_proxy": not direct_first}
             # Health repair of a full-size cache needs only Stooq's newest page:
             # its ~40 authoritative rows replace the possibly Yahoo-derived tail.
             # Normal refresh/backfill behavior remains unchanged.
@@ -3029,10 +2979,11 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
     with sync_playwright() as p:
         initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
-        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        direct_first = os.getenv("STOCKHELPER_STOOQ_DIRECT_FIRST", "1") != "0"
+        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None, use_proxy=not direct_first)
         proxy = _stooq_proxy_config(symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
-        tor_check = {"configured": bool(proxy), "server": (proxy or {}).get("server", ""), "verified": False}
-        if _stooq_tor_enabled():
+        tor_check = {"configured": bool(proxy), "server": (proxy or {}).get("server", ""), "verified": False, "initial_connection": "direct" if direct_first else "proxy"}
+        if not direct_first and _stooq_tor_enabled():
             try:
                 check = page.context.request.get("https://check.torproject.org/api/ip", timeout=15_000)
                 check_payload = check.json() if check.ok else {}
@@ -3052,7 +3003,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         payload["tor_check"] = tor_check
         response = None
         attachment_frame: pd.DataFrame | None = None
-        interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
+        interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx, "using_proxy": not direct_first}
         for u in urls:
             try:
                 attachment_frame = _goto_stooq_history_page(page, u)

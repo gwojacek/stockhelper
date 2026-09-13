@@ -23,7 +23,7 @@ if not _BOOTSTRAP_RUNNING_IN_DOCKER:
     _bootstrap_os.chdir(_BOOTSTRAP_PROJECT_ROOT)
     _bootstrap_os.execv(str(_stock_launcher), [str(_stock_launcher), *_bootstrap_sys.argv[1:]])
 
-import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib, shlex, socket
+import argparse, subprocess, os, sys, csv, webbrowser, json, html, shutil, re, signal, time, hashlib, shlex
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 from datetime import UTC, date, datetime, timedelta
@@ -3750,32 +3750,11 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     # Preserve a shell-provided request across both batch phases; each phase
     # otherwise cleans its temporary environment at completion.
     force_remote_refresh = force_remote_refresh or os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
-    # Allsearch performs commodity and forex Stooq UI downloads concurrently.
-    # Keep explicit caller settings, otherwise use a practical Tor-backed default.
-    os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")
-    # One Tor SOCKS endpoint normally means one shared exit. Parallel browser
-    # workers rapidly trigger Stooq's blank decoy response on that exit.
-    # A real proxy pool can remain parallel; callers can also override these.
-    if not os.getenv("STOCKHELPER_STOOQ_PROXY_POOL", "").strip():
-        os.environ.setdefault("STOCKHELPER_SCAN_WORKERS", "1")
-        os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "1")
-        os.environ.setdefault("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
-    else:
-        os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "8")
-    tor_proxy = os.getenv('STOCKHELPER_STOOQ_TOR_PROXY', 'socks5://127.0.0.1:9050')
-    tor_reachable = False
-    try:
-        from urllib.parse import urlparse
-        parsed_tor = urlparse(tor_proxy)
-        with socket.create_connection((parsed_tor.hostname or "127.0.0.1", parsed_tor.port or 9050), timeout=1):
-            tor_reachable = True
-    except (OSError, ValueError):
-        pass
-    print(
-        f"[allsearch] Stooq Playwright Tor mode={os.environ['STOCKHELPER_STOOQ_TOR']} "
-        f"proxy={tor_proxy} reachable={'yes' if tor_reachable else 'NO'}",
-        flush=True,
-    )
+    # Stooq starts with the normal connection and switches to the local Tor
+    # SOCKS proxy only when the history table is missing.
+    os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")
+    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "6")
+    print("[allsearch] Stooq connection mode=direct-first, Tor SOCKS fallback=socks5://127.0.0.1:9050", flush=True)
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)
     for old in report_dir.glob("*.txt"):

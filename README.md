@@ -782,47 +782,6 @@ stock --debug-stooq CB.F
 - `debug/stooq/<symbol>.html`
 - `debug/stooq/<symbol>.png`
 
-The debug command also verifies the configured SOCKS route through Tor's check
-API and prints `Tor route verification: WORKING` with the Tor exit IP, or
-`FAILED` with the connection error. A white Chromium tab can be expected when
-Stooq answers the navigation with a CSV attachment: Playwright cancels the tab
-navigation to start a download. StockHelper now parses that attachment directly;
-check `response_kind=csv_attachment` and `rows_count` in the debug JSON rather
-than treating the white tab as proof that Tor failed.
-
-If Tor verification says `WORKING` but `response_kind=html_page` has zero tables,
-the SOCKS proxy is working: that particular Tor exit is receiving Stooq's blank
-decoy page. StockHelper automatically attempts `SIGNAL NEWNYM` for this state.
-Enable a Tor control port on the host (for example `ControlPort 9051` plus a
-`HashedControlPassword` in `torrc`) and pass the matching password as
-`STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD`. Alternatively, mount Tor's control
-authentication cookie and set `STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE` to its
-container path. Set `STOCKHELPER_STOOQ_TOR_CONTROL=0` to disable automatic
-control-port attempts. With one Tor endpoint, allsearch defaults to one Stooq
-worker to avoid rate-limiting a single exit; configure
-`STOCKHELPER_STOOQ_PROXY_POOL` to use parallel independent exits.
-
-To make the working Tor control password permanent for every Forex and
-commodity command, keep it in the gitignored local launcher file rather than in
-the repository or shell history:
-
-```bash
-cp .stockhelper.env.example .stockhelper.env
-sed -i "s/replace-with-your-tor-control-password/MySecret123/" .stockhelper.env
-chmod 600 .stockhelper.env
-```
-
-The `stock` launcher sources `.stockhelper.env` before forwarding all
-`STOCKHELPER_*` variables into Docker. Do not commit `.stockhelper.env`; only
-the safe `.stockhelper.env.example` template is versioned.
-
-With `STOCKHELPER_MANAGE_TOR_SERVICE=auto` (included in the template), the host
-Tor service is started automatically for Forex, commodity, and `--debug-stooq`
-commands and stopped when the command exits, including after Ctrl+C. Other
-market commands do not start Tor. Starting and stopping a system service may
-invoke `sudo`; set `STOCKHELPER_MANAGE_TOR_SERVICE=0` if Tor is managed outside
-StockHelper.
-
 **Common variants:**
 
 ```bash
@@ -830,6 +789,25 @@ stock --debug-stooq COFFEE
 stock --debug-stooq CB.F --debug-stooq-fetch
 stock --debug-stooq CB.F --inspector
 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 stock --debug-stooq CB.F
+```
+
+Stooq table navigation is **direct-first**. For Forex, commodities, and
+`--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
+Playwright uses it only if the normal connection finishes without a history
+table. The Tor container is stopped automatically when the command finishes or
+is interrupted, and no Tor control password is required. If something already
+listens on `127.0.0.1:9050`, the launcher reuses it and does not stop it.
+
+After changing the Docker image dependencies, build once:
+
+```bash
+docker compose build
+```
+
+Expected recovery output is:
+
+```text
+[stooq-web] ... direct connection had no table, retrying through Tor SOCKS.
 ```
 
 ### 10. Fetch older cached history

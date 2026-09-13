@@ -14,58 +14,6 @@ done
 PROJECT_ROOT="$(cd -P "$(dirname "$_stock_source")" && pwd)"
 cd "$PROJECT_ROOT" || exit 1
 
-# Persistent machine-local StockHelper settings. This file is gitignored and
-# is the appropriate place for secrets such as the Tor control password.
-_stockhelper_local_env="$PROJECT_ROOT/.stockhelper.env"
-if [[ -f "$_stockhelper_local_env" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$_stockhelper_local_env"
-  set +a
-fi
-
-_stockhelper_needs_tor=0
-for _stockhelper_arg in "$@"; do
-  case "${_stockhelper_arg,,}" in
-    --debug-stooq|forex|commodities|commodity|all|*.f|coffee|cocoa|sugar|wheat|corn|soybean|soyoil|copper|aluminium|platinum|palladium|wti|oil|natural_gas|gold|silver)
-      _stockhelper_needs_tor=1
-      break
-      ;;
-  esac
-  if [[ "${_stockhelper_arg,,}" =~ ^(aud|eur|gbp|usd|chf|jpy|pln|cad)(aud|eur|gbp|usd|chf|jpy|pln|cad)$ ]]; then
-    _stockhelper_needs_tor=1
-    break
-  fi
-done
-
-_stockhelper_manage_tor="${STOCKHELPER_MANAGE_TOR_SERVICE:-auto}"
-_stockhelper_tor_started=0
-_stockhelper_systemctl() {
-  systemctl "$@" >/dev/null 2>&1 || sudo systemctl "$@"
-}
-_stockhelper_stop_tor() {
-  if [[ "$_stockhelper_tor_started" == "1" ]]; then
-    echo "[stock] stopping host Tor service..."
-    _stockhelper_systemctl stop tor || echo "[stock] warning: could not stop host Tor service." >&2
-    _stockhelper_tor_started=0
-  fi
-}
-
-if [[ "$_stockhelper_needs_tor" == "1" \
-   && "${STOCKHELPER_STOOQ_TOR:-1}" != "0" \
-   && "$_stockhelper_manage_tor" != "0" \
-   && "$_stockhelper_manage_tor" != "false" \
-   && "$_stockhelper_manage_tor" != "off" ]]; then
-  echo "[stock] starting host Tor service for Stooq Forex/commodity access..."
-  if ! _stockhelper_systemctl start tor; then
-    echo "stock: could not start Tor. Run 'sudo systemctl start tor' or set STOCKHELPER_MANAGE_TOR_SERVICE=0." >&2
-    exit 1
-  fi
-  _stockhelper_tor_started=1
-  trap _stockhelper_stop_tor EXIT
-  trap '_stockhelper_stop_tor; exit 130' HUP INT TERM
-fi
-
 if [[ "${1:-}" == "--cleanup" ]]; then
   echo "Stopping StockHelper report containers..."
   docker ps -aq --filter "name=stockhelper" | xargs -r docker rm -f
@@ -104,6 +52,54 @@ fi
 export STOCKHELPER_UID="${STOCKHELPER_UID:-$(id -u)}"
 export STOCKHELPER_GID="${STOCKHELPER_GID:-$(id -g)}"
 
+# Keep Tor isolated to a disposable Compose service. It may be running while a
+# Forex/commodity command executes, but Playwright always tries the direct
+# connection first and uses SOCKS only after Stooq returns no history table.
+_stockhelper_needs_stooq=0
+for _stockhelper_arg in "$@"; do
+  case "${_stockhelper_arg,,}" in
+    --debug-stooq|forex|commodities|commodity|all|*.f|coffee|cocoa|sugar|wheat|corn|soybean|soyoil|copper|aluminium|platinum|palladium|wti|oil|natural_gas|gold|silver)
+      _stockhelper_needs_stooq=1
+      break
+      ;;
+  esac
+  if [[ "${_stockhelper_arg,,}" =~ ^(aud|eur|gbp|usd|chf|jpy|pln|cad)(aud|eur|gbp|usd|chf|jpy|pln|cad)$ ]]; then
+    _stockhelper_needs_stooq=1
+    break
+  fi
+done
+
+_stockhelper_tor_started=0
+_stockhelper_stop_tor() {
+  if [[ "$_stockhelper_tor_started" == "1" ]]; then
+    docker compose stop tor >/dev/null 2>&1 || true
+    _stockhelper_tor_started=0
+  fi
+}
+if [[ "$_stockhelper_needs_stooq" == "1" ]]; then
+  if (echo >/dev/tcp/127.0.0.1/9050) >/dev/null 2>&1; then
+    echo "[stock] using existing Tor SOCKS fallback (initial Stooq request stays direct)."
+  else
+    echo "[stock] starting disposable Tor SOCKS fallback (initial Stooq request stays direct)..."
+    docker compose up -d --no-deps tor
+    _stockhelper_tor_started=1
+    trap _stockhelper_stop_tor EXIT
+    trap '_stockhelper_stop_tor; exit 130' HUP INT TERM
+    _stockhelper_tor_ready=0
+    for _stockhelper_wait in {1..50}; do
+      if (echo >/dev/tcp/127.0.0.1/9050) >/dev/null 2>&1; then
+        _stockhelper_tor_ready=1
+        break
+      fi
+      sleep 0.2
+    done
+    if [[ "$_stockhelper_tor_ready" != "1" ]]; then
+      echo "stock: disposable Tor SOCKS service did not become ready on 127.0.0.1:9050." >&2
+      exit 1
+    fi
+  fi
+fi
+
 # `docker compose run` only applies variables declared by the Compose service;
 # it does not automatically copy ad-hoc host variables into the container.
 # Forward every StockHelper setting so invocations such as
@@ -114,26 +110,12 @@ while IFS= read -r _stockhelper_env_name; do
   [[ -n "$_stockhelper_env_name" ]] && _stockhelper_env_args+=( -e "$_stockhelper_env_name" )
 done < <(compgen -e | LC_ALL=C sort | awk '/^STOCKHELPER_[A-Za-z0-9_]+$/')
 
-# A headed Playwright inspector needs the host display socket in addition to
-# DISPLAY itself.  Compose does not inherit either automatically.  Forward
-# them only for inspector runs so normal batch containers remain isolated.
 _stockhelper_gui_args=()
 for _stockhelper_arg in "$@"; do
   if [[ "$_stockhelper_arg" == "--inspector" || "$_stockhelper_arg" == "-inspector" ]]; then
     if [[ -n "${DISPLAY:-}" && -d /tmp/.X11-unix ]]; then
       _stockhelper_gui_args+=( -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix )
-      if [[ -n "${XAUTHORITY:-}" && -f "$XAUTHORITY" ]]; then
-        _stockhelper_gui_args+=( -e XAUTHORITY -v "$XAUTHORITY:$XAUTHORITY:ro" )
-      elif [[ -f "${HOME}/.Xauthority" ]]; then
-        _stockhelper_gui_args+=( -e XAUTHORITY=/tmp/.stockhelper.Xauthority -v "${HOME}/.Xauthority:/tmp/.stockhelper.Xauthority:ro" )
-      fi
-    elif [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" && -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]]; then
-      _stockhelper_gui_args+=(
-        -e WAYLAND_DISPLAY -e XDG_RUNTIME_DIR
-        -v "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
-      )
-    else
-      echo "stock: --inspector requested, but no host X11/Wayland display socket was found." >&2
+      [[ -n "${XAUTHORITY:-}" && -f "$XAUTHORITY" ]] && _stockhelper_gui_args+=( -e XAUTHORITY -v "$XAUTHORITY:$XAUTHORITY:ro" )
     fi
     break
   fi
@@ -182,7 +164,6 @@ fi
 
 if [[ "$_stockhelper_tor_started" == "1" ]]; then
   docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" "${_stockhelper_gui_args[@]}" stockhelper "$@"
-  _stockhelper_status=$?
-  exit "$_stockhelper_status"
+  exit $?
 fi
 exec docker compose run --rm --no-deps "${_stockhelper_env_args[@]}" "${_stockhelper_gui_args[@]}" stockhelper "$@"

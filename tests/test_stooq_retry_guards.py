@@ -49,25 +49,22 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'Use a real numeric port' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_PROXY' in SOURCE
-    assert 'SIGNAL NEWNYM' in SOURCE
-    assert 'STOCKHELPER_STOOQ_TOR_CONTROL", "auto"' in SOURCE
-    assert "STOCKHELPER_STOOQ_TOR_CONTROL_COOKIE" in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_AUTO' in SOURCE
     assert 'def _stooq_tor_proxy_reachable' in SOURCE
+    assert 'direct connection had no table, retrying through Tor SOCKS' in SOURCE
 
 
 def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert '_handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)' in SOURCE
     assert 'Stooq page load failed. URL:' in SOURCE
-    assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
     assert '_CAPTCHA_SOLVER_LOGGED_SYMBOLS' in SOURCE
     assert "lookback_days: int = 548" in SOURCE
     assert "remote = _trim_stooq_ui_history_to_window(remote, start)" in SOURCE
 
 
-def test_allsearch_enables_tor_for_stooq_playwright_by_default():
-    assert 'os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")' in RUN_SOURCE
-    assert 'f"[allsearch] Stooq Playwright Tor mode=' in RUN_SOURCE
+def test_allsearch_uses_direct_connection_before_tor_fallback():
+    assert 'os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")' in RUN_SOURCE
+    assert 'connection mode=direct-first' in RUN_SOURCE
 
 
 def test_allsearch_top_choice_actions_are_scoped_to_their_category():
@@ -93,11 +90,8 @@ def test_forex_uses_table_ui_only_and_reports_fetch_paths():
 
 def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():
     assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
-    assert 'source "$_stockhelper_local_env"' in STOCK_SOURCE
-    assert '.stockhelper.env' in Path(".gitignore").read_text(encoding="utf-8")
-    assert 'STOCKHELPER_MANAGE_TOR_SERVICE' in STOCK_SOURCE
     assert 'trap _stockhelper_stop_tor EXIT' in STOCK_SOURCE
-    assert '_stockhelper_systemctl start tor' in STOCK_SOURCE
-    assert '_stockhelper_systemctl stop tor' in STOCK_SOURCE
+    assert 'docker compose up -d --no-deps tor' in STOCK_SOURCE
+    assert 'docker compose stop tor' in STOCK_SOURCE
     assert 'label=com.docker.compose.service=stockhelper' in STOCK_SOURCE
     assert 'docker compose run --rm will delete this one-shot container' in RUN_SOURCE
