@@ -1358,7 +1358,11 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
         # history table and currently throws ``_DumpException is not a
         # function`` before Stooq finishes initializing the page. Desktop
         # profiles may have a cached working copy, explaining the discrepancy.
-        context.route("**/bog-content-ads-contributor/**", lambda route: route.abort())
+        # The live path is ``boq-...`` (letter q). Keep the historical
+        # ``bog-...`` spelling blocked too in case Google's generated path
+        # varies between deployments.
+        for contributor_path in ("boq-content-ads-contributor", "bog-content-ads-contributor"):
+            context.route(f"**/{contributor_path}/**", lambda route: route.abort())
     page = context.new_page()
     try:
         page.__stockhelper_browser_name = browser_name

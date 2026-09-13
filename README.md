@@ -803,8 +803,9 @@ the overlay, it removes only the unresponsive consent overlay and continues
 with the loaded table instead of treating the page as a failed download.
 
 StockHelper also blocks the nonessential Google Funding Choices contributor
-bundle that can fail with `_DumpException is not a function` and prevent Stooq
-from finishing page initialization. Set
+bundle under Stooq's `/_mss/boq-content-ads-contributor/` path. That bundle can
+fail with `_DumpException is not a function` or `Cannot read properties of
+undefined (reading 'tagName')` and leave the consent button inert. Set
 `STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT=1` only to reproduce that browser
 error. Stooq debug JSON now includes captured console and uncaught page errors
 under `browser_errors`.
