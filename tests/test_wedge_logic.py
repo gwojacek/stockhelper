@@ -589,3 +589,10 @@ def test_explicit_retired_or_unknown_symbol_stops_before_data_loading(monkeypatc
         scanner._get_members("SHO.WA")
 
     assert scanner._get_members("TXT.WA")[:2] == ("single", ["TXT.WA"])
+
+
+def test_force_outside_scope_allows_explicit_unknown_symbol(monkeypatch, capsys):
+    monkeypatch.setenv("STOCKHELPER_FORCE_OUTSIDE_SCOPE", "1")
+
+    assert scanner._get_members("SHO.WA")[:2] == ("single", ["SHO.WA"])
+    assert "forcing scan outside configured universes: SHO.WA" in capsys.readouterr().out

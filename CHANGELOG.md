@@ -2,13 +2,28 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `8.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `8.1`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
 No unreleased changes are documented yet.
 
-Compare: [`8.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/8.0...HEAD)
+Compare: [`8.1...HEAD`](https://github.com/gwojacek/stockhelper/compare/8.1...HEAD)
+
+## [8.1] - 2026-09-13
+
+Tag: `8.1`
+Compare: [`8.0...8.1`](https://github.com/gwojacek/stockhelper/compare/8.0...8.1)
+
+### Added
+
+- Added end-of-run warnings for stock CSVs lagging their market peers by at least three days.
+- Added configured-universe validation for explicit scans, with an intentional `--force-outside-scope` override.
+
+### Changed
+
+- Retired acquired WSE ticker SHO from scans, cached data, and future Stooq bulk imports.
+- Bumped the package minor version to `0.2.0`.
 
 ## [8.0] - 2026-09-08
 

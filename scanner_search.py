@@ -3148,10 +3148,17 @@ def _validate_explicit_scanner_members(members: Sequence[str]) -> None:
     configured = _configured_scanner_symbols()
     outside = [str(member).upper() for member in members if str(member).upper() not in configured]
     if outside:
+        if os.environ.get("STOCKHELPER_FORCE_OUTSIDE_SCOPE") == "1":
+            print(
+                "[scope-check] WARNING: forcing scan outside configured universes: "
+                f"{', '.join(outside)}. Remote data may be incomplete or unsuitable.",
+                flush=True,
+            )
+            return
         raise ValueError(
             "Stopped before downloading market data: instrument(s) outside configured "
             f"WIG/US100/DAX/ETF/forex/commodity/index scopes: {', '.join(outside)}. "
-            "Add the instrument to the appropriate scanner universe before searching it."
+            "Add it to the appropriate scanner universe or rerun with --force-outside-scope."
         )
 
 
