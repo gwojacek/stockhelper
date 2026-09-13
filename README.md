@@ -809,6 +809,11 @@ version, so rebuilding is required after a Playwright constraint update; merely
 pulling Python source changes does not replace `/ms-playwright` in an existing
 image.
 
+The dependency baselines intentionally follow `pyproject.toml` and Docker's pip
+ranges. Regenerate `poetry.lock` with `poetry lock` in an online environment
+before using Poetry-managed installation; Docker resolves the same declared
+ranges directly during its build.
+
 Expected recovery output is:
 
 ```text
