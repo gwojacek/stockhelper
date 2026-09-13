@@ -703,11 +703,23 @@ def _stock_local_cache_or_yahoo_download(
         local_df = _sanitize_ohlc_dataframe(pd.read_csv(csv_path))
         if not local_df.empty:
             try:
+                local_latest = _latest_date_from_df(local_df)
+                warsaw_now = datetime.now(WARSAW_TZ)
+                # A same-date Yahoo replacement is useful only for today's
+                # still-forming Warsaw session. On weekends (and when the bulk
+                # latest row is from an earlier session), Stooq's downloaded
+                # OHLCV is authoritative and must remain in place rather than
+                # being replaced by Yahoo float values.
+                replace_live_same_date = bool(
+                    local_latest is not None
+                    and warsaw_now.weekday() < 5
+                    and local_latest.date() == warsaw_now.date()
+                )
                 merged, yahoo_symbol, display_name, yahoo_newer_count = _merge_yahoo_fresh_candle(
                     local_df,
                     symbol,
                     "stock",
-                    replace_same_date=True,
+                    replace_same_date=replace_live_same_date,
                 )
             except Exception as yahoo_exc:
                 return (

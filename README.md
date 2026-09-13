@@ -410,6 +410,10 @@ be deleted if it exists from an older installation.
 The WIG bulk browser also uses the direct-first Stooq strategy: after consent it
 waits for the real `d_pl_txt` link, then retries the page through the configured
 Tor SOCKS proxy only when that link never appears.
+For Warsaw stocks, an equal-date Yahoo candle may replace the cached row only
+during that same weekday's live session. On weekends, the newest row imported
+from the Stooq bulk archive remains authoritative; Yahoo is appended only when
+it has a strictly newer date.
 
 ### API keys
 

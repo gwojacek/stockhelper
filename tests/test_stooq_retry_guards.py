@@ -157,6 +157,16 @@ def test_forex_uses_table_ui_only_and_reports_fetch_paths():
     assert 'not in {"commodities", "forex"}' in SCANNER_SOURCE
 
 
+def test_wig_bulk_same_date_row_is_not_replaced_by_yahoo_on_weekends():
+    stock_merge = LOADER_SOURCE[
+        LOADER_SOURCE.index("def _stock_local_cache_or_yahoo_download("):
+        LOADER_SOURCE.index("def _download_remote(")
+    ]
+    assert "warsaw_now.weekday() < 5" in stock_merge
+    assert "local_latest.date() == warsaw_now.date()" in stock_merge
+    assert "replace_same_date=replace_live_same_date" in stock_merge
+
+
 def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():
     assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
     assert 'trap _stockhelper_stop_tor EXIT' in STOCK_SOURCE
