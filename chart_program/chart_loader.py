@@ -1353,7 +1353,7 @@ def _download_remote(symbol: str, instrument_type: str, api_key: str | None, dat
         and not is_index_like_commodity_symbol
         and not fetch_older_data
     )
-    if use_commodity_yahoo_freshness:
+    if use_commodity_yahoo_freshness and not _force_remote_refresh_enabled():
         yahoo_only = _try_local_commodity_yahoo_only_merge(symbol, csv_path_ref)
         if yahoo_only is not None:
             return yahoo_only

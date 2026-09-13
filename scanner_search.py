@@ -2130,7 +2130,7 @@ def _commodity_refresh_target_matches(ticker: str, fetch_symbol: str, refresh_ta
     return ticker.upper() in refresh_targets or fetch_symbol.upper() in refresh_targets
 
 
-def _commodity_csv_health_check(members: Sequence[str]) -> None:
+def _commodity_csv_health_check(members: Sequence[str]) -> list[str]:
     try:
         min_rows = max(1, int(os.getenv("STOCKHELPER_COMMODITIES_MIN_ROWS", "250")))
     except ValueError:
@@ -2256,18 +2256,21 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         repaired_checked = [_health_row(ticker) for ticker in retry_tickers]
         _print_summary(repaired_checked)
         final_checked = [_health_row(ticker) for ticker in members]
-        final_warn = sum(
-            1
-            for _raw, _path, rows, _latest, missing, yahoo_like, exc in final_checked
+        final_retry = [
+            raw
+            for raw, _path, rows, _latest, missing, yahoo_like, exc in final_checked
             if exc is not None
             or rows < min_rows
             or missing != 0
             or yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
-        )
+        ]
         print(
-            f"[commodity-check] final group summary: ok={len(final_checked) - final_warn}, "
-            f"warn={final_warn}, total={len(final_checked)}"
+            f"[commodity-check] final group summary: ok={len(final_checked) - len(final_retry)}, "
+            f"warn={len(final_retry)}, total={len(final_checked)}"
         )
+        return final_retry
+
+    return retry_tickers
 
 
 def _forex_missing_session_count(latest: date, expected_latest: date) -> int:
@@ -4778,6 +4781,19 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
 def run_ichimoku_search(target: str) -> int:
     group_name, members, source, exchange_suffix = _get_members(target)
     _should_refresh_group_data(group_name, members, exchange_suffix)
+    if group_name == "commodities":
+        # Validate and repair the market-data snapshot before any indicator is
+        # calculated.  Running this after the result report allowed Ichimoku to
+        # use a cache containing several Yahoo fallback rows while the corrected
+        # Stooq tail was only made available to the following Fibo phase.
+        unresolved = _commodity_csv_health_check(members)
+        if unresolved:
+            print(
+                "[commodity-check] aborting Ichimoku: commodity history is still unhealthy after repair: "
+                f"{', '.join(unresolved)}"
+            )
+            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+            return 1
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -4996,13 +5012,9 @@ def run_ichimoku_search(target: str) -> int:
     if group_name == "forex":
         _print_forex_source_summary("search", members, data_source_by_ticker)
     if group_name == "commodities":
-        try:
-            _commodity_csv_health_check(members)
-        finally:
-            # Refresh targets belong to this completed Ichimoku pass. Leaving
-            # them set makes the following allsearch Fibo snapshot reopen the
-            # Stooq downloader for the formerly stale commodities.
-            os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
+        # Refresh targets belong to this completed Ichimoku pass. Leaving them
+        # set makes the following allsearch Fibo snapshot reopen the downloader.
+        os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
     elif group_name == "forex":
         _forex_csv_health_check(members, data_source_by_ticker)
 

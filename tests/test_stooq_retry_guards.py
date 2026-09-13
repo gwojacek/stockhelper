@@ -97,6 +97,24 @@ def test_allsearch_uses_direct_connection_before_tor_fallback():
     assert 'connection mode=direct-first' in RUN_SOURCE
 
 
+def test_commodity_health_repair_precedes_ichimoku_calculation():
+    ichimoku_source = SCANNER_SOURCE[
+        SCANNER_SOURCE.index("def run_ichimoku_search("):
+        SCANNER_SOURCE.index("def run_fibo_search(")
+    ]
+    health = ichimoku_source.index("unresolved = _commodity_csv_health_check(members)")
+    scan_start = ichimoku_source.index("def _record_scan_error(")
+    assert health < scan_start
+    assert "aborting Ichimoku: commodity history is still unhealthy after repair" in ichimoku_source
+    assert ichimoku_source.count("_commodity_csv_health_check(members)") == 1
+
+    commodity_loader = LOADER_SOURCE[
+        LOADER_SOURCE.index("use_commodity_yahoo_freshness ="):
+        LOADER_SOURCE.index("if is_literal_commodity:")
+    ]
+    assert "if use_commodity_yahoo_freshness and not _force_remote_refresh_enabled():" in commodity_loader
+
+
 def test_allsearch_top_choice_actions_are_scoped_to_their_category():
     selector = "btn?.closest('.top-choice-group')||btn?.closest('.top-choice')"
     assert RUN_SOURCE.count(selector) >= 4
