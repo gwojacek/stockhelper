@@ -5063,6 +5063,26 @@ def _wedge_line_value(idx: int, anchor_a: tuple[int, float], anchor_b: tuple[int
     return float(ya) + (float(yb) - float(ya)) * ((idx - ia) / (ib - ia))
 
 
+def _drop_untraded_wedge_placeholders(df: pd.DataFrame) -> pd.DataFrame:
+    """Exclude zero-volume, zero-range placeholders from wedge geometry.
+
+    Some delayed stock feeds publish an as-of-date row by repeating one price
+    in every OHLC field with volume zero.  It is not a traded candle and must
+    not confirm a breakout merely because a trend line moved past that price
+    during a long data gap.  Genuine zero-volume price bars (notably FX data)
+    retain a range and remain eligible.
+    """
+    if "Volume" not in df.columns:
+        return df
+    volume = pd.to_numeric(df["Volume"], errors="coerce")
+    high = pd.to_numeric(df["High"], errors="coerce")
+    low = pd.to_numeric(df["Low"], errors="coerce")
+    scale = pd.concat((high.abs(), low.abs()), axis=1).max(axis=1).clip(lower=1.0)
+    zero_range = (high - low).abs() <= scale * 1e-9
+    placeholder = volume.fillna(0).le(0) & zero_range
+    return df.loc[~placeholder].copy()
+
+
 def _wedge_probable_stop_touched_after_breakout(
     i: int,
     breakout_idx: int | None,
@@ -5424,7 +5444,7 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     required = {"Date", "Open", "High", "Low", "Close"}
     if df is None or df.empty or not required.issubset(df.columns):
         return None
-    w = df.copy()
+    w = _drop_untraded_wedge_placeholders(df)
     w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
     for col in ["Open", "High", "Low", "Close"]:
         w[col] = pd.to_numeric(w[col], errors="coerce")
@@ -5553,7 +5573,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
     required = {"Date", "Open", "High", "Low", "Close"}
     if df is None or df.empty or not required.issubset(df.columns) or len(df) < 55:
         return None
-    w = df.copy()
+    w = _drop_untraded_wedge_placeholders(df)
     w["Date"] = pd.to_datetime(w["Date"], errors="coerce")
     for col in ["Open", "High", "Low", "Close"]:
         w[col] = pd.to_numeric(w[col], errors="coerce")

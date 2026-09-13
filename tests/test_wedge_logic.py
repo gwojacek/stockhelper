@@ -555,3 +555,16 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.lower_touches == 3
     assert setup.breakout_date == "2026-09-11"
     assert setup.breakout_direction == "short"
+
+
+def test_sho_wa_zero_volume_flat_placeholder_does_not_create_breakout():
+    df = pd.read_csv(DATA_DIR / "SHO_WA.csv")
+
+    setup = scanner._find_falling_wedge_setup(df)
+
+    assert setup is not None
+    assert setup.upper_start_date == "2026-05-25"
+    assert setup.upper_end_date == "2026-07-06"
+    assert setup.breakout_date == "-"
+    assert setup.breakout_direction == "-"
+    assert setup.end_date == "2026-07-22"
