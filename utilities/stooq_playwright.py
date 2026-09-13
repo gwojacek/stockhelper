@@ -1606,10 +1606,7 @@ def _page_has_history_rows(page) -> bool:
                 return True
     except Exception:
         pass
-    try:
-        return page.locator("#fth1, table tr td").count() > 0 and not _page_has_rate_limit_or_captcha(page)
-    except Exception:
-        return False
+    return False
 
 
 def _page_is_blank_or_without_captcha_and_rows(page) -> bool:
@@ -2165,12 +2162,27 @@ def _wait_for_table_or_limit_with_retry(page, retries: int | None = None) -> boo
     # Playwright-native wait. Reload retries are opt-in to avoid multiplying
     # blank-page retries at every call site during batch scans.
     attempts = 1 + (retries if retries is not None else _stooq_wait_reload_retries_default())
+    try:
+        row_wait_ms = max(3000, int(os.getenv("STOCKHELPER_STOOQ_TABLE_WAIT_MS", "8000")))
+    except ValueError:
+        row_wait_ms = 8000
     for _ in range(max(1, attempts)):
         try:
-            page.locator("table tr td").first.wait_for(state="visible", timeout=3000)
-            return True
+            # Stooq contains layout/consent tables long before market data is
+            # ready. Waiting for generic ``table tr td`` therefore caused an
+            # immediate false success and premature Tor fallback. Require a
+            # real history row with at least eight cells instead.
+            page.locator(
+                "table#fth1 tr[id^='t']:has(td:nth-child(8)), "
+                "tr[id^='t']:has(td:nth-child(8))"
+            ).first.wait_for(state="attached", timeout=row_wait_ms)
+            if _page_has_history_rows(page):
+                return True
         except Exception:
             pass
+        # The table can be rendered in a child frame on some consent variants.
+        if _page_has_history_rows(page):
+            return True
         body = (page.locator("body").inner_text() or "").lower()
         if "przekroczony dzienny limit" in body or "przepisz powyższy kod" in body:
             return False
@@ -2185,7 +2197,7 @@ def _wait_for_table_or_limit_with_retry(page, retries: int | None = None) -> boo
             return True
     except Exception:
         pass
-    return page.locator("table tr td").count() > 0
+    return _page_has_history_rows(page)
 
 
 

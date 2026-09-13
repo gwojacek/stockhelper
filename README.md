@@ -816,6 +816,12 @@ open or wait for an Inspector; only `--debug-stooq ... --inspector` (or the
 explicit `STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1` diagnostic override) enables
 manual CAPTCHA pauses.
 
+After consent clears, the scraper waits up to 8 seconds for an actual Stooq
+history row (not merely one of the page's layout/consent tables) before deciding
+that the direct connection needs the SOCKS fallback. Override this settling
+window with `STOCKHELPER_STOOQ_TABLE_WAIT_MS` when a slower connection needs
+more time.
+
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
 Playwright uses it only if the normal connection finishes without a history
