@@ -34,9 +34,10 @@ def test_stooq_no_display_inspector_guard_is_present():
     assert 'browser_name: str = "chrome"' in SOURCE
     assert 'launch_kwargs["channel"] = "chrome"' in SOURCE
     assert '"service_workers": "block"' in SOURCE
-    assert '"boq-content-ads-contributor"' in SOURCE
-    assert '"bog-content-ads-contributor"' in SOURCE
-    assert 'context.route(f"**/{contributor_path}/**"' in SOURCE
+    assert 're.compile(r"(?:boq|bog)-content-ads-contributor"' in SOURCE
+    assert 'context.route(broken_contributor' in SOURCE
+    assert 'page.route(broken_contributor' in SOURCE
+    assert '"Network.setBlockedURLs"' in SOURCE
     assert "STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT" not in SOURCE
     assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE

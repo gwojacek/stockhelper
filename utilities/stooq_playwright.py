@@ -1354,11 +1354,27 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
         context_kwargs["proxy"] = proxy
     context = browser.new_context(**context_kwargs)
     # This Google Funding Choices contributor bundle is unrelated to the
-    # history table and throws during page initialization. Always block both
-    # generated spellings; re-enabling it only leaves consent controls inert.
-    for contributor_path in ("boq-content-ads-contributor", "bog-content-ads-contributor"):
-        context.route(f"**/{contributor_path}/**", lambda route: route.abort())
+    # history table and throws during page initialization. Use a regex rather
+    # than a path glob because Google's generated ``/_mss/.../_/js?...`` URL
+    # was not consistently matched by Playwright's glob handling in Chrome.
+    broken_contributor = re.compile(r"(?:boq|bog)-content-ads-contributor", re.IGNORECASE)
+    context.route(broken_contributor, lambda route: route.abort("blockedbyclient"))
     page = context.new_page()
+    page.route(broken_contributor, lambda route: route.abort("blockedbyclient"))
+    if browser_name == "chrome":
+        # Chrome DevTools Protocol blocking is a second, browser-level guard.
+        # It also covers requests that Chrome may satisfy before a Playwright
+        # route callback observes them.
+        try:
+            cdp = context.new_cdp_session(page)
+            cdp.send("Network.enable")
+            cdp.send(
+                "Network.setBlockedURLs",
+                {"urls": ["*boq-content-ads-contributor*", "*bog-content-ads-contributor*"]},
+            )
+        except Exception as exc:
+            if _stooq_verbose_enabled():
+                print(f"[stooq-web] Chrome contributor CDP block unavailable: {exc}", flush=True)
     try:
         page.__stockhelper_browser_name = browser_name
         page.__stockhelper_context = context

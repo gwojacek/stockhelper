@@ -813,6 +813,9 @@ fail with `_DumpException is not a function` or `Cannot read properties of
 undefined (reading 'tagName')` and leave the consent button inert. The broken
 bundle is always disabled for every Stooq browser context. Stooq debug JSON
 includes captured console and uncaught page errors under `browser_errors`.
+The request is blocked at both Playwright context/page routing and Chrome's
+DevTools Protocol network layer because Chrome did not consistently match the
+generated `/_mss/.../_/js?...` URL with a normal glob route.
 
 The same Chrome context, service-worker block, contributor-script block,
 consent handling, attachment recovery, and direct-to-SOCKS fallback are used by
