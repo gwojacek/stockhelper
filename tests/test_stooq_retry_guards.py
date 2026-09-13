@@ -81,6 +81,17 @@ def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert auto_solver < interactive_guard
 
 
+def test_stooq_captcha_preprocessing_supports_current_black_grid_challenge():
+    preprocess_source = SOURCE[
+        SOURCE.index("def _preprocess_stooq_captcha_image("):
+        SOURCE.index("def _captcha_code_from_text(")
+    ]
+    assert "cv2.countNonZero(red_mask)" in preprocess_source
+    assert "cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU" in preprocess_source
+    assert "horizontal_grid" in preprocess_source
+    assert "vertical_grid" in preprocess_source
+
+
 def test_allsearch_uses_direct_connection_before_tor_fallback():
     assert 'os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")' in RUN_SOURCE
     assert 'connection mode=direct-first' in RUN_SOURCE

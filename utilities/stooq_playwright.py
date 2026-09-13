@@ -2357,11 +2357,34 @@ def _preprocess_stooq_captcha_image(src_path: Path, out_path: Path) -> bool:
     upper_red2 = np.array([180, 255, 255])
     mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
     mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
-    mask = mask1 | mask2
-    kernel = np.ones((2, 2), np.uint8)
-    cleaned = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    red_mask = mask1 | mask2
+
+    # Older Stooq challenges used red letters, but the current daily-limit
+    # dialog renders black letters over a black square grid.  A red-only mask
+    # therefore produced an entirely white "cleaned" image.  Keep the precise
+    # red path where it has content; otherwise threshold all dark pixels and
+    # remove only the page-spanning horizontal/vertical grid lines.
+    min_red_pixels = max(8, int(red_mask.size * 0.0005))
+    if cv2.countNonZero(red_mask) >= min_red_pixels:
+        foreground = red_mask
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _threshold, dark = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        height, width = dark.shape
+        horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(15, width // 2), 1))
+        vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(15, (height * 4) // 5)))
+        horizontal_grid = cv2.morphologyEx(dark, cv2.MORPH_OPEN, horizontal_kernel)
+        vertical_grid = cv2.morphologyEx(dark, cv2.MORPH_OPEN, vertical_kernel)
+        grid = horizontal_grid | vertical_grid
+        foreground = cv2.bitwise_and(dark, cv2.bitwise_not(grid))
+
+    # Reconnect glyph strokes cut where a grid line crossed a character and
+    # discard isolated remnants before enlarging the image for OCR.
+    close_kernel = np.ones((3, 3), np.uint8)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, close_kernel)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
     # OCR engines generally work better with dark glyphs on a light background.
-    cleaned = 255 - cleaned
+    cleaned = 255 - foreground
     cleaned = cv2.resize(cleaned, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
     cleaned = cv2.copyMakeBorder(cleaned, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=255)
     return bool(cv2.imwrite(str(out_path), cleaned))

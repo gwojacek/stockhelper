@@ -843,6 +843,9 @@ If Stooq displays its daily-limit code challenge, ordinary unattended Forex and
 commodity scans run the OCR solver before failing the instrument. The
 `STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA` option controls only the headed/manual
 inspector fallback; it is not required for automatic OCR.
+The CAPTCHA preprocessor supports both Stooq's older red-letter challenge and
+the current black-letter challenge by removing its square background grid
+before sending the enlarged image to EasyOCR/Tesseract.
 
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
