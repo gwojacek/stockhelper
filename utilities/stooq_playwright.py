@@ -2040,7 +2040,15 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         if loc.count() == 0:
                             continue
                         loc.wait_for(state='visible', timeout=1500)
-                    loc.click(timeout=3000, force=True)
+                    # Prefer a real trusted pointer click. ``force=True`` can
+                    # target the decorative Funding Choices background child
+                    # while bypassing the CMP's normal actionability path.
+                    try:
+                        loc.click(timeout=3000)
+                    except Exception:
+                        # If an animation/overlay blocks Playwright's pointer
+                        # checks, invoke the button itself rather than its child.
+                        loc.evaluate("button => button.click()")
                     print(f"[stooq-web] consent click attempted with selector: {sel}", flush=True)
                     clicked = True
                     break
@@ -2068,7 +2076,34 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                 break
 
     if _consent_overlay_visible(page):
-        raise ValueError("Stooq consent overlay remained visible after repeated acceptance")
+        # Occasionally the Funding Choices JavaScript fails to initialize even
+        # though Stooq already rendered the complete history table underneath.
+        # In that state manual and automated button clicks both do nothing. Do
+        # not discard usable data solely because the broken overlay stayed up.
+        if _page_has_history_rows(page):
+            removed = page.evaluate("""() => {
+                const selectors = [
+                    '.fc-consent-root', '.fc-dialog-overlay',
+                    '.fc-dialog-container', '.fc-whitelist-root'
+                ];
+                let count = 0;
+                for (const selector of selectors) {
+                    for (const node of document.querySelectorAll(selector)) {
+                        node.remove();
+                        count += 1;
+                    }
+                }
+                document.documentElement.style.overflow = 'auto';
+                document.body.style.overflow = 'auto';
+                return count;
+            }""")
+            print(
+                f"[stooq-web] consent manager was unresponsive; removed {removed} overlay node(s) "
+                "because the history table is already loaded.",
+                flush=True,
+            )
+            return
+        raise ValueError("Stooq consent overlay remained visible after repeated acceptance and no history rows were loaded")
 
 def _consent_overlay_visible(page) -> bool:
     probes = [

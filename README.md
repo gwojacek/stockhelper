@@ -796,6 +796,12 @@ Stooq returned an unrecognized blank page rather than a known CAPTCHA. Inspect
 the final DOM or Network panel, then click **Resume** in Playwright Inspector to
 let StockHelper save its debug artifacts and exit.
 
+If the visible Funding Choices **Zgadzam się** button is inert, StockHelper first
+tries a trusted Playwright pointer click and then a DOM button click. When the
+consent script is broken but the Stooq history rows are already present behind
+the overlay, it removes only the unresponsive consent overlay and continues
+with the loaded table instead of treating the page as a failed download.
+
 Stooq table navigation is **direct-first**. For Forex, commodities, and
 `--debug-stooq`, the launcher starts a disposable Tor SOCKS Compose service, but
 Playwright uses it only if the normal connection finishes without a history

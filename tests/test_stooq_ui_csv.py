@@ -192,6 +192,10 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     assert "checking once more for follow-up consent dialog" in source
     assert "consent_pass >= 1" in source
     assert "consent overlay remained visible after repeated acceptance" in source
+    assert 'loc.click(timeout=3000)' in source
+    assert 'loc.evaluate("button => button.click()")' in source
+    assert "if _page_has_history_rows(page):" in source
+    assert "consent manager was unresponsive" in source
 
 
 def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
