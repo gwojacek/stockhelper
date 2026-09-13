@@ -1156,6 +1156,45 @@ def _stooq_history_urls(symbol: str) -> list[str]:
     return dedup
 
 
+def _goto_stooq_history_page(page, url: str) -> pd.DataFrame | None:
+    """Navigate to a history page, including Stooq's attachment response variant.
+
+    Stooq sometimes sends CSV (or HTML) with ``Content-Disposition: attachment``
+    to automated/proxied Chromium sessions.  Playwright deliberately
+    cancels a navigation response with that header and raises "Download is
+    starting".  The browser context request client does not turn that response
+    into a download, and it uses the same proxy/cookies, so load its HTML into the
+    existing page and continue through the normal CAPTCHA/table checks.
+    """
+    try:
+        page.goto(url, wait_until="domcontentloaded")
+        return None
+    except Exception as exc:
+        if "download is starting" not in str(exc).lower():
+            raise
+
+    response = page.context.request.get(url, timeout=20_000)
+    if not response.ok:
+        raise ValueError(f"Stooq attachment-response recovery returned HTTP {response.status}")
+    body = response.body()
+    if not body.strip():
+        raise ValueError("Stooq attachment-response recovery returned an empty body")
+    try:
+        downloaded = _parse_stooq_ui_csv(body)
+    except Exception:
+        downloaded = pd.DataFrame()
+    if not downloaded.empty:
+        print(
+            f"[stooq-web] recovered {len(downloaded)} CSV rows from attachment-style response for {url}",
+            flush=True,
+        )
+        return downloaded
+    html = _stooq_ui_payload_preview(body, limit=max(500, len(body)))
+    page.set_content(html, wait_until="domcontentloaded")
+    print(f"[stooq-web] recovered attachment-style HTML response for {url}", flush=True)
+    return None
+
+
 
 def _is_metal_stooq_symbol(symbol: str | None) -> bool:
     return (symbol or "").strip().lower() in {"xauusd", "xagusd", "pl.f", "pa.f"}
@@ -1200,42 +1239,6 @@ def _stooq_tor_enabled() -> bool:
     if os.getenv("STOCKHELPER_STOOQ_TOR_AUTO", "1").strip().lower() in {"0", "false", "no", "off"}:
         return False
     return _stooq_tor_proxy_reachable()
-
-
-def _signal_tor_newnym(symbol: str, reason: str) -> bool:
-    if not _stooq_tor_enabled():
-        return False
-    control_requested = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL", "0").strip().lower() in {"1", "true", "yes", "on"}
-    control_requested = control_requested or any(
-        key in os.environ
-        for key in ("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD")
-    )
-    if not control_requested:
-        return False
-    host = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_HOST", "127.0.0.1").strip()
-    try:
-        port = int(os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PORT", "9051"))
-    except ValueError:
-        port = 9051
-    password = os.getenv("STOCKHELPER_STOOQ_TOR_CONTROL_PASSWORD", "")
-    auth = f'AUTHENTICATE "{password}"\r\n' if password else "AUTHENTICATE\r\n"
-    try:
-        with socket.create_connection((host, port), timeout=4) as conn:
-            conn.sendall(auth.encode("utf-8"))
-            auth_reply = conn.recv(1024).decode("utf-8", errors="replace")
-            if not auth_reply.startswith("250"):
-                print(f"[stooq-web] Tor NEWNYM auth failed for {symbol}: {auth_reply.strip()}", flush=True)
-                return False
-            conn.sendall(b"SIGNAL NEWNYM\r\n")
-            reply = conn.recv(1024).decode("utf-8", errors="replace")
-            conn.sendall(b"QUIT\r\n")
-            if reply.startswith("250"):
-                print(f"[stooq-web] {reason} for {symbol}; requested new Tor circuit via {host}:{port}.", flush=True)
-                return True
-            print(f"[stooq-web] Tor NEWNYM failed for {symbol}: {reply.strip()}", flush=True)
-    except Exception as exc:
-        print(f"[stooq-web] Tor NEWNYM unavailable for {symbol} at {host}:{port}: {exc}", flush=True)
-    return False
 
 
 def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = None) -> dict | None:
@@ -1321,8 +1324,10 @@ def _stooq_proxy_config(symbol: str | None = None, proxy_index: int | None = Non
     return cfg
 
 
-def _open_page(playwright, interactive: bool = False, browser_name: str = "chromium", symbol: str | None = None, proxy_index: int | None = None):
-    browser_type = getattr(playwright, browser_name)
+def _open_page(playwright, interactive: bool = False, browser_name: str = "chrome", symbol: str | None = None, proxy_index: int | None = None, use_proxy: bool = True):
+    # Playwright's branded Chrome channel uses the installed Google Chrome
+    # binary while retaining the Chromium automation API.
+    browser_type = playwright.chromium if browser_name == "chrome" else getattr(playwright, browser_name)
     launch_interactive = bool(interactive and _headed_display_available())
     if interactive and not launch_interactive:
         print(
@@ -1332,14 +1337,28 @@ def _open_page(playwright, interactive: bool = False, browser_name: str = "chrom
             flush=True,
         )
     launch_kwargs = {"headless": not launch_interactive, "slow_mo": 150 if launch_interactive else 0}
-    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index)
+    if browser_name == "chrome":
+        launch_kwargs["channel"] = "chrome"
+    proxy = _stooq_proxy_config(symbol, proxy_index=proxy_index) if use_proxy else None
     browser = browser_type.launch(**launch_kwargs)
-    context_kwargs = {"viewport": {"width": 1440, "height": 1000}, "locale": "pl-PL"}
+    context_kwargs = {
+        "viewport": {"width": 1440, "height": 1000},
+        "locale": "pl-PL",
+        # Service workers can hide requests from Playwright routing and retain
+        # a previously broken Funding Choices/ads bundle between navigations.
+        "service_workers": "block",
+    }
     if proxy:
         # Keep the proxy scoped to this context.  To change IP, close this
         # context/browser and create a new one with the next pool slot.
         context_kwargs["proxy"] = proxy
     context = browser.new_context(**context_kwargs)
+    if os.getenv("STOCKHELPER_STOOQ_ALLOW_BROKEN_AD_SCRIPT", "0") != "1":
+        # This Google Funding Choices contributor bundle is unrelated to the
+        # history table and currently throws ``_DumpException is not a
+        # function`` before Stooq finishes initializing the page. Desktop
+        # profiles may have a cached working copy, explaining the discrepancy.
+        context.route("**/bog-content-ads-contributor/**", lambda route: route.abort())
     page = context.new_page()
     try:
         page.__stockhelper_browser_name = browser_name
@@ -1798,7 +1817,7 @@ def _retry_blank_page_with_firefox(playwright, browser, page, url: str, symbol: 
         fallback_interactive = interactive and _headed_display_available()
         if interactive and not fallback_interactive:
             print(f"[stooq-web] headed Chromium fallback skipped for {symbol} because DISPLAY/WAYLAND_DISPLAY is not set.", flush=True)
-        browser, page = _open_page(playwright, interactive=fallback_interactive, browser_name="chromium", symbol=symbol)
+        browser, page = _open_page(playwright, interactive=fallback_interactive, browser_name="chrome", symbol=symbol)
         return browser, page, False
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
@@ -1844,7 +1863,7 @@ def _reopen_stooq_page(playwright, browser, page, url: str, symbol: str, interac
         browser.close()
     except Exception:
         pass
-    browser, page = _open_page(playwright, interactive=interactive, browser_name="chromium", symbol=symbol, proxy_index=proxy_index)
+    browser, page = _open_page(playwright, interactive=interactive, browser_name="chrome", symbol=symbol, proxy_index=proxy_index)
     page.set_default_timeout(15000)
     page.set_default_navigation_timeout(20000)
     try:
@@ -1881,12 +1900,13 @@ def _rotate_blank_page_proxy(playwright, browser, page, url: str, symbol: str, i
 
 def _recover_blank_page_with_proxy_rotation(playwright, browser, page, url: str, symbol: str, interactive: bool, retry_state: dict | None, reason: str):
     pool_size = _stooq_proxy_pool_size()
+    if retry_state is not None and not retry_state.get("using_proxy", True):
+        if _stooq_tor_proxy_reachable():
+            retry_state["using_proxy"] = True
+            print(f"[stooq-web] {reason} for {symbol}; direct connection had no table, retrying through Tor SOCKS.", flush=True)
+            return _reopen_stooq_page(playwright, browser, page, url, symbol, interactive, None)
+        print(f"[stooq-web] {reason} for {symbol}; Tor SOCKS fallback is not reachable.", flush=True)
     if pool_size <= 1:
-        if _signal_tor_newnym(symbol, reason):
-            browser, page, changed = _reopen_stooq_page(playwright, browser, page, url, symbol, interactive, None)
-            if changed and (_try_solve_stooq_captcha(page, symbol) or _page_has_history_rows(page) or _page_has_captcha_image(page)):
-                return browser, page, True
-            return browser, page, changed and not _page_is_blank_or_without_captcha_and_rows(page)
         if retry_state is None or not retry_state.get("proxy_rotation_skip_logged"):
             if _stooq_verbose_enabled():
                 print(
@@ -2036,7 +2056,15 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         if loc.count() == 0:
                             continue
                         loc.wait_for(state='visible', timeout=1500)
-                    loc.click(timeout=3000, force=True)
+                    # Prefer a real trusted pointer click. ``force=True`` can
+                    # target the decorative Funding Choices background child
+                    # while bypassing the CMP's normal actionability path.
+                    try:
+                        loc.click(timeout=3000)
+                    except Exception:
+                        # If an animation/overlay blocks Playwright's pointer
+                        # checks, invoke the button itself rather than its child.
+                        loc.evaluate("button => button.click()")
                     print(f"[stooq-web] consent click attempted with selector: {sel}", flush=True)
                     clicked = True
                     break
@@ -2064,7 +2092,34 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                 break
 
     if _consent_overlay_visible(page):
-        raise ValueError("Stooq consent overlay remained visible after repeated acceptance")
+        # Occasionally the Funding Choices JavaScript fails to initialize even
+        # though Stooq already rendered the complete history table underneath.
+        # In that state manual and automated button clicks both do nothing. Do
+        # not discard usable data solely because the broken overlay stayed up.
+        if _page_has_history_rows(page):
+            removed = page.evaluate("""() => {
+                const selectors = [
+                    '.fc-consent-root', '.fc-dialog-overlay',
+                    '.fc-dialog-container', '.fc-whitelist-root'
+                ];
+                let count = 0;
+                for (const selector of selectors) {
+                    for (const node of document.querySelectorAll(selector)) {
+                        node.remove();
+                        count += 1;
+                    }
+                }
+                document.documentElement.style.overflow = 'auto';
+                document.body.style.overflow = 'auto';
+                return count;
+            }""")
+            print(
+                f"[stooq-web] consent manager was unresponsive; removed {removed} overlay node(s) "
+                "because the history table is already loaded.",
+                flush=True,
+            )
+            return
+        raise ValueError("Stooq consent overlay remained visible after repeated acceptance and no history rows were loaded")
 
 def _consent_overlay_visible(page) -> bool:
     probes = [
@@ -2167,6 +2222,7 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
             page.pause()
             if state is not None:
                 state["done"] = True
+                state["inspector_paused"] = True
         except Exception as exc:
             print(f"[stooq-web] Unable to open inspector automatically: {exc}")
             print("[stooq-web] Tip: run with STOCKHELPER_STOOQ_INTERACTIVE_CAPTCHA=1 and desktop session/X server.")
@@ -2176,7 +2232,7 @@ def _handle_captcha_interactive(page, symbol: str, state: dict | None = None, in
 def _force_interactive_pause(page, symbol: str, state: dict | None = None, interactive_captcha: bool = False) -> None:
     if not interactive_captcha:
         return
-    if state is not None and state.get("forced_pause_done"):
+    if state is not None and (state.get("forced_pause_done") or state.get("inspector_paused")):
         return
     if not _headed_display_available():
         if _stooq_verbose_enabled():
@@ -2665,13 +2721,14 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
             start_page = 1
     with sync_playwright() as p:
         initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
-        browser, page = _open_page(p, interactive=False, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        direct_first = os.getenv("STOCKHELPER_STOOQ_DIRECT_FIRST", "1") != "0"
+        browser, page = _open_page(p, interactive=False, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None, use_proxy=not direct_first)
         try:
             page.set_default_timeout(15000)
             page.set_default_navigation_timeout(20000)
             page_num = start_page
             empty_pages = 0
-            interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
+            interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx, "using_proxy": not direct_first}
             # Health repair of a full-size cache needs only Stooq's newest page:
             # its ~40 authoritative rows replace the possibly Yahoo-derived tail.
             # Normal refresh/backfill behavior remains unchanged.
@@ -2684,16 +2741,27 @@ def update_stooq_history_with_playwright(symbol: str, csv_path: Path, lookback_d
                         f"Timeout while fetching Stooq history for {symbol} "
                         f"(>{max_runtime_s}s without progress, last_page={page_num})."
                     )
-                url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}&i=d&l={page_num}"
+                # Page one is the canonical history URL.  In some Stooq edge/
+                # anti-bot responses an explicit ``l=1`` is returned with an
+                # attachment disposition, which makes Playwright abort goto()
+                # with "Download is starting" before we can inspect the page.
+                # A normal desktop browser canonicalizes to the same first
+                # page, so omit the redundant pagination parameter there.
+                page_suffix = "" if page_num == 1 else f"&l={page_num}"
+                url = f"https://stooq.pl/q/d/?s={_stooq_query_symbol(symbol)}&i=d{page_suffix}"
                 attempted_urls.append(url)
                 if verbose:
                     print(f"[stooq-web] page={page_num} goto={url}")
                 try:
-                    page.goto(url, wait_until="domcontentloaded")
+                    attachment_rows = _goto_stooq_history_page(page, url)
                 except Exception as exc:
                     if page_num == 1:
                         shot = _debug_fail_screenshot(symbol, page, suffix="_goto_failed")
                         raise ValueError(f"Stooq page load failed. URL: {url} error={exc} Screenshot: {shot}")
+                    break
+                if attachment_rows is not None:
+                    rows.extend(attachment_rows.to_dict("records"))
+                    last_progress_at = time.monotonic()
                     break
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 if _page_is_blank_or_without_captcha_and_rows(page) and not _page_has_captcha_image(page):
@@ -2913,6 +2981,11 @@ def _rows_to_daily_df(rows: list[list[str]]) -> pd.DataFrame:
 
 def _merge_debug_rows_into_csv(rows: list[list[str]], csv_path: Path) -> tuple[int, str]:
     remote = _rows_to_daily_df(rows)
+    return _merge_debug_frame_into_csv(remote, csv_path)
+
+
+def _merge_debug_frame_into_csv(remote: pd.DataFrame, csv_path: Path) -> tuple[int, str]:
+    """Merge already-parsed debug data, including attachment CSV responses."""
     if remote.empty:
         return 0, ""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2958,12 +3031,51 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
     payload: dict = {"symbol": symbol, "url": urls[0], "attempted_urls": [], "debug_only": csv_path is None}
     with sync_playwright() as p:
         initial_proxy_idx = _stooq_proxy_pool_initial_index(symbol)
-        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        direct_first = os.getenv("STOCKHELPER_STOOQ_DIRECT_FIRST", "1") != "0"
+        browser, page = _open_page(p, interactive=interactive_captcha, symbol=symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None, use_proxy=not direct_first)
+        browser_errors: list[dict[str, str]] = []
+
+        def _record_console(message) -> None:
+            if message.type == "error" and len(browser_errors) < 50:
+                browser_errors.append({"kind": "console", "text": message.text})
+
+        def _record_page_error(error) -> None:
+            if len(browser_errors) < 50:
+                browser_errors.append({"kind": "pageerror", "text": str(error)})
+
+        page.on("console", _record_console)
+        page.on("pageerror", _record_page_error)
+        proxy = _stooq_proxy_config(symbol, proxy_index=initial_proxy_idx if initial_proxy_idx >= 0 else None)
+        tor_check = {"configured": bool(proxy), "server": (proxy or {}).get("server", ""), "verified": False, "initial_connection": "direct" if direct_first else "proxy"}
+        if not direct_first and _stooq_tor_enabled():
+            try:
+                check = page.context.request.get("https://check.torproject.org/api/ip", timeout=15_000)
+                check_payload = check.json() if check.ok else {}
+                tor_check.update(
+                    status=check.status,
+                    verified=bool(check_payload.get("IsTor")),
+                    exit_ip=str(check_payload.get("IP", "")),
+                )
+            except Exception as exc:
+                tor_check["error"] = str(exc)
+            print(
+                f"[stooq-web] Tor route verification: {'WORKING' if tor_check['verified'] else 'FAILED'} "
+                f"proxy={tor_check['server'] or '-'} exit_ip={tor_check.get('exit_ip') or '-'}"
+                + (f" error={tor_check['error']}" if tor_check.get("error") else ""),
+                flush=True,
+            )
+        payload["tor_check"] = tor_check
         response = None
-        interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx}
+        attachment_frame: pd.DataFrame | None = None
+        interactive_state = {"done": False, "forced_pause_done": False, "proxy_pool_index": initial_proxy_idx, "using_proxy": not direct_first}
         for u in urls:
             try:
-                response = page.goto(u, wait_until="domcontentloaded")
+                attachment_frame = _goto_stooq_history_page(page, u)
+                if attachment_frame is not None:
+                    payload["attempted_urls"].append(
+                        {"url": u, "attachment_csv_rows": len(attachment_frame), "goto_error": None}
+                    )
+                    break
                 _accept_consent_if_present(page, first_page=True)
                 _handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)
                 _wait_for_table_or_limit_with_retry(page, retries=3)
@@ -2979,10 +3091,22 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
                 continue
             if page.locator("#fth1").count() > 0:
                 break
-        try:
-            page.wait_for_selector("table#fth1", timeout=6000)
-        except Exception:
-            pass
+        if attachment_frame is None:
+            try:
+                page.wait_for_selector("table#fth1", timeout=6000)
+            except Exception:
+                pass
+
+        # ``--inspector`` is an explicit debugging request, not merely
+        # permission to open an inspector if a recognized CAPTCHA happens to
+        # appear. Always pause after navigation/recovery so the user can inspect
+        # the final DOM and Network panel, including unknown blank/decoy pages.
+        _force_interactive_pause(
+            page,
+            symbol,
+            state=interactive_state,
+            interactive_captcha=interactive_captcha,
+        )
 
         html = page.content()
         html_path = out_dir / f"{_stooq_debug_symbol(symbol)}.html"
@@ -2991,18 +3115,28 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         page.screenshot(path=str(png_path), full_page=True)
         print(f"[stooq-web] debug page artifacts saved for {symbol}: {png_path.resolve()} (html: {html_path.resolve()})", flush=True)
 
-        rows = _extract_rows_from_frame(page)
+        rows = _extract_rows_from_frame(page) if attachment_frame is None else []
         frame_rows = {}
-        if not rows:
+        if not rows and attachment_frame is None:
             for fr in page.frames:
                 fr_rows = _extract_rows_from_frame(fr)
                 frame_rows[fr.url] = len(fr_rows)
                 if fr_rows and not rows:
                     rows = fr_rows
-        payload["rows_count"] = len(rows)
-        payload["rows_preview"] = rows[:8]
+        payload["rows_count"] = len(attachment_frame) if attachment_frame is not None else len(rows)
+        if attachment_frame is not None:
+            preview = attachment_frame.head(8).copy()
+            preview["Date"] = pd.to_datetime(preview["Date"]).dt.strftime("%Y-%m-%d")
+            payload["rows_preview"] = preview.to_dict("records")
+            payload["response_kind"] = "csv_attachment"
+        else:
+            payload["rows_preview"] = rows[:8]
+            payload["response_kind"] = "html_page"
         if csv_path is not None:
-            written_rows, latest_date = _merge_debug_rows_into_csv(rows, csv_path)
+            if attachment_frame is not None:
+                written_rows, latest_date = _merge_debug_frame_into_csv(attachment_frame, csv_path)
+            else:
+                written_rows, latest_date = _merge_debug_rows_into_csv(rows, csv_path)
             payload["csv_path"] = str(csv_path)
             payload["csv_rows_merged_from_debug"] = written_rows
             payload["csv_latest_date_after_merge"] = latest_date
@@ -3018,6 +3152,7 @@ def debug_stooq_page(symbol: str, out_dir: Path | None = None, interactive_captc
         payload["frame_rows"] = frame_rows
         payload["contains_fth1_text"] = "fth1" in html.lower()
         payload["rate_limited"] = _is_rate_limited_html(html)
+        payload["browser_errors"] = browser_errors
         browser.close()
 
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

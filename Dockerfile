@@ -8,11 +8,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Runtime libraries for OpenCV, Playwright/Chromium, EasyOCR, and Tk/web helpers used by chart workflows.
+# Runtime libraries for OpenCV, Playwright/Google Chrome, EasyOCR, and Tk/web helpers used by chart workflows.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         curl \
+        tor \
         libgl1 \
         libglib2.0-0 \
         libgomp1 \
@@ -38,22 +39,22 @@ RUN apt-get update \
 
 RUN python -m pip install --upgrade pip setuptools wheel
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml ./
 # The Poetry lock currently resolves EasyOCR through GPU-enabled PyTorch/CUDA wheels.
 # Installing Docker runtime dependencies directly avoids downloading those multi-GB
 # NVIDIA packages and then installs CPU-only PyTorch before EasyOCR.
 RUN pip install \
         "colorama>=0.4.6,<0.5.0" \
-        "dash>=4.1.0,<5.0.0" \
-        "flask>=3.1.1,<4.0.0" \
-        "numpy>=2.2.6,<3.0" \
-        "pandas>=2.3.3,<4.0" \
-        "plotly>=6.0.1,<7.0.0" \
+        "dash>=4.4.1,<5.0.0" \
+        "flask>=3.1.3,<4.0.0" \
+        "numpy>=2.5.3,<3.0" \
+        "pandas>=3.0.1,<4.0" \
+        "plotly>=7.0.0,<8.0.0" \
         "tabulate>=0.9.0,<0.11.0" \
         "tenacity>=9.1.2,<10.0.0" \
-        "playwright>=1.55.0,<2.0.0" \
-        "yfinance>=1.3.0,<2.0.0" \
-        "opencv-python>=4.13.0.92,<5.0.0" \
+        "playwright>=1.62.0,<2.0.0" \
+        "yfinance>=1.7.0,<2.0.0" \
+        "opencv-python>=5.0.0.93,<6.0.0" \
     && pip install --index-url https://download.pytorch.org/whl/cpu \
         "torch==2.7.1" \
         "torchvision==0.22.1" \
@@ -69,7 +70,7 @@ RUN pip install \
     && pip install --no-deps "easyocr==1.7.2" \
     && pip freeze | awk -F== '/^nvidia-/ {print $1}' | xargs -r pip uninstall -y \
     && rm -rf /root/.cache/pip
-RUN python -m playwright install chromium \
+RUN python -m playwright install chrome \
     && chmod -R a+rX /ms-playwright \
     && apt-get purge -y --auto-remove build-essential curl \
     && rm -rf /var/lib/apt/lists/* /tmp/*

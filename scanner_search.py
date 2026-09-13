@@ -2136,7 +2136,9 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
     except ValueError:
         min_rows = 250
 
-    def _health_row(ticker: str) -> tuple[str, Path, int, str, int, Exception | None]:
+    expected_latest = get_expected_latest_session_date("commodity", "COMMODITIES", datetime.now(UTC))
+
+    def _health_row(ticker: str) -> tuple[str, Path, int, str, int, int, Exception | None]:
         raw = (ticker or "").strip().upper()
         csv_path = local_csv_path_for_symbol(raw, "commodity")
         if not csv_path.exists():
@@ -2148,29 +2150,35 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
             df = pd.read_csv(csv_path)
             rows = len(df)
             dates = pd.to_datetime(df.get("Date"), errors="coerce").dropna() if "Date" in df.columns else pd.Series(dtype="datetime64[ns]")
-            latest = dates.max().date().isoformat() if not dates.empty else "-"
+            latest_date = dates.max().date() if not dates.empty else None
+            latest = latest_date.isoformat() if latest_date else "-"
+            missing = (
+                _forex_missing_session_count(latest_date, expected_latest)
+                if latest_date is not None
+                else 0
+            )
             yahoo_like = _recent_high_precision_candle_count(df)
-            return raw, csv_path, rows, latest, yahoo_like, None
+            return raw, csv_path, rows, latest, missing, yahoo_like, None
         except Exception as exc:
-            return raw, csv_path, 0, "-", 0, exc
+            return raw, csv_path, 0, "-", 0, 0, exc
 
-    print(f"[commodity-check] CSV row-count check (min_rows={min_rows})")
-    def _print_summary(checked: Sequence[tuple[str, Path, int, str, int, Exception | None]]) -> list[str]:
+    print(f"[commodity-check] CSV row-count and freshness check (min_rows={min_rows}, expected_latest={expected_latest})")
+    def _print_summary(checked: Sequence[tuple[str, Path, int, str, int, int, Exception | None]]) -> list[str]:
         ok_count = 0
         retry_tickers: list[str] = []
-        for raw, csv_path, rows, latest, yahoo_like, exc in checked:
+        for raw, csv_path, rows, latest, missing, yahoo_like, exc in checked:
             if exc is not None:
                 retry_tickers.append(raw)
                 print(f"[commodity-check] WARN {raw}: could not read CSV ({_retry_error_brief(exc)})")
                 continue
             contaminated = yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
-            status = "OK" if rows >= min_rows and not contaminated else "WARN"
+            status = "OK" if rows >= min_rows and missing == 0 and not contaminated else "WARN"
             if status == "OK":
                 ok_count += 1
             else:
                 retry_tickers.append(raw)
             print(
-                f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, "
+                f"[commodity-check] {status} {raw}: rows={rows}, latest={latest}, missing_candles={missing}, "
                 f"yahoo_like_last20={yahoo_like}, csv={csv_path}"
             )
         print(f"[commodity-check] summary: ok={ok_count}, warn={len(retry_tickers)}, total={len(checked)}")
@@ -2186,7 +2194,7 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
         try:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
             for raw in retry_tickers:
-                _raw, csv_path, rows, _latest, yahoo_like, health_exc = _health_row(raw)
+                _raw, csv_path, rows, _latest, missing, yahoo_like, health_exc = _health_row(raw)
                 backup = csv_path.read_bytes() if csv_path.exists() else None
                 try:
                     contaminated_tail = health_exc is None and rows >= min_rows and yahoo_like >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
@@ -2199,12 +2207,22 @@ def _commodity_csv_health_check(members: Sequence[str]) -> None:
                             f"[commodity-check] {raw}: healthy {rows}-row history; "
                             "refreshing only newest Stooq page before Yahoo latest-candle merge"
                         )
-                    else:
+                    elif health_exc is not None or rows < min_rows:
                         # Missing/short/unreadable caches still require a clean
                         # full-window replacement rather than a tail repair.
                         os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
                         print(f"[commodity-check] {raw}: incomplete/unreadable history; performing full replacement")
                         csv_path.unlink(missing_ok=True)
+                    else:
+                        # Keep a complete but stale Stooq base.  The loader can
+                        # append newer Yahoo candles if Stooq remains blocked;
+                        # deleting it would turn a recoverable freshness issue
+                        # into a needless full-history outage.
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        print(
+                            f"[commodity-check] {raw}: healthy {rows}-row history but "
+                            f"missing {missing} session(s); preserving base for Stooq/Yahoo refresh"
+                        )
                     load_or_update_daily_data(symbol=raw, instrument_type="commodity", persist=True, fetch_older_data=False)
                     if not csv_path.exists():
                         raise FileNotFoundError(f"repair did not create {csv_path}")

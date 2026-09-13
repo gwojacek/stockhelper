@@ -11,8 +11,95 @@ from utilities.stooq_playwright import (
     _drop_local_tail_covered_by_remote,
     _stooq_history_urls,
     _stooq_query_symbol,
+    _goto_stooq_history_page,
     _trim_stooq_ui_history_to_window,
 )
+
+
+def test_history_navigation_recovers_download_starting_response():
+    class Response:
+        ok = True
+        status = 200
+
+        def text(self):
+            return "<html><table><tr><td>history</td></tr></table></html>"
+
+        def body(self):
+            return self.text().encode()
+
+    class Request:
+        def get(self, url, timeout):
+            assert url == "https://stooq.pl/q/d/?s=eurgbp&i=d"
+            assert timeout == 20_000
+            return Response()
+
+    class Context:
+        request = Request()
+
+    class Page:
+        context = Context()
+        content = None
+
+        def goto(self, *_args, **_kwargs):
+            raise RuntimeError("Page.goto: Download is starting")
+
+        def set_content(self, html, *, wait_until):
+            self.content = html
+            assert wait_until == "domcontentloaded"
+
+    page = Page()
+    recovered = _goto_stooq_history_page(page, "https://stooq.pl/q/d/?s=eurgbp&i=d")
+    assert recovered is None
+    assert "history" in page.content
+
+
+def test_history_navigation_returns_csv_attachment_rows():
+    csv_body = b"Date,Open,High,Low,Close\n2026-09-11,1.1,1.2,1.0,1.15\n"
+
+    class Response:
+        ok = True
+        status = 200
+
+        def body(self):
+            return csv_body
+
+    class Request:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    class Context:
+        request = Request()
+
+    class Page:
+        context = Context()
+
+        def goto(self, *_args, **_kwargs):
+            raise RuntimeError("Page.goto: Download is starting")
+
+        def set_content(self, *_args, **_kwargs):
+            raise AssertionError("CSV attachment must not be loaded as HTML")
+
+    recovered = _goto_stooq_history_page(Page(), "https://stooq.pl/q/d/?s=eurgbp&i=d")
+    assert recovered is not None
+    assert len(recovered) == 1
+    assert recovered.iloc[0]["Date"] == pd.Timestamp("2026-09-11")
+
+
+def test_debug_frame_merge_accepts_attachment_csv(monkeypatch, tmp_path):
+    from utilities.stooq_playwright import _merge_debug_frame_into_csv
+
+    csv_path = tmp_path / "CB_F.csv"
+    old = pd.DataFrame({"Date": ["2026-09-10"], "Open": [1], "High": [2], "Low": [0], "Close": [1.5], "Volume": [5]})
+    old.to_csv(csv_path, index=False)
+    attachment = _parse_stooq_ui_csv(
+        b"Date,Open,High,Low,Close,Volume\n2026-09-11,2,3,1,2.5,10\n"
+    )
+
+    written, latest = _merge_debug_frame_into_csv(attachment, csv_path)
+
+    assert written == 1
+    assert latest == "2026-09-11"
+    assert len(pd.read_csv(csv_path)) == 2
 
 
 def test_forced_rebase_drops_yahoo_only_rows_from_remote_tail():
@@ -105,6 +192,10 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     assert "checking once more for follow-up consent dialog" in source
     assert "consent_pass >= 1" in source
     assert "consent overlay remained visible after repeated acceptance" in source
+    assert 'loc.click(timeout=3000)' in source
+    assert 'loc.evaluate("button => button.click()")' in source
+    assert "if _page_has_history_rows(page):" in source
+    assert "consent manager was unresponsive" in source
 
 
 def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
@@ -117,6 +208,20 @@ def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():
     assert consent < extraction
     assert "shared by literal commodities and" in source
     assert "mandatory second consent" in source
+
+
+def test_debug_inspector_always_pauses_after_navigation():
+    source = inspect.getsource(
+        __import__("utilities.stooq_playwright", fromlist=["debug_stooq_page"]).debug_stooq_page
+    )
+    wait = source.index('page.wait_for_selector("table#fth1"')
+    pause = source.index("_force_interactive_pause(")
+    capture = source.index("html = page.content()")
+    assert wait < pause < capture
+    assert "interactive_captcha=interactive_captcha" in source[pause:capture]
+    assert 'page.on("console", _record_console)' in source
+    assert 'page.on("pageerror", _record_page_error)' in source
+    assert 'payload["browser_errors"] = browser_errors' in source
 
 
 def test_forex_browser_uses_exact_download_url_before_ui_fallback():
@@ -142,6 +247,14 @@ def test_commodity_tail_repair_limits_stooq_scrape_to_first_page():
     source = Path("utilities/stooq_playwright.py").read_text(encoding="utf-8")
     assert 'tail_refresh = os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"' in source
     assert "max_page = 1 if tail_refresh" in source
+
+
+def test_paginated_scraper_uses_canonical_first_page_url():
+    source = inspect.getsource(
+        __import__("utilities.stooq_playwright", fromlist=["update_stooq_history_with_playwright"])
+        .update_stooq_history_with_playwright
+    )
+    assert 'page_suffix = "" if page_num == 1 else f"&l={page_num}"' in source
 
 
 def test_ui_failure_writes_screenshot_html_raw_download_and_json(monkeypatch, tmp_path):

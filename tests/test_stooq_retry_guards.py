@@ -28,6 +28,10 @@ def test_stooq_no_display_inspector_guard_is_present():
     assert 'html_path.write_text(page.content()' in SOURCE
     assert 'launching headless and skipping inspector pause' in SOURCE
     assert '--inspector requires a GUI display visible inside the process' in SOURCE
+    assert 'browser_name: str = "chrome"' in SOURCE
+    assert 'launch_kwargs["channel"] = "chrome"' in SOURCE
+    assert '"service_workers": "block"' in SOURCE
+    assert 'context.route("**/bog-content-ads-contributor/**"' in SOURCE
     assert 'debug_stooq_page symbol=' in SOURCE
     assert 'out_dir = out_dir or _stooq_debug_dir()' in SOURCE
     assert 'debug page artifacts saved' in SOURCE
@@ -49,23 +53,22 @@ def test_stooq_proxy_pool_configuration_is_supported():
     assert 'Use a real numeric port' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_PROXY' in SOURCE
-    assert 'SIGNAL NEWNYM' in SOURCE
     assert 'STOCKHELPER_STOOQ_TOR_AUTO' in SOURCE
     assert 'def _stooq_tor_proxy_reachable' in SOURCE
+    assert 'direct connection had no table, retrying through Tor SOCKS' in SOURCE
 
 
 def test_stooq_fetch_keeps_auto_captcha_handling_in_main_flow():
     assert '_handle_captcha_interactive(page, symbol, interactive_state, interactive_captcha)' in SOURCE
     assert 'Stooq page load failed. URL:' in SOURCE
-    assert 'STOCKHELPER_STOOQ_TOR_CONTROL' in SOURCE
     assert '_CAPTCHA_SOLVER_LOGGED_SYMBOLS' in SOURCE
     assert "lookback_days: int = 548" in SOURCE
     assert "remote = _trim_stooq_ui_history_to_window(remote, start)" in SOURCE
 
 
-def test_allsearch_enables_tor_for_stooq_playwright_by_default():
-    assert 'os.environ.setdefault("STOCKHELPER_STOOQ_TOR", "1")' in RUN_SOURCE
-    assert 'f"[allsearch] Stooq Playwright Tor mode=' in RUN_SOURCE
+def test_allsearch_uses_direct_connection_before_tor_fallback():
+    assert 'os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")' in RUN_SOURCE
+    assert 'connection mode=direct-first' in RUN_SOURCE
 
 
 def test_allsearch_top_choice_actions_are_scoped_to_their_category():
@@ -91,5 +94,8 @@ def test_forex_uses_table_ui_only_and_reports_fetch_paths():
 
 def test_report_container_is_auto_removed_and_stale_runs_use_compose_label_cleanup():
     assert 'docker compose run --rm --no-deps' in STOCK_SOURCE
+    assert 'trap _stockhelper_stop_tor EXIT' in STOCK_SOURCE
+    assert 'docker compose up -d --no-deps tor' in STOCK_SOURCE
+    assert 'docker compose stop tor' in STOCK_SOURCE
     assert 'label=com.docker.compose.service=stockhelper' in STOCK_SOURCE
     assert 'docker compose run --rm will delete this one-shot container' in RUN_SOURCE
