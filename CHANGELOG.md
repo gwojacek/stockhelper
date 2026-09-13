@@ -17,12 +17,12 @@ Compare: [`8.0...8.1`](https://github.com/gwojacek/stockhelper/compare/8.0...8.1
 
 ### Added
 
-- Added end-of-run warnings for stock CSVs lagging their market peers by at least three days.
-- Added configured-universe validation for explicit scans, with an intentional `--force-outside-scope` override.
+- Added bold red end-of-run warnings for stock CSVs lagging the newest stock in the same scan scope by at least three calendar days; non-stock markets are excluded from this peer comparison.
+- Added configured-universe validation for direct and comma-separated explicit scans. Unknown or retired symbols now stop before Yahoo/Stooq probing, with an intentional one-run `--force-outside-scope` override that prints a data-quality warning.
 
 ### Changed
 
-- Retired acquired WSE ticker SHO from scans, cached data, and future Stooq bulk imports.
+- Retired acquired WSE ticker SHO from the WIG universe, deleted its cached CSV, and made future Stooq bulk imports remove an existing SHO cache and skip its archived member rather than restoring it.
 - Bumped the package minor version to `0.2.0`.
 
 ## [8.0] - 2026-09-08

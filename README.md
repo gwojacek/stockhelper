@@ -1053,6 +1053,16 @@ stock configs/stocks/ena.py
 
 ### Scanner results look stale
 
+At the end of each stock Ichimoku or Fibo run, StockHelper compares every
+instrument's newest local candle with the newest stock candle in that same
+scope. A stock that is at least three calendar days behind is printed in bold
+red as a candidate to check and remove. Forex, commodities, and indexes are not
+included in this peer comparison. This catches delisted or acquired companies
+whose provider history simply stops while the rest of the market advances.
+
+`SHO` is already retired: it is absent from the WIG universe, its cached CSV is
+removed, and Stooq bulk imports skip it rather than recreating obsolete data.
+
 Force a remote refresh:
 
 ```bash
@@ -1064,6 +1074,24 @@ Or force cache-only if remote data is unreliable:
 ```bash
 STOCKHELPER_CACHE_ONLY=1 stock -fibo_search wig
 ```
+
+### Explicit scanner symbol is outside the configured scope
+
+Direct and comma-separated allsearch requests accept only instruments already
+present in the configured WIG, US100, DAX, ETF, forex, commodity, or index
+universes. An unknown or retired symbol stops before Yahoo/Stooq probing, so an
+accidental command cannot create a misleading full-history CSV.
+
+If you deliberately need to investigate an outside-scope symbol, opt in for
+that run only:
+
+```bash
+stock -allsearch SHO.WA --force-outside-scope
+```
+
+The override prints a data-quality warning and then permits remote loading. It
+does not add the symbol to a configured universe, remove it from the retired
+bulk-import blocklist, or make it part of later normal market scans.
 
 ### Stooq returns blank pages, CAPTCHA, or rate-limit pages
 
