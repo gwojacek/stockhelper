@@ -2051,9 +2051,9 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
     # first consent disappears.  Always perform at least two detection passes;
     # later passes are fallbacks for a dialog that is re-mounted again.
     try:
-        first_dialog_settle_ms = max(0, int(os.getenv("STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "2000")))
+        first_dialog_settle_ms = max(0, int(os.getenv("STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "3000")))
     except ValueError:
-        first_dialog_settle_ms = 2000
+        first_dialog_settle_ms = 3000
 
     for consent_pass in range(6):
         try:
@@ -2075,12 +2075,14 @@ def _accept_consent_if_present(page, first_page: bool = False) -> None:
                         loc.wait_for(state='visible', timeout=1500)
                     if consent_pass == 0 and first_dialog_settle_ms:
                         # Funding Choices renders the button before its event
-                        # handlers are always ready. Let its own event loop run
-                        # before the first trusted click.
-                        loc.evaluate(
-                            "(button, ms) => new Promise(resolve => setTimeout(resolve, ms))",
-                            first_dialog_settle_ms,
+                        # handlers are always ready. Use a wall-clock wait here,
+                        # rather than a page promise which Chrome may resolve
+                        # unexpectedly while Inspector instrumentation starts.
+                        print(
+                            f"[stooq-web] consent visible; waiting {first_dialog_settle_ms / 1000:g}s before first click.",
+                            flush=True,
                         )
+                        time.sleep(first_dialog_settle_ms / 1000)
                     # Prefer a real trusted pointer click. ``force=True`` can
                     # target the decorative Funding Choices background child
                     # while bypassing the CMP's normal actionability path.

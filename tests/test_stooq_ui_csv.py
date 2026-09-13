@@ -196,8 +196,9 @@ def test_stooq_consent_is_checked_twice_before_table_fetching():
     assert 'loc.evaluate("button => button.click()")' in source
     assert "if _page_has_history_rows(page):" in source
     assert "consent manager was unresponsive" in source
-    assert 'STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "2000"' in source
-    assert "new Promise(resolve => setTimeout(resolve, ms))" in source
+    assert 'STOCKHELPER_STOOQ_CONSENT_SETTLE_MS", "3000"' in source
+    assert "time.sleep(first_dialog_settle_ms / 1000)" in source
+    assert "consent visible; waiting" in source
 
 
 def test_commodity_table_scraper_uses_double_consent_before_extracting_rows():

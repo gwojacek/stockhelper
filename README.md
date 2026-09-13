@@ -802,8 +802,9 @@ consent script is broken but the Stooq history rows are already present behind
 the overlay, it removes only the unresponsive consent overlay and continues
 with the loaded table instead of treating the page as a failed download.
 
-On the first Funding Choices appearance, StockHelper gives its JavaScript two
-seconds to attach the consent handler before clicking. It then checks for and
+On the first Funding Choices appearance, StockHelper keeps the dialog visible
+for at least three wall-clock seconds before clicking, giving its JavaScript
+time to attach the consent handler. It then checks for and
 accepts re-mounted consent dialogs up to six times without refreshing the page.
 Use `STOCKHELPER_STOOQ_CONSENT_SETTLE_MS` to adjust the initial delay.
 
