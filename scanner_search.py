@@ -2790,7 +2790,7 @@ def _should_refresh_group_data(group_name: str, members: list[str], exchange_suf
             os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
             preview = ", ".join(refresh_symbols) if refresh_symbols else "none"
             print(
-                f"[refresh-check] {group_name}: audited last 20 candles; "
+                f"[refresh-check] {group_name}: audited last 50 candles; "
                 f"Stooq refresh needed for {len(refresh_symbols)}/{len(members)}: {preview}"
             )
             return bool(refresh_symbols)
@@ -3175,7 +3175,6 @@ def _get_members(target: str) -> tuple[str, list[str], str, str | None]:
         _validate_explicit_scanner_members(members)
         return normalized, members, "explicit instrument selection", None
     if normalized == "wig":
-        print("[search] WIG has a large universe. For VPN/rate-limit safety use: wig_part1, wig_part2, wig_part3.")
         return "WIG", WIG_SEARCH_TICKERS, "manual WIG list", ".WA"
     if normalized in {"wig_part1", "wig1", "wig_p1"}:
         p1, _, _ = _split_into_parts(WIG_SEARCH_TICKERS, WIG_PART_SIZE)
@@ -3580,17 +3579,17 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
     }
     refresh_audited = os.environ.get("STOCKHELPER_MARKET_REFRESH_AUDITED") == "1"
     targeted_refresh = symbol.upper() in refresh_symbols
-    tail_refresh = False
+    rebuild_from_stooq = False
     if targeted_refresh and refresh_audited and instrument_type in {"forex", "commodity"}:
         try:
             existing_path = local_csv_path_for_symbol(symbol, instrument_type)
             existing = pd.read_csv(existing_path) if existing_path.exists() else pd.DataFrame()
-            tail_refresh = (
+            rebuild_from_stooq = (
                 not existing.empty
                 and _recent_high_precision_candle_count(existing) >= YAHOO_RECENT_CANDLE_REBASE_THRESHOLD
             )
         except Exception:
-            tail_refresh = False
+            rebuild_from_stooq = False
     explicit_cache_only = (
         os.environ.get("STOCKHELPER_USER_ONLYCACHE") == "1"
         or os.environ.get("STOCKHELPER_SNAPSHOT_CACHE_ONLY") == "1"
@@ -3605,11 +3604,19 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
             os.environ.pop("STOCKHELPER_CACHE_ONLY", None)
         if targeted_refresh:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = "1"
-        if tail_refresh:
-            os.environ["STOCKHELPER_STOOQ_TAIL_REFRESH"] = "1"
+        rebuild_backup = None
+        rebuild_path = None
+        if rebuild_from_stooq:
+            # More than five Yahoo candles in the latest 50 means this is no
+            # longer a Stooq base plus a live quote.  Remove it temporarily so
+            # the loader performs a complete Stooq rebuild, then merges only
+            # Yahoo's newest candle. Restore the old cache if the rebuild fails.
+            rebuild_path = local_csv_path_for_symbol(symbol, instrument_type)
+            rebuild_backup = rebuild_path.read_bytes() if rebuild_path.exists() else None
+            rebuild_path.unlink(missing_ok=True)
             print(
-                f"[refresh-check] {symbol}: healthy cached history has multiple Yahoo-like tail candles; "
-                "refreshing only newest Stooq page before Yahoo latest-candle merge"
+                f"[refresh-check] {symbol}: more than five Yahoo candles in the latest 50; "
+                "rebuilding the complete CSV from Stooq before Yahoo latest-candle merge"
             )
         try:
             _runtime_df, csv_path, meta = _load_daily_data_with_retries(
@@ -3618,22 +3625,11 @@ def _load_full_cached_history_for_scan(symbol: str, instrument_type: str) -> tup
                 persist=True,
                 fetch_older_data=False,
             )
-            if tail_refresh:
-                # Page 1 replaces the Yahoo-contaminated overlap with Stooq,
-                # but Stooq normally ends at yesterday. Re-attach Yahoo's
-                # newest candle now, before either Ichimoku result set is
-                # calculated (rather than waiting for the post-scan health
-                # check to repair it).
-                refreshed = pd.read_csv(csv_path)
-                refreshed, _candidate, _name, _added = _merge_yahoo_fresh_candle(
-                    refreshed,
-                    symbol,
-                    instrument_type,
-                    trim_to_last_year=False,
-                )
-                refreshed.to_csv(csv_path, index=False)
-                meta = dict(meta or {})
-                meta["source"] = f"{meta.get('source', 'table_ui')}+yahoo"
+        except Exception:
+            if rebuild_path is not None and rebuild_backup is not None:
+                rebuild_path.parent.mkdir(parents=True, exist_ok=True)
+                rebuild_path.write_bytes(rebuild_backup)
+            raise
         finally:
             if old_auto_cache == "1":
                 os.environ["STOCKHELPER_CACHE_ONLY"] = old_auto_cache

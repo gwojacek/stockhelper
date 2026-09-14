@@ -4,6 +4,70 @@ from pathlib import Path
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
 
 
+def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "choose-sidetrends" in source
+    assert "choose-fibo-anchors" in source
+    assert "choose-wedge-anchors" in source
+    assert "$('debug-tools').onclick = renderDebugChooser" in source
+    assert "debugToolsBtn.style.display = ['Fibo', 'Kliny'].includes(tech)" in source
+    assert "Sidetrend correction report" in source
+    assert "Wedge'}} correction report" in source
+    assert "Copy result" in source
+
+
+def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function detectedMonthlySidetrends()" in source
+    assert "function renderSidetrendEditor()" in source
+    assert "function drawDebugSidetrends(ctx)" in source
+    assert 'type="checkbox"' in source
+    assert 'type="date"' in source
+    assert "debug-add-sidetrend" in source
+
+
+def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "group_id:'debug-fibo-correction'" in source
+    assert "group_id:'debug-wedge-correction'" in source
+    assert "live.color='#f43f5e'" in source
+    assert "color:'#22d3ee'" in source
+    assert "label:`My ${{wedgeSide(o)}} wedge`" in source
+
+
+def test_debug_report_newline_is_escaped_for_generated_javascript():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "text.indexOf('\\\\n',at)" in source
+
+
+def test_debug_corrections_are_kept_only_by_explicit_report_action():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "keep-debug-correction" in source
+    assert "function restoreUnkeptDebugCorrection()" in source
+    assert "requestAnimationFrame(()=>$('saved-fibo-status')?.click())" in source
+    assert "<th>Action</th>" not in source
+    assert "navigator.clipboard.writeText(copyText)" in source
+    assert "drawer.classList.add('debug-report-mode')" in source
+
+
+def test_sidetrends_fit_chart_and_have_draggable_edge_handles():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function beginSidetrendDrag(ev)" in source
+    assert "function moveSidetrendDrag(ev)" in source
+    assert "function endSidetrendDrag(ev)" in source
+    assert "chart.timeScale().fitContent()" in source[source.index("function renderSidetrendEditor"):source.index("function renderGeometryEditor")]
+    assert "activeTool='sidetrend-add'" in source
+    assert "Click first candle" in source
+    assert "debug-toggle-all" in source
+    assert "Delete ${{range.id}}" in source
+
+
 def test_fibo_boundary_is_draggable_and_resynchronizes_group():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

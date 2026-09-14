@@ -78,7 +78,7 @@ _stockhelper_stop_tor() {
 }
 if [[ "$_stockhelper_needs_stooq" == "1" ]]; then
   if (echo >/dev/tcp/127.0.0.1/9050) >/dev/null 2>&1; then
-    echo "[stock] using existing Tor SOCKS fallback (initial Stooq request stays direct)."
+    : # Reuse the running proxy silently; this is an implementation detail.
   else
     echo "[stock] starting disposable Tor SOCKS fallback (initial Stooq request stays direct)..."
     docker compose up -d --no-deps tor
