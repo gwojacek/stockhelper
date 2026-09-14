@@ -684,22 +684,19 @@ class LightweightChartLevelSelectorUI:
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
     #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; margin-top:-6px; }}
-    #calc-drawer.debug-report-mode #calc-title {{ position:static; transform:none; width:auto; grid-column:1; align-self:center; text-align:left; }}
-    #calc-drawer.debug-report-mode #calc-head {{ grid-template-columns:minmax(180px,1fr) auto auto; }}
-    #calc-drawer.debug-report-mode #calc-summary {{ grid-column:2; width:auto; }}
-    #calc-head {{ display:grid; grid-template-columns:minmax(120px,1fr) minmax(760px,980px) minmax(80px,1fr); align-items:start; gap:12px; margin:0 0 4px 0; }}
-    #calc-title {{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:max(120px, calc((100% - 980px) / 2 - 24px)); margin:0; text-align:center; font-size:18px; }}
-    #calc-close {{ grid-column:3; justify-self:end; }}
+    .calc-toolbar {{ display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,1fr) auto auto; align-items:center; gap:12px; margin:0 0 10px; }}
+    #calc-title {{ margin:0; font-size:18px; }}
+    #calc-close {{ justify-self:end; }}
     #calc-table {{ max-width: 980px; margin: 0 auto; }}
     #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:13px; }}
     #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:24%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ width:38%; border-left:3px solid #294f73; white-space:normal; }}
-    .debug-instrument {{ display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:0 0 12px; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-instrument dt {{ color:#93c5fd; font-weight:800; }} .debug-instrument dd {{ margin:0; color:#f8fafc; }}
+    #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; white-space:normal; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:16%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ border-left:3px solid #294f73; text-align:center; }}
+    .calc-toolbar.debug-instrument {{ padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
-    #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin:0 0 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
+    #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin-left:auto; color:#cbd5e1; font-size:13px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
     #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
@@ -741,8 +738,9 @@ class LightweightChartLevelSelectorUI:
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
       <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
       <section id="calc-drawer" aria-live="polite">
-        <div id="calc-head">
+        <div class="calc-toolbar">
           <h3 id="calc-title">Position calculation</h3>
+          <div id="debug-report-identity" class="debug-report-identity"></div>
           <div id="calc-summary"></div>
           <button id="calc-close" type="button">Close</button>
         </div>
@@ -1876,7 +1874,7 @@ class LightweightChartLevelSelectorUI:
     const scannerGeometry=baseline.filter(obj=>mode==='fibo'?obj.type==='fib-boundary':isWedgeLineObject(obj));
     const correctedGeometry=drawnObjects.filter(obj=>mode==='fibo'?obj.group_id==='debug-fibo-correction'&&obj.type==='fib-boundary':obj.group_id==='debug-wedge-correction');
     const geometry=obj=>{{const value=debugGeometryValues(obj);return value?`${{String(value.x0||'').slice(0,10)}} @ ${{fmt(value.y0)}} → ${{String(value.x1||'').slice(0,10)}} @ ${{fmt(value.y1)}}`:'—';}};
-    const geometryPoint=(obj,key)=>{{const value=debugGeometryValues(obj);return value?`${{String(value[key==='A'?'x0':'x1']||'').slice(0,10)}} @ ${{fmt(value[key==='A'?'y0':'y1'])}}`:'—';}};
+    const geometryCells=obj=>{{const value=debugGeometryValues(obj);return value?[String(value.x0||'').slice(0,10),fmt(value.y0),String(value.x1||'').slice(0,10),fmt(value.y1)]:['—','—','—','—'];}};
     const rows=[];
     if(mode==='fibo') {{
       const before=scannerGeometry[0],after=correctedGeometry[0],same=geometry(before)===geometry(after);
@@ -1886,13 +1884,15 @@ class LightweightChartLevelSelectorUI:
       rows.push(['Anchor B',String(beforeValue?.x1||'').slice(0,10),beforeValue?fmt(beforeValue.y1):'—',same?'No changes':String(afterValue?.x1||'').slice(0,10),same?'':fmt(afterValue?.y1)]);
       rows.push(['Length (calendar days)',String(days(before)),'',same?'No changes':String(days(after)),'']);
     }}
-    else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),same=geometry(before)===geometry(after);rows.push([`${{side}} line`,geometryPoint(before,'A'),geometryPoint(before,'B'),same?'No changes':geometryPoint(after,'A'),same?'':geometryPoint(after,'B')]);}});
+    else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),same=geometry(before)===geometry(after),scannerCells=geometryCells(before),correctedCells=same?['No changes','','','']:geometryCells(after);rows.push([`${{side}} line`,...scannerCells,...correctedCells]);}});
     else [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
       const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
       const scanner=r.scannerStart==='not found'?'—':'✓',modified=!r.valid?'Unselected':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
       rows.push([r.id,r.start,r.end,String(days),scanner,modified]);
     }});
     const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
+    drawer.querySelector('.calc-toolbar')?.classList.add('debug-instrument');
+    $('debug-report-identity').innerHTML=`<strong>${{esc(debugTickerText())}}</strong><span>${{esc(P.sourceName || '-')}}</span>`;
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
     let dataHtml='',copyData=[];
     if(mode==='sidetrend') {{
@@ -1907,8 +1907,8 @@ class LightweightChartLevelSelectorUI:
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
     const fibInfo=mode==='sidetrend'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
-    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Price (scanner)','Date (corrected)','Price (corrected)']:['Item','Scanner start','Scanner end','Corrected start','Corrected end']);
-    table.innerHTML=`<dl class="debug-instrument"><dt>Ticker</dt><dd>${{esc(debugTickerText())}}</dd><dt>Full name</dt><dd>${{esc(P.sourceName || '-')}}</dd></dl><table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
+    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Price (scanner)','Date (corrected)','Price (corrected)']:['Item','Start date (scanner)','Start price (scanner)','End date (scanner)','End price (scanner)','Start date (corrected)','Start price (corrected)','End date (corrected)','End price (corrected)']);
+    table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
     if(!refreshOnly) requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
@@ -4214,6 +4214,8 @@ class LightweightChartLevelSelectorUI:
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
     $('calc-title').textContent='Position calculation';
+    drawer.querySelector('.calc-toolbar')?.classList.remove('debug-instrument');
+    $('debug-report-identity').textContent='';
     table.classList.remove('debug-report');
     drawer.classList.remove('debug-report-mode');
     drawer.classList.add('open');

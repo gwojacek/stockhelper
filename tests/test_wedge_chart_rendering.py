@@ -38,8 +38,9 @@ def test_chart_debug_reports_include_ticker_and_full_name():
     assert "`Ticker: ${{debugTickerText()}}`" in source
     assert "`Full name: ${{P.sourceName || '-'}}`" in source
     assert "lines.push(...debugInstrumentLines());" in source
-    assert '<dt>Ticker</dt>' in source
-    assert '<dt>Full name</dt>' in source
+    assert 'id="debug-report-identity" class="debug-report-identity"' in source
+    assert "classList.add('debug-instrument')" in source
+    assert 'id="calc-head"' not in source
 
 
 def test_debug_editors_use_comparison_tables_and_save_sidetrends():
@@ -52,7 +53,7 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "debugReportMode==='sidetrend'" in source
     assert "Fibo formation containing the sidetrend" in source
     assert "renderGeometryEditor(debugCorrectionKind, true)" in source
-    assert "same?'No changes':geometryPoint(after,'A')" in source
+    assert "correctedCells=same?['No changes','','','']" in source
     assert "reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']" in source
     assert "rows.push(['Anchor A'" in source
     assert "rows.push(['Anchor B'" in source
@@ -60,7 +61,7 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "Complete Fibo candle data" in source
     assert "COMPLETE FIBO DATA" in source
     assert "['Item','Date (scanner)','Price (scanner)','Date (corrected)','Price (corrected)']" in source
-    assert "['Item','Scanner start','Scanner end','Corrected start','Corrected end']" in source
+    assert "['Item','Start date (scanner)','Start price (scanner)','End date (scanner)','End price (scanner)','Start date (corrected)','Start price (corrected)','End date (corrected)','End price (corrected)']" in source
     assert "#calc-table.debug-report > table th:not(:first-child)" in source
 
 
@@ -86,7 +87,7 @@ def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy
     assert "scannerUpper=debugGeometryValues" in source
     assert "function showCorrectionReport(refreshOnly=false)" in source
     assert "refreshOpenDebugReport();" in source
-    assert "geometryPoint(before,'A')" in source
+    assert "geometryCells(before)" in source
 
 
 def test_debug_report_newline_is_escaped_for_generated_javascript():
