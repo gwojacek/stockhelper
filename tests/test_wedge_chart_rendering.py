@@ -26,7 +26,7 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert 'type="checkbox"' in source
     assert 'type="date"' in source
     assert "debug-add-sidetrend" in source
-    assert "bestWidth <= 0.20" in source
+    assert "bestWidth <= 0.185" in source
     assert "Math.abs(last-first)" in source
 
 
@@ -50,6 +50,9 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert '<th>From</th><th>To</th><th>Days</th><th>Scanner</th>' in source
     assert "levels.__saved_sidetrends__=" in source
     assert "debugReportMode==='sidetrend'" in source
+    assert "Fibo formation containing the sidetrend" in source
+    assert "renderGeometryEditor(debugCorrectionKind, true)" in source
+    assert "'No changes':after" in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
@@ -94,7 +97,7 @@ def test_sidetrends_fit_chart_and_have_draggable_edge_handles():
     assert "function beginSidetrendDrag(ev)" in source
     assert "function moveSidetrendDrag(ev)" in source
     assert "function endSidetrendDrag(ev)" in source
-    assert "chart.timeScale().fitContent()" in source[source.index("function renderSidetrendEditor"):source.index("function renderGeometryEditor")]
+    assert "chart.timeScale().fitContent()" not in source[source.index("function renderSidetrendEditor"):source.index("function renderGeometryEditor")]
     assert "activeTool='sidetrend-add'" in source
     assert "Click first candle" in source
     assert "debug-toggle-all" in source
