@@ -27,10 +27,10 @@ def test_forced_commodity_refresh_ignores_daily_refresh_state(monkeypatch, capsy
     assert scanner.os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
     assert scanner.os.environ.get("STOCKHELPER_MARKET_REFRESH_SYMBOLS") == "XAUUSD,XAGUSD"
     assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") is None
-    assert "audited last 20 candles" in capsys.readouterr().out
+    assert "audited last 50 candles" in capsys.readouterr().out
 
 
-def test_forced_forex_audit_repairs_only_first_stooq_page(monkeypatch, tmp_path, capsys):
+def test_forced_forex_audit_rebuilds_complete_stooq_csv(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "USDJPY.csv"
     cached = pd.DataFrame(
         {
@@ -47,27 +47,22 @@ def test_forced_forex_audit_repairs_only_first_stooq_page(monkeypatch, tmp_path,
     monkeypatch.setenv("STOCKHELPER_MARKET_REFRESH_SYMBOLS", "USDJPY")
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
 
-    def load_tail(**_kwargs):
+    def rebuild_csv(**_kwargs):
         assert scanner.os.environ.get("STOCKHELPER_FORCE_REMOTE_REFRESH") == "1"
-        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") == "1"
-        return cached, csv_path, {"source": "table_ui"}
+        assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
+        assert not csv_path.exists()
+        rebuilt = cached.round(6)
+        rebuilt.to_csv(csv_path, index=False)
+        return rebuilt, csv_path, {"source": "table_ui+yahoo"}
 
-    monkeypatch.setattr(scanner, "_load_daily_data_with_retries", load_tail)
-    yahoo_latest = cached.copy()
-    yahoo_latest.loc[len(yahoo_latest)] = yahoo_latest.iloc[-1]
-    yahoo_latest.loc[len(yahoo_latest) - 1, "Date"] = cached["Date"].max() + pd.Timedelta(days=1)
-    monkeypatch.setattr(
-        scanner,
-        "_merge_yahoo_fresh_candle",
-        lambda df, *_args, **_kwargs: (yahoo_latest, "USDJPY=X", "USD/JPY", 1),
-    )
+    monkeypatch.setattr(scanner, "_load_daily_data_with_retries", rebuild_csv)
     _loaded, _path, meta = scanner._load_full_cached_history_for_scan("USDJPY", "forex")
 
     assert meta["source"] == "table_ui+yahoo"
     persisted = pd.read_csv(csv_path)
-    assert pd.to_datetime(persisted["Date"]).max() == yahoo_latest["Date"].max()
+    assert len(persisted) == len(cached)
     assert scanner.os.environ.get("STOCKHELPER_STOOQ_TAIL_REFRESH") is None
-    assert "refreshing only newest Stooq page" in capsys.readouterr().out
+    assert "rebuilding the complete CSV from Stooq" in capsys.readouterr().out
 
 
 def test_forex_health_replaces_short_csv_and_reports_post_retry(monkeypatch, tmp_path, capsys):

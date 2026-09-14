@@ -699,6 +699,7 @@ class LightweightChartLevelSelectorUI:
     #wedge-debug-panel.open {{ display:block; }}
     #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
     #wedge-debug-panel .muted {{ color:#94a3b8; }}
+    #debug-tools {{ border-color:#38bdf8; }}
     #chart-context-info {{ margin:0 0 10px;padding:9px 11px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px;line-height:1.5; }}
     #chart-context-info strong {{ color:#f8fafc; }}
   </style>
@@ -712,7 +713,7 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Analysis</span><span class="toolbar-hint">Validate and confirm levels</span><div class="toolbar-actions" id="analysis-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Tools</span><span class="toolbar-hint">Drawing &amp; measurement tools</span><div class="toolbar-actions">
           <span class="line-tool-group"><button id="tool-line" title="Draw a line on the chart"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color"><span id="line-color-indicator" aria-hidden="true"></span><span class="line-color-chevron" aria-hidden="true">⌄</span></button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
-          <button id="tool-fib" title="Draw Fibonacci 61.8 levels">Fib 61.8</button><button id="tool-half" title="Set a half-distance stop loss">Half→SL</button><button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button><button id="ichimoku-toggle" title="Show or hide the Ichimoku overlay">Ichimoku</button>
+          <button id="tool-fib" title="Draw Fibonacci 61.8 levels">Fib 61.8</button><button id="tool-half" title="Set a half-distance stop loss">Half→SL</button><button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button><button id="ichimoku-toggle" title="Show or hide the Ichimoku overlay">Ichimoku</button><button id="debug-tools" type="button" title="Review and correct scanner geometry">Debug tools</button>
         </div></section>
         <section class="toolbar-group" id="scanner-toolbar-group" style="display:none"><span class="toolbar-label">Scanner</span><span class="toolbar-hint">Find chart patterns</span><div class="toolbar-actions">
           <button id="find-new-upper-wedge" class="wedge-mini-btn" title="Find a new upper wedge line" aria-label="Find a new upper wedge line">↑</button><button id="find-new-wedge" style="display:none" title="Search for a larger valid alternative around the current wedge">△ Find new wedge</button><button id="find-new-lower-wedge" class="wedge-mini-btn" title="Find a new lower wedge line" aria-label="Find a new lower wedge line">↓</button>
@@ -1529,7 +1530,29 @@ class LightweightChartLevelSelectorUI:
   function fiboDebugSnapshot() {{
     const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
     const lines = [];
-    lines.push(`FIBO DEBUG: ${{P.symbol || ''}}`);
+    lines.push(`FIBO CORRECTION REPORT: ${{P.symbol || ''}}`);
+    lines.push('Scanner found,Corrected to,Action');
+    const scannerBoundary = initialScannerDrawnObjects.find(obj => obj.type === 'fib-boundary');
+    const currentBoundaries = fibs.filter(obj => obj.type === 'fib-boundary');
+    const correctedBoundary = [...currentBoundaries].reverse().find(obj => !scannerBoundary || obj.x0 !== scannerBoundary.x0 || obj.x1 !== scannerBoundary.x1 || Number(obj.y0) !== Number(scannerBoundary.y0) || Number(obj.y1) !== Number(scannerBoundary.y1));
+    const boundaryText = obj => obj ? `${{String(obj.x0).slice(0,10)}} @ ${{fmt(obj.y0)}} -> ${{String(obj.x1).slice(0,10)}} @ ${{fmt(obj.y1)}}` : 'none';
+    lines.push(`${{boundaryText(scannerBoundary)}},${{boundaryText(correctedBoundary || scannerBoundary)}},${{correctedBoundary ? 'Adjusted' : 'No change'}}`);
+    lines.push('');
+    lines.push('SIDETRENDS (>30 calendar days; review candidates):');
+    const sideRanges = [];
+    for (let start=0; start<ohlc.length; start++) {{
+      let end=start;
+      for (let j=start+1; j<ohlc.length; j++) {{
+        const days=(Date.parse(ohlc[j].time)-Date.parse(ohlc[start].time))/86400000;
+        if (days < 30) continue;
+        const sample=ohlc.slice(start,j+1), hi=Math.max(...sample.map(r=>Number(r.high))), lo=Math.min(...sample.map(r=>Number(r.low)));
+        const mid=(hi+lo)/2;
+        if (mid && (hi-lo)/mid <= 0.12) end=j; else if (end>start) break;
+      }}
+      if (end>start) {{ sideRanges.push([ohlc[start].time,ohlc[end].time]); start=end; }}
+    }}
+    if (sideRanges.length) sideRanges.forEach((r,i)=>lines.push(`S${{i+1}},${{r[0]}},${{r[1]}},Detected (mark invalid or redraw its dates)`));
+    else lines.push('none');
     if (!fibs.length) lines.push('No Fibonacci lines on chart.');
     const groups = new Map();
     fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
@@ -1576,7 +1599,16 @@ class LightweightChartLevelSelectorUI:
     const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
-    lines.push(`WEDGE DEBUG: ${{P.symbol || ''}}`);
+    lines.push(`WEDGE CORRECTION REPORT: ${{P.symbol || ''}}`);
+    lines.push('Item,Scanner found,Corrected to,Action');
+    const scannerWedges = initialScannerDrawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+    ['upper','lower'].forEach(side => {{
+      const before=scannerWedges.find(obj => wedgeSide(obj) === side);
+      const after=wedges.find(obj => wedgeSide(obj) === side);
+      const geometry=obj => obj ? `${{String(obj.x0 || obj.x?.[0] || '').slice(0,10)}} @ ${{fmt(obj.y0 ?? obj.y?.[0])}} -> ${{String(obj.x1 || obj.x?.[(obj.x?.length || 1)-1] || '').slice(0,10)}} @ ${{fmt(obj.y1 ?? obj.y?.[(obj.y?.length || 1)-1])}}` : 'none';
+      const changed=geometry(before)!==geometry(after);
+      lines.push(`${{side}} line,${{geometry(before)}},${{geometry(after)}},${{changed ? 'Adjusted' : 'No change'}}`);
+    }});
     if (!wedges.length) {{
       lines.push('No wedge lines on chart.');
       return lines.join('\\n');
@@ -3023,6 +3055,12 @@ class LightweightChartLevelSelectorUI:
       setupInfoBtn.querySelector('span:last-child').textContent = `${{tech}} information`;
       setupInfoBtn.closest('.action-grid')?.classList.toggle('no-wedge', !showInfo);
     }}
+    const debugToolsBtn = $('debug-tools');
+    if (debugToolsBtn) {{
+      const tech = selectedJournalTechnique();
+      debugToolsBtn.style.display = ['Fibo', 'Kliny'].includes(tech) ? 'block' : 'none';
+      debugToolsBtn.title = tech === 'Fibo' ? 'Review monthly sidetrends and correct Fibonacci anchors' : 'Correct scanner wedge anchors';
+    }}
     const findNewWedgeBtn = $('find-new-wedge');
     if (findNewWedgeBtn) findNewWedgeBtn.style.display = hasWedgeObjects ? 'block' : 'none';
     ['find-new-upper-wedge', 'find-new-lower-wedge'].forEach(id => {{ const btn = $(id); if (btn) btn.style.display = hasWedgeObjects ? 'block' : 'none'; }});
@@ -3302,6 +3340,7 @@ class LightweightChartLevelSelectorUI:
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('setup-debug-btn').onclick = () => copySetupDebug();
+  $('debug-tools').onclick = () => copySetupDebug();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
   $('find-new-lower-wedge').onclick = () => findNewWedge('lower');
@@ -3443,8 +3482,8 @@ class LightweightChartLevelSelectorUI:
 
   function activeJournalTechnique() {{
     if (levels.__show_ichimoku__) return 'Ichimoku';
-    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (drawnObjects.some(isWedgeLineObject)) return 'Kliny';
+    if (drawnObjects.some(obj => obj.type === 'fib' || obj.type === 'fib-boundary')) return 'Fibo';
     if (levels.__journal_source_technique__) return levels.__journal_source_technique__;
     return 'Manual';
   }}
