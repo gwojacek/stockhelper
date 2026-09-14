@@ -161,6 +161,14 @@ def test_chart_and_drawer_have_a_persisted_drag_splitter():
     assert "localStorage.setItem(DRAWER_HEIGHT_STORAGE_KEY" in source
     assert "splitter?.addEventListener('pointermove'" in source
     assert "setDrawerHeight(resize.height+(resize.y-ev.clientY))" in source
+    assert "#calc-splitter::after" in source
+    assert "splitter.classList.add('resizing')" in source
+
+
+def test_save_chart_and_png_buttons_have_identical_dimensions():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert ".chart-save-actions button {{ box-sizing:border-box; flex:0 0 150px; width:150px; height:34px; min-height:34px; padding:5px 10px; }}" in source
 
 
 def test_sidetrend_report_orders_selected_data_before_complete_fibo_data():

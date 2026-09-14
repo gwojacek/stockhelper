@@ -542,7 +542,7 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
     .chart-save-actions {{ display:flex; align-items:center; gap:7px; }}
-    .chart-save-actions button {{ flex:0 0 150px; width:150px; min-height:32px; }}
+    .chart-save-actions button {{ box-sizing:border-box; flex:0 0 150px; width:150px; height:34px; min-height:34px; padding:5px 10px; }}
     #cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); min-width:0; }}
     #cursor-box .cursor-stat {{ display:inline-flex; align-items:baseline; gap:5px; }}
     #cursor-box .cursor-label {{ color:#82a9ca; font-weight:700; }}
@@ -682,7 +682,7 @@ class LightweightChartLevelSelectorUI:
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
-    #calc-splitter {{ display:none; height:12px; margin:-6px 14px 0; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:relative; top:5px; height:3px; border-radius:999px; background:#315b80; box-shadow:0 0 8px rgba(56,189,248,.35); }} .main.calc-open #calc-splitter {{ display:block; }}
+    #calc-splitter {{ display:none; position:relative; z-index:90; height:22px; margin:0 10px; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:absolute; left:0; right:0; top:10px; height:2px; border-radius:999px; background:#315b80; box-shadow:0 0 8px rgba(56,189,248,.35); }} #calc-splitter::after {{ content:'↕'; display:grid; place-items:center; position:absolute; left:50%; top:1px; width:42px; height:20px; transform:translateX(-50%); border:1px solid #fb923c; border-radius:999px; background:#ea580c; color:#fff7ed; font:900 13px/1 sans-serif; box-shadow:0 2px 10px rgba(234,88,12,.55); }} #calc-splitter:hover::after,#calc-splitter.resizing::after {{ background:#f97316; transform:translateX(-50%) scale(1.08); }} .main.calc-open #calc-splitter {{ display:block; }}
     #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; margin-top:-6px; }}
     .main.calc-open #calc-drawer {{ box-sizing:border-box; height:var(--calc-drawer-height,340px); max-height:none; }}
@@ -739,7 +739,7 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
       <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
-      <div id="calc-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize chart and report"></div>
+      <div id="calc-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize chart and report" title="Drag to resize chart and report"></div>
       <section id="calc-drawer" class="chart-stage" aria-live="polite">
         <div class="calc-toolbar">
           <h3 id="calc-title">Position calculation</h3>
@@ -1083,9 +1083,9 @@ class LightweightChartLevelSelectorUI:
   requestAnimationFrame(resizeChartToContainer);
   (()=>{{
     const splitter=$('calc-splitter');let resize=null;
-    splitter?.addEventListener('pointerdown',ev=>{{resize={{id:ev.pointerId,y:ev.clientY,height:$('calc-drawer').getBoundingClientRect().height}};splitter.setPointerCapture?.(ev.pointerId);ev.preventDefault();}});
+    splitter?.addEventListener('pointerdown',ev=>{{resize={{id:ev.pointerId,y:ev.clientY,height:$('calc-drawer').getBoundingClientRect().height}};splitter.classList.add('resizing');splitter.setPointerCapture?.(ev.pointerId);ev.preventDefault();}});
     splitter?.addEventListener('pointermove',ev=>{{if(!resize||resize.id!==ev.pointerId)return;setDrawerHeight(resize.height+(resize.y-ev.clientY));ev.preventDefault();}});
-    const stop=ev=>{{if(!resize||resize.id!==ev.pointerId)return;splitter.releasePointerCapture?.(ev.pointerId);setDrawerHeight(preferredDrawerHeight,true);resize=null;}};
+    const stop=ev=>{{if(!resize||resize.id!==ev.pointerId)return;splitter.releasePointerCapture?.(ev.pointerId);splitter.classList.remove('resizing');setDrawerHeight(preferredDrawerHeight,true);resize=null;}};
     splitter?.addEventListener('pointerup',stop);splitter?.addEventListener('pointercancel',stop);
   }})();
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
