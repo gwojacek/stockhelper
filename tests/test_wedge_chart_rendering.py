@@ -4,6 +4,27 @@ from pathlib import Path
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
 
 
+def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "choose-sidetrends" in source
+    assert "choose-fibo-anchors" in source
+    assert "choose-wedge-anchors" in source
+    assert "debugToolsBtn.style.display = ['Fibo', 'Kliny'].includes(tech)" in source
+    assert "$('calc-title').textContent='Correction report'" in source
+    assert "Copy result" in source
+
+
+def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function detectedMonthlySidetrends()" in source
+    assert "function renderSidetrendEditor()" in source
+    assert "function drawDebugSidetrends(ctx)" in source
+    assert 'type="checkbox"' in source
+    assert 'type="date"' in source
+
+
 def test_fibo_boundary_is_draggable_and_resynchronizes_group():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
