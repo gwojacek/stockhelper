@@ -1580,6 +1580,19 @@ class LightweightChartLevelSelectorUI:
     const y0=candleSeries.priceToCoordinate?.(hi), y1=candleSeries.priceToCoordinate?.(lo);
     return [x0,x1,y0,y1].every(Number.isFinite)?{{x0,x1,y0,y1}}:null;
   }}
+  function sidetrendColor(index) {{
+    const palette=[
+      {{stroke:'#c084fc',fill:'rgba(168,85,247,.16)',label:'#f3e8ff'}},
+      {{stroke:'#22d3ee',fill:'rgba(6,182,212,.16)',label:'#cffafe'}},
+      {{stroke:'#f59e0b',fill:'rgba(245,158,11,.16)',label:'#fef3c7'}},
+      {{stroke:'#4ade80',fill:'rgba(34,197,94,.16)',label:'#dcfce7'}},
+      {{stroke:'#fb7185',fill:'rgba(244,63,94,.16)',label:'#ffe4e6'}},
+      {{stroke:'#60a5fa',fill:'rgba(37,99,235,.16)',label:'#dbeafe'}},
+      {{stroke:'#f472b6',fill:'rgba(236,72,153,.16)',label:'#fce7f3'}},
+      {{stroke:'#a3e635',fill:'rgba(132,204,22,.16)',label:'#ecfccb'}},
+    ];
+    return palette[index % palette.length];
+  }}
   function beginSidetrendDrag(ev) {{
     if (!debugShowSidetrends || !debugSideRanges) return false;
     const rect=$('chart-wrap').getBoundingClientRect(), x=ev.clientX-rect.left, y=ev.clientY-rect.top;
@@ -1894,8 +1907,9 @@ class LightweightChartLevelSelectorUI:
     const tbody=rows.querySelector('tbody');
     debugSideRanges.forEach((range,index)=>{{
       const row=document.createElement('tr'); row.className=range.valid?'':'invalid';
+      const color=sidetrendColor(index);
       const days=Math.max(0,Math.round((Date.parse(range.end)-Date.parse(range.start))/86400000));
-      row.innerHTML=`<td>${{range.id}}<input type="checkbox" ${{range.valid?'checked':''}} aria-label="Keep ${{range.id}}"></td><td><input type="date" value="${{range.start}}" aria-label="${{range.id}} start"></td><td><input type="date" value="${{range.end}}" aria-label="${{range.id}} end"></td><td>${{days}}</td><td title="${{range.scannerStart==='not found'?'Added by user':'Detected by scanner'}}">${{range.scannerStart==='not found'?'—':'✓'}}</td><td><button type="button" aria-label="Delete ${{range.id}}">×</button></td>`;
+      row.innerHTML=`<td><i style="display:inline-block;width:9px;height:9px;margin-right:4px;border-radius:2px;background:${{color.stroke}}"></i>${{range.id}}<input type="checkbox" ${{range.valid?'checked':''}} aria-label="Keep ${{range.id}}"></td><td><input type="date" value="${{range.start}}" aria-label="${{range.id}} start"></td><td><input type="date" value="${{range.end}}" aria-label="${{range.id}} end"></td><td>${{days}}</td><td title="${{range.scannerStart==='not found'?'Added by user':'Detected by scanner'}}">${{range.scannerStart==='not found'?'—':'✓'}}</td><td><button type="button" aria-label="Delete ${{range.id}}">×</button></td>`;
       const [valid,start,end]=row.querySelectorAll('input');
       valid.onchange=()=>{{range.valid=valid.checked; renderSidetrendEditor();}};
       start.onchange=()=>{{range.start=start.value; drawCloud();}}; end.onchange=()=>{{range.end=end.value; drawCloud();}};
@@ -2983,10 +2997,11 @@ class LightweightChartLevelSelectorUI:
     if (!debugShowSidetrends || !debugSideRanges) return;
     debugSideRanges.filter(r=>r.valid).forEach((range,index)=>{{
       const bounds=sidetrendBounds(range); if (!bounds) return; const {{x0,x1,y0,y1}}=bounds;
-      ctx.save(); ctx.fillStyle='rgba(168,85,247,.15)'; ctx.strokeStyle='#c084fc'; ctx.lineWidth=1.5; ctx.setLineDash([7,4]);
+      const color=sidetrendColor(debugSideRanges.indexOf(range));
+      ctx.save(); ctx.fillStyle=color.fill; ctx.strokeStyle=color.stroke; ctx.lineWidth=1.5; ctx.setLineDash([7,4]);
       ctx.fillRect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0),Math.abs(y1-y0)); ctx.strokeRect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0),Math.abs(y1-y0));
-      ctx.setLineDash([]); ctx.fillStyle='#e9d5ff'; ctx.font='bold 11px sans-serif'; ctx.fillText(range.id,Math.min(x0,x1)+5,Math.min(y0,y1)+14);
-      const mid=(y0+y1)/2; [x0,x1].forEach(x=>{{ctx.beginPath();ctx.arc(x,mid,6,0,Math.PI*2);ctx.fillStyle='#f8fafc';ctx.fill();ctx.strokeStyle='#a855f7';ctx.lineWidth=2;ctx.stroke();}}); ctx.restore();
+      ctx.setLineDash([]); ctx.fillStyle=color.label; ctx.font='bold 11px sans-serif'; ctx.fillText(range.id,Math.min(x0,x1)+5,Math.min(y0,y1)+14);
+      const mid=(y0+y1)/2; [x0,x1].forEach(x=>{{ctx.beginPath();ctx.arc(x,mid,6,0,Math.PI*2);ctx.fillStyle='#f8fafc';ctx.fill();ctx.strokeStyle=color.stroke;ctx.lineWidth=2;ctx.stroke();}}); ctx.restore();
     }});
   }}
 

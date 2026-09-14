@@ -101,6 +101,16 @@ def test_sidetrends_fit_chart_and_have_draggable_edge_handles():
     assert "Delete ${{range.id}}" in source
 
 
+def test_each_sidetrend_uses_its_own_chart_and_table_color():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function sidetrendColor(index)" in source
+    assert "palette[index % palette.length]" in source
+    assert "ctx.fillStyle=color.fill" in source
+    assert "ctx.strokeStyle=color.stroke" in source
+    assert "background:${{color.stroke}}" in source
+
+
 def test_fibo_boundary_is_draggable_and_resynchronizes_group():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
