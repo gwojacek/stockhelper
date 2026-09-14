@@ -109,14 +109,19 @@ def test_debug_tools_and_reports_have_polish_translations():
 def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
-    assert 'id="line-kind-picker"' in source
-    assert "lineKindPicker.style.display=scannerWedgeAvailable?'none':'inline-flex'" in source
+    assert 'id="line-tool-group"' in source
+    assert "$('line-tool-group').classList.toggle('kind-open')" in source
+    assert "if(!scannerWedgeAvailable)" in source
     assert "activeTool='manual-wedge'" in source
     assert "side=manualWedgeStep===0?'upper':'lower'" in source
     assert "color:side==='upper'?'#dc2626':'#2563eb'" in source
     assert "group_id:'auto-wedge'" in source
     assert "manualWedgeStep < 2" in source
     assert 'id="save-manual-wedge"' in source
+    save_actions = source[source.index('<div class="chart-save-actions">'):source.index('</div></div><div class="legend-row">')]
+    assert save_actions.index('id="saved-fibo-status"') < save_actions.index('id="save-manual-wedge"') < save_actions.index('id="download-chart-png"')
+    assert "manualPrice=manualWedgeStep===0?Number(row.high):Number(row.low)" in source
+    assert "$('save-manual-wedge').style.display='inline-flex'" in source
     assert "levels.__saved_wedge_by_user__=true" in source
     assert "body:JSON.stringify({{levels:payload,screenshot:null}})" in source
 

@@ -627,7 +627,7 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
-    .line-tool-group {{ display:inline-flex; align-items:stretch; gap:0; }}
+    .line-tool-group {{ position:relative; display:inline-flex; align-items:stretch; gap:0; }}
     .line-tool-group #tool-line {{ border-radius:7px 0 0 7px; }}
     .line-color-picker {{ position:relative; display:inline-flex; margin-left:-1px; }}
     .line-color-picker #line-color-toggle {{ display:inline-flex; align-items:center; justify-content:center; gap:5px; border-radius:0 7px 7px 0; min-width:40px; padding-left:8px; padding-right:8px; }}
@@ -635,10 +635,8 @@ class LightweightChartLevelSelectorUI:
     .line-color-chevron {{ color:#cbd5e1; font-size:10px; line-height:1; }}
     .line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
     .line-color-picker.open .line-color-menu {{ display:flex; }}
-    .line-kind-picker {{ position:relative; display:inline-flex; margin-left:5px; }}
-    #line-kind-toggle {{ min-width:34px; padding:6px 8px; }}
     .line-kind-menu {{ display:none; position:absolute; z-index:101; top:calc(100% + 6px); left:0; min-width:150px; padding:6px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
-    .line-kind-picker.open .line-kind-menu {{ display:grid; gap:5px; }}
+    .line-tool-group.kind-open .line-kind-menu {{ display:grid; gap:5px; }}
     .line-kind-menu button {{ width:100%; text-align:left; white-space:nowrap; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; min-height:48px; padding:12px 18px 9px; border-top:1px solid rgba(23,81,117,.75); }}
     #chart-legend {{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; min-height:20px; margin:0; font-size:12px; font-weight:700; }}
@@ -734,7 +732,7 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Levels</span><span class="toolbar-hint">Select key price levels</span><div class="level-grid" id="level-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Analysis</span><span class="toolbar-hint">Validate and confirm levels</span><div class="toolbar-actions" id="analysis-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Tools</span><span class="toolbar-hint">Drawing &amp; measurement tools</span><div class="toolbar-actions">
-          <span class="line-tool-group"><button id="tool-line" title="Draw a line on the chart"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color"><span id="line-color-indicator" aria-hidden="true"></span><span class="line-color-chevron" aria-hidden="true">⌄</span></button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span><span class="line-kind-picker" id="line-kind-picker"><button id="line-kind-toggle" type="button" title="Choose line type" aria-label="Choose line type">⌄</button><span class="line-kind-menu"><button id="line-kind-ordinary" type="button" title="Draw an ordinary line">Ordinary line</button><button id="line-kind-wedge" type="button" title="Draw a wedge">Wedge</button></span></span>
+          <span class="line-tool-group" id="line-tool-group"><button id="tool-line" title="Choose an ordinary line or a wedge"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color"><span id="line-color-indicator" aria-hidden="true"></span><span class="line-color-chevron" aria-hidden="true">⌄</span></button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span><span class="line-kind-menu"><button id="line-kind-ordinary" type="button" title="Draw an ordinary line">Ordinary line</button><button id="line-kind-wedge" type="button" title="Draw a wedge using candle extremes; it can be saved for future scanner searches">Wedge</button></span></span>
           <button id="tool-fib" title="Draw Fibonacci 61.8 levels">Fib 61.8</button><button id="tool-half" title="Set a half-distance stop loss">Half→SL</button><button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button><button id="ichimoku-toggle" title="Show or hide the Ichimoku overlay">Ichimoku</button><button id="debug-tools" type="button" title="Review and correct scanner geometry">Debug tools</button>
         </div></section>
         <section class="toolbar-group" id="scanner-toolbar-group" style="display:none"><span class="toolbar-label">Scanner</span><span class="toolbar-hint">Find chart patterns</span><div class="toolbar-actions">
@@ -743,7 +741,7 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Reset</span><span class="toolbar-hint">Restore chart drawings</span><div class="toolbar-actions"><button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Fibo</button><button id="reset-all" title="Reset all chart values and drawings">All</button></div></section>
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
+      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="save-manual-wedge" type="button" title="Save this wedge so future scanner searches treat it as saved by you" style="display:none">Save wedge</button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
       <div id="calc-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize chart and report" title="Drag to resize chart and report"></div>
       <section id="calc-drawer" class="chart-stage" aria-live="polite">
         <div class="calc-toolbar">
@@ -3384,8 +3382,7 @@ class LightweightChartLevelSelectorUI:
   function updatePanel() {{
     seq.forEach(field => $(field + '-btn')?.classList.toggle('active', activeTool === 'level' && activeField === field));
     $('tool-line').classList.toggle('active', activeTool === 'line' || activeTool === 'manual-wedge');
-    const lineKindPicker=$('line-kind-picker');
-    if(lineKindPicker) lineKindPicker.style.display=scannerWedgeAvailable?'none':'inline-flex';
+    $('line-tool-group')?.classList.toggle('has-kind-choice',!scannerWedgeAvailable);
     $('tool-fib').classList.toggle('active', activeTool === 'fib');
     $('tool-half').classList.toggle('active', activeTool === 'half');
     $('tool-percent-diff').classList.toggle('active', activeTool === 'percent-diff');
@@ -3666,21 +3663,24 @@ class LightweightChartLevelSelectorUI:
   $('capital').addEventListener('change', saveSharedBalance);
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
-  $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
-  $('line-kind-toggle').onclick = () => $('line-kind-picker').classList.toggle('open');
+  $('tool-line').onclick = () => {{
+    if(!scannerWedgeAvailable) {{$('line-tool-group').classList.toggle('kind-open');return;}}
+    const same=activeTool==='line';clearPreviews();activeTool=same?'level':'line';activeField=null;fibAnchor=halfAnchor=null;updatePanel();
+  }};
   $('line-kind-ordinary').onclick = () => {{
     drawnObjects=drawnObjects.filter(obj=>!manualWedgeDraftIds.includes(obj.id)); manualWedgeDraftIds=[]; manualWedgeStep=0;
-    clearPreviews(); activeTool='line'; activeField=null; $('line-kind-picker').classList.remove('open'); $('result-box').textContent=''; render();
+    clearPreviews(); activeTool='line'; activeField=null; $('line-tool-group').classList.remove('kind-open'); $('result-box').textContent=''; render();
   }};
   $('line-kind-wedge').onclick = () => {{
     drawnObjects=drawnObjects.filter(obj=>!manualWedgeDraftIds.includes(obj.id)); manualWedgeDraftIds=[]; manualWedgeStep=0;
-    clearPreviews(); activeTool='manual-wedge'; activeField=null; lineAnchor=null; $('line-kind-picker').classList.remove('open');
+    clearPreviews(); activeTool='manual-wedge'; activeField=null; lineAnchor=null; $('line-tool-group').classList.remove('kind-open');
     $('result-box').textContent='Draw the upper wedge line.'; updatePanel(); render();
   }};
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
   $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');
+  $('save-manual-wedge').onclick = saveManualWedge;
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => {{ lineColor = b.dataset.color; $('line-color-indicator').style.background=b.dataset.color; $('line-color-picker').classList.remove('open'); }});
   $('download-chart-png').onclick = async () => {{
     try {{
@@ -3778,8 +3778,8 @@ class LightweightChartLevelSelectorUI:
       if(manualWedgeStep < 2) $('result-box').textContent='Draw the lower wedge line.';
       else {{
         activeTool='level'; applyWedgeDerivedLevels(true); render();
-        $('result-box').innerHTML='<button id="save-manual-wedge" type="button">Save wedge</button>';
-        $('save-manual-wedge').onclick=saveManualWedge;
+        $('save-manual-wedge').style.display='inline-flex';
+        $('result-box').textContent='The wedge is ready to save.';
         return;
       }}
     }}
@@ -3796,10 +3796,12 @@ class LightweightChartLevelSelectorUI:
       if(!resp.ok||!data.ok) throw new Error(data.error||String(resp.status));
       initialWedgeGeometry=JSON.stringify(drawnObjects.filter(obj=>obj.type==='wedge'||obj.group_id==='auto-wedge'));
       manualWedgeDraftIds=[]; refreshSavedFiboStatus();
+      $('save-manual-wedge').style.display='none';
       $('result-box').textContent='Wedge saved for future scanner searches.';
       try {{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:true}},'*');}} catch(_err) {{}}
     }} catch(err) {{
       savedWedgeByUser=false; levels.__saved_wedge_by_user__=false;
+      if(button) button.disabled=false;
       $('result-box').textContent=`Could not save wedge: ${{err.message||err}}`;
     }}
   }}
@@ -3877,7 +3879,12 @@ class LightweightChartLevelSelectorUI:
       $('result-box').textContent = '';
       percentDiffAnchor = null; activeTool = 'level'; updatePanel(); return;
     }}
-    if (activeTool === 'line' || activeTool === 'manual-wedge') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); updatePanel(); }} else {{ commitLineDrawing(time, price); }} return; }}
+    if (activeTool === 'line' || activeTool === 'manual-wedge') {{
+      const row=nearest(time),manualPrice=manualWedgeStep===0?Number(row.high):Number(row.low),anchorTime=activeTool==='manual-wedge'?row.time:time,anchorPrice=activeTool==='manual-wedge'?manualPrice:price;
+      if (!lineAnchor) {{ lineAnchor = {{x:anchorTime, y:anchorPrice}}; updateLinePreview(addDays(anchorTime, 1), anchorPrice); updatePanel(); }}
+      else commitLineDrawing(anchorTime,anchorPrice);
+      return;
+    }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}

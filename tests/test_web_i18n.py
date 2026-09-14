@@ -191,7 +191,7 @@ def test_chart_toolbar_hints_and_button_tooltips_have_polish_translations():
     assert all('title="' in button.split(">", 1)[0] for button in literal_buttons)
     assert "b.title=levelButtonTitles[field]" in chart_source
     for tooltip in (
-        "Draw a line on the chart", "Line color", "Yellow", "Purple", "Green",
+        "Choose an ordinary line or a wedge", "Line color", "Yellow", "Purple", "Green",
         "Draw Fibonacci 61.8 levels", "Set a half-distance stop loss",
         "Select two candles to calculate the price difference", "Show or hide the Ichimoku overlay",
         "Find a new upper wedge line", "Search for a larger valid alternative around the current wedge",
