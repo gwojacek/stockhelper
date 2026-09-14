@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
+I18N_SOURCE = Path(__file__).resolve().parents[1] / "utilities" / "web_i18n.py"
 
 
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
@@ -69,6 +70,31 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "scannerCells[1],correctedCells[1],scannerCells[3],correctedCells[3]" in source
     assert "same?'-':String(afterValue?.x0" in source
     assert "#calc-table.debug-report > table th:not(:first-child)" in source
+
+
+def test_debug_tools_and_reports_have_polish_translations():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    i18n_source = I18N_SOURCE.read_text(encoding="utf-8")
+
+    translated_labels = [
+        "Debug tools — Fibo anchors",
+        "Debug tools — Wedge anchors",
+        "Fibo anchor correction report",
+        "Wedge correction report",
+        "Sidetrend correction report",
+        "Start date (scanner)",
+        "Start date (corrected)",
+        "End date (scanner)",
+        "End date (corrected)",
+        "Date (yours)",
+        "Price (yours)",
+        "Show report",
+        "Show unselected",
+    ]
+    for label in translated_labels:
+        assert f'"{label}":' in i18n_source
+    for label in translated_labels[:2] + translated_labels[5:-1]:
+        assert label in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
