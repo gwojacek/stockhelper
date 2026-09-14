@@ -682,7 +682,7 @@ class LightweightChartLevelSelectorUI:
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
-    #calc-splitter {{ display:none; position:relative; z-index:90; height:22px; margin:0 10px; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:absolute; left:0; right:0; top:10px; height:2px; border-radius:999px; background:#315b80; box-shadow:0 0 8px rgba(56,189,248,.35); }} #calc-splitter::after {{ content:'↕'; display:grid; place-items:center; position:absolute; left:50%; top:1px; width:42px; height:20px; transform:translateX(-50%); border:1px solid #fb923c; border-radius:999px; background:#ea580c; color:#fff7ed; font:900 13px/1 sans-serif; box-shadow:0 2px 10px rgba(234,88,12,.55); }} #calc-splitter:hover::after,#calc-splitter.resizing::after {{ background:#f97316; transform:translateX(-50%) scale(1.08); }} .main.calc-open #calc-splitter {{ display:block; }}
+    #calc-splitter {{ display:none; position:relative; z-index:90; height:22px; margin:0 10px; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:absolute; left:0; right:0; top:10px; height:2px; border-radius:999px; background:#315b80; }} #calc-splitter::after {{ content:'↕'; display:grid; place-items:center; position:absolute; left:50%; top:1px; width:28px; height:20px; transform:translateX(-50%); border:0; background:#071426; color:#94a3b8; font:900 15px/1 sans-serif; }} #calc-splitter:hover::after,#calc-splitter.resizing::after {{ color:#e2e8f0; transform:translateX(-50%) scale(1.08); }} .main.calc-open #calc-splitter {{ display:block; }}
     #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; margin-top:-6px; }}
     .main.calc-open #calc-drawer {{ box-sizing:border-box; height:var(--calc-drawer-height,340px); max-height:none; }}
@@ -3681,7 +3681,12 @@ class LightweightChartLevelSelectorUI:
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('setup-debug-btn').onclick = () => copySetupDebug();
   $('debug-tools').onclick = renderDebugChooser;
-  $('debug-dialog-close').onclick = () => {{ $('debug-dialog').classList.remove('open'); debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud(); }};
+  $('debug-dialog-close').onclick = () => {{
+    $('debug-dialog').classList.remove('open'); debugShowSidetrends=false;
+    const reportOpen=$('calc-drawer')?.classList.contains('open')&&$('calc-table')?.classList.contains('debug-report');
+    if(!reportOpen) restoreUnkeptDebugCorrection();
+    drawCloud();
+  }};
   (() => {{
     const dialog=$('debug-dialog'), handle=dialog?.querySelector('.debug-head');
     let drag=null;

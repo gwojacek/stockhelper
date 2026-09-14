@@ -121,6 +121,9 @@ def test_sidetrends_fit_chart_and_have_draggable_edge_handles():
     assert "debug-toggle-all" in source
     assert "Delete ${{range.id}}" in source
     assert "debugShowSidetrends=mode==='sidetrend'" in source
+    assert "const reportOpen=$('calc-drawer')?.classList.contains('open')&&$('calc-table')?.classList.contains('debug-report')" in source
+    assert "if(!reportOpen) restoreUnkeptDebugCorrection();" in source
+    assert "$('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open');" in source
     assert "debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud()" in source
 
 
@@ -163,6 +166,11 @@ def test_chart_and_drawer_have_a_persisted_drag_splitter():
     assert "setDrawerHeight(resize.height+(resize.y-ev.clientY))" in source
     assert "#calc-splitter::after" in source
     assert "splitter.classList.add('resizing')" in source
+    splitter_css = source[source.index("#calc-splitter {{"):source.index("#calc-drawer {{")]
+    assert "content:'↕'" in splitter_css
+    assert "border:0; background:#071426; color:#94a3b8" in splitter_css
+    assert "#ea580c" not in splitter_css
+    assert "#f97316" not in splitter_css
 
 
 def test_save_chart_and_png_buttons_have_identical_dimensions():
