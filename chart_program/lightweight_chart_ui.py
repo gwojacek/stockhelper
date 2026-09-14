@@ -714,7 +714,7 @@ class LightweightChartLevelSelectorUI:
     .debug-choice-grid {{ display:grid; gap:10px; margin-top:14px; }}
     .debug-choice {{ padding:14px; text-align:left; border-color:#315b80; }} .debug-choice strong,.debug-choice span {{ display:block; }} .debug-choice span {{ margin-top:5px; color:#9fb4d6; font-size:12px; font-weight:500; }}
     .debug-help {{ color:#a9c0dc; font-size:13px; line-height:1.5; }}
-    .debug-editor-table {{ width:100%; min-width:0; border-collapse:collapse; font-size:11px; }} .debug-editor-table th,.debug-editor-table td {{ padding:6px 5px; border:1px solid #17324d; text-align:center; white-space:nowrap; }} .debug-editor-table th {{ color:#a9c0dc; background:#10253c; }} .debug-editor-table input[type=date] {{ width:105px; min-width:0; padding:4px; font-size:10px; }} .debug-editor-table button {{ padding:4px 7px; color:#fca5a5; }} .debug-editor-table tr.invalid {{ opacity:.42; text-decoration:line-through; }}
+    .debug-editor-table {{ width:100%; min-width:680px; border-collapse:collapse; font-size:12px; }} .debug-editor-table th,.debug-editor-table td {{ height:42px; padding:7px 9px; border:1px solid #173a59; text-align:center; white-space:nowrap; }} .debug-editor-table th {{ color:#b9cae0; background:#102a43; font-weight:800; }} .debug-editor-table input[type=date] {{ width:132px; min-width:0; padding:8px 10px; border-radius:11px; font-size:11px; }} .debug-editor-table input[type=checkbox] {{ width:22px; height:22px; accent-color:#1683f8; }} .debug-editor-table button {{ padding:5px 9px; border-radius:9px; color:#fca5a5; }} .debug-editor-table tr.invalid {{ opacity:.42; text-decoration:line-through; }}
     .debug-period.invalid {{ opacity:.42; text-decoration:line-through; }}
     .debug-actions {{ display:flex; gap:8px; margin-top:14px; }} .debug-actions button {{ flex:1; }} .debug-report-btn {{ background:#0969ef; border-color:#38bdf8; }}
     #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report pre {{ margin:0; padding:12px; color:#dbeafe; background:#071426; border:1px solid #29415f; border-radius:9px; white-space:pre-wrap; font:12px/1.45 ui-monospace,monospace; }}
@@ -1643,6 +1643,17 @@ class LightweightChartLevelSelectorUI:
     return ranges;
   }}
 
+  function sidetrendNearFibo(range) {{
+    const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
+    if(!boundary)return true;
+    const fibStart=Date.parse(String(boundary.x0||'').slice(0,10)),fibEnd=Date.parse(String(boundary.x1||'').slice(0,10));
+    const sideStart=Date.parse(range.start),sideEnd=Date.parse(range.end),limit=62*86400000;
+    if(![fibStart,fibEnd,sideStart,sideEnd].every(Number.isFinite))return true;
+    if(sideEnd<fibStart)return fibStart-sideEnd<=limit;
+    if(sideStart>fibEnd)return sideStart-fibEnd<=limit;
+    return true;
+  }}
+
   function fiboDebugSnapshot() {{
     const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
     const lines = [];
@@ -1852,7 +1863,11 @@ class LightweightChartLevelSelectorUI:
     const rows=[];
     if(mode==='fibo') {{const before=geometry(scannerGeometry[0]),after=geometry(correctedGeometry[0]);rows.push(['Fibo anchors',before,before===after?'No changes':after]);}}
     else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),beforeText=geometry(before),afterText=geometry(after);rows.push([`${{side}} line`,beforeText,beforeText===afterText?'No changes':afterText]);}});
-    else (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>rows.push([r.id,`${{r.scannerStart}} → ${{r.scannerEnd}}`,`${{r.start}} → ${{r.end}}`]));
+    else [...(debugSideRanges||[])].sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
+      const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
+      const scanner=r.scannerStart==='not found'?'—':'✓',modified=!r.valid?'Unselected':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
+      rows.push([r.id,r.start,r.end,String(days),scanner,modified]);
+    }});
     const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
     let dataHtml='',copyData=[];
@@ -1861,13 +1876,14 @@ class LightweightChartLevelSelectorUI:
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
     const fibInfo=mode==='sidetrend'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
-    table.innerHTML=`<dl class="debug-instrument"><dt>Ticker</dt><dd>${{esc(debugTickerText())}}</dd><dt>Full name</dt><dd>${{esc(P.sourceName || '-')}}</dd></dl><table><thead><tr><th>Item</th><th>Scanner found</th><th>Corrected to</th></tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
-    const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),['Item,Scanner found,Corrected to',...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
+    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:['Item','Scanner found','Corrected to'];
+    table.innerHTML=`<dl class="debug-instrument"><dt>Ticker</dt><dd>${{esc(debugTickerText())}}</dd><dt>Full name</dt><dd>${{esc(P.sourceName || '-')}}</dd></dl><table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
+    const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
     requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
     $('copy-debug-report').onclick=async()=>{{try{{await navigator.clipboard.writeText(copyText);$('copy-debug-report').textContent='Copied';}}catch(_err){{$('copy-debug-report').textContent='Select and copy below';}}}};
     $('keep-debug-correction')?.addEventListener('click',keepDebugCorrection);
-    $('debug-dialog').classList.remove('open'); debugShowSidetrends=false; drawCloud();
+    $('debug-dialog').classList.remove('open'); debugShowSidetrends=mode==='sidetrend'; drawCloud();
   }}
 
   function restoreUnkeptDebugCorrection() {{
@@ -1899,24 +1915,25 @@ class LightweightChartLevelSelectorUI:
     debugShowSidetrends=true; drawCloud();
     const firstOpen=!debugSideRanges;
     if (firstOpen) {{
-      debugSideRanges=detectedMonthlySidetrends();
+      debugSideRanges=detectedMonthlySidetrends().map(range=>({{...range,valid:sidetrendNearFibo(range)}}));
       savedSidetrends.forEach(saved=>{{
         const match=debugSideRanges.find(r=>(saved.scannerStart&&r.scannerStart===saved.scannerStart&&r.scannerEnd===saved.scannerEnd)||(r.start===saved.start&&r.end===saved.end));
-        if (!match) debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:true,saved:true}});
-        else {{match.start=saved.start;match.end=saved.end;match.saved=true;}}
+        if (!match) debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:sidetrendNearFibo(saved),saved:true}});
+        else {{match.start=saved.start;match.end=saved.end;match.valid=sidetrendNearFibo(match);match.saved=true;}}
       }});
+      debugSideRanges.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
     }}
     if(firstOpen) requestAnimationFrame(()=>{{resizeChartToContainer();requestAnimationFrame(drawCloud);}});
     const body=$('debug-dialog-body');
     body.innerHTML=`<p class="debug-help">Drag either chart handle to resize a range. Added or adjusted ranges can be saved for future Allsearch scans.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-add-sidetrend">Add sidetrend</button><button id="debug-toggle-all">Select/unselect all</button></div><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     const rows=$('debug-periods');
-    rows.innerHTML='<table class="debug-editor-table"><thead><tr><th>#</th><th>From</th><th>To</th><th>Days</th><th>Scanner</th><th></th></tr></thead><tbody></tbody></table>';
+    rows.innerHTML='<table class="debug-editor-table"><thead><tr><th>Use</th><th>#</th><th>From</th><th>To</th><th>Days</th><th>Scanner</th><th></th></tr></thead><tbody></tbody></table>';
     const tbody=rows.querySelector('tbody');
     debugSideRanges.forEach((range,index)=>{{
       const row=document.createElement('tr'); row.className=range.valid?'':'invalid';
       const color=sidetrendColor(index);
       const days=Math.max(0,Math.round((Date.parse(range.end)-Date.parse(range.start))/86400000));
-      row.innerHTML=`<td><i style="display:inline-block;width:9px;height:9px;margin-right:4px;border-radius:2px;background:${{color.stroke}}"></i>${{range.id}}<input type="checkbox" ${{range.valid?'checked':''}} aria-label="Keep ${{range.id}}"></td><td><input type="date" value="${{range.start}}" aria-label="${{range.id}} start"></td><td><input type="date" value="${{range.end}}" aria-label="${{range.id}} end"></td><td>${{days}}</td><td title="${{range.scannerStart==='not found'?'Added by user':'Detected by scanner'}}">${{range.scannerStart==='not found'?'—':'✓'}}</td><td><button type="button" aria-label="Delete ${{range.id}}">×</button></td>`;
+      row.innerHTML=`<td><input type="checkbox" ${{range.valid?'checked':''}} aria-label="Keep ${{range.id}}"></td><td><i style="display:inline-block;width:9px;height:9px;margin-right:4px;border-radius:2px;background:${{color.stroke}}"></i>${{range.id}}</td><td><input type="date" value="${{range.start}}" aria-label="${{range.id}} start"></td><td><input type="date" value="${{range.end}}" aria-label="${{range.id}} end"></td><td>${{days}}</td><td title="${{range.scannerStart==='not found'?'Added by user':'Detected by scanner'}}">${{range.scannerStart==='not found'?'—':'✓'}}</td><td><button type="button" aria-label="Delete ${{range.id}}">×</button></td>`;
       const [valid,start,end]=row.querySelectorAll('input');
       valid.onchange=()=>{{range.valid=valid.checked; renderSidetrendEditor();}};
       start.onchange=()=>{{range.start=start.value; drawCloud();}}; end.onchange=()=>{{range.end=end.value; drawCloud();}};
@@ -4216,7 +4233,7 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
   $('calculate-btn').onclick = () => calculatePosition(true);
-  $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); restoreUnkeptDebugCorrection(); window.dispatchEvent(new Event('resize')); }};
+  $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud(); window.dispatchEvent(new Event('resize')); }};
 
   $('saved-fibo-status').onclick = async () => {{
     if (!savedFiboByUser && !savedWedgeByUser) {{

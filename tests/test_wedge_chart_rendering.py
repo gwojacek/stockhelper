@@ -47,12 +47,13 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
 
     assert 'Date (scanner)' in source
     assert 'Price (scanner)' in source
-    assert '<th>From</th><th>To</th><th>Days</th><th>Scanner</th>' in source
+    assert '<th>Use</th><th>#</th><th>From</th><th>To</th><th>Days</th><th>Scanner</th>' in source
     assert "levels.__saved_sidetrends__=" in source
     assert "debugReportMode==='sidetrend'" in source
     assert "Fibo formation containing the sidetrend" in source
     assert "renderGeometryEditor(debugCorrectionKind, true)" in source
     assert "'No changes':after" in source
+    assert "reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']" in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
@@ -102,6 +103,18 @@ def test_sidetrends_fit_chart_and_have_draggable_edge_handles():
     assert "Click first candle" in source
     assert "debug-toggle-all" in source
     assert "Delete ${{range.id}}" in source
+    assert "debugShowSidetrends=mode==='sidetrend'" in source
+    assert "debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud()" in source
+
+
+def test_sidetrends_are_sorted_and_distant_ranges_start_unselected():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function sidetrendNearFibo(range)" in source
+    assert "limit=62*86400000" in source
+    assert "valid:sidetrendNearFibo(range)" in source
+    assert "String(a.start).localeCompare(String(b.start))" in source
+    assert "String(b.start).localeCompare(String(a.start))" in source
 
 
 def test_each_sidetrend_uses_its_own_chart_and_table_color():
