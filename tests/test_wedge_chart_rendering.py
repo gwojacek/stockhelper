@@ -143,6 +143,8 @@ def test_wedge_debug_button_opens_its_only_tool_directly():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
     assert "$('debug-tools').onclick = () => selectedJournalTechnique()==='Kliny'?renderGeometryEditor('wedge'):renderDebugChooser()" in source
+    editor = source[source.index("function renderGeometryEditor"):source.index("function renderDebugChooser")]
+    assert "$('debug-dialog').classList.add('open')" in editor
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():

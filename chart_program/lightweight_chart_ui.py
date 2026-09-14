@@ -2016,6 +2016,7 @@ class LightweightChartLevelSelectorUI:
     debugShowSidetrends=false; drawCloud();
     const isFibo=kind==='fibo';
     debugReportMode=kind;
+    $('debug-dialog').classList.add('open');
     if (!refreshOnly) {{
       restoreUnkeptDebugCorrection();
       debugCorrectionKind=kind; debugCorrectionKept=false;
