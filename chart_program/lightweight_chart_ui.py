@@ -1901,14 +1901,14 @@ class LightweightChartLevelSelectorUI:
       const before=scannerGeometry[0],after=correctedGeometry[0],same=geometry(before)===geometry(after);
       const days=obj=>obj?Math.abs(Math.round((Date.parse(obj.x1)-Date.parse(obj.x0))/86400000)):'—';
       const beforeValue=debugGeometryValues(before),afterValue=debugGeometryValues(after);
-      rows.push(['Anchor A',String(beforeValue?.x0||'').slice(0,10),same?'No changes':String(afterValue?.x0||'').slice(0,10),beforeValue?fmt(beforeValue.y0):'—',same?'':fmt(afterValue?.y0)]);
-      rows.push(['Anchor B',String(beforeValue?.x1||'').slice(0,10),same?'No changes':String(afterValue?.x1||'').slice(0,10),beforeValue?fmt(beforeValue.y1):'—',same?'':fmt(afterValue?.y1)]);
-      rows.push(['Length (calendar days)',String(days(before)),same?'No changes':String(days(after)),'','']);
+      rows.push(['Anchor A',String(beforeValue?.x0||'').slice(0,10),same?'-':String(afterValue?.x0||'').slice(0,10),beforeValue?fmt(beforeValue.y0):'—',same?'-':fmt(afterValue?.y0)]);
+      rows.push(['Anchor B',String(beforeValue?.x1||'').slice(0,10),same?'-':String(afterValue?.x1||'').slice(0,10),beforeValue?fmt(beforeValue.y1):'—',same?'-':fmt(afterValue?.y1)]);
+      rows.push(['Length (calendar days)',String(days(before)),same?'-':String(days(after)),'','']);
     }}
     else if(mode==='wedge') ['upper','lower'].forEach(side=>{{
       const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),same=geometry(before)===geometry(after);
-      const scannerCells=geometryCells(before),correctedCells=same?['No changes','','','']:geometryCells(after);
-      rows.push([`${{side}} line`,scannerCells[0],correctedCells[0],scannerCells[1],correctedCells[1],scannerCells[2],correctedCells[2],scannerCells[3],correctedCells[3]]);
+      const scannerCells=geometryCells(before),correctedCells=same?['-','-','-','-']:geometryCells(after);
+      rows.push([`${{side}} line`,scannerCells[0],correctedCells[0],scannerCells[2],correctedCells[2],scannerCells[1],correctedCells[1],scannerCells[3],correctedCells[3]]);
     }});
     else [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
       const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
@@ -1932,7 +1932,7 @@ class LightweightChartLevelSelectorUI:
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
     const fibInfo=mode==='sidetrend'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
-    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','Start price (scanner)','Start price (corrected)','End date (scanner)','End date (corrected)','End price (scanner)','End price (corrected)']);
+    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','End date (scanner)','End date (corrected)','Start price (scanner)','Start price (corrected)','End price (scanner)','End price (corrected)']);
     table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
