@@ -26,17 +26,30 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert 'type="checkbox"' in source
     assert 'type="date"' in source
     assert "debug-add-sidetrend" in source
+    assert "bestWidth <= 0.20" in source
+    assert "Math.abs(last-first)" in source
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
+    assert "function debugTickerText()" in source
     assert "function debugInstrumentLines()" in source
-    assert "`Ticker: ${{P.sourceTicker || P.symbol || '-'}}`" in source
+    assert "`Ticker: ${{debugTickerText()}}`" in source
     assert "`Full name: ${{P.sourceName || '-'}}`" in source
     assert "lines.push(...debugInstrumentLines());" in source
     assert '<dt>Ticker</dt>' in source
     assert '<dt>Full name</dt>' in source
+
+
+def test_debug_editors_use_comparison_tables_and_save_sidetrends():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert 'Date (scanner)' in source
+    assert 'Price (scanner)' in source
+    assert '<th>From</th><th>To</th><th>Days</th><th>Scanner</th>' in source
+    assert "levels.__saved_sidetrends__=" in source
+    assert "debugReportMode==='sidetrend'" in source
 
 
 def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy():

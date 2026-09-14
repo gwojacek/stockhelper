@@ -5403,6 +5403,41 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
     return anchors
 
 
+def _saved_sidetrends_for_ticker(ticker: str) -> list[tuple[str, str]]:
+    """Return user-confirmed month-long sideways ranges from a chart session."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return []
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    ranges = state.get("__saved_sidetrends__") if isinstance(state, dict) else None
+    if not isinstance(ranges, list):
+        return []
+    saved: list[tuple[str, str]] = []
+    for item in ranges:
+        if not isinstance(item, dict):
+            continue
+        start, end = str(item.get("start") or "")[:10], str(item.get("end") or "")[:10]
+        try:
+            duration = (pd.Timestamp(end) - pd.Timestamp(start)).days
+        except (TypeError, ValueError):
+            continue
+        if start and end and duration >= 30:
+            saved.append((start, end))
+    return saved
+
+
+def _fibo_crosses_saved_sidetrend(candidate: FiboScanResult, ranges: list[tuple[str, str]]) -> bool:
+    """A confirmed sidetrend inside an impulse invalidates that old Fibo leg."""
+    return any(
+        candidate.incline_start_date <= start
+        and end <= candidate.incline_end_date
+        for start, end in ranges
+    )
+
+
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
     """Warn for five days before removing an invalid saved Fibo."""
     path = _scanner_session_path_for_ticker(ticker)
@@ -8474,6 +8509,13 @@ def run_fibo_search(target: str) -> int:
             # when this same scan found a much smaller regular long formation.
             # This removes JP225's stale broad leg while preserving stepwise
             # trends such as ROST when no actionable nested replacement exists.
+            saved_sidetrends = _saved_sidetrends_for_ticker(ticker)
+            if saved_sidetrends:
+                out_rows = [
+                    item for item in out_rows
+                    if isinstance(item, WedgeScanResult)
+                    or not _fibo_crosses_saved_sidetrend(item, saved_sidetrends)
+                ]
             out_rows = _prune_superseded_steep_fibo_rows(out_rows)
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:

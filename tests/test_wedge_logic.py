@@ -6,6 +6,7 @@ import os
 from datetime import date
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -81,6 +82,27 @@ def test_saved_fibo_anchors_are_read_from_boundary_group(tmp_path, monkeypatch):
     assert scanner._saved_fibo_anchors_for_ticker("KLIN") == [
         ("long", "2026-02-02", "2026-06-05")
     ]
+
+
+def test_saved_sidetrends_are_loaded_and_invalidate_crossing_fibo(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "GVT.json").write_text(json.dumps({
+        "__saved_sidetrends__": [
+            {"start": "2026-07-24", "end": "2026-08-28"},
+            {"start": "2026-09-01", "end": "2026-09-10"},
+        ],
+    }), encoding="utf-8")
+
+    ranges = scanner._saved_sidetrends_for_ticker("GVT.WA")
+    candidate = SimpleNamespace(
+        incline_start_date="2026-07-15",
+        incline_end_date="2026-09-03",
+    )
+
+    assert ranges == [("2026-07-24", "2026-08-28")]
+    assert scanner._fibo_crosses_saved_sidetrend(candidate, ranges) is True
 
 
 def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkeypatch):
