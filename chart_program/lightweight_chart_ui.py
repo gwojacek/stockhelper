@@ -709,7 +709,7 @@ class LightweightChartLevelSelectorUI:
     #debug-tools {{ border-color:#38bdf8; }}
     #debug-dialog {{ display:none; position:fixed; z-index:200; left:26px; top:150px; width:390px; max-height:calc(100vh - 190px); overflow:auto; padding:16px; border:1px solid #315b80; border-radius:15px; background:linear-gradient(145deg,#0d1b30,#071426); box-shadow:0 24px 70px rgba(0,0,0,.65); }}
     #debug-dialog.open {{ display:block; }}
-    .debug-head {{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }} .debug-head h3 {{ flex:1; margin:0; font-size:18px; }}
+    .debug-head {{ display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:move; user-select:none; touch-action:none; }} .debug-head h3 {{ flex:1; margin:0; font-size:18px; }}
     .debug-close {{ border:0; background:transparent; font-size:22px; padding:2px 6px; }}
     .debug-choice-grid {{ display:grid; gap:10px; margin-top:14px; }}
     .debug-choice {{ padding:14px; text-align:left; border-color:#315b80; }} .debug-choice strong,.debug-choice span {{ display:block; }} .debug-choice span {{ margin-top:5px; color:#9fb4d6; font-size:12px; font-weight:500; }}
@@ -1356,7 +1356,7 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function debugTickerText() {{
-    const values=[P.symbol,P.sourceTicker].map(value=>String(value||'').trim()).filter(Boolean);
+    const values=[P.symbol,P.sourceTicker].flatMap(value=>String(value||'').split('/')).map(value=>value.trim()).filter(Boolean);
     return [...new Set(values)].join(' / ') || '-';
   }}
   function debugInstrumentLines() {{
@@ -3584,6 +3584,24 @@ class LightweightChartLevelSelectorUI:
   $('setup-debug-btn').onclick = () => copySetupDebug();
   $('debug-tools').onclick = renderDebugChooser;
   $('debug-dialog-close').onclick = () => {{ $('debug-dialog').classList.remove('open'); debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud(); }};
+  (() => {{
+    const dialog=$('debug-dialog'), handle=dialog?.querySelector('.debug-head');
+    let drag=null;
+    handle?.addEventListener('pointerdown',ev=>{{
+      if(ev.target.closest('button'))return;
+      const rect=dialog.getBoundingClientRect();
+      drag={{id:ev.pointerId,dx:ev.clientX-rect.left,dy:ev.clientY-rect.top}};
+      handle.setPointerCapture?.(ev.pointerId); ev.preventDefault();
+    }});
+    handle?.addEventListener('pointermove',ev=>{{
+      if(!drag||drag.id!==ev.pointerId)return;
+      const maxLeft=Math.max(0,window.innerWidth-dialog.offsetWidth),maxTop=Math.max(0,window.innerHeight-dialog.offsetHeight);
+      dialog.style.left=`${{Math.max(0,Math.min(maxLeft,ev.clientX-drag.dx))}}px`;
+      dialog.style.top=`${{Math.max(0,Math.min(maxTop,ev.clientY-drag.dy))}}px`;
+    }});
+    const stop=ev=>{{if(!drag||drag.id!==ev.pointerId)return;handle.releasePointerCapture?.(ev.pointerId);drag=null;}};
+    handle?.addEventListener('pointerup',stop); handle?.addEventListener('pointercancel',stop);
+  }})();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
   $('find-new-lower-wedge').onclick = () => findNewWedge('lower');

@@ -5429,13 +5429,47 @@ def _saved_sidetrends_for_ticker(ticker: str) -> list[tuple[str, str]]:
     return saved
 
 
-def _fibo_crosses_saved_sidetrend(candidate: FiboScanResult, ranges: list[tuple[str, str]]) -> bool:
-    """A confirmed sidetrend inside an impulse invalidates that old Fibo leg."""
+def _fibo_crosses_saved_sidetrend(
+    candidate: FiboScanResult,
+    ranges: list[tuple[str, str]],
+    *,
+    latest_date: str = "",
+) -> bool:
+    """Reject a Fibo split by a confirmed sidetrend before its 61.8 touch."""
+    correction_end = candidate.first_61_8_touch_date or latest_date
     return any(
-        candidate.incline_start_date <= start
-        and end <= candidate.incline_end_date
+        (
+            candidate.incline_start_date <= start
+            and end <= candidate.incline_end_date
+        )
+        or (
+            candidate.incline_end_date <= start
+            and bool(correction_end)
+            and end <= correction_end
+        )
         for start, end in ranges
     )
+
+
+def _fibo_has_detected_month_sidetrend(df: pd.DataFrame, candidate: FiboScanResult) -> bool:
+    """Reject old anchors and corrections separated by an automatic side phase.
+
+    A new formation remains possible, but its first anchor must occur after the
+    completed range.  Therefore this check never relocates an old anchor; the
+    normal selector must independently find a sufficiently mature new impulse.
+    """
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    start = pd.to_datetime(candidate.incline_start_date, errors="coerce")
+    end = pd.to_datetime(candidate.incline_end_date, errors="coerce")
+    touch = pd.to_datetime(candidate.first_61_8_touch_date, errors="coerce")
+    if pd.isna(start) or pd.isna(end):
+        return False
+    impulse = df.loc[(dates >= start) & (dates <= end)].reset_index(drop=True)
+    if _has_completed_month_side_trend(impulse):
+        return True
+    correction_end = touch if not pd.isna(touch) else dates.max()
+    correction = df.loc[(dates >= end) & (dates <= correction_end)].reset_index(drop=True)
+    return _has_completed_month_side_trend(correction)
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
@@ -8510,12 +8544,17 @@ def run_fibo_search(target: str) -> int:
             # This removes JP225's stale broad leg while preserving stepwise
             # trends such as ROST when no actionable nested replacement exists.
             saved_sidetrends = _saved_sidetrends_for_ticker(ticker)
-            if saved_sidetrends:
-                out_rows = [
-                    item for item in out_rows
-                    if isinstance(item, WedgeScanResult)
-                    or not _fibo_crosses_saved_sidetrend(item, saved_sidetrends)
-                ]
+            latest_date_text = str(pd.to_datetime(df["Date"], errors="coerce").max().date())
+            out_rows = [
+                item for item in out_rows
+                if isinstance(item, WedgeScanResult)
+                or (
+                    not _fibo_has_detected_month_sidetrend(df, item)
+                    and not _fibo_crosses_saved_sidetrend(
+                        item, saved_sidetrends, latest_date=latest_date_text,
+                    )
+                )
+            ]
             out_rows = _prune_superseded_steep_fibo_rows(out_rows)
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:

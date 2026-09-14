@@ -52,6 +52,15 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "debugReportMode==='sidetrend'" in source
 
 
+def test_debug_dialog_can_be_dragged_by_its_header():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "handle?.addEventListener('pointerdown'" in source
+    assert "handle?.addEventListener('pointermove'" in source
+    assert "dialog.style.left=" in source
+    assert "dialog.style.top=" in source
+
+
 def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

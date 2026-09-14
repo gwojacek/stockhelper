@@ -99,10 +99,18 @@ def test_saved_sidetrends_are_loaded_and_invalidate_crossing_fibo(tmp_path, monk
     candidate = SimpleNamespace(
         incline_start_date="2026-07-15",
         incline_end_date="2026-09-03",
+        first_61_8_touch_date="",
     )
 
     assert ranges == [("2026-07-24", "2026-08-28")]
     assert scanner._fibo_crosses_saved_sidetrend(candidate, ranges) is True
+
+    post_anchor = SimpleNamespace(
+        incline_start_date="2026-04-01",
+        incline_end_date="2026-07-01",
+        first_61_8_touch_date="2026-09-15",
+    )
+    assert scanner._fibo_crosses_saved_sidetrend(post_anchor, ranges) is True
 
 
 def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkeypatch):
