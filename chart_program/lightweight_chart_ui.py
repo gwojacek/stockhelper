@@ -2385,7 +2385,7 @@ class LightweightChartLevelSelectorUI:
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
       }} else if (mode === 'end' && anchorsX[0] && Number.isFinite(anchorsY[0])) {{
-        const maxEnd=addDays(P.ohlc[P.ohlc.length-1]?.time||anchorsX[0],30);
+        const maxEnd=String(futureTimes[Math.min(59,futureTimes.length-1)]||P.ohlc[P.ohlc.length-1]?.time||anchorsX[0]).slice(0,10);
         if (compareTime(x1, anchorsX[0]) <= 0) x1=addDays(anchorsX[0],1);
         if (compareTime(x1,maxEnd)>0) x1=maxEnd;
         x0 = anchorsX[0];
@@ -2900,15 +2900,21 @@ class LightweightChartLevelSelectorUI:
     const lowerObj = wedges.find(o => wedgeSide(o) === 'lower');
     if (!upperObj || !lowerObj) return null;
     const idxByTime = new Map(rows.map((r, i) => [String(r.time).slice(0,10), i]));
-    const anchorIdx = (obj, pos) => idxByTime.get(String((obj.anchor_x || [])[pos] || '').slice(0,10));
-    const curStart = Math.min(anchorIdx(upperObj, 0) ?? rows.length, anchorIdx(lowerObj, 0) ?? rows.length);
-    const curUpperFirst = anchorIdx(upperObj, 0);
-    const curUpperSecond = anchorIdx(upperObj, 1);
-    const curLowerFirst = anchorIdx(lowerObj, 0);
-    const curLowerSecond = anchorIdx(lowerObj, 1);
+    const anchorIdx = (obj, pos, side) => {{
+      const date=String((obj.anchor_x || [])[pos] || '').slice(0,10),exact=idxByTime.get(date);
+      if(!date)return undefined;
+      const isExtreme=side==='upper'?isHigh:isLow;
+      if(Number.isFinite(exact)&&(pos===0||isExtreme(exact)))return exact;
+      const target=Math.min(rows.length-2,nearest(date).idx);
+      for(let i=target;i>=Math.max(1,target-45);i--)if(isExtreme(i))return i;
+      return target;
+    }};
     const hi = i => Number(rows[i].high), lo = i => Number(rows[i].low), cl = i => Number(rows[i].close);
     const isHigh = i => i > 0 && i < rows.length - 1 && hi(i) >= hi(i - 1) && hi(i) >= hi(i + 1);
     const isLow = i => i > 0 && i < rows.length - 1 && lo(i) <= lo(i - 1) && lo(i) <= lo(i + 1);
+    const curStart = Math.min(anchorIdx(upperObj,0,'upper')??rows.length,anchorIdx(lowerObj,0,'lower')??rows.length);
+    const curUpperFirst=anchorIdx(upperObj,0,'upper'),curUpperSecond=anchorIdx(upperObj,1,'upper');
+    const curLowerFirst=anchorIdx(lowerObj,0,'lower'),curLowerSecond=anchorIdx(lowerObj,1,'lower');
     const tol = Math.max(...rows.slice(-30).map(r => Number(r.high) - Number(r.low)).filter(Number.isFinite), Math.abs(cl(rows.length - 1)) * 0.004) * 0.20;
     const end = rows.length - 1;
     const scoreCurrent = Math.max(1, end - curStart);
@@ -2961,8 +2967,9 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function restoreScannerWedgeFromRoulette() {{
-    if (!initialScannerDrawnObjects.length) return false;
-    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(initialScannerDrawnObjects.map(deepClone));
+    const scannerWedges=initialScannerDrawnObjects.filter(isWedgeLineObject);
+    if (scannerWedges.length < 2) return false;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(scannerWedges.map(deepClone));
     wedgeRouletteNoAlternative = false;
     Object.values(wedgeRouletteSeen).forEach(s => s.clear());
     applyWedgeDerivedLevels(true);
@@ -2981,7 +2988,9 @@ class LightweightChartLevelSelectorUI:
       return;
     }}
     wedgeRouletteNoAlternative = false;
-    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(wedgeLineThroughExtremeObjects(candidate));
+    const replacement=wedgeLineThroughExtremeObjects(candidate),wasManualDraft=manualWedgeDraftIds.length>0;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(replacement);
+    if(wasManualDraft) {{manualWedgeDraftIds=replacement.map(obj=>obj.id);$('save-manual-wedge').classList.add('ready');}}
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
