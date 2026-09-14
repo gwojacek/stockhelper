@@ -52,14 +52,15 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "debugReportMode==='sidetrend'" in source
     assert "Fibo formation containing the sidetrend" in source
     assert "renderGeometryEditor(debugCorrectionKind, true)" in source
-    assert "'No changes':after" in source
+    assert "same?'No changes':geometryPoint(after,'A')" in source
     assert "reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']" in source
     assert "rows.push(['Anchor A'" in source
     assert "rows.push(['Anchor B'" in source
     assert "rows.push(['Length (calendar days)'" in source
     assert "Complete Fibo candle data" in source
     assert "COMPLETE FIBO DATA" in source
-    assert "rows.push(['Full formation'" in source
+    assert "['Item','Date (scanner)','Price (scanner)','Date (corrected)','Price (corrected)']" in source
+    assert "['Item','Scanner start','Scanner end','Corrected start','Corrected end']" in source
     assert "#calc-table.debug-report > table th:not(:first-child)" in source
 
 
@@ -85,6 +86,7 @@ def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy
     assert "scannerUpper=debugGeometryValues" in source
     assert "function showCorrectionReport(refreshOnly=false)" in source
     assert "refreshOpenDebugReport();" in source
+    assert "geometryPoint(before,'A')" in source
 
 
 def test_debug_report_newline_is_escaped_for_generated_javascript():
@@ -137,7 +139,7 @@ def test_unselected_sidetrends_are_hidden_until_requested():
     assert "if(!range.valid&&!debugShowUnselected)return" in source
     assert 'id="debug-show-unselected"' in source
     assert "debugShowUnselected=!debugShowUnselected" in source
-    assert "(debugSideRanges||[]).filter(r=>r.valid).forEach" in source
+    assert "[...(debugSideRanges||[])].filter(r=>r.valid).sort" in source
 
 
 def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
@@ -145,6 +147,16 @@ def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
 
     assert "#chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 28px) !important; }}" in source
     assert "Math.floor(r.height - 28)" in source
+
+
+def test_sidetrend_report_orders_selected_data_before_complete_fibo_data():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    selected_data = "[...(debugSideRanges||[])].filter(r=>r.valid).sort"
+    assert report.index(selected_data) < report.index("Complete Fibo candle data")
+    assert "copyData.push(`COMPLETE FIBO DATA" in report
+    assert "<tr><td>Move (%)" not in source[source.index("const geometrySummary"):source.index("$('debug-dialog-body').innerHTML", source.index("const geometrySummary"))]
 
 
 def test_each_sidetrend_uses_its_own_chart_and_table_color():

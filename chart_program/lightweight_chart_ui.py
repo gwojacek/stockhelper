@@ -683,7 +683,7 @@ class LightweightChartLevelSelectorUI:
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
     #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
-    #calc-drawer.open {{ display:block; }}
+    #calc-drawer.open {{ display:block; margin-top:-6px; }}
     #calc-drawer.debug-report-mode #calc-title {{ position:static; transform:none; width:auto; grid-column:1; align-self:center; text-align:left; }}
     #calc-drawer.debug-report-mode #calc-head {{ grid-template-columns:minmax(180px,1fr) auto auto; }}
     #calc-drawer.debug-report-mode #calc-summary {{ grid-column:2; width:auto; }}
@@ -1876,17 +1876,17 @@ class LightweightChartLevelSelectorUI:
     const scannerGeometry=baseline.filter(obj=>mode==='fibo'?obj.type==='fib-boundary':isWedgeLineObject(obj));
     const correctedGeometry=drawnObjects.filter(obj=>mode==='fibo'?obj.group_id==='debug-fibo-correction'&&obj.type==='fib-boundary':obj.group_id==='debug-wedge-correction');
     const geometry=obj=>{{const value=debugGeometryValues(obj);return value?`${{String(value.x0||'').slice(0,10)}} @ ${{fmt(value.y0)}} → ${{String(value.x1||'').slice(0,10)}} @ ${{fmt(value.y1)}}`:'—';}};
+    const geometryPoint=(obj,key)=>{{const value=debugGeometryValues(obj);return value?`${{String(value[key==='A'?'x0':'x1']||'').slice(0,10)}} @ ${{fmt(value[key==='A'?'y0':'y1'])}}`:'—';}};
     const rows=[];
     if(mode==='fibo') {{
       const before=scannerGeometry[0],after=correctedGeometry[0],same=geometry(before)===geometry(after);
-      const point=(obj,key)=>obj?`${{String(obj[key==='A'?'x0':'x1']||'').slice(0,10)}} @ ${{fmt(obj[key==='A'?'y0':'y1'])}}`:'—';
       const days=obj=>obj?Math.abs(Math.round((Date.parse(obj.x1)-Date.parse(obj.x0))/86400000)):'—';
-      rows.push(['Anchor A',point(before,'A'),same?'No changes':point(after,'A')]);
-      rows.push(['Anchor B',point(before,'B'),same?'No changes':point(after,'B')]);
-      rows.push(['Length (calendar days)',String(days(before)),same?'No changes':String(days(after))]);
-      rows.push(['Full formation',geometry(before),same?'No changes':geometry(after)]);
+      const beforeValue=debugGeometryValues(before),afterValue=debugGeometryValues(after);
+      rows.push(['Anchor A',String(beforeValue?.x0||'').slice(0,10),beforeValue?fmt(beforeValue.y0):'—',same?'No changes':String(afterValue?.x0||'').slice(0,10),same?'':fmt(afterValue?.y0)]);
+      rows.push(['Anchor B',String(beforeValue?.x1||'').slice(0,10),beforeValue?fmt(beforeValue.y1):'—',same?'No changes':String(afterValue?.x1||'').slice(0,10),same?'':fmt(afterValue?.y1)]);
+      rows.push(['Length (calendar days)',String(days(before)),'',same?'No changes':String(days(after)),'']);
     }}
-    else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),beforeText=geometry(before),afterText=geometry(after);rows.push([`${{side}} line`,beforeText,beforeText===afterText?'No changes':afterText]);}});
+    else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),same=geometry(before)===geometry(after);rows.push([`${{side}} line`,geometryPoint(before,'A'),geometryPoint(before,'B'),same?'No changes':geometryPoint(after,'A'),same?'':geometryPoint(after,'B')]);}});
     else [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
       const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
       const scanner=r.scannerStart==='not found'?'—':'✓',modified=!r.valid?'Unselected':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
@@ -1896,18 +1896,18 @@ class LightweightChartLevelSelectorUI:
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
     let dataHtml='',copyData=[];
     if(mode==='sidetrend') {{
+      [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
       const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
       if(boundary) {{
         const start=String(boundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
-        dataHtml=csvTable(csv,`Complete Fibo candle data · from ${{start}}`);copyData=[`COMPLETE FIBO DATA\\n${{csv}}`];
+        dataHtml+=csvTable(csv,`Complete Fibo candle data · from ${{start}}`);copyData.push(`COMPLETE FIBO DATA\\n${{csv}}`);
       }}
-      (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
     }}
     else {{const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';const at=text.lastIndexOf(marker),nl=at<0?-1:text.indexOf('\\n',at);const csv=nl<0?'No candle data available.':text.slice(nl+1);dataHtml=csvTable(csv,'Candle data');copyData=[csv];}}
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
     const fibInfo=mode==='sidetrend'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
-    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:['Item','Scanner found','Corrected to'];
+    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Price (scanner)','Date (corrected)','Price (corrected)']:['Item','Scanner start','Scanner end','Corrected start','Corrected end']);
     table.innerHTML=`<dl class="debug-instrument"><dt>Ticker</dt><dd>${{esc(debugTickerText())}}</dd><dt>Full name</dt><dd>${{esc(P.sourceName || '-')}}</dd></dl><table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
@@ -2013,9 +2013,7 @@ class LightweightChartLevelSelectorUI:
     const geometrySummary=()=>{{
       if(!isFibo)return'';const before=debugGeometryValues(debugSessionScannerObjects.find(o=>o.type==='fib-boundary')),after=debugGeometryValues(drawnObjects.find(o=>o.group_id==='debug-fibo-correction'&&o.type==='fib-boundary'));
       const days=o=>o?Math.abs(Math.round((Date.parse(o.x1)-Date.parse(o.x0))/86400000)):'—';
-      const move=o=>o&&Number(o.y0)?`${{(Math.abs(Number(o.y1)-Number(o.y0))/Math.abs(Number(o.y0))*100).toFixed(1)}}%`:'—';
-      const status=o=>o&&days(o)>=1&&Number(o.y0)!==Number(o.y1)?'Valid':'Invalid';
-      return `<tr><td>Length (days)</td><td colspan="2">${{days(before)}}</td><td colspan="2">${{days(after)}}</td></tr><tr><td>Move (%)</td><td colspan="2">${{move(before)}}</td><td colspan="2">${{move(after)}}</td></tr><tr><td>Status</td><td colspan="2">${{status(before)}}</td><td colspan="2">${{status(after)}}</td></tr>`;
+      return `<tr><td>Length (days)</td><td colspan="2">${{days(before)}}</td><td colspan="2">${{days(after)}}</td></tr>`;
     }};
     $('debug-dialog-body').innerHTML=`<p class="debug-help">${{isFibo ? 'Drag the visible Fibo boundary anchor points to correct the scanner result.' : 'Drag each visible upper or lower wedge endpoint directly on the chart.'}}</p><table class="debug-editor-table"><thead><tr><th>Point</th><th>Date (scanner)</th><th>Price (scanner)</th><th>Date (yours)</th><th>Price (yours)</th></tr></thead><tbody>${{geometryRows()}}${{geometrySummary()}}</tbody></table><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     $('debug-back').onclick=renderDebugChooser; $('debug-show-report').onclick=showCorrectionReport;
