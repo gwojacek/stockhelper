@@ -34,6 +34,13 @@ def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy
     assert "group_id:'debug-wedge-correction'" in source
     assert "live.color='#f43f5e'" in source
     assert "color:'#22d3ee'" in source
+    assert "label:`My ${{wedgeSide(o)}} wedge`" in source
+
+
+def test_debug_report_newline_is_escaped_for_generated_javascript():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "text.indexOf('\\\\n',markerAt)" in source
 
 
 def test_fibo_boundary_is_draggable_and_resynchronizes_group():

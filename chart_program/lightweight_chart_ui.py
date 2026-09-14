@@ -1767,7 +1767,7 @@ class LightweightChartLevelSelectorUI:
     (debugSideRanges||[]).forEach(r=>rows.push([r.id,`${{r.scannerStart}} → ${{r.scannerEnd}}`,r.valid?`${{r.start}} → ${{r.end}}`:'—',!r.valid?'Marked invalid':(r.start===r.scannerStart&&r.end===r.scannerEnd?'No change':'Adjusted')]));
     const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
     const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';
-    const markerAt=text.lastIndexOf(marker), dataAt=markerAt<0?-1:text.indexOf('\n',markerAt);
+    const markerAt=text.lastIndexOf(marker), dataAt=markerAt<0?-1:text.indexOf('\\n',markerAt);
     const candleData=dataAt<0?'No candle data available.':text.slice(dataAt+1);
     table.innerHTML=`<table><thead><tr><th>Item</th><th>Scanner found</th><th>Corrected to</th><th>Action</th></tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table><h4>Data</h4><pre>${{esc(candleData)}}</pre>`;
     drawer.classList.add('open');
@@ -1810,7 +1810,7 @@ class LightweightChartLevelSelectorUI:
     if (!isFibo && !debugWedgeCorrectionReady) {{
       const originals=initialScannerDrawnObjects.filter(isWedgeLineObject);
       originals.forEach(o=>{{ const live=drawnObjects.find(x=>x.id===o.id); if(live) live.color='#f43f5e'; }});
-      if (originals.length) drawnObjects.push(...originals.map(o=>({{...deepClone(o),id:crypto.randomUUID(),group_id:'debug-wedge-correction',color:'#22d3ee',label=`My ${{wedgeSide(o)}} wedge`}})));
+      if (originals.length) drawnObjects.push(...originals.map(o=>({{...deepClone(o),id:crypto.randomUUID(),group_id:'debug-wedge-correction',color:'#22d3ee',label:`My ${{wedgeSide(o)}} wedge`}})));
       debugWedgeCorrectionReady=true; render();
     }}
     $('debug-dialog-title').textContent=isFibo?'Debug tools — Fibo anchors':'Debug tools — Wedge anchors';
