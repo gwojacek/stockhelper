@@ -11,7 +11,7 @@ def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer(
     assert "choose-sidetrends" in source
     assert "choose-fibo-anchors" in source
     assert "choose-wedge-anchors" in source
-    assert "$('debug-tools').onclick = renderDebugChooser" in source
+    assert "$('debug-tools').onclick = () =>" in source
     assert "debugToolsBtn.style.display = ['Fibo', 'Kliny'].includes(tech)" in source
     assert "Sidetrend correction report" in source
     assert "Wedge'}} correction report" in source
@@ -119,11 +119,22 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "manualWedgeStep < 2" in source
     assert 'id="save-manual-wedge"' in source
     save_actions = source[source.index('<div class="chart-save-actions">'):source.index('</div></div><div class="legend-row">')]
-    assert save_actions.index('id="saved-fibo-status"') < save_actions.index('id="save-manual-wedge"') < save_actions.index('id="download-chart-png"')
+    assert save_actions.index('id="save-manual-wedge"') < save_actions.index('id="saved-fibo-status"') < save_actions.index('id="download-chart-png"')
     assert "manualPrice=manualWedgeStep===0?Number(row.high):Number(row.low)" in source
-    assert "$('save-manual-wedge').style.display='inline-flex'" in source
+    assert "$('save-manual-wedge').classList.add('ready')" in source
+    assert "#save-manual-wedge.ready" in source
+    assert "anchor_x:[lineAnchor.x,time], anchor_y:[lineAnchor.y,price]" in source
+    assert "obj.anchor_x=[x0,x1]" in source
+    assert "obj.anchor_y=[y0,y1]" in source
+    assert "maxEnd=addDays(P.ohlc[P.ohlc.length-1]?.time||anchorsX[0],30)" in source
     assert "levels.__saved_wedge_by_user__=true" in source
     assert "body:JSON.stringify({{levels:payload,screenshot:null}})" in source
+
+
+def test_wedge_debug_button_opens_its_only_tool_directly():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "$('debug-tools').onclick = () => selectedJournalTechnique()==='Kliny'?renderGeometryEditor('wedge'):renderDebugChooser()" in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
