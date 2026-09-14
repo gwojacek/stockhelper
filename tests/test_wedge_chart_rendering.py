@@ -59,6 +59,8 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "rows.push(['Length (calendar days)'" in source
     assert "Complete Fibo candle data" in source
     assert "COMPLETE FIBO DATA" in source
+    assert "rows.push(['Full formation'" in source
+    assert "#calc-table.debug-report > table th:not(:first-child)" in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
@@ -78,6 +80,9 @@ def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy
     assert "live.color='#f43f5e'" in source
     assert "color:'#22d3ee'" in source
     assert "label:`My ${{wedgeSide(o)}} wedge`" in source
+    assert "function debugGeometryValues(obj)" in source
+    assert "obj.group_id === 'debug-wedge-correction' && wedgeSide(obj) === side" in source
+    assert "scannerUpper=debugGeometryValues" in source
 
 
 def test_debug_report_newline_is_escaped_for_generated_javascript():
@@ -130,6 +135,13 @@ def test_unselected_sidetrends_are_hidden_until_requested():
     assert "if(!range.valid&&!debugShowUnselected)return" in source
     assert 'id="debug-show-unselected"' in source
     assert "debugShowUnselected=!debugShowUnselected" in source
+    assert "(debugSideRanges||[]).filter(r=>r.valid).forEach" in source
+
+
+def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "#chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 12px) !important; }}" in source
 
 
 def test_each_sidetrend_uses_its_own_chart_and_table_color():
