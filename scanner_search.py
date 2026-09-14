@@ -5322,7 +5322,9 @@ def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
         state = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
-    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    objects = state.get("__saved_manual_wedges__") if isinstance(state, dict) else None
+    if not isinstance(objects, list) or len(objects) < 2:
+        objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
         return None
     wedges = [obj for obj in objects if isinstance(obj, dict) and (obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge")]
@@ -5353,13 +5355,15 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
         return set()
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
-        return set()
+        objects = []
     kinds: set[str] = set()
     # ``False`` is written by new scanner preloads.  Missing is deliberately
     # treated as saved for compatibility with sessions created before the
     # marker existed; the next chart save migrates those sessions to ``True``.
     saved_fibo_active = state.get("__saved_fibo_by_user__") is not False
     saved_wedge_active = state.get("__saved_wedge_by_user__") is not False
+    if saved_wedge_active and isinstance(state.get("__saved_manual_wedges__"), list) and len(state["__saved_manual_wedges__"]) >= 2:
+        kinds.add("wedge")
     for obj in objects:
         if not isinstance(obj, dict):
             continue

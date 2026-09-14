@@ -3,6 +3,7 @@ from pathlib import Path
 
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
 I18N_SOURCE = Path(__file__).resolve().parents[1] / "utilities" / "web_i18n.py"
+SCANNER_SOURCE = Path(__file__).resolve().parents[1] / "scanner_search.py"
 
 
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
@@ -127,8 +128,15 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "obj.anchor_x=[x0,x1]" in source
     assert "obj.anchor_y=[y0,y1]" in source
     assert "maxEnd=addDays(P.ohlc[P.ohlc.length-1]?.time||anchorsX[0],30)" in source
-    assert "levels.__saved_wedge_by_user__=true" in source
+    assert "__saved_manual_wedges__:wedgeObjects,__saved_wedge_by_user__:true" in source
+    save_function = source[source.index("async function saveManualWedge()"):source.index("function forgetLevelSeries")]
+    assert "collectLevelsForSave" not in save_function
+    assert "savedWedgeByUser=true" not in save_function
+    assert "The wedge is ready to save." not in source
     assert "body:JSON.stringify({{levels:payload,screenshot:null}})" in source
+    scanner_source = SCANNER_SOURCE.read_text(encoding="utf-8")
+    assert 'state.get("__saved_manual_wedges__")' in scanner_source
+    assert 'len(state["__saved_manual_wedges__"]) >= 2' in scanner_source
 
 
 def test_wedge_debug_button_opens_its_only_tool_directly():

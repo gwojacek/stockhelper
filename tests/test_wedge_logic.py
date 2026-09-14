@@ -57,6 +57,24 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
     assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
 
 
+def test_wedge_only_save_is_available_to_wedge_scanner_without_saving_chart(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    wedges = [
+        {"type": "wedge", "group_id": "auto-wedge", "label": "My upper wedge", "x0": "2026-01-02", "y0": 12, "x1": "2026-02-02", "y1": 10},
+        {"type": "wedge", "group_id": "auto-wedge", "label": "My lower wedge", "x0": "2026-01-03", "y0": 8, "x1": "2026-02-03", "y1": 9},
+    ]
+    (sessions / "KLIN.json").write_text(json.dumps({
+        "__saved_manual_wedges__": wedges,
+        "__saved_wedge_by_user__": True,
+        "drawn_objects": [],
+    }), encoding="utf-8")
+
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge"}
+    assert scanner._manual_wedge_objects_for_ticker("KLIN.WA") == tuple(wedges)
+
+
 def test_explicitly_released_wedge_geometry_is_not_authoritative(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
