@@ -530,7 +530,7 @@ class LightweightChartLevelSelectorUI:
     .close-line-control input {{ width:120px; }}
     #close-mode-save {{ background:linear-gradient(135deg,#16a34a,#22c55e); color:#052e16; border-color:#86efac; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
-    #chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 12px) !important; }}
+    #chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 28px) !important; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
     #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
     .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:12px; height:12px; padding:0 2px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:1.5px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
@@ -695,7 +695,7 @@ class LightweightChartLevelSelectorUI:
     #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:25%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ width:37.5%; border-left-width:2px; white-space:normal; }}
+    #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:24%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ width:38%; border-left:3px solid #294f73; white-space:normal; }}
     .debug-instrument {{ display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:0 0 12px; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-instrument dt {{ color:#93c5fd; font-weight:800; }} .debug-instrument dd {{ margin:0; color:#f8fafc; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
@@ -1062,7 +1062,7 @@ class LightweightChartLevelSelectorUI:
     if (!el || !chart.applyOptions) return;
     const r = el.getBoundingClientRect();
     if (r.width > 0 && r.height > 0) {{
-      try {{ chart.applyOptions({{width: Math.floor(r.width), height: Math.floor(r.height)}}); }} catch(e) {{}}
+      try {{ chart.applyOptions({{width: Math.floor(r.width), height: Math.max(1, Math.floor(r.height - 28))}}); }} catch(e) {{}}
       requestAnimationFrame(drawCloud);
     }}
   }}
@@ -1578,6 +1578,7 @@ class LightweightChartLevelSelectorUI:
   let debugSessionScannerObjects = [];
   let debugReportMode = null;
   let debugShowUnselected = false;
+  let debugReportRefreshFrame = null;
   let newSidetrendAnchor = null;
   let sidetrendDrag = null;
   const savedSidetrends = Array.isArray(levels.__saved_sidetrends__) ? levels.__saved_sidetrends__ : [];
@@ -1588,6 +1589,11 @@ class LightweightChartLevelSelectorUI:
     const x0=chart.timeScale().timeToCoordinate?.(range.start), x1=chart.timeScale().timeToCoordinate?.(range.end);
     const y0=candleSeries.priceToCoordinate?.(hi), y1=candleSeries.priceToCoordinate?.(lo);
     return [x0,x1,y0,y1].every(Number.isFinite)?{{x0,x1,y0,y1}}:null;
+  }}
+  function refreshOpenDebugReport() {{
+    if(!$('calc-drawer')?.classList.contains('open')||!$('calc-table')?.classList.contains('debug-report'))return;
+    if(debugReportRefreshFrame)return;
+    debugReportRefreshFrame=requestAnimationFrame(()=>{{debugReportRefreshFrame=null;showCorrectionReport(true);}});
   }}
   function sidetrendColor(index) {{
     const palette=[
@@ -1618,7 +1624,7 @@ class LightweightChartLevelSelectorUI:
     if (!sidetrendDrag || sidetrendDrag.id!==ev.pointerId) return false;
     const rect=$('chart-wrap').getBoundingClientRect(); let date=chart.timeScale().coordinateToTime?.(ev.clientX-rect.left);
     if (date && typeof date!=='string') date=`${{date.year}}-${{String(date.month).padStart(2,'0')}}-${{String(date.day).padStart(2,'0')}}`;
-    if (date) {{ if (sidetrendDrag.side==='start' && date<=sidetrendDrag.range.end) sidetrendDrag.range.start=date; if (sidetrendDrag.side==='end' && date>=sidetrendDrag.range.start) sidetrendDrag.range.end=date; drawCloud(); }}
+    if (date) {{ if (sidetrendDrag.side==='start' && date<=sidetrendDrag.range.end) sidetrendDrag.range.start=date; if (sidetrendDrag.side==='end' && date>=sidetrendDrag.range.start) sidetrendDrag.range.end=date; drawCloud(); refreshOpenDebugReport(); }}
     ev.preventDefault(); ev.stopImmediatePropagation?.(); return true;
   }}
   function endSidetrendDrag(ev) {{
@@ -1857,7 +1863,7 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
 
-  function showCorrectionReport() {{
+  function showCorrectionReport(refreshOnly=false) {{
     const text=setupDebugSnapshot(), drawer=$('calc-drawer'), table=$('calc-table');
     const mode=debugReportMode || debugCorrectionKind || 'sidetrend';
     $('calc-title').textContent=mode==='sidetrend'?'Sidetrend correction report':`${{mode==='fibo'?'Fibo anchor':'Wedge'}} correction report`;
@@ -1905,10 +1911,11 @@ class LightweightChartLevelSelectorUI:
     table.innerHTML=`<dl class="debug-instrument"><dt>Ticker</dt><dd>${{esc(debugTickerText())}}</dd><dt>Full name</dt><dd>${{esc(P.sourceName || '-')}}</dd></dl><table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
-    requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
+    if(!refreshOnly) requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
     $('copy-debug-report').onclick=async()=>{{try{{await navigator.clipboard.writeText(copyText);$('copy-debug-report').textContent='Copied';}}catch(_err){{$('copy-debug-report').textContent='Select and copy below';}}}};
     $('keep-debug-correction')?.addEventListener('click',keepDebugCorrection);
-    $('debug-dialog').classList.remove('open'); debugShowSidetrends=mode==='sidetrend'; drawCloud();
+    if(!refreshOnly) $('debug-dialog').classList.remove('open');
+    debugShowSidetrends=mode==='sidetrend'; drawCloud();
   }}
 
   function restoreUnkeptDebugCorrection() {{
@@ -2504,6 +2511,7 @@ class LightweightChartLevelSelectorUI:
       drawCloud();
       updateSetupDebugPanel();
       if ($('debug-dialog')?.classList.contains('open') && ['fibo','wedge'].includes(debugCorrectionKind)) renderGeometryEditor(debugCorrectionKind, true);
+      refreshOpenDebugReport();
     }});
   }}
 

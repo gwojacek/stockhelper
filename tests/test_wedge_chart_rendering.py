@@ -83,6 +83,8 @@ def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy
     assert "function debugGeometryValues(obj)" in source
     assert "obj.group_id === 'debug-wedge-correction' && wedgeSide(obj) === side" in source
     assert "scannerUpper=debugGeometryValues" in source
+    assert "function showCorrectionReport(refreshOnly=false)" in source
+    assert "refreshOpenDebugReport();" in source
 
 
 def test_debug_report_newline_is_escaped_for_generated_javascript():
@@ -141,7 +143,8 @@ def test_unselected_sidetrends_are_hidden_until_requested():
 def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
-    assert "#chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 12px) !important; }}" in source
+    assert "#chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 28px) !important; }}" in source
+    assert "Math.floor(r.height - 28)" in source
 
 
 def test_each_sidetrend_uses_its_own_chart_and_table_color():
