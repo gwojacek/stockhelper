@@ -41,6 +41,8 @@ def test_chart_debug_reports_include_ticker_and_full_name():
     assert 'id="debug-report-identity" class="debug-report-identity"' in source
     assert "classList.add('debug-instrument')" in source
     assert 'id="calc-head"' not in source
+    assert "left:50%; top:50%" in source
+    assert "transform:translate(-50%,-50%)" in source
 
 
 def test_debug_editors_use_comparison_tables_and_save_sidetrends():
@@ -148,6 +150,17 @@ def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
 
     assert "#chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 28px) !important; }}" in source
     assert "Math.floor(r.height - 28)" in source
+
+
+def test_chart_and_drawer_have_a_persisted_drag_splitter():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert 'id="calc-splitter" role="separator"' in source
+    assert 'id="calc-drawer" class="chart-stage"' in source
+    assert "DRAWER_HEIGHT_STORAGE_KEY='stockhelper_calc_drawer_height_v1'" in source
+    assert "localStorage.setItem(DRAWER_HEIGHT_STORAGE_KEY" in source
+    assert "splitter?.addEventListener('pointermove'" in source
+    assert "setDrawerHeight(resize.height+(resize.y-ev.clientY))" in source
 
 
 def test_sidetrend_report_orders_selected_data_before_complete_fibo_data():

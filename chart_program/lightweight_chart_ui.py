@@ -682,8 +682,10 @@ class LightweightChartLevelSelectorUI:
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
+    #calc-splitter {{ display:none; height:12px; margin:-6px 14px 0; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:relative; top:5px; height:3px; border-radius:999px; background:#315b80; box-shadow:0 0 8px rgba(56,189,248,.35); }} .main.calc-open #calc-splitter {{ display:block; }}
     #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
     #calc-drawer.open {{ display:block; margin-top:-6px; }}
+    .main.calc-open #calc-drawer {{ box-sizing:border-box; height:var(--calc-drawer-height,340px); max-height:none; }}
     .calc-toolbar {{ display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,1fr) auto auto; align-items:center; gap:12px; margin:0 0 10px; }}
     #calc-title {{ margin:0; font-size:18px; }}
     #calc-close {{ justify-self:end; }}
@@ -693,7 +695,7 @@ class LightweightChartLevelSelectorUI:
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
     #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; white-space:normal; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:16%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ border-left:3px solid #294f73; text-align:center; }}
-    .calc-toolbar.debug-instrument {{ padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
+    .calc-toolbar.debug-instrument {{ position:relative; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; position:absolute; left:50%; top:50%; width:min(34vw,440px); transform:translate(-50%,-50%); }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
     #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin-left:auto; color:#cbd5e1; font-size:13px; }}
@@ -737,7 +739,8 @@ class LightweightChartLevelSelectorUI:
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
       <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
-      <section id="calc-drawer" aria-live="polite">
+      <div id="calc-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize chart and report"></div>
+      <section id="calc-drawer" class="chart-stage" aria-live="polite">
         <div class="calc-toolbar">
           <h3 id="calc-title">Position calculation</h3>
           <div id="debug-report-identity" class="debug-report-identity"></div>
@@ -1055,6 +1058,17 @@ class LightweightChartLevelSelectorUI:
     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
     localization: {{ priceFormatter: p => fmt(p) }},
   }});
+  const DRAWER_HEIGHT_STORAGE_KEY='stockhelper_calc_drawer_height_v1';
+  let preferredDrawerHeight=0;
+  try {{ preferredDrawerHeight=Number(localStorage.getItem(DRAWER_HEIGHT_STORAGE_KEY)||0); }} catch(_err) {{}}
+  function setDrawerHeight(height,persist=false) {{
+    const max=Math.max(220,window.innerHeight-390),value=Math.round(Math.max(180,Math.min(max,Number(height)||340)));
+    preferredDrawerHeight=value;
+    document.documentElement.style.setProperty('--calc-drawer-height',`${{value}}px`);
+    if(persist) try {{localStorage.setItem(DRAWER_HEIGHT_STORAGE_KEY,String(value));}} catch(_err) {{}}
+    resizeChartToContainer();
+  }}
+  if(preferredDrawerHeight>0)setDrawerHeight(preferredDrawerHeight);
   function resizeChartToContainer() {{
     const el = $('chart');
     if (!el || !chart.applyOptions) return;
@@ -1067,6 +1081,13 @@ class LightweightChartLevelSelectorUI:
   if (window.ResizeObserver) new ResizeObserver(resizeChartToContainer).observe($('chart'));
   window.addEventListener('resize', resizeChartToContainer);
   requestAnimationFrame(resizeChartToContainer);
+  (()=>{{
+    const splitter=$('calc-splitter');let resize=null;
+    splitter?.addEventListener('pointerdown',ev=>{{resize={{id:ev.pointerId,y:ev.clientY,height:$('calc-drawer').getBoundingClientRect().height}};splitter.setPointerCapture?.(ev.pointerId);ev.preventDefault();}});
+    splitter?.addEventListener('pointermove',ev=>{{if(!resize||resize.id!==ev.pointerId)return;setDrawerHeight(resize.height+(resize.y-ev.clientY));ev.preventDefault();}});
+    const stop=ev=>{{if(!resize||resize.id!==ev.pointerId)return;splitter.releasePointerCapture?.(ev.pointerId);setDrawerHeight(preferredDrawerHeight,true);resize=null;}};
+    splitter?.addEventListener('pointerup',stop);splitter?.addEventListener('pointercancel',stop);
+  }})();
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   let verticalPan = 0;
   let chartDrag = null;
@@ -1911,7 +1932,7 @@ class LightweightChartLevelSelectorUI:
     table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
-    if(!refreshOnly) requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
+    if(!refreshOnly) requestAnimationFrame(()=>{{if(preferredDrawerHeight>0)setDrawerHeight(preferredDrawerHeight);else setDrawerHeight(Math.ceil(drawer.scrollHeight+10));window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
     $('copy-debug-report').onclick=async()=>{{try{{await navigator.clipboard.writeText(copyText);$('copy-debug-report').textContent='Copied';}}catch(_err){{$('copy-debug-report').textContent='Select and copy below';}}}};
     $('keep-debug-correction')?.addEventListener('click',keepDebugCorrection);
     if(!refreshOnly) $('debug-dialog').classList.remove('open');
