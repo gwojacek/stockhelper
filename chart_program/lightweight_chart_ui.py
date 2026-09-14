@@ -1569,6 +1569,7 @@ class LightweightChartLevelSelectorUI:
   let debugCorrectionKept = false;
   let debugSessionScannerObjects = [];
   let debugReportMode = null;
+  let debugShowUnselected = false;
   let newSidetrendAnchor = null;
   let sidetrendDrag = null;
   const savedSidetrends = Array.isArray(levels.__saved_sidetrends__) ? levels.__saved_sidetrends__ : [];
@@ -1861,9 +1862,17 @@ class LightweightChartLevelSelectorUI:
     const correctedGeometry=drawnObjects.filter(obj=>mode==='fibo'?obj.group_id==='debug-fibo-correction'&&obj.type==='fib-boundary':obj.group_id==='debug-wedge-correction');
     const geometry=obj=>obj?`${{String(obj.x0||obj.x?.[0]||'').slice(0,10)}} @ ${{fmt(obj.y0??obj.y?.[0])}} → ${{String(obj.x1||obj.x?.[(obj.x?.length||1)-1]||'').slice(0,10)}} @ ${{fmt(obj.y1??obj.y?.[(obj.y?.length||1)-1])}}`:'—';
     const rows=[];
-    if(mode==='fibo') {{const before=geometry(scannerGeometry[0]),after=geometry(correctedGeometry[0]);rows.push(['Fibo anchors',before,before===after?'No changes':after]);}}
+    if(mode==='fibo') {{
+      const before=scannerGeometry[0],after=correctedGeometry[0],same=geometry(before)===geometry(after);
+      const point=(obj,key)=>obj?`${{String(obj[key==='A'?'x0':'x1']||'').slice(0,10)}} @ ${{fmt(obj[key==='A'?'y0':'y1'])}}`:'—';
+      const days=obj=>obj?Math.abs(Math.round((Date.parse(obj.x1)-Date.parse(obj.x0))/86400000)):'—';
+      rows.push(['Anchor A',point(before,'A'),same?'No changes':point(after,'A')]);
+      rows.push(['Anchor B',point(before,'B'),same?'No changes':point(after,'B')]);
+      rows.push(['Length (calendar days)',String(days(before)),same?'No changes':String(days(after))]);
+      rows.push(['Full formation',geometry(before),same?'No changes':geometry(after)]);
+    }}
     else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),beforeText=geometry(before),afterText=geometry(after);rows.push([`${{side}} line`,beforeText,beforeText===afterText?'No changes':afterText]);}});
-    else [...(debugSideRanges||[])].sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
+    else [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
       const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
       const scanner=r.scannerStart==='not found'?'—':'✓',modified=!r.valid?'Unselected':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
       rows.push([r.id,r.start,r.end,String(days),scanner,modified]);
@@ -1871,7 +1880,13 @@ class LightweightChartLevelSelectorUI:
     const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
     let dataHtml='',copyData=[];
-    if(mode==='sidetrend') (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
+    if(mode==='sidetrend') {{
+      const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
+      if(boundary) {{
+        const start=String(boundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
+        dataHtml=csvTable(csv,`Complete Fibo candle data · from ${{start}}`);copyData=[`COMPLETE FIBO DATA\\n${{csv}}`];
+      }} else (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
+    }}
     else {{const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';const at=text.lastIndexOf(marker),nl=at<0?-1:text.indexOf('\\n',at);const csv=nl<0?'No candle data available.':text.slice(nl+1);dataHtml=csvTable(csv,'Candle data');copyData=[csv];}}
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
@@ -1925,11 +1940,12 @@ class LightweightChartLevelSelectorUI:
     }}
     if(firstOpen) requestAnimationFrame(()=>{{resizeChartToContainer();requestAnimationFrame(drawCloud);}});
     const body=$('debug-dialog-body');
-    body.innerHTML=`<p class="debug-help">Drag either chart handle to resize a range. Added or adjusted ranges can be saved for future Allsearch scans.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-add-sidetrend">Add sidetrend</button><button id="debug-toggle-all">Select/unselect all</button></div><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
+    body.innerHTML=`<p class="debug-help">Drag either chart handle to resize a range. Added or adjusted ranges can be saved for future Allsearch scans.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-add-sidetrend">Add sidetrend</button><button id="debug-toggle-all">Select/unselect all</button><button id="debug-show-unselected">${{debugShowUnselected?'Hide':'Show'}} unselected</button></div><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     const rows=$('debug-periods');
     rows.innerHTML='<table class="debug-editor-table"><thead><tr><th>Use</th><th>#</th><th>From</th><th>To</th><th>Days</th><th>Scanner</th><th></th></tr></thead><tbody></tbody></table>';
     const tbody=rows.querySelector('tbody');
     debugSideRanges.forEach((range,index)=>{{
+      if(!range.valid&&!debugShowUnselected)return;
       const row=document.createElement('tr'); row.className=range.valid?'':'invalid';
       const color=sidetrendColor(index);
       const days=Math.max(0,Math.round((Date.parse(range.end)-Date.parse(range.start))/86400000));
@@ -1943,6 +1959,7 @@ class LightweightChartLevelSelectorUI:
     if (!debugSideRanges.length) rows.textContent='No periods longer than one month were detected.';
     $('debug-add-sidetrend').onclick=()=>{{newSidetrendAnchor=null;activeTool='sidetrend-add';$('debug-add-sidetrend').textContent='Click first candle…';}};
     $('debug-toggle-all').onclick=()=>{{const select=!debugSideRanges.every(r=>r.valid);debugSideRanges.forEach(r=>r.valid=select);renderSidetrendEditor();}};
+    $('debug-show-unselected').onclick=()=>{{debugShowUnselected=!debugShowUnselected;renderSidetrendEditor();}};
     $('debug-back').onclick=renderDebugChooser; $('debug-show-report').onclick=showCorrectionReport;
   }}
 

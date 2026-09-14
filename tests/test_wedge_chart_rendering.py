@@ -54,6 +54,11 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "renderGeometryEditor(debugCorrectionKind, true)" in source
     assert "'No changes':after" in source
     assert "reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']" in source
+    assert "rows.push(['Anchor A'" in source
+    assert "rows.push(['Anchor B'" in source
+    assert "rows.push(['Length (calendar days)'" in source
+    assert "Complete Fibo candle data" in source
+    assert "COMPLETE FIBO DATA" in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
@@ -115,6 +120,16 @@ def test_sidetrends_are_sorted_and_distant_ranges_start_unselected():
     assert "valid:sidetrendNearFibo(range)" in source
     assert "String(a.start).localeCompare(String(b.start))" in source
     assert "String(b.start).localeCompare(String(a.start))" in source
+    assert ".filter(r=>r.valid).sort((a,b)=>String(b.start)" in source
+
+
+def test_unselected_sidetrends_are_hidden_until_requested():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "let debugShowUnselected = false" in source
+    assert "if(!range.valid&&!debugShowUnselected)return" in source
+    assert 'id="debug-show-unselected"' in source
+    assert "debugShowUnselected=!debugShowUnselected" in source
 
 
 def test_each_sidetrend_uses_its_own_chart_and_table_color():
