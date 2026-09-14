@@ -10,6 +10,7 @@ def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer(
     assert "choose-sidetrends" in source
     assert "choose-fibo-anchors" in source
     assert "choose-wedge-anchors" in source
+    assert "$('debug-tools').onclick = renderDebugChooser" in source
     assert "debugToolsBtn.style.display = ['Fibo', 'Kliny'].includes(tech)" in source
     assert "$('calc-title').textContent='Correction report'" in source
     assert "Copy result" in source
@@ -23,6 +24,16 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert "function drawDebugSidetrends(ctx)" in source
     assert 'type="checkbox"' in source
     assert 'type="date"' in source
+    assert "debug-add-sidetrend" in source
+
+
+def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "group_id:'debug-fibo-correction'" in source
+    assert "group_id:'debug-wedge-correction'" in source
+    assert "live.color='#f43f5e'" in source
+    assert "color:'#22d3ee'" in source
 
 
 def test_fibo_boundary_is_draggable_and_resynchronizes_group():

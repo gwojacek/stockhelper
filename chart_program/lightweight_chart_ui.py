@@ -1541,6 +1541,8 @@ class LightweightChartLevelSelectorUI:
 
   let debugSideRanges = null;
   let debugShowSidetrends = false;
+  let debugFiboCorrectionReady = false;
+  let debugWedgeCorrectionReady = false;
   function detectedMonthlySidetrends() {{
     const ranges = [];
     for (let start=0; start<ohlc.length; start++) {{
@@ -1614,8 +1616,8 @@ class LightweightChartLevelSelectorUI:
     if (tech === 'Ichimoku') return ichimokuDebugSnapshot();
     if (tech === 'Fibo') return fiboDebugSnapshot();
     const wedges = drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
-    const upper = wedges.find(obj => wedgeSide(obj) === 'upper') || null;
-    const lower = wedges.find(obj => wedgeSide(obj) === 'lower') || null;
+    const upper = wedges.find(obj => obj.group_id === 'debug-wedge-correction' && wedgeSide(obj) === 'upper') || wedges.find(obj => wedgeSide(obj) === 'upper') || null;
+    const lower = wedges.find(obj => obj.group_id === 'debug-wedge-correction' && wedgeSide(obj) === 'lower') || wedges.find(obj => wedgeSide(obj) === 'lower') || null;
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
     lines.push(`WEDGE CORRECTION REPORT: ${{P.symbol || ''}}`);
@@ -1755,7 +1757,19 @@ class LightweightChartLevelSelectorUI:
     $('calc-summary').innerHTML='<button id="copy-debug-report" type="button">Copy result</button>';
     $('calc-warnings').textContent='Candle data is included once from the earliest affected date.';
     table.classList.add('debug-report');
-    const pre=document.createElement('pre'); pre.textContent=text; table.replaceChildren(pre);
+    const tech=selectedJournalTechnique();
+    const scannerGeometry=initialScannerDrawnObjects.filter(obj=>tech==='Fibo' ? obj.type==='fib-boundary' : isWedgeLineObject(obj));
+    const correctedGeometry=drawnObjects.filter(obj=>tech==='Fibo' ? obj.group_id==='debug-fibo-correction' && obj.type==='fib-boundary' : obj.group_id==='debug-wedge-correction');
+    const geometry=obj=>obj ? `${{String(obj.x0 || obj.x?.[0] || '').slice(0,10)}} @ ${{fmt(obj.y0 ?? obj.y?.[0])}} → ${{String(obj.x1 || obj.x?.[(obj.x?.length||1)-1] || '').slice(0,10)}} @ ${{fmt(obj.y1 ?? obj.y?.[(obj.y?.length||1)-1])}}` : '—';
+    const rows=[];
+    if (tech==='Fibo') rows.push(['Fibo anchors',geometry(scannerGeometry[0]),geometry(correctedGeometry[0]),geometry(scannerGeometry[0])===geometry(correctedGeometry[0])?'No change':'Adjusted']);
+    else ['upper','lower'].forEach(side=>{{ const before=scannerGeometry.find(o=>wedgeSide(o)===side), after=correctedGeometry.find(o=>wedgeSide(o)===side); rows.push([`${{side}} line`,geometry(before),geometry(after),geometry(before)===geometry(after)?'No change':'Adjusted']); }});
+    (debugSideRanges||[]).forEach(r=>rows.push([r.id,`${{r.scannerStart}} → ${{r.scannerEnd}}`,r.valid?`${{r.start}} → ${{r.end}}`:'—',!r.valid?'Marked invalid':(r.start===r.scannerStart&&r.end===r.scannerEnd?'No change':'Adjusted')]));
+    const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
+    const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';
+    const markerAt=text.lastIndexOf(marker), dataAt=markerAt<0?-1:text.indexOf('\n',markerAt);
+    const candleData=dataAt<0?'No candle data available.':text.slice(dataAt+1);
+    table.innerHTML=`<table><thead><tr><th>Item</th><th>Scanner found</th><th>Corrected to</th><th>Action</th></tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table><h4>Data</h4><pre>${{esc(candleData)}}</pre>`;
     drawer.classList.add('open');
     $('copy-debug-report').onclick=async()=>{{
       try {{ await navigator.clipboard.writeText(text); $('copy-debug-report').textContent='Copied'; }}
@@ -1769,7 +1783,7 @@ class LightweightChartLevelSelectorUI:
     debugShowSidetrends=true; drawCloud();
     if (!debugSideRanges) debugSideRanges=detectedMonthlySidetrends();
     const body=$('debug-dialog-body');
-    body.innerHTML=`<p class="debug-help">Every detected sideways period longer than one month is listed below. Edit either date to extend or shorten it, or untick a bad detection.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
+    body.innerHTML=`<p class="debug-help">Every detected sideways period longer than one month is listed below. Edit either date to extend or shorten it, untick a bad detection, or add a missed sidetrend.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-add-sidetrend">Add sidetrend</button><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     const rows=$('debug-periods');
     debugSideRanges.forEach((range,index)=>{{
       const row=document.createElement('label'); row.className=`debug-period${{range.valid?'':' invalid'}}`;
@@ -1780,12 +1794,25 @@ class LightweightChartLevelSelectorUI:
       rows.appendChild(row);
     }});
     if (!debugSideRanges.length) rows.textContent='No periods longer than one month were detected.';
+    $('debug-add-sidetrend').onclick=()=>{{ const end=ohlc[ohlc.length-1]?.time || new Date().toISOString().slice(0,10), start=ohlc[Math.max(0,ohlc.length-22)]?.time || end; debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:'not found',scannerEnd:'not found',start,end,valid:true}}); renderSidetrendEditor(); }};
     $('debug-back').onclick=renderDebugChooser; $('debug-show-report').onclick=showCorrectionReport;
   }}
 
   function renderGeometryEditor(kind) {{
     debugShowSidetrends=false; drawCloud();
     const isFibo=kind==='fibo';
+    if (isFibo && !debugFiboCorrectionReady) {{
+      const originals=initialScannerDrawnObjects.filter(o=>o.group_id==='auto-fibo' || o.type==='fib' || o.type==='fib-boundary');
+      originals.forEach(o=>{{ const live=drawnObjects.find(x=>x.id===o.id); if(live) live.color='#f43f5e'; }});
+      if (originals.length) drawnObjects.push(...originals.map(o=>({{...deepClone(o),id:crypto.randomUUID(),group_id:'debug-fibo-correction',color:'#22d3ee',label:String(o.label||'FIB').replace('FIB','My FIB')}})));
+      debugFiboCorrectionReady=true; render();
+    }}
+    if (!isFibo && !debugWedgeCorrectionReady) {{
+      const originals=initialScannerDrawnObjects.filter(isWedgeLineObject);
+      originals.forEach(o=>{{ const live=drawnObjects.find(x=>x.id===o.id); if(live) live.color='#f43f5e'; }});
+      if (originals.length) drawnObjects.push(...originals.map(o=>({{...deepClone(o),id:crypto.randomUUID(),group_id:'debug-wedge-correction',color:'#22d3ee',label=`My ${{wedgeSide(o)}} wedge`}})));
+      debugWedgeCorrectionReady=true; render();
+    }}
     $('debug-dialog-title').textContent=isFibo?'Debug tools — Fibo anchors':'Debug tools — Wedge anchors';
     $('debug-dialog-body').innerHTML=`<p class="debug-help">${{isFibo ? 'Drag the visible Fibo boundary anchor points to correct the scanner result. If the scanner found none, close this panel, choose Fib 61.8, and place two anchors; then reopen Debug tools.' : 'Drag each visible upper or lower wedge endpoint directly on the chart. The report keeps the original scanner geometry and compares it with your correction.'}}</p><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     $('debug-back').onclick=renderDebugChooser; $('debug-show-report').onclick=showCorrectionReport;
