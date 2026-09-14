@@ -62,7 +62,8 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "rows.push(['Length (calendar days)'" in source
     assert "Complete Fibo candle data" in source
     assert "COMPLETE FIBO DATA" in source
-    assert "['Item','Date (scanner)','Price (scanner)','Date (corrected)','Price (corrected)']" in source
+    assert "['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']" in source
+    assert "<th>Point</th><th>Date (scanner)</th><th>Date (yours)</th><th>Price (scanner)</th><th>Price (yours)</th>" in source
     assert "['Item','Start date (scanner)','Start date (corrected)','Start price (scanner)','Start price (corrected)','End date (scanner)','End date (corrected)','End price (scanner)','End price (corrected)']" in source
     assert "scannerCells[0],correctedCells[0],scannerCells[1],correctedCells[1]" in source
     assert "scannerCells[2],correctedCells[2],scannerCells[3],correctedCells[3]" in source
