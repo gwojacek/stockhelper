@@ -90,11 +90,35 @@ def test_debug_tools_and_reports_have_polish_translations():
         "Price (yours)",
         "Show report",
         "Show unselected",
+        "A (low)",
+        "B (high)",
+        "Wedge anchors",
+        "Correct the scanner upper and lower wedge lines.",
+        "Ordinary line",
+        "Save wedge",
     ]
     for label in translated_labels:
         assert f'"{label}":' in i18n_source
-    for label in translated_labels[:2] + translated_labels[5:-1]:
+    source_labels = [label for label in translated_labels if label not in {
+        "Fibo anchor correction report", "Wedge correction report", "Sidetrend correction report", "Show unselected"
+    }]
+    for label in source_labels:
         assert label in source
+
+
+def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert 'id="line-kind-picker"' in source
+    assert "lineKindPicker.style.display=scannerWedgeAvailable?'none':'inline-flex'" in source
+    assert "activeTool='manual-wedge'" in source
+    assert "side=manualWedgeStep===0?'upper':'lower'" in source
+    assert "color:side==='upper'?'#dc2626':'#2563eb'" in source
+    assert "group_id:'auto-wedge'" in source
+    assert "manualWedgeStep < 2" in source
+    assert 'id="save-manual-wedge"' in source
+    assert "levels.__saved_wedge_by_user__=true" in source
+    assert "body:JSON.stringify({{levels:payload,screenshot:null}})" in source
 
 
 def test_debug_dialog_can_be_dragged_by_its_header():
