@@ -966,6 +966,10 @@ def _sideways_window_stats(
         idx for idx in candidate_idxs
         if idx in low_order[:3]
         and (ending_close - low_values[idx]) / max(abs(low_values[idx]), 1e-9) > 0.10
+        # A deep intraday wick which is reclaimed before that same candle
+        # closes is noise inside a range, not the start of a new recovery.
+        # Protect only lows where price actually closed near the new level.
+        and (float(closes.iloc[idx]) - low_values[idx]) / max(abs(low_values[idx]), 1e-9) <= 0.08
     }
     candidate_idxs -= protected_bottoms
     best: tuple[float, float, float, int] | None = None

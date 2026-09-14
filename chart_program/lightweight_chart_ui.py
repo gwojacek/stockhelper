@@ -696,6 +696,7 @@ class LightweightChartLevelSelectorUI:
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
     #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; }}
+    .debug-instrument {{ display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:0 0 12px; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-instrument dt {{ color:#93c5fd; font-weight:800; }} .debug-instrument dd {{ margin:0; color:#f8fafc; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
     #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin:0 0 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
@@ -1354,6 +1355,13 @@ class LightweightChartLevelSelectorUI:
     return lines.join('\\n');
   }}
 
+  function debugInstrumentLines() {{
+    return [
+      `Ticker: ${{P.sourceTicker || P.symbol || '-'}}`,
+      `Full name: ${{P.sourceName || '-'}}`,
+    ];
+  }}
+
   function candlePatternForRow(row, idx = null, rows = ohlc) {{
     if (!row) return '-';
     const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
@@ -1517,6 +1525,7 @@ class LightweightChartLevelSelectorUI:
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
+    lines.push(...debugInstrumentLines());
     if (scannerBreakout) {{
       lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}`);
       if (scannerContext.note) lines.push(scannerContext.note);
@@ -1609,6 +1618,7 @@ class LightweightChartLevelSelectorUI:
     const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
     const lines = [];
     lines.push(`FIBO CORRECTION REPORT: ${{P.symbol || ''}}`);
+    lines.push(...debugInstrumentLines());
     lines.push('Scanner found,Corrected to,Action');
     const scannerBoundary = initialScannerDrawnObjects.find(obj => obj.type === 'fib-boundary');
     const currentBoundaries = fibs.filter(obj => obj.type === 'fib-boundary');
@@ -1667,6 +1677,7 @@ class LightweightChartLevelSelectorUI:
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
     lines.push(`WEDGE CORRECTION REPORT: ${{P.symbol || ''}}`);
+    lines.push(...debugInstrumentLines());
     lines.push('Item,Scanner found,Corrected to,Action');
     const scannerWedges = initialScannerDrawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
     ['upper','lower'].forEach(side => {{
@@ -1818,8 +1829,9 @@ class LightweightChartLevelSelectorUI:
     let dataHtml='',copyData=[];
     if(mode==='sidetrend') (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
     else {{const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';const at=text.lastIndexOf(marker),nl=at<0?-1:text.indexOf('\\n',at);const csv=nl<0?'No candle data available.':text.slice(nl+1);dataHtml=csvTable(csv,'Candle data');copyData=[csv];}}
-    table.innerHTML=`<table><thead><tr><th>Item</th><th>Scanner found</th><th>Corrected to</th></tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{dataHtml}}`;
-    const copyText=[$('calc-title').textContent,['Item,Scanner found,Corrected to',...rows.map(r=>r.join(','))].join('\\n'),...copyData].join('\\n\\n');
+    const instrumentRows=debugInstrumentLines();
+    table.innerHTML=`<dl class="debug-instrument"><dt>Ticker</dt><dd>${{esc(P.sourceTicker || P.symbol || '-')}}</dd><dt>Full name</dt><dd>${{esc(P.sourceName || '-')}}</dd></dl><table><thead><tr><th>Item</th><th>Scanner found</th><th>Corrected to</th></tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{dataHtml}}`;
+    const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),['Item,Scanner found,Corrected to',...rows.map(r=>r.join(','))].join('\\n'),...copyData].join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
     requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
     $('copy-debug-report').onclick=async()=>{{try{{await navigator.clipboard.writeText(copyText);$('copy-debug-report').textContent='Copied';}}catch(_err){{$('copy-debug-report').textContent='Select and copy below';}}}};

@@ -28,6 +28,17 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert "debug-add-sidetrend" in source
 
 
+def test_chart_debug_reports_include_ticker_and_full_name():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function debugInstrumentLines()" in source
+    assert "`Ticker: ${{P.sourceTicker || P.symbol || '-'}}`" in source
+    assert "`Full name: ${{P.sourceName || '-'}}`" in source
+    assert "lines.push(...debugInstrumentLines());" in source
+    assert '<dt>Ticker</dt>' in source
+    assert '<dt>Full name</dt>' in source
+
+
 def test_anchor_debug_keeps_scanner_geometry_and_creates_colored_correction_copy():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
