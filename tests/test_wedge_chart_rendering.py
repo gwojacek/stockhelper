@@ -43,6 +43,24 @@ def test_debug_report_newline_is_escaped_for_generated_javascript():
     assert "text.indexOf('\\\\n',markerAt)" in source
 
 
+def test_debug_corrections_are_kept_only_by_explicit_report_action():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "keep-debug-correction" in source
+    assert "function restoreUnkeptDebugCorrection()" in source
+    assert "requestAnimationFrame(()=>$('saved-fibo-status')?.click())" in source
+    assert "<th>Action</th>" not in source
+
+
+def test_sidetrends_fit_chart_and_have_draggable_edge_handles():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function beginSidetrendDrag(ev)" in source
+    assert "function moveSidetrendDrag(ev)" in source
+    assert "function endSidetrendDrag(ev)" in source
+    assert "chart.timeScale().fitContent()" in source[source.index("function renderSidetrendEditor"):source.index("function renderGeometryEditor")]
+
+
 def test_fibo_boundary_is_draggable_and_resynchronizes_group():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
