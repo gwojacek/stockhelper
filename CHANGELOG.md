@@ -3,6 +3,7 @@
 - Improved sidetrend review detection to split long candidates at sustained transitions, discard unsplittable multi-regime ranges, recover post-shock shelves, and refine smooth entry/exit boundaries.
 - Updated the WIG scanner universe by removing stale MOJ and PUR entries and adding MQR (MultiQure SA).
 - Persisted the reviewed GRX sidetrend corrections and invalid-range decisions for future scans.
+- Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
 
 All notable release changes for StockHelper are documented here.
 

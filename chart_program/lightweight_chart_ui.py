@@ -2125,16 +2125,21 @@ class LightweightChartLevelSelectorUI:
     const firstOpen=!debugSideRanges;
     if (firstOpen) {{
       debugSideRanges=detectedMonthlySidetrends().map(range=>({{...range,valid:sidetrendNearFibo(range)}}));
+      const overlaps=(left,right)=>left.start<=right.end&&right.start<=left.end;
+      const removeScannerOverlaps=(saved,keep=null)=>{{
+        const coverage={{start:saved.start,end:saved.end}};
+        debugSideRanges=debugSideRanges.filter(range=>range===keep||range.saved||!overlaps(range,coverage));
+      }};
       savedSidetrends.forEach(saved=>{{
         const match=debugSideRanges.find(r=>(saved.scannerStart&&r.scannerStart===saved.scannerStart&&r.scannerEnd===saved.scannerEnd)||(r.start===saved.start&&r.end===saved.end));
-        if (!match) debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:sidetrendNearFibo(saved),saved:true}});
-        else {{match.start=saved.start;match.end=saved.end;match.valid=sidetrendNearFibo(match);match.saved=true;}}
+        if (!match) {{removeScannerOverlaps(saved);debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:sidetrendNearFibo(saved),saved:true}});}}
+        else {{match.start=saved.start;match.end=saved.end;match.valid=sidetrendNearFibo(match);match.saved=true;removeScannerOverlaps(saved,match);}}
       }});
       const invalidSidetrends=Array.isArray(levels.__saved_invalid_sidetrends__)?levels.__saved_invalid_sidetrends__:[];
       invalidSidetrends.forEach(saved=>{{
         const match=debugSideRanges.find(r=>(saved.scannerStart&&r.scannerStart===saved.scannerStart&&r.scannerEnd===saved.scannerEnd)||(r.start===saved.start&&r.end===saved.end));
-        if(match) Object.assign(match,{{start:saved.start,end:saved.end,valid:false,markedInvalid:true}});
-        else debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:false,markedInvalid:true,saved:true}});
+        if(match) {{Object.assign(match,{{start:saved.start,end:saved.end,valid:false,markedInvalid:true,saved:true}});removeScannerOverlaps(saved,match);}}
+        else {{removeScannerOverlaps(saved);debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:false,markedInvalid:true,saved:true}});}}
       }});
       debugSideRanges.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
     }}

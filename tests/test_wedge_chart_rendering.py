@@ -37,6 +37,16 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert "debug-add-sidetrend" in source
 
 
+def test_saved_sidetrends_take_precedence_over_overlapping_scanner_ranges():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    editor = source[source.index("function renderSidetrendEditor()") : source.index("function renderGeometryEditor")]
+
+    assert "const overlaps=(left,right)=>left.start<=right.end&&right.start<=left.end" in editor
+    assert "const removeScannerOverlaps=(saved,keep=null)" in editor
+    assert "range===keep||range.saved||!overlaps(range,coverage)" in editor
+    assert "removeScannerOverlaps(saved,match)" in editor
+
+
 def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
