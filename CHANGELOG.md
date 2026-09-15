@@ -7,6 +7,7 @@
 - Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
 - Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo, and saved the reviewed GRX July-September correction.
 - Persisted the reviewed ATT and SGN sidetrend boundary corrections and ATT invalid-range decisions across both session aliases.
+- Updated the ATT and SGN review state with the latest split/added ATT ranges, revised boundaries, and SGN invalidation decisions.
 
 All notable release changes for StockHelper are documented here.
 

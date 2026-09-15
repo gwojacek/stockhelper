@@ -94,6 +94,12 @@
     {
       "scannerStart": "2026-02-10",
       "scannerEnd": "2026-03-12",
+      "start": "2026-02-16",
+      "end": "2026-03-12"
+    },
+    {
+      "scannerStart": "not found",
+      "scannerEnd": "not found",
       "start": "2026-01-21",
       "end": "2026-02-13"
     },
@@ -101,13 +107,13 @@
       "scannerStart": "2025-07-25",
       "scannerEnd": "2025-09-08",
       "start": "2025-07-25",
-      "end": "2025-12-02"
+      "end": "2025-11-27"
     },
     {
       "scannerStart": "2025-05-13",
       "scannerEnd": "2025-06-16",
-      "start": "2025-05-13",
-      "end": "2025-06-12"
+      "start": "2025-05-16",
+      "end": "2025-06-13"
     }
   ],
   "__saved_invalid_sidetrends__": [

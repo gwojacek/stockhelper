@@ -1003,27 +1003,34 @@
     {
       "scannerStart": "2026-06-08",
       "scannerEnd": "2026-07-31",
-      "start": "2026-07-22",
+      "start": "2026-07-23",
       "end": "2026-08-18"
-    },
-    {
-      "scannerStart": "2026-04-30",
-      "scannerEnd": "2026-05-28",
-      "start": "2026-05-12",
-      "end": "2026-05-26"
     },
     {
       "scannerStart": "2026-02-13",
       "scannerEnd": "2026-04-02",
-      "start": "2026-03-02",
+      "start": "2026-02-13",
       "end": "2026-04-15"
     },
     {
-      "scannerStart": "2025-07-04",
-      "scannerEnd": "2025-08-18",
-      "start": "2025-08-04",
-      "end": "2025-09-04"
+      "scannerStart": "2025-10-13",
+      "scannerEnd": "2025-11-06",
+      "start": "2025-10-13",
+      "end": "2025-11-06"
+    },
+    {
+      "scannerStart": "2025-05-15",
+      "scannerEnd": "2025-06-13",
+      "start": "2025-05-19",
+      "end": "2025-06-13"
     }
   ],
-  "__saved_invalid_sidetrends__": []
+  "__saved_invalid_sidetrends__": [
+    {
+      "scannerStart": "2025-07-04",
+      "scannerEnd": "2025-08-18",
+      "start": "2025-07-04",
+      "end": "2025-08-18"
+    }
+  ]
 }
