@@ -833,7 +833,14 @@ class LightweightChartLevelSelectorUI:
   let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
   let wedgeOnlySavedForScanner=Array.isArray(levels.__saved_manual_wedges__)&&levels.__saved_manual_wedges__.length>=2;
-  let savedWedgeByUser = (levels.__saved_wedge_by_user__ === true && (!wedgeOnlySavedForScanner || initialWedgeGeometry !== '[]')) || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
+  // A dedicated manual-wedge save is deliberately hidden on every other
+  // technique.  When the Wedges chart materializes that exact saved pair,
+  // however, its shared save-status control must represent the active wedge
+  // override even if an older session wrote a false/missing legacy marker.
+  const wedgeOnlySaveVisible = wedgeOnlySavedForScanner
+    && levels.__journal_source_technique__ === 'Kliny'
+    && initialWedgeGeometry !== '[]';
+  let savedWedgeByUser = wedgeOnlySaveVisible || (levels.__saved_wedge_by_user__ === true && (!wedgeOnlySavedForScanner || initialWedgeGeometry !== '[]')) || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
   const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; const invalid=savedFiboByUser&&levels.__saved_fibo_invalid__; btn.classList.toggle('active',saved); btn.classList.toggle('invalid-save',!!invalid); let invalidDays=0; if(invalid){{const due=Date.parse(invalid.delete_on||'');if(Number.isFinite(due))invalidDays=Math.max(0,Math.ceil((due-Date.now())/86400000));}} btn.title=invalid?`Invalid saved Fibo — will be dropped in ${{invalidDays}} day${{invalidDays===1?'':'s'}}; click to remove now`:(saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'); const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=invalid?'⚠ Invalid save':(saved?'💾 Chart saved':'💾 Save chart'); if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;

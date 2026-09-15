@@ -131,6 +131,9 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "futureTimes[Math.min(59,futureTimes.length-1)]" in source
     assert "__saved_manual_wedges__:wedgeObjects,__saved_wedge_by_user__:true" in source
     assert "wedgeOnlySavedForScanner=Array.isArray(levels.__saved_manual_wedges__)" in source
+    assert "const wedgeOnlySaveVisible = wedgeOnlySavedForScanner" in source
+    assert "levels.__journal_source_technique__ === 'Kliny'" in source
+    assert "savedWedgeByUser = wedgeOnlySaveVisible ||" in source
     assert "!wedgeOnlySavedForScanner || initialWedgeGeometry !== '[]'" in source
     save_function = source[source.index("async function saveManualWedge()"):source.index("function forgetLevelSeries")]
     assert "collectLevelsForSave" not in save_function
