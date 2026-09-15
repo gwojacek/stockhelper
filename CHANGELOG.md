@@ -2,13 +2,42 @@
 
 All notable release changes for StockHelper are documented here.
 
-The project currently documents release tags `1.0` through `8.1`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
+The project currently documents release tags `1.0` through `9.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
 No unreleased changes are documented yet.
 
-Compare: [`8.1...HEAD`](https://github.com/gwojacek/stockhelper/compare/8.1...HEAD)
+Compare: [`9.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/9.0...HEAD)
+
+## [9.0] - 2026-09-15
+
+Tag: `9.0`
+Compare: [`8.1...9.0`](https://github.com/gwojacek/stockhelper/compare/8.1...9.0)
+
+### Added
+
+- Added a two-line manual wedge drawing workflow with candle-extreme snapping, freely movable projected endpoints, and a dedicated **Save wedge** action. Dedicated wedge saves preserve the user's exact geometry for future wedge scans without saving unrelated chart edits.
+- Added an interactive month-scale sidetrend review tool with individually colored ranges, selection controls, draggable boundaries, saved-range persistence, and detailed candle data in correction reports.
+- Added richer Fibo, wedge, Ichimoku, and sidetrend debug reports with instrument identity, live-updating correction comparisons, separately grouped date/price columns, and copyable formation candle data.
+- Added a movable debug dialog and a persistent draggable splitter between the chart and calculation/report drawer.
+
+### Changed
+
+- Made dedicated manual wedges authoritative in the Wedges scanner until invalidation. Their precise saved anchor geometry is retained after allsearch, while their saved state and lines remain isolated from Fibo, Ichimoku, and unrelated chart contexts.
+- Made manual wedge projections editable up to 60 candles beyond the newest available candle and ensured wedge discovery controls operate with user-saved geometry.
+- Strengthened Fibo validation around month-long sidetrends: a qualifying range between anchors invalidates the original impulse, and a qualifying range after the second anchor but before the 61.8 touch invalidates the complete formation.
+- Reworked correction tables and report layouts for clearer scanner-versus-user comparisons, newest-first sidetrend reporting, dynamic updates while tools remain open, and complete non-duplicated formation data.
+- Made chart PNG overlay capture preserve the same geometry and dimensions as the visible chart instead of rescaling line overlays.
+- Bumped the package major version to `1.0.0`.
+
+### Fixed
+
+- Fixed dedicated manual wedges being automatically replaced by newly detected scanner anchors even though the saved geometry remained valid.
+- Fixed wedge-only saves incorrectly affecting the saved status or visible drawings of Ichimoku, Fibo, and other technique charts.
+- Fixed the saved-chart control not appearing active when an authoritative wedge-only save was loaded in the Wedges chart.
+- Fixed reclaimed intraday wicks hiding otherwise valid month-long sidetrends and allowing invalid Fibo formations to survive.
+- Fixed chart time-axis clipping, stale wedge/Fibo correction-table values, report content ordering, and line displacement in PNG exports.
 
 ## [8.1] - 2026-09-13
 

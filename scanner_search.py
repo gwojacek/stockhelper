@@ -966,6 +966,10 @@ def _sideways_window_stats(
         idx for idx in candidate_idxs
         if idx in low_order[:3]
         and (ending_close - low_values[idx]) / max(abs(low_values[idx]), 1e-9) > 0.10
+        # A deep intraday wick which is reclaimed before that same candle
+        # closes is noise inside a range, not the start of a new recovery.
+        # Protect only lows where price actually closed near the new level.
+        and (float(closes.iloc[idx]) - low_values[idx]) / max(abs(low_values[idx]), 1e-9) <= 0.08
     }
     candidate_idxs -= protected_bottoms
     best: tuple[float, float, float, int] | None = None
@@ -3958,13 +3962,14 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
             pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern_name)}"
         return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
     if mode == "wedge" and wedge is not None:
+        saved_flag = " --wedge-saved-by-user" if wedge.saved_by_user else ""
         return (
             f"{base} --wedge-lines "
             f"--wedge-upper-start {wedge.upper_start_date},{wedge.upper_start_price} "
             f"--wedge-upper-end {wedge.upper_end_date},{wedge.upper_end_price} "
             f"--wedge-lower-start {wedge.lower_start_date},{wedge.lower_start_price} "
             f"--wedge-lower-end {wedge.lower_end_date},{wedge.lower_end_price} "
-            f"--wedge-right"
+            f"--wedge-right{saved_flag}"
         )
     return base + " --ichimoku-mode on"
 
@@ -5318,7 +5323,9 @@ def _manual_wedge_objects_for_ticker(ticker: str) -> tuple[dict, dict] | None:
         state = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
-    objects = state.get("drawn_objects") if isinstance(state, dict) else None
+    objects = state.get("__saved_manual_wedges__") if isinstance(state, dict) else None
+    if not isinstance(objects, list) or len(objects) < 2:
+        objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
         return None
     wedges = [obj for obj in objects if isinstance(obj, dict) and (obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge")]
@@ -5349,13 +5356,15 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
         return set()
     objects = state.get("drawn_objects") if isinstance(state, dict) else None
     if not isinstance(objects, list):
-        return set()
+        objects = []
     kinds: set[str] = set()
     # ``False`` is written by new scanner preloads.  Missing is deliberately
     # treated as saved for compatibility with sessions created before the
     # marker existed; the next chart save migrates those sessions to ``True``.
     saved_fibo_active = state.get("__saved_fibo_by_user__") is not False
     saved_wedge_active = state.get("__saved_wedge_by_user__") is not False
+    if saved_wedge_active and isinstance(state.get("__saved_manual_wedges__"), list) and len(state["__saved_manual_wedges__"]) >= 2:
+        kinds.add("wedge")
     for obj in objects:
         if not isinstance(obj, dict):
             continue
@@ -5397,6 +5406,75 @@ def _saved_fibo_anchors_for_ticker(ticker: str) -> list[tuple[str, str, str]]:
         if start and end and direction in {"long", "short"}:
             anchors.append((direction, start, end))
     return anchors
+
+
+def _saved_sidetrends_for_ticker(ticker: str) -> list[tuple[str, str]]:
+    """Return user-confirmed month-long sideways ranges from a chart session."""
+    path = _scanner_session_path_for_ticker(ticker)
+    if not path.exists():
+        return []
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    ranges = state.get("__saved_sidetrends__") if isinstance(state, dict) else None
+    if not isinstance(ranges, list):
+        return []
+    saved: list[tuple[str, str]] = []
+    for item in ranges:
+        if not isinstance(item, dict):
+            continue
+        start, end = str(item.get("start") or "")[:10], str(item.get("end") or "")[:10]
+        try:
+            duration = (pd.Timestamp(end) - pd.Timestamp(start)).days
+        except (TypeError, ValueError):
+            continue
+        if start and end and duration >= 30:
+            saved.append((start, end))
+    return saved
+
+
+def _fibo_crosses_saved_sidetrend(
+    candidate: FiboScanResult,
+    ranges: list[tuple[str, str]],
+    *,
+    latest_date: str = "",
+) -> bool:
+    """Reject a Fibo split by a confirmed sidetrend before its 61.8 touch."""
+    correction_end = candidate.first_61_8_touch_date or latest_date
+    return any(
+        (
+            candidate.incline_start_date <= start
+            and end <= candidate.incline_end_date
+        )
+        or (
+            candidate.incline_end_date <= start
+            and bool(correction_end)
+            and end <= correction_end
+        )
+        for start, end in ranges
+    )
+
+
+def _fibo_has_detected_month_sidetrend(df: pd.DataFrame, candidate: FiboScanResult) -> bool:
+    """Reject old anchors and corrections separated by an automatic side phase.
+
+    A new formation remains possible, but its first anchor must occur after the
+    completed range.  Therefore this check never relocates an old anchor; the
+    normal selector must independently find a sufficiently mature new impulse.
+    """
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    start = pd.to_datetime(candidate.incline_start_date, errors="coerce")
+    end = pd.to_datetime(candidate.incline_end_date, errors="coerce")
+    touch = pd.to_datetime(candidate.first_61_8_touch_date, errors="coerce")
+    if pd.isna(start) or pd.isna(end):
+        return False
+    impulse = df.loc[(dates >= start) & (dates <= end)].reset_index(drop=True)
+    if _has_completed_month_side_trend(impulse):
+        return True
+    correction_end = touch if not pd.isna(touch) else dates.max()
+    correction = df.loc[(dates >= end) & (dates <= correction_end)].reset_index(drop=True)
+    return _has_completed_month_side_trend(correction)
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
@@ -5515,16 +5593,25 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
     date_to_idx = {str(pd.to_datetime(dt).date()): i for i, dt in enumerate(w["Date"])}
 
-    def _idx_anchor(raw: tuple[str, float]) -> tuple[int, float] | None:
+    def _idx_anchor(raw: tuple[str, float], *, allow_nearest: bool = False) -> tuple[int, float] | None:
         try:
-            key = str(pd.to_datetime(raw[0]).date())
+            timestamp = pd.to_datetime(raw[0])
+            key = str(timestamp.date())
         except Exception:
             return None
         idx = date_to_idx.get(key)
+        if idx is None and allow_nearest:
+            # A manually dragged second endpoint is a free line-definition
+            # point, not a candle touch. It may sit on a weekend or in future
+            # whitespace, so validate the line against the nearest available
+            # candle instead of rejecting otherwise valid saved geometry.
+            distances = (w["Date"] - timestamp).abs()
+            if not distances.empty:
+                idx = int(distances.idxmin())
         return None if idx is None else (idx, float(raw[1]))
 
-    up0 = _idx_anchor(upper_raw[0]); up1 = _idx_anchor(upper_raw[1])
-    lo0 = _idx_anchor(lower_raw[0]); lo1 = _idx_anchor(lower_raw[1])
+    up0 = _idx_anchor(upper_raw[0]); up1 = _idx_anchor(upper_raw[1], allow_nearest=True)
+    lo0 = _idx_anchor(lower_raw[0]); lo1 = _idx_anchor(lower_raw[1], allow_nearest=True)
     if up0 is None or up1 is None or lo0 is None or lo1 is None or up0[0] == up1[0] or lo0[0] == lo1[0]:
         return None
     upper_a, upper_b = up0, up1
@@ -8470,6 +8557,18 @@ def run_fibo_search(target: str) -> int:
             # when this same scan found a much smaller regular long formation.
             # This removes JP225's stale broad leg while preserving stepwise
             # trends such as ROST when no actionable nested replacement exists.
+            saved_sidetrends = _saved_sidetrends_for_ticker(ticker)
+            latest_date_text = str(pd.to_datetime(df["Date"], errors="coerce").max().date())
+            out_rows = [
+                item for item in out_rows
+                if isinstance(item, WedgeScanResult)
+                or (
+                    not _fibo_has_detected_month_sidetrend(df, item)
+                    and not _fibo_crosses_saved_sidetrend(
+                        item, saved_sidetrends, latest_date=latest_date_text,
+                    )
+                )
+            ]
             out_rows = _prune_superseded_steep_fibo_rows(out_rows)
             return idx, ticker, out_rows, None, str((meta or {}).get("source", "unknown"))
         except Exception as exc:

@@ -151,6 +151,7 @@ def _parse_args(raw_args=None):
     parser.add_argument("--wedge-lower-start")
     parser.add_argument("--wedge-lower-end")
     parser.add_argument("--wedge-right", action="store_true")
+    parser.add_argument("--wedge-saved-by-user", action="store_true")
     parser.add_argument("--journal-close-mode", action="store_true")
     parser.add_argument("--journal-entry-id")
     parser.add_argument("--journal-entry-price")
@@ -657,6 +658,20 @@ def run_level_selector(raw_args=None):
     elif args.ichimoku_mode == "on":
         existing["__journal_source_technique__"] = "Ichimoku"
 
+    # ``Save wedge`` is intentionally technique-scoped.  Its dedicated pair
+    # remains in the shared instrument session so the wedge scanner can use it,
+    # but wedge lines previously materialized by opening the Wedges-tab chart
+    # must not leak into later Ichimoku or Fibo charts for the same instrument.
+    wedge_only_save = existing.get("__saved_manual_wedges__")
+    if not args.wedge_lines and isinstance(wedge_only_save, list) and len(wedge_only_save) >= 2:
+        objects = existing.get("drawn_objects")
+        if isinstance(objects, list):
+            existing["drawn_objects"] = [
+                obj for obj in objects
+                if not isinstance(obj, dict)
+                or not (obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge")
+            ]
+
     # Chart UI should remain responsive: render at most ~2 years from latest bar.
     df = _trim_chart_window(df, max_days=548)
 
@@ -864,6 +879,15 @@ def run_level_selector(raw_args=None):
 
     if args.wedge_lines:
         try:
+            dedicated_wedge = existing.get("__saved_manual_wedges__")
+            if args.wedge_saved_by_user and isinstance(dedicated_wedge, list) and len(dedicated_wedge) >= 2:
+                # The scanner has already validated this dedicated save. Render
+                # the user's exact points instead of rebuilding and snapping a
+                # new wedge from the scanner result's effective candle touches.
+                existing["drawn_objects"] = json.loads(json.dumps(dedicated_wedge))
+                existing["__saved_wedge_by_user__"] = True
+                print("[chart] loaded exact wedge-only saved geometry")
+                raise StopIteration
             if _saved_wedge_is_active():
                 print("[chart] kept saved manual wedge lines (active/recent breakout)")
                 raise StopIteration

@@ -530,7 +530,7 @@ class LightweightChartLevelSelectorUI:
     .close-line-control input {{ width:120px; }}
     #close-mode-save {{ background:linear-gradient(135deg,#16a34a,#22c55e); color:#052e16; border-color:#86efac; }}
     #chart {{ position:absolute; inset:0; width: 100%; height: 100%; z-index:1; }}
-    #chart .tv-lightweight-charts {{ width:100% !important; height:100% !important; }}
+    #chart .tv-lightweight-charts {{ width:100% !important; height:calc(100% - 28px) !important; }}
     #cloud-overlay {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }}
     #icon-overlay {{ position:absolute; inset:0; pointer-events:none; z-index:60; overflow:hidden; }}
     .chart-icon {{ position:absolute; transform:translate(-50%,-50%); min-width:12px; height:12px; padding:0 2px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:8px; line-height:1; font-weight:900; color:#0f172a; background:#f8fafc; border:1.5px solid currentColor; box-shadow:0 2px 8px rgba(0,0,0,.55); }}
@@ -542,7 +542,7 @@ class LightweightChartLevelSelectorUI:
     #chart-wrap.line-handle-hover {{ cursor: pointer; }}
     #cursor-box {{ min-height:52px; display:flex; align-items:center; padding:0 24px; margin:0; color:#d7e7f7; font-size:14px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }}
     .chart-save-actions {{ display:flex; align-items:center; gap:7px; }}
-    .chart-save-actions button {{ flex:0 0 150px; width:150px; min-height:32px; }}
+    .chart-save-actions button {{ box-sizing:border-box; flex:0 0 150px; width:150px; height:34px; min-height:34px; padding:5px 10px; }}
     #cursor-stats {{ flex:1 1 auto; display:flex; align-items:center; justify-content:center; gap:clamp(16px,2.2vw,34px); min-width:0; }}
     #cursor-box .cursor-stat {{ display:inline-flex; align-items:baseline; gap:5px; }}
     #cursor-box .cursor-label {{ color:#82a9ca; font-weight:700; }}
@@ -573,6 +573,7 @@ class LightweightChartLevelSelectorUI:
     #saved-fibo-status:not(.active) {{ border-color:#52677f; background:#17263b; box-shadow:none; }}
     #saved-fibo-status.invalid-save {{ border-color:#ef4444; background:rgba(127,29,29,.72); color:#fee2e2; box-shadow:0 0 0 1px rgba(239,68,68,.2),0 0 16px rgba(239,68,68,.28); }}
     #saved-fibo-status .saved-remove {{ flex:0 0 auto; margin-left:0; color:inherit; font-size:14px; }}
+    #save-manual-wedge.ready {{ display:inline-flex !important; align-items:center; justify-content:center; border-color:#4ade80; background:linear-gradient(180deg,#15803d,#166534); color:#f0fdf4; box-shadow:0 0 0 1px rgba(74,222,128,.18),0 0 16px rgba(34,197,94,.28); }}
     .identity-sub {{ color:#9fb4d6; font-weight:700; margin-top:2px; font-size:13px; }}
     .meta-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); }}
     .meta-field.full {{ grid-column:1 / -1; }}
@@ -627,7 +628,7 @@ class LightweightChartLevelSelectorUI:
     .value-tile.entry .value-number {{ color:#4ade80; }}
     .value-tile.stop_loss .value-number {{ color:#fb7185; }}
     .color-dot {{ width: 22px; height: 22px; padding: 0; border: 1px solid white; }}
-    .line-tool-group {{ display:inline-flex; align-items:stretch; gap:0; }}
+    .line-tool-group {{ position:relative; display:inline-flex; align-items:stretch; gap:0; }}
     .line-tool-group #tool-line {{ border-radius:7px 0 0 7px; }}
     .line-color-picker {{ position:relative; display:inline-flex; margin-left:-1px; }}
     .line-color-picker #line-color-toggle {{ display:inline-flex; align-items:center; justify-content:center; gap:5px; border-radius:0 7px 7px 0; min-width:40px; padding-left:8px; padding-right:8px; }}
@@ -635,6 +636,9 @@ class LightweightChartLevelSelectorUI:
     .line-color-chevron {{ color:#cbd5e1; font-size:10px; line-height:1; }}
     .line-color-menu {{ display:none; position:absolute; z-index:100; top:auto; bottom:calc(100% + 6px); right:0; gap:7px; padding:8px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
     .line-color-picker.open .line-color-menu {{ display:flex; }}
+    .line-kind-menu {{ display:none; position:absolute; z-index:101; top:calc(100% + 6px); left:0; min-width:150px; padding:6px; border:1px solid #475569; border-radius:9px; background:#0f172a; box-shadow:0 10px 28px rgba(0,0,0,.4); }}
+    .line-tool-group.kind-open .line-kind-menu {{ display:grid; gap:5px; }}
+    .line-kind-menu button {{ width:100%; text-align:left; white-space:nowrap; }}
     .legend-row {{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; min-height:48px; padding:12px 18px 9px; border-top:1px solid rgba(23,81,117,.75); }}
     #chart-legend {{ display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; min-height:20px; margin:0; font-size:12px; font-weight:700; }}
     #scanner-highlight-legend {{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; min-height:20px; margin:0 0 7px 0; font-size:12px; font-weight:800; }}
@@ -682,23 +686,23 @@ class LightweightChartLevelSelectorUI:
     #chart-legend i {{ width: 18px; height: 3px; display: inline-block; border-radius: 2px; }}
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
+    #calc-splitter {{ display:none; position:relative; z-index:90; height:22px; margin:0 10px; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:absolute; left:0; right:0; top:10px; height:2px; border-radius:999px; background:#315b80; }} #calc-splitter::after {{ content:'↕'; display:grid; place-items:center; position:absolute; left:50%; top:1px; width:28px; height:20px; transform:translateX(-50%); border:0; background:#071426; color:#94a3b8; font:900 15px/1 sans-serif; }} #calc-splitter:hover::after,#calc-splitter.resizing::after {{ color:#e2e8f0; transform:translateX(-50%) scale(1.08); }} .main.calc-open #calc-splitter {{ display:block; }}
     #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
-    #calc-drawer.open {{ display:block; }}
-    #calc-drawer.debug-report-mode #calc-title {{ position:static; transform:none; width:auto; grid-column:1; align-self:center; text-align:left; }}
-    #calc-drawer.debug-report-mode #calc-head {{ grid-template-columns:minmax(180px,1fr) auto auto; }}
-    #calc-drawer.debug-report-mode #calc-summary {{ grid-column:2; width:auto; }}
-    #calc-head {{ display:grid; grid-template-columns:minmax(120px,1fr) minmax(760px,980px) minmax(80px,1fr); align-items:start; gap:12px; margin:0 0 4px 0; }}
-    #calc-title {{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:max(120px, calc((100% - 980px) / 2 - 24px)); margin:0; text-align:center; font-size:18px; }}
-    #calc-close {{ grid-column:3; justify-self:end; }}
+    #calc-drawer.open {{ display:block; margin-top:-6px; }}
+    .main.calc-open #calc-drawer {{ box-sizing:border-box; height:var(--calc-drawer-height,340px); max-height:none; }}
+    .calc-toolbar {{ display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,1fr) auto auto; align-items:center; gap:12px; margin:0 0 10px; }}
+    #calc-title {{ margin:0; font-size:18px; }}
+    #calc-close {{ justify-self:end; }}
     #calc-table {{ max-width: 980px; margin: 0 auto; }}
     #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:13px; }}
     #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
     #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
-    #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; }}
+    #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; white-space:normal; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:16%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ border-left:3px solid #294f73; text-align:center; }}
+    .calc-toolbar.debug-instrument {{ position:relative; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; position:absolute; left:50%; top:50%; width:min(34vw,440px); transform:translate(-50%,-50%); }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
-    #calc-summary {{ grid-column:2; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin:0 0 3px auto; width:100%; max-width:980px; color:#cbd5e1; font-size:13px; }}
+    #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin-left:auto; color:#cbd5e1; font-size:13px; }}
     #calc-summary b {{ color:#f8fafc; }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
     #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
@@ -706,14 +710,14 @@ class LightweightChartLevelSelectorUI:
     #wedge-debug-panel h4 {{ margin:0 0 6px 0; color:#f8fafc; }}
     #wedge-debug-panel .muted {{ color:#94a3b8; }}
     #debug-tools {{ border-color:#38bdf8; }}
-    #debug-dialog {{ display:none; position:fixed; z-index:200; left:26px; top:150px; width:390px; max-height:calc(100vh - 190px); overflow:auto; padding:16px; border:1px solid #315b80; border-radius:15px; background:linear-gradient(145deg,#0d1b30,#071426); box-shadow:0 24px 70px rgba(0,0,0,.65); }}
+    #debug-dialog {{ display:none; position:fixed; z-index:200; left:26px; top:100px; width:max-content; min-width:390px; max-width:none; max-height:none; overflow:visible; padding:16px; border:1px solid #315b80; border-radius:15px; background:linear-gradient(145deg,#0d1b30,#071426); box-shadow:0 24px 70px rgba(0,0,0,.65); }}
     #debug-dialog.open {{ display:block; }}
-    .debug-head {{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }} .debug-head h3 {{ flex:1; margin:0; font-size:18px; }}
+    .debug-head {{ display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:move; user-select:none; touch-action:none; }} .debug-head h3 {{ flex:1; margin:0; font-size:18px; }}
     .debug-close {{ border:0; background:transparent; font-size:22px; padding:2px 6px; }}
     .debug-choice-grid {{ display:grid; gap:10px; margin-top:14px; }}
     .debug-choice {{ padding:14px; text-align:left; border-color:#315b80; }} .debug-choice strong,.debug-choice span {{ display:block; }} .debug-choice span {{ margin-top:5px; color:#9fb4d6; font-size:12px; font-weight:500; }}
     .debug-help {{ color:#a9c0dc; font-size:13px; line-height:1.5; }}
-    .debug-period {{ display:grid; grid-template-columns:26px 1fr 1fr 34px; gap:7px; align-items:center; margin:7px 0; }} .debug-period input {{ min-width:0; padding:5px; font-size:11px; }} .debug-period button {{ padding:6px; color:#fca5a5; }}
+    .debug-editor-table {{ width:100%; min-width:680px; border-collapse:collapse; font-size:12px; }} .debug-editor-table th,.debug-editor-table td {{ height:42px; padding:7px 9px; border:1px solid #173a59; text-align:center; white-space:nowrap; }} .debug-editor-table th {{ color:#b9cae0; background:#102a43; font-weight:800; }} .debug-editor-table input[type=date] {{ width:132px; min-width:0; padding:8px 10px; border-radius:11px; font-size:11px; }} .debug-editor-table input[type=checkbox] {{ width:22px; height:22px; accent-color:#1683f8; }} .debug-editor-table button {{ padding:5px 9px; border-radius:9px; color:#fca5a5; }} .debug-editor-table tr.invalid {{ opacity:.42; text-decoration:line-through; }}
     .debug-period.invalid {{ opacity:.42; text-decoration:line-through; }}
     .debug-actions {{ display:flex; gap:8px; margin-top:14px; }} .debug-actions button {{ flex:1; }} .debug-report-btn {{ background:#0969ef; border-color:#38bdf8; }}
     #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report pre {{ margin:0; padding:12px; color:#dbeafe; background:#071426; border:1px solid #29415f; border-radius:9px; white-space:pre-wrap; font:12px/1.45 ui-monospace,monospace; }}
@@ -729,7 +733,7 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Levels</span><span class="toolbar-hint">Select key price levels</span><div class="level-grid" id="level-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Analysis</span><span class="toolbar-hint">Validate and confirm levels</span><div class="toolbar-actions" id="analysis-buttons"></div></section>
         <section class="toolbar-group"><span class="toolbar-label">Tools</span><span class="toolbar-hint">Drawing &amp; measurement tools</span><div class="toolbar-actions">
-          <span class="line-tool-group"><button id="tool-line" title="Draw a line on the chart"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color"><span id="line-color-indicator" aria-hidden="true"></span><span class="line-color-chevron" aria-hidden="true">⌄</span></button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span></span>
+          <span class="line-tool-group" id="line-tool-group"><button id="tool-line" title="Choose an ordinary line or a wedge"><span class="tool-icon">✎</span>Line tool</button><span class="line-color-picker" id="line-color-picker"><button id="line-color-toggle" type="button" title="Line color"><span id="line-color-indicator" aria-hidden="true"></span><span class="line-color-chevron" aria-hidden="true">⌄</span></button><span class="line-color-menu"><button class="color-dot" data-color="#facc15" title="Yellow" style="background:#facc15"></button><button class="color-dot" data-color="#a855f7" title="Purple" style="background:#a855f7"></button><button class="color-dot" data-color="#22c55e" title="Green" style="background:#22c55e"></button></span></span><span class="line-kind-menu"><button id="line-kind-ordinary" type="button" title="Draw an ordinary line">Ordinary line</button><button id="line-kind-wedge" type="button" title="Draw a wedge using candle extremes; it can be saved for future scanner searches">Wedge</button></span></span>
           <button id="tool-fib" title="Draw Fibonacci 61.8 levels">Fib 61.8</button><button id="tool-half" title="Set a half-distance stop loss">Half→SL</button><button id="tool-percent-diff" title="Select two candles to calculate the price difference">% Diff</button><button id="ichimoku-toggle" title="Show or hide the Ichimoku overlay">Ichimoku</button><button id="debug-tools" type="button" title="Review and correct scanner geometry">Debug tools</button>
         </div></section>
         <section class="toolbar-group" id="scanner-toolbar-group" style="display:none"><span class="toolbar-label">Scanner</span><span class="toolbar-hint">Find chart patterns</span><div class="toolbar-actions">
@@ -738,10 +742,12 @@ class LightweightChartLevelSelectorUI:
         <section class="toolbar-group"><span class="toolbar-label">Reset</span><span class="toolbar-hint">Restore chart drawings</span><div class="toolbar-actions"><button id="reset-scanner-drawings" style="display:none" title="Restore the original scanner-created drawings and remove manual drawing changes">Fibo</button><button id="reset-all" title="Reset all chart values and drawings">All</button></div></section>
       </div>
       <div id="close-mode-panel"><strong>💰 Close adjust</strong><span>Grab a line, click chart, or edit inputs.</span><label class="close-line-control active" data-line="sold"><span>🟢 SOLD</span><input id="close-mode-price" type="number" step="any"></label><label class="close-line-control" data-line="entry"><span>🔵 ENTRY</span><input id="close-mode-entry" type="number" step="any"></label><label class="close-line-control" data-line="sl"><span>🔴 SL</span><input id="close-mode-stop-loss" type="number" step="any" placeholder="last SL"></label><label class="close-line-control"><span>↕ SIDE</span><select id="close-mode-direction"><option value="long">↗ LONG</option><option value="short">↘ SHORT</option></select></label><button id="close-mode-save" type="button">Accept closing screenshot</button><span id="close-mode-status"></span></div>
-      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
-      <section id="calc-drawer" aria-live="polite">
-        <div id="calc-head">
+      <div class="chart-stage"><div id="cursor-box"><div id="cursor-stats"><span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">---- -- --</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">--</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value">--</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">--</span></span></div><div class="chart-save-actions"><button id="save-manual-wedge" type="button" title="Save only this wedge for future wedge scanner searches; other chart changes are not saved" style="display:none">Save wedge</button><button id="saved-fibo-status" type="button" title="Saves chart configuration until it becomes invalid"><span>💾 Save chart</span><span class="saved-remove" aria-hidden="true" style="display:none">×</span></button><button id="download-chart-png" type="button" title="Download the current chart as a PNG image">⇩ PNG</button></div></div><div class="legend-row"><div id="chart-legend"></div><div id="scanner-highlight-legend"></div></div><div id="chart-wrap"><div id="chart"></div><canvas id="cloud-overlay"></canvas><div id="icon-overlay"></div><div id="scanner-highlight-tooltip"></div></div></div>
+      <div id="calc-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize chart and report" title="Drag to resize chart and report"></div>
+      <section id="calc-drawer" class="chart-stage" aria-live="polite">
+        <div class="calc-toolbar">
           <h3 id="calc-title">Position calculation</h3>
+          <div id="debug-report-identity" class="debug-report-identity"></div>
           <div id="calc-summary"></div>
           <button id="calc-close" type="button">Close</button>
         </div>
@@ -826,7 +832,15 @@ class LightweightChartLevelSelectorUI:
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
   let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
-  let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
+  let wedgeOnlySavedForScanner=Array.isArray(levels.__saved_manual_wedges__)&&levels.__saved_manual_wedges__.length>=2;
+  // A dedicated manual-wedge save is deliberately hidden on every other
+  // technique.  When the Wedges chart materializes that exact saved pair,
+  // however, its shared save-status control must represent the active wedge
+  // override even if an older session wrote a false/missing legacy marker.
+  const wedgeOnlySaveVisible = wedgeOnlySavedForScanner
+    && levels.__journal_source_technique__ === 'Kliny'
+    && initialWedgeGeometry !== '[]';
+  let savedWedgeByUser = wedgeOnlySaveVisible || (levels.__saved_wedge_by_user__ === true && (!wedgeOnlySavedForScanner || initialWedgeGeometry !== '[]')) || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
   const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; const invalid=savedFiboByUser&&levels.__saved_fibo_invalid__; btn.classList.toggle('active',saved); btn.classList.toggle('invalid-save',!!invalid); let invalidDays=0; if(invalid){{const due=Date.parse(invalid.delete_on||'');if(Number.isFinite(due))invalidDays=Math.max(0,Math.ceil((due-Date.now())/86400000));}} btn.title=invalid?`Invalid saved Fibo — will be dropped in ${{invalidDays}} day${{invalidDays===1?'':'s'}}; click to remove now`:(saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'); const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=invalid?'⚠ Invalid save':(saved?'💾 Chart saved':'💾 Save chart'); if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
@@ -838,6 +852,9 @@ class LightweightChartLevelSelectorUI:
   let halfAnchor = null;
   let percentDiffAnchor = null;
   let percentDiffSeries = null;
+  let manualWedgeStep = 0;
+  let manualWedgeDraftIds = [];
+  const scannerWedgeAvailable = initialScannerDrawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
   let lineColor = P.lineColors.gold;
   const precision = P.pricePrecision || 2;
   const futureTimes = Array.isArray(P.futureTimes) ? P.futureTimes : [];
@@ -1056,18 +1073,36 @@ class LightweightChartLevelSelectorUI:
     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
     localization: {{ priceFormatter: p => fmt(p) }},
   }});
+  const DRAWER_HEIGHT_STORAGE_KEY='stockhelper_calc_drawer_height_v1';
+  let preferredDrawerHeight=0;
+  try {{ preferredDrawerHeight=Number(localStorage.getItem(DRAWER_HEIGHT_STORAGE_KEY)||0); }} catch(_err) {{}}
+  function setDrawerHeight(height,persist=false) {{
+    const max=Math.max(220,window.innerHeight-390),value=Math.round(Math.max(180,Math.min(max,Number(height)||340)));
+    preferredDrawerHeight=value;
+    document.documentElement.style.setProperty('--calc-drawer-height',`${{value}}px`);
+    if(persist) try {{localStorage.setItem(DRAWER_HEIGHT_STORAGE_KEY,String(value));}} catch(_err) {{}}
+    resizeChartToContainer();
+  }}
+  if(preferredDrawerHeight>0)setDrawerHeight(preferredDrawerHeight);
   function resizeChartToContainer() {{
     const el = $('chart');
     if (!el || !chart.applyOptions) return;
     const r = el.getBoundingClientRect();
     if (r.width > 0 && r.height > 0) {{
-      try {{ chart.applyOptions({{width: Math.floor(r.width), height: Math.floor(r.height)}}); }} catch(e) {{}}
+      try {{ chart.applyOptions({{width: Math.floor(r.width), height: Math.max(1, Math.floor(r.height - 28))}}); }} catch(e) {{}}
       requestAnimationFrame(drawCloud);
     }}
   }}
   if (window.ResizeObserver) new ResizeObserver(resizeChartToContainer).observe($('chart'));
   window.addEventListener('resize', resizeChartToContainer);
   requestAnimationFrame(resizeChartToContainer);
+  (()=>{{
+    const splitter=$('calc-splitter');let resize=null;
+    splitter?.addEventListener('pointerdown',ev=>{{resize={{id:ev.pointerId,y:ev.clientY,height:$('calc-drawer').getBoundingClientRect().height}};splitter.classList.add('resizing');splitter.setPointerCapture?.(ev.pointerId);ev.preventDefault();}});
+    splitter?.addEventListener('pointermove',ev=>{{if(!resize||resize.id!==ev.pointerId)return;setDrawerHeight(resize.height+(resize.y-ev.clientY));ev.preventDefault();}});
+    const stop=ev=>{{if(!resize||resize.id!==ev.pointerId)return;splitter.releasePointerCapture?.(ev.pointerId);splitter.classList.remove('resizing');setDrawerHeight(preferredDrawerHeight,true);resize=null;}};
+    splitter?.addEventListener('pointerup',stop);splitter?.addEventListener('pointercancel',stop);
+  }})();
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   let verticalPan = 0;
   let chartDrag = null;
@@ -1354,6 +1389,25 @@ class LightweightChartLevelSelectorUI:
     return lines.join('\\n');
   }}
 
+  function debugTickerText() {{
+    const values=[P.symbol,P.sourceTicker].flatMap(value=>String(value||'').split('/')).map(value=>value.trim()).filter(Boolean);
+    return [...new Set(values)].join(' / ') || '-';
+  }}
+  function debugInstrumentLines() {{
+    return [
+      `Ticker: ${{debugTickerText()}}`,
+      `Full name: ${{P.sourceName || '-'}}`,
+    ];
+  }}
+  function debugGeometryValues(obj) {{
+    if(!obj)return null;
+    if(isWedgeLineObject(obj)) {{
+      const displayed=lineDisplayValues(obj);
+      if(displayed)return displayed;
+    }}
+    return {{x0:obj.x0??obj.x?.[0],y0:obj.y0??obj.y?.[0],x1:obj.x1??obj.x?.[(obj.x?.length||1)-1],y1:obj.y1??obj.y?.[(obj.y?.length||1)-1]}};
+  }}
+
   function candlePatternForRow(row, idx = null, rows = ohlc) {{
     if (!row) return '-';
     const open = Number(row.open), high = Number(row.high), low = Number(row.low), close = Number(row.close);
@@ -1517,6 +1571,7 @@ class LightweightChartLevelSelectorUI:
     const latestRetestPattern = scannerMetaValue('__scanner_latest_retest_pattern__');
     const lines = [];
     lines.push(`ICHIMOKU DEBUG: ${{P.symbol || ''}}`);
+    lines.push(...debugInstrumentLines());
     if (scannerBreakout) {{
       lines.push(`Breakout day: ${{scannerContext.displayDate || scannerBreakout}}`);
       if (scannerContext.note) lines.push(scannerContext.note);
@@ -1556,8 +1611,11 @@ class LightweightChartLevelSelectorUI:
   let debugCorrectionKept = false;
   let debugSessionScannerObjects = [];
   let debugReportMode = null;
+  let debugShowUnselected = false;
+  let debugReportRefreshFrame = null;
   let newSidetrendAnchor = null;
   let sidetrendDrag = null;
+  const savedSidetrends = Array.isArray(levels.__saved_sidetrends__) ? levels.__saved_sidetrends__ : [];
   function sidetrendBounds(range) {{
     const sample=ohlc.filter(row=>row.time>=range.start && row.time<=range.end);
     if (!sample.length) return null;
@@ -1565,6 +1623,24 @@ class LightweightChartLevelSelectorUI:
     const x0=chart.timeScale().timeToCoordinate?.(range.start), x1=chart.timeScale().timeToCoordinate?.(range.end);
     const y0=candleSeries.priceToCoordinate?.(hi), y1=candleSeries.priceToCoordinate?.(lo);
     return [x0,x1,y0,y1].every(Number.isFinite)?{{x0,x1,y0,y1}}:null;
+  }}
+  function refreshOpenDebugReport() {{
+    if(!$('calc-drawer')?.classList.contains('open')||!$('calc-table')?.classList.contains('debug-report'))return;
+    if(debugReportRefreshFrame)return;
+    debugReportRefreshFrame=requestAnimationFrame(()=>{{debugReportRefreshFrame=null;showCorrectionReport(true);}});
+  }}
+  function sidetrendColor(index) {{
+    const palette=[
+      {{stroke:'#c084fc',fill:'rgba(168,85,247,.16)',label:'#f3e8ff'}},
+      {{stroke:'#22d3ee',fill:'rgba(6,182,212,.16)',label:'#cffafe'}},
+      {{stroke:'#f59e0b',fill:'rgba(245,158,11,.16)',label:'#fef3c7'}},
+      {{stroke:'#4ade80',fill:'rgba(34,197,94,.16)',label:'#dcfce7'}},
+      {{stroke:'#fb7185',fill:'rgba(244,63,94,.16)',label:'#ffe4e6'}},
+      {{stroke:'#60a5fa',fill:'rgba(37,99,235,.16)',label:'#dbeafe'}},
+      {{stroke:'#f472b6',fill:'rgba(236,72,153,.16)',label:'#fce7f3'}},
+      {{stroke:'#a3e635',fill:'rgba(132,204,22,.16)',label:'#ecfccb'}},
+    ];
+    return palette[index % palette.length];
   }}
   function beginSidetrendDrag(ev) {{
     if (!debugShowSidetrends || !debugSideRanges) return false;
@@ -1582,7 +1658,7 @@ class LightweightChartLevelSelectorUI:
     if (!sidetrendDrag || sidetrendDrag.id!==ev.pointerId) return false;
     const rect=$('chart-wrap').getBoundingClientRect(); let date=chart.timeScale().coordinateToTime?.(ev.clientX-rect.left);
     if (date && typeof date!=='string') date=`${{date.year}}-${{String(date.month).padStart(2,'0')}}-${{String(date.day).padStart(2,'0')}}`;
-    if (date) {{ if (sidetrendDrag.side==='start' && date<=sidetrendDrag.range.end) sidetrendDrag.range.start=date; if (sidetrendDrag.side==='end' && date>=sidetrendDrag.range.start) sidetrendDrag.range.end=date; drawCloud(); }}
+    if (date) {{ if (sidetrendDrag.side==='start' && date<=sidetrendDrag.range.end) sidetrendDrag.range.start=date; if (sidetrendDrag.side==='end' && date>=sidetrendDrag.range.start) sidetrendDrag.range.end=date; drawCloud(); refreshOpenDebugReport(); }}
     ev.preventDefault(); ev.stopImmediatePropagation?.(); return true;
   }}
   function endSidetrendDrag(ev) {{
@@ -1596,19 +1672,42 @@ class LightweightChartLevelSelectorUI:
       for (let j=start+1; j<ohlc.length; j++) {{
         const days=(Date.parse(ohlc[j].time)-Date.parse(ohlc[start].time))/86400000;
         if (days < 30) continue;
-        const sample=ohlc.slice(start,j+1), hi=Math.max(...sample.map(r=>Number(r.high))), lo=Math.min(...sample.map(r=>Number(r.low)));
-        const mid=(hi+lo)/2;
-        if (mid && (hi-lo)/mid <= 0.12) end=j; else if (end>start) break;
+        const sample=ohlc.slice(start,j+1);
+        const extremes=[...sample.keys()].sort((a,b)=>Number(sample[b].high)-Number(sample[a].high)).slice(0,3)
+          .concat([...sample.keys()].sort((a,b)=>Number(sample[a].low)-Number(sample[b].low)).slice(0,3))
+          .filter((idx,pos,all)=>{{
+            if(idx<2||idx>sample.length-4||all.indexOf(idx)!==pos)return false;
+            const row=sample[idx],close=Number(row.close),lo=Number(row.low),hi=Number(row.high);
+            return (close-lo)/Math.max(Math.abs(lo),1e-9)>0.08||(hi-close)/Math.max(Math.abs(hi),1e-9)>0.08;
+          }});
+        let bestWidth=Infinity;
+        const score=excluded=>{{const kept=sample.filter((_row,idx)=>!excluded.includes(idx));const hi=Math.max(...kept.map(r=>Number(r.high))),lo=Math.min(...kept.map(r=>Number(r.low))),mid=(hi+lo)/2;if(mid)bestWidth=Math.min(bestWidth,(hi-lo)/mid);}};
+        score([]);
+        extremes.forEach((a,i)=>{{score([a]);extremes.slice(i+1).forEach(b=>score([a,b]));}});
+        const first=sample.slice(0,3).map(r=>Number(r.close)).sort((a,b)=>a-b)[1],last=sample.slice(-3).map(r=>Number(r.close)).sort((a,b)=>a-b)[1];
+        if (bestWidth <= 0.185 && Math.abs(last-first)/Math.max(Math.abs(first),1e-9)<=0.08) end=j; else if (end>start) break;
       }}
       if (end>start) {{ ranges.push({{id:`S${{ranges.length+1}}`, scannerStart:ohlc[start].time, scannerEnd:ohlc[end].time, start:ohlc[start].time, end:ohlc[end].time, valid:true}}); start=end; }}
     }}
     return ranges;
   }}
 
+  function sidetrendNearFibo(range) {{
+    const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
+    if(!boundary)return true;
+    const fibStart=Date.parse(String(boundary.x0||'').slice(0,10)),fibEnd=Date.parse(String(boundary.x1||'').slice(0,10));
+    const sideStart=Date.parse(range.start),sideEnd=Date.parse(range.end),limit=62*86400000;
+    if(![fibStart,fibEnd,sideStart,sideEnd].every(Number.isFinite))return true;
+    if(sideEnd<fibStart)return fibStart-sideEnd<=limit;
+    if(sideStart>fibEnd)return sideStart-fibEnd<=limit;
+    return true;
+  }}
+
   function fiboDebugSnapshot() {{
     const fibs = drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary');
     const lines = [];
     lines.push(`FIBO CORRECTION REPORT: ${{P.symbol || ''}}`);
+    lines.push(...debugInstrumentLines());
     lines.push('Scanner found,Corrected to,Action');
     const scannerBoundary = initialScannerDrawnObjects.find(obj => obj.type === 'fib-boundary');
     const currentBoundaries = fibs.filter(obj => obj.type === 'fib-boundary');
@@ -1635,8 +1734,9 @@ class LightweightChartLevelSelectorUI:
         const since = anchorDates[0] || null;
         touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
       }}
-      const anchorDatesLine = boundary ? `${{String(boundary.x0 || '').slice(0,10)}}->${{String(boundary.x1 || '').slice(0,10)}}` : '-';
-      const anchorValuesLine = boundary ? `${{fmt(boundary.y0)}}->${{fmt(boundary.y1)}}` : '-';
+      const boundaryGeometry=debugGeometryValues(boundary);
+      const anchorDatesLine = boundaryGeometry ? `${{String(boundaryGeometry.x0 || '').slice(0,10)}}->${{String(boundaryGeometry.x1 || '').slice(0,10)}}` : '-';
+      const anchorValuesLine = boundaryGeometry ? `${{fmt(boundaryGeometry.y0)}}->${{fmt(boundaryGeometry.y1)}}` : '-';
       const scannerPatternDate = scannerMetaValue('__scanner_pattern_date__');
       const scannerPatternName = scannerMetaValue('__scanner_pattern_name__');
       const scannerPattern = scannerPatternDate && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
@@ -1667,12 +1767,13 @@ class LightweightChartLevelSelectorUI:
     const realCandles = ohlc.filter(c => c && c.time && Number.isFinite(Number(c.open)) && Number.isFinite(Number(c.high)) && Number.isFinite(Number(c.low)) && Number.isFinite(Number(c.close)));
     const lines = [];
     lines.push(`WEDGE CORRECTION REPORT: ${{P.symbol || ''}}`);
+    lines.push(...debugInstrumentLines());
     lines.push('Item,Scanner found,Corrected to,Action');
     const scannerWedges = initialScannerDrawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
     ['upper','lower'].forEach(side => {{
       const before=scannerWedges.find(obj => wedgeSide(obj) === side);
-      const after=wedges.find(obj => wedgeSide(obj) === side);
-      const geometry=obj => obj ? `${{String(obj.x0 || obj.x?.[0] || '').slice(0,10)}} @ ${{fmt(obj.y0 ?? obj.y?.[0])}} -> ${{String(obj.x1 || obj.x?.[(obj.x?.length || 1)-1] || '').slice(0,10)}} @ ${{fmt(obj.y1 ?? obj.y?.[(obj.y?.length || 1)-1])}}` : 'none';
+      const after=wedges.find(obj => obj.group_id === 'debug-wedge-correction' && wedgeSide(obj) === side) || wedges.find(obj => wedgeSide(obj) === side);
+      const geometry=obj => {{const value=debugGeometryValues(obj);return value?`${{String(value.x0||'').slice(0,10)}} @ ${{fmt(value.y0)}} -> ${{String(value.x1||'').slice(0,10)}} @ ${{fmt(value.y1)}}`:'none';}};
       const changed=geometry(before)!==geometry(after);
       lines.push(`${{side}} line,${{geometry(before)}},${{geometry(after)}},${{changed ? 'Adjusted' : 'No change'}}`);
     }});
@@ -1796,35 +1897,65 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
 
-  function showCorrectionReport() {{
+  function showCorrectionReport(refreshOnly=false) {{
     const text=setupDebugSnapshot(), drawer=$('calc-drawer'), table=$('calc-table');
     const mode=debugReportMode || debugCorrectionKind || 'sidetrend';
     $('calc-title').textContent=mode==='sidetrend'?'Sidetrend correction report':`${{mode==='fibo'?'Fibo anchor':'Wedge'}} correction report`;
-    const canKeep=['fibo','wedge'].includes(mode);
-    $('calc-summary').innerHTML=`<button id="copy-debug-report" type="button">Copy result</button>${{canKeep?'<button id="keep-debug-correction" type="button">Keep changed '+mode+'</button>':''}}`;
+    const canKeep=['fibo','wedge','sidetrend'].includes(mode);
+    $('calc-summary').innerHTML=`<button id="copy-debug-report" type="button">Copy result</button>${{canKeep?'<button id="keep-debug-correction" type="button">Save changed '+mode+'</button>':''}}`;
     $('calc-warnings').textContent=mode==='sidetrend'?'Candles are grouped by selected sidetrend.':'Candle data is included once from the earliest affected date.';
     table.classList.add('debug-report'); drawer.classList.add('debug-report-mode');
     const tech=selectedJournalTechnique();
     const baseline=debugSessionScannerObjects.length?debugSessionScannerObjects:initialScannerDrawnObjects;
     const scannerGeometry=baseline.filter(obj=>mode==='fibo'?obj.type==='fib-boundary':isWedgeLineObject(obj));
     const correctedGeometry=drawnObjects.filter(obj=>mode==='fibo'?obj.group_id==='debug-fibo-correction'&&obj.type==='fib-boundary':obj.group_id==='debug-wedge-correction');
-    const geometry=obj=>obj?`${{String(obj.x0||obj.x?.[0]||'').slice(0,10)}} @ ${{fmt(obj.y0??obj.y?.[0])}} → ${{String(obj.x1||obj.x?.[(obj.x?.length||1)-1]||'').slice(0,10)}} @ ${{fmt(obj.y1??obj.y?.[(obj.y?.length||1)-1])}}`:'—';
+    const geometry=obj=>{{const value=debugGeometryValues(obj);return value?`${{String(value.x0||'').slice(0,10)}} @ ${{fmt(value.y0)}} → ${{String(value.x1||'').slice(0,10)}} @ ${{fmt(value.y1)}}`:'—';}};
+    const geometryCells=obj=>{{const value=debugGeometryValues(obj);return value?[String(value.x0||'').slice(0,10),fmt(value.y0),String(value.x1||'').slice(0,10),fmt(value.y1)]:['—','—','—','—'];}};
     const rows=[];
-    if(mode==='fibo') rows.push(['Fibo anchors',geometry(scannerGeometry[0]),geometry(correctedGeometry[0])]);
-    else if(mode==='wedge') ['upper','lower'].forEach(side=>{{const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side);rows.push([`${{side}} line`,geometry(before),geometry(after)]);}});
-    else (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>rows.push([r.id,`${{r.scannerStart}} → ${{r.scannerEnd}}`,`${{r.start}} → ${{r.end}}`]));
+    if(mode==='fibo') {{
+      const before=scannerGeometry[0],after=correctedGeometry[0],same=geometry(before)===geometry(after);
+      const days=obj=>obj?Math.abs(Math.round((Date.parse(obj.x1)-Date.parse(obj.x0))/86400000)):'—';
+      const beforeValue=debugGeometryValues(before),afterValue=debugGeometryValues(after);
+      rows.push(['Anchor A',String(beforeValue?.x0||'').slice(0,10),same?'-':String(afterValue?.x0||'').slice(0,10),beforeValue?fmt(beforeValue.y0):'—',same?'-':fmt(afterValue?.y0)]);
+      rows.push(['Anchor B',String(beforeValue?.x1||'').slice(0,10),same?'-':String(afterValue?.x1||'').slice(0,10),beforeValue?fmt(beforeValue.y1):'—',same?'-':fmt(afterValue?.y1)]);
+      rows.push(['Length (calendar days)',String(days(before)),same?'-':String(days(after)),'','']);
+    }}
+    else if(mode==='wedge') ['upper','lower'].forEach(side=>{{
+      const before=scannerGeometry.find(o=>wedgeSide(o)===side),after=correctedGeometry.find(o=>wedgeSide(o)===side),same=geometry(before)===geometry(after);
+      const scannerCells=geometryCells(before),correctedCells=same?['-','-','-','-']:geometryCells(after);
+      rows.push([`${{side}} line`,scannerCells[0],correctedCells[0],scannerCells[2],correctedCells[2],scannerCells[1],correctedCells[1],scannerCells[3],correctedCells[3]]);
+    }});
+    else [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{
+      const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
+      const scanner=r.scannerStart==='not found'?'—':'✓',modified=!r.valid?'Unselected':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
+      rows.push([r.id,r.start,r.end,String(days),scanner,modified]);
+    }});
     const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
+    drawer.querySelector('.calc-toolbar')?.classList.add('debug-instrument');
+    $('debug-report-identity').innerHTML=`<strong>${{esc(debugTickerText())}}</strong><span>${{esc(P.sourceName || '-')}}</span>`;
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
     let dataHtml='',copyData=[];
-    if(mode==='sidetrend') (debugSideRanges||[]).filter(r=>r.valid).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
+    if(mode==='sidetrend') {{
+      [...(debugSideRanges||[])].filter(r=>r.valid).sort((a,b)=>String(b.start).localeCompare(String(a.start))).forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
+      const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
+      if(boundary) {{
+        const start=String(boundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
+        dataHtml+=csvTable(csv,`Complete Fibo candle data · from ${{start}}`);copyData.push(`COMPLETE FIBO DATA\\n${{csv}}`);
+      }}
+    }}
     else {{const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';const at=text.lastIndexOf(marker),nl=at<0?-1:text.indexOf('\\n',at);const csv=nl<0?'No candle data available.':text.slice(nl+1);dataHtml=csvTable(csv,'Candle data');copyData=[csv];}}
-    table.innerHTML=`<table><thead><tr><th>Item</th><th>Scanner found</th><th>Corrected to</th></tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{dataHtml}}`;
-    const copyText=[$('calc-title').textContent,['Item,Scanner found,Corrected to',...rows.map(r=>r.join(','))].join('\\n'),...copyData].join('\\n\\n');
+    const instrumentRows=debugInstrumentLines();
+    const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
+    const fibInfo=mode==='sidetrend'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
+    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','End date (scanner)','End date (corrected)','Start price (scanner)','Start price (corrected)','End price (scanner)','End price (corrected)']);
+    table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
+    const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');
-    requestAnimationFrame(()=>{{document.documentElement.style.setProperty('--calc-drawer-height',`${{Math.ceil(drawer.getBoundingClientRect().height+10)}}px`);window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
+    if(!refreshOnly) requestAnimationFrame(()=>{{if(preferredDrawerHeight>0)setDrawerHeight(preferredDrawerHeight);else setDrawerHeight(Math.ceil(drawer.scrollHeight+10));window.dispatchEvent(new Event('resize'));applyVerticalPan();}});
     $('copy-debug-report').onclick=async()=>{{try{{await navigator.clipboard.writeText(copyText);$('copy-debug-report').textContent='Copied';}}catch(_err){{$('copy-debug-report').textContent='Select and copy below';}}}};
     $('keep-debug-correction')?.addEventListener('click',keepDebugCorrection);
-    $('debug-dialog').classList.remove('open'); debugShowSidetrends=false; drawCloud();
+    if(!refreshOnly) $('debug-dialog').classList.remove('open');
+    debugShowSidetrends=mode==='sidetrend'; drawCloud();
   }}
 
   function restoreUnkeptDebugCorrection() {{
@@ -1833,7 +1964,16 @@ class LightweightChartLevelSelectorUI:
     if (debugCorrectionKind==='wedge') {{ drawnObjects=drawnObjects.filter(o=>!isWedgeLineObject(o)).concat(debugSessionScannerObjects.map(deepClone)); debugWedgeCorrectionReady=false; applyWedgeDerivedLevels(true); }}
     debugCorrectionKind=null; render();
   }}
-  function keepDebugCorrection() {{
+  async function keepDebugCorrection() {{
+    if (debugReportMode==='sidetrend') {{
+      levels.__saved_sidetrends__=(debugSideRanges||[]).filter(r=>r.valid).map(r=>({{scannerStart:r.scannerStart,scannerEnd:r.scannerEnd,start:r.start,end:r.end}}));
+      const payload=collectLevelsForSave(false);
+      const resp=await fetch('/save',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{levels:payload,screenshot:null}})}});
+      const data=await resp.json().catch(()=>({{}}));
+      $('keep-debug-correction').textContent=resp.ok&&data.ok?'Sidetrends saved':'Save failed';
+      if(resp.ok&&data.ok) levels={{...levels,__saved_sidetrends__:payload.__saved_sidetrends__}};
+      return;
+    }}
     if (debugCorrectionKind==='fibo') {{ drawnObjects=drawnObjects.filter(o=>o.group_id!=='auto-fibo').map(o=>{{if(o.group_id!=='debug-fibo-correction')return o;const base=debugSessionScannerObjects.find(b=>b.type===o.type&&Number(b.ratio??-1)===Number(o.ratio??-1));return{{...o,group_id:'auto-fibo',color:base?.color||fibColor(Number(o.ratio||0),0)}};}}); savedFiboByUser=false; levels.__saved_fibo_by_user__=false; }}
     if (debugCorrectionKind==='wedge') {{ drawnObjects=drawnObjects.filter(o=>o.group_id!=='auto-wedge').map(o=>{{if(o.group_id!=='debug-wedge-correction')return o;const base=debugSessionScannerObjects.find(b=>wedgeSide(b)===wedgeSide(o));return{{...o,group_id:'auto-wedge',color:base?.color||(wedgeSide(o)==='upper'?'#dc2626':'#2563eb')}};}}); applyWedgeDerivedLevels(true); savedWedgeByUser=false; levels.__saved_wedge_by_user__=false; }}
     debugCorrectionKept=true; render();
@@ -1845,47 +1985,78 @@ class LightweightChartLevelSelectorUI:
   function renderSidetrendEditor() {{
     debugReportMode='sidetrend';
     debugShowSidetrends=true; drawCloud();
-    if (!debugSideRanges) debugSideRanges=detectedMonthlySidetrends();
-    requestAnimationFrame(()=>{{ try {{ chart.timeScale().fitContent(); }} catch(_err) {{}} resizeChartToContainer(); requestAnimationFrame(drawCloud); }});
+    const firstOpen=!debugSideRanges;
+    if (firstOpen) {{
+      debugSideRanges=detectedMonthlySidetrends().map(range=>({{...range,valid:sidetrendNearFibo(range)}}));
+      savedSidetrends.forEach(saved=>{{
+        const match=debugSideRanges.find(r=>(saved.scannerStart&&r.scannerStart===saved.scannerStart&&r.scannerEnd===saved.scannerEnd)||(r.start===saved.start&&r.end===saved.end));
+        if (!match) debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:sidetrendNearFibo(saved),saved:true}});
+        else {{match.start=saved.start;match.end=saved.end;match.valid=sidetrendNearFibo(match);match.saved=true;}}
+      }});
+      debugSideRanges.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+    }}
+    if(firstOpen) requestAnimationFrame(()=>{{resizeChartToContainer();requestAnimationFrame(drawCloud);}});
     const body=$('debug-dialog-body');
-    body.innerHTML=`<p class="debug-help">Drag either chart handle to resize a range. To add one, click Add sidetrend and then click its two boundary candles.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-add-sidetrend">Add sidetrend</button><button id="debug-toggle-all">Select/unselect all</button></div><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
+    body.innerHTML=`<p class="debug-help">Drag either chart handle to resize a range. Added or adjusted ranges can be saved for future Allsearch scans.</p><div id="debug-periods"></div><div class="debug-actions"><button id="debug-add-sidetrend">Add sidetrend</button><button id="debug-toggle-all">Select/unselect all</button><button id="debug-show-unselected">${{debugShowUnselected?'Hide':'Show'}} unselected</button></div><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     const rows=$('debug-periods');
+    rows.innerHTML='<table class="debug-editor-table"><thead><tr><th>Use</th><th>#</th><th>From</th><th>To</th><th>Days</th><th>Scanner</th><th></th></tr></thead><tbody></tbody></table>';
+    const tbody=rows.querySelector('tbody');
     debugSideRanges.forEach((range,index)=>{{
-      const row=document.createElement('label'); row.className=`debug-period${{range.valid?'':' invalid'}}`;
-      row.innerHTML=`<input type="checkbox" ${{range.valid?'checked':''}} aria-label="Keep ${{range.id}}"><input type="date" value="${{range.start}}" aria-label="${{range.id}} start"><input type="date" value="${{range.end}}" aria-label="${{range.id}} end"><button type="button" aria-label="Delete ${{range.id}}">×</button>`;
+      if(!range.valid&&!debugShowUnselected)return;
+      const row=document.createElement('tr'); row.className=range.valid?'':'invalid';
+      const color=sidetrendColor(index);
+      const days=Math.max(0,Math.round((Date.parse(range.end)-Date.parse(range.start))/86400000));
+      row.innerHTML=`<td><input type="checkbox" ${{range.valid?'checked':''}} aria-label="Keep ${{range.id}}"></td><td><i style="display:inline-block;width:9px;height:9px;margin-right:4px;border-radius:2px;background:${{color.stroke}}"></i>${{range.id}}</td><td><input type="date" value="${{range.start}}" aria-label="${{range.id}} start"></td><td><input type="date" value="${{range.end}}" aria-label="${{range.id}} end"></td><td>${{days}}</td><td title="${{range.scannerStart==='not found'?'Added by user':'Detected by scanner'}}">${{range.scannerStart==='not found'?'—':'✓'}}</td><td><button type="button" aria-label="Delete ${{range.id}}">×</button></td>`;
       const [valid,start,end]=row.querySelectorAll('input');
       valid.onchange=()=>{{range.valid=valid.checked; renderSidetrendEditor();}};
       start.onchange=()=>{{range.start=start.value; drawCloud();}}; end.onchange=()=>{{range.end=end.value; drawCloud();}};
       row.querySelector('button').onclick=()=>{{debugSideRanges.splice(index,1);renderSidetrendEditor();}};
-      rows.appendChild(row);
+      tbody.appendChild(row);
     }});
     if (!debugSideRanges.length) rows.textContent='No periods longer than one month were detected.';
     $('debug-add-sidetrend').onclick=()=>{{newSidetrendAnchor=null;activeTool='sidetrend-add';$('debug-add-sidetrend').textContent='Click first candle…';}};
     $('debug-toggle-all').onclick=()=>{{const select=!debugSideRanges.every(r=>r.valid);debugSideRanges.forEach(r=>r.valid=select);renderSidetrendEditor();}};
+    $('debug-show-unselected').onclick=()=>{{debugShowUnselected=!debugShowUnselected;renderSidetrendEditor();}};
     $('debug-back').onclick=renderDebugChooser; $('debug-show-report').onclick=showCorrectionReport;
   }}
 
-  function renderGeometryEditor(kind) {{
+  function renderGeometryEditor(kind, refreshOnly=false) {{
     debugShowSidetrends=false; drawCloud();
     const isFibo=kind==='fibo';
     debugReportMode=kind;
-    restoreUnkeptDebugCorrection();
-    debugCorrectionKind=kind; debugCorrectionKept=false;
-    debugSessionScannerObjects=drawnObjects.filter(o=>isFibo?o.group_id==='auto-fibo':o.group_id==='auto-wedge').map(deepClone);
-    if (isFibo && !debugFiboCorrectionReady) {{
+    $('debug-dialog').classList.add('open');
+    if (!refreshOnly) {{
+      restoreUnkeptDebugCorrection();
+      debugCorrectionKind=kind; debugCorrectionKept=false;
+      debugSessionScannerObjects=drawnObjects.filter(o=>isFibo?o.group_id==='auto-fibo':o.group_id==='auto-wedge').map(deepClone);
+    }}
+    if (!refreshOnly && isFibo && !debugFiboCorrectionReady) {{
       const originals=debugSessionScannerObjects;
       originals.forEach(o=>{{ const live=drawnObjects.find(x=>x.id===o.id); if(live) live.color='#f43f5e'; }});
       if (originals.length) drawnObjects.push(...originals.map(o=>({{...deepClone(o),id:crypto.randomUUID(),group_id:'debug-fibo-correction',color:'#22d3ee',label:String(o.label||'FIB').replace('FIB','My FIB')}})));
       debugFiboCorrectionReady=true; render();
     }}
-    if (!isFibo && !debugWedgeCorrectionReady) {{
+    if (!refreshOnly && !isFibo && !debugWedgeCorrectionReady) {{
       const originals=debugSessionScannerObjects;
       originals.forEach(o=>{{ const live=drawnObjects.find(x=>x.id===o.id); if(live) live.color='#f43f5e'; }});
       if (originals.length) drawnObjects.push(...originals.map(o=>({{...deepClone(o),id:crypto.randomUUID(),group_id:'debug-wedge-correction',color:'#22d3ee',label:`My ${{wedgeSide(o)}} wedge`}})));
       debugWedgeCorrectionReady=true; render();
     }}
     $('debug-dialog-title').textContent=isFibo?'Debug tools — Fibo anchors':'Debug tools — Wedge anchors';
-    $('debug-dialog-body').innerHTML=`<p class="debug-help">${{isFibo ? 'Drag the visible Fibo boundary anchor points to correct the scanner result. If the scanner found none, close this panel, choose Fib 61.8, and place two anchors; then reopen Debug tools.' : 'Drag each visible upper or lower wedge endpoint directly on the chart. The report keeps the original scanner geometry and compares it with your correction.'}}</p><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
+    const geometryRows=()=>{{
+      const scanner=debugSessionScannerObjects.filter(o=>isFibo?o.type==='fib-boundary':isWedgeLineObject(o));
+      const yours=drawnObjects.filter(o=>isFibo?o.group_id==='debug-fibo-correction'&&o.type==='fib-boundary':o.group_id==='debug-wedge-correction');
+      const scannerFib=debugGeometryValues(scanner[0]),yourFib=debugGeometryValues(yours[0]);
+      const scannerUpper=debugGeometryValues(scanner.find(o=>wedgeSide(o)==='upper')),scannerLower=debugGeometryValues(scanner.find(o=>wedgeSide(o)==='lower')),yourUpper=debugGeometryValues(yours.find(o=>wedgeSide(o)==='upper')),yourLower=debugGeometryValues(yours.find(o=>wedgeSide(o)==='lower'));
+      const points=isFibo?[['A (low)',scannerFib?.x0,scannerFib?.y0,yourFib?.x0,yourFib?.y0],['B (high)',scannerFib?.x1,scannerFib?.y1,yourFib?.x1,yourFib?.y1]]:[['Upper A',scannerUpper?.x0,scannerUpper?.y0,yourUpper?.x0,yourUpper?.y0],['Upper B',scannerUpper?.x1,scannerUpper?.y1,yourUpper?.x1,yourUpper?.y1],['Lower A',scannerLower?.x0,scannerLower?.y0,yourLower?.x0,yourLower?.y0],['Lower B',scannerLower?.x1,scannerLower?.y1,yourLower?.x1,yourLower?.y1]];
+      return points.map(p=>`<tr><td>${{p[0]}}</td><td>${{String(p[1]||'—').slice(0,10)}}</td><td>${{String(p[3]||'—').slice(0,10)}}</td><td>${{p[2]==null?'—':fmt(p[2])}}</td><td>${{p[4]==null?'—':fmt(p[4])}}</td></tr>`).join('');
+    }};
+    const geometrySummary=()=>{{
+      if(!isFibo)return'';const before=debugGeometryValues(debugSessionScannerObjects.find(o=>o.type==='fib-boundary')),after=debugGeometryValues(drawnObjects.find(o=>o.group_id==='debug-fibo-correction'&&o.type==='fib-boundary'));
+      const days=o=>o?Math.abs(Math.round((Date.parse(o.x1)-Date.parse(o.x0))/86400000)):'—';
+      return `<tr><td>Length (days)</td><td>${{days(before)}}</td><td>${{days(after)}}</td><td></td><td></td></tr>`;
+    }};
+    $('debug-dialog-body').innerHTML=`<p class="debug-help">${{isFibo ? 'Drag the visible Fibo boundary anchor points to correct the scanner result.' : 'Drag each visible upper or lower wedge endpoint directly on the chart.'}}</p><table class="debug-editor-table"><thead><tr><th>Point</th><th>Date (scanner)</th><th>Date (yours)</th><th>Price (scanner)</th><th>Price (yours)</th></tr></thead><tbody>${{geometryRows()}}${{geometrySummary()}}</tbody></table><div class="debug-actions"><button id="debug-back">Back</button><button id="debug-show-report" class="debug-report-btn">Show report</button></div>`;
     $('debug-back').onclick=renderDebugChooser; $('debug-show-report').onclick=showCorrectionReport;
   }}
 
@@ -2086,6 +2257,8 @@ class LightweightChartLevelSelectorUI:
     const raw = ts.coordinateToTime ? ts.coordinateToTime(x) : null;
     if (typeof raw === 'string') return raw.slice(0, 10);
     if (raw && Number.isFinite(raw.year)) return `${{raw.year}}-${{String(raw.month).padStart(2,'0')}}-${{String(raw.day).padStart(2,'0')}}`;
+    const logical=ts.coordinateToLogical?ts.coordinateToLogical(x):null;
+    if(Number.isFinite(logical)) {{const row=ohlcWithFuture[Math.max(0,Math.min(ohlcWithFuture.length-1,Math.round(logical)))];if(row?.time)return String(row.time).slice(0,10);}}
     if (x > rect.width) {{
       const extraCandles = Math.min(120, Math.max(5, Math.round((x - rect.width) / 7)));
       return addDays(P.ohlc[P.ohlc.length - 1]?.time || nearest(null).time, extraCandles);
@@ -2220,9 +2393,13 @@ class LightweightChartLevelSelectorUI:
         obj.anchor_x = [x0, anchorsX[1] || x1];
         obj.anchor_y = [y0, Number.isFinite(anchorsY[1]) ? anchorsY[1] : candleExtremeForDate(x1, side, y1)];
       }} else if (mode === 'end' && anchorsX[0] && Number.isFinite(anchorsY[0])) {{
-        if (compareTime(x1, anchorsX[0]) <= 0) x1 = dateAtIndex(Math.min(P.ohlc.length - 1, nearest(anchorsX[0]).idx + 1));
+        const maxEnd=String(futureTimes[Math.min(59,futureTimes.length-1)]||P.ohlc[P.ohlc.length-1]?.time||anchorsX[0]).slice(0,10);
+        if (compareTime(x1, anchorsX[0]) <= 0) x1=addDays(anchorsX[0],1);
+        if (compareTime(x1,maxEnd)>0) x1=maxEnd;
         x0 = anchorsX[0];
         y0 = anchorsY[0];
+        obj.anchor_x=[x0,x1];
+        obj.anchor_y=[y0,y1];
         obj.free_extension = true;
       }} else if (!Array.isArray(obj.anchor_x) || !Array.isArray(obj.anchor_y)) {{
         obj.anchor_x = [x0, x1];
@@ -2378,6 +2555,8 @@ class LightweightChartLevelSelectorUI:
       }}
       drawCloud();
       updateSetupDebugPanel();
+      if ($('debug-dialog')?.classList.contains('open') && ['fibo','wedge'].includes(debugCorrectionKind)) renderGeometryEditor(debugCorrectionKind, true);
+      refreshOpenDebugReport();
     }});
   }}
 
@@ -2729,15 +2908,21 @@ class LightweightChartLevelSelectorUI:
     const lowerObj = wedges.find(o => wedgeSide(o) === 'lower');
     if (!upperObj || !lowerObj) return null;
     const idxByTime = new Map(rows.map((r, i) => [String(r.time).slice(0,10), i]));
-    const anchorIdx = (obj, pos) => idxByTime.get(String((obj.anchor_x || [])[pos] || '').slice(0,10));
-    const curStart = Math.min(anchorIdx(upperObj, 0) ?? rows.length, anchorIdx(lowerObj, 0) ?? rows.length);
-    const curUpperFirst = anchorIdx(upperObj, 0);
-    const curUpperSecond = anchorIdx(upperObj, 1);
-    const curLowerFirst = anchorIdx(lowerObj, 0);
-    const curLowerSecond = anchorIdx(lowerObj, 1);
+    const anchorIdx = (obj, pos, side) => {{
+      const date=String((obj.anchor_x || [])[pos] || '').slice(0,10),exact=idxByTime.get(date);
+      if(!date)return undefined;
+      const isExtreme=side==='upper'?isHigh:isLow;
+      if(Number.isFinite(exact)&&(pos===0||isExtreme(exact)))return exact;
+      const target=Math.min(rows.length-2,nearest(date).idx);
+      for(let i=target;i>=Math.max(1,target-45);i--)if(isExtreme(i))return i;
+      return target;
+    }};
     const hi = i => Number(rows[i].high), lo = i => Number(rows[i].low), cl = i => Number(rows[i].close);
     const isHigh = i => i > 0 && i < rows.length - 1 && hi(i) >= hi(i - 1) && hi(i) >= hi(i + 1);
     const isLow = i => i > 0 && i < rows.length - 1 && lo(i) <= lo(i - 1) && lo(i) <= lo(i + 1);
+    const curStart = Math.min(anchorIdx(upperObj,0,'upper')??rows.length,anchorIdx(lowerObj,0,'lower')??rows.length);
+    const curUpperFirst=anchorIdx(upperObj,0,'upper'),curUpperSecond=anchorIdx(upperObj,1,'upper');
+    const curLowerFirst=anchorIdx(lowerObj,0,'lower'),curLowerSecond=anchorIdx(lowerObj,1,'lower');
     const tol = Math.max(...rows.slice(-30).map(r => Number(r.high) - Number(r.low)).filter(Number.isFinite), Math.abs(cl(rows.length - 1)) * 0.004) * 0.20;
     const end = rows.length - 1;
     const scoreCurrent = Math.max(1, end - curStart);
@@ -2790,8 +2975,9 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function restoreScannerWedgeFromRoulette() {{
-    if (!initialScannerDrawnObjects.length) return false;
-    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(initialScannerDrawnObjects.map(deepClone));
+    const scannerWedges=initialScannerDrawnObjects.filter(isWedgeLineObject);
+    if (scannerWedges.length < 2) return false;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(scannerWedges.map(deepClone));
     wedgeRouletteNoAlternative = false;
     Object.values(wedgeRouletteSeen).forEach(s => s.clear());
     applyWedgeDerivedLevels(true);
@@ -2810,7 +2996,9 @@ class LightweightChartLevelSelectorUI:
       return;
     }}
     wedgeRouletteNoAlternative = false;
-    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(wedgeLineThroughExtremeObjects(candidate));
+    const replacement=wedgeLineThroughExtremeObjects(candidate),wasManualDraft=manualWedgeDraftIds.length>0;
+    drawnObjects = drawnObjects.filter(o => !isWedgeLineObject(o)).concat(replacement);
+    if(wasManualDraft) {{manualWedgeDraftIds=replacement.map(obj=>obj.id);$('save-manual-wedge').classList.add('ready');}}
     applyWedgeDerivedLevels();
     ['high', 'low', 'line_cross_value', 'stop_loss'].forEach(refreshLevelSeries);
     render();
@@ -2927,10 +3115,11 @@ class LightweightChartLevelSelectorUI:
     if (!debugShowSidetrends || !debugSideRanges) return;
     debugSideRanges.filter(r=>r.valid).forEach((range,index)=>{{
       const bounds=sidetrendBounds(range); if (!bounds) return; const {{x0,x1,y0,y1}}=bounds;
-      ctx.save(); ctx.fillStyle='rgba(168,85,247,.15)'; ctx.strokeStyle='#c084fc'; ctx.lineWidth=1.5; ctx.setLineDash([7,4]);
+      const color=sidetrendColor(debugSideRanges.indexOf(range));
+      ctx.save(); ctx.fillStyle=color.fill; ctx.strokeStyle=color.stroke; ctx.lineWidth=1.5; ctx.setLineDash([7,4]);
       ctx.fillRect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0),Math.abs(y1-y0)); ctx.strokeRect(Math.min(x0,x1),Math.min(y0,y1),Math.abs(x1-x0),Math.abs(y1-y0));
-      ctx.setLineDash([]); ctx.fillStyle='#e9d5ff'; ctx.font='bold 11px sans-serif'; ctx.fillText(range.id,Math.min(x0,x1)+5,Math.min(y0,y1)+14);
-      const mid=(y0+y1)/2; [x0,x1].forEach(x=>{{ctx.beginPath();ctx.arc(x,mid,6,0,Math.PI*2);ctx.fillStyle='#f8fafc';ctx.fill();ctx.strokeStyle='#a855f7';ctx.lineWidth=2;ctx.stroke();}}); ctx.restore();
+      ctx.setLineDash([]); ctx.fillStyle=color.label; ctx.font='bold 11px sans-serif'; ctx.fillText(range.id,Math.min(x0,x1)+5,Math.min(y0,y1)+14);
+      const mid=(y0+y1)/2; [x0,x1].forEach(x=>{{ctx.beginPath();ctx.arc(x,mid,6,0,Math.PI*2);ctx.fillStyle='#f8fafc';ctx.fill();ctx.strokeStyle=color.stroke;ctx.lineWidth=2;ctx.stroke();}}); ctx.restore();
     }});
   }}
 
@@ -3217,7 +3406,8 @@ class LightweightChartLevelSelectorUI:
 
   function updatePanel() {{
     seq.forEach(field => $(field + '-btn')?.classList.toggle('active', activeTool === 'level' && activeField === field));
-    $('tool-line').classList.toggle('active', activeTool === 'line');
+    $('tool-line').classList.toggle('active', activeTool === 'line' || activeTool === 'manual-wedge');
+    $('line-tool-group')?.classList.toggle('has-kind-choice',!scannerWedgeAvailable);
     $('tool-fib').classList.toggle('active', activeTool === 'fib');
     $('tool-half').classList.toggle('active', activeTool === 'half');
     $('tool-percent-diff').classList.toggle('active', activeTool === 'percent-diff');
@@ -3498,11 +3688,24 @@ class LightweightChartLevelSelectorUI:
   $('capital').addEventListener('change', saveSharedBalance);
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
-  $('tool-line').onclick = () => {{ const same = activeTool === 'line'; clearPreviews(); activeTool=same ? 'level' : 'line'; activeField=null; fibAnchor=halfAnchor=null; updatePanel(); }};
+  $('tool-line').onclick = () => {{
+    if(!scannerWedgeAvailable) {{$('line-tool-group').classList.toggle('kind-open');return;}}
+    const same=activeTool==='line';clearPreviews();activeTool=same?'level':'line';activeField=null;fibAnchor=halfAnchor=null;updatePanel();
+  }};
+  $('line-kind-ordinary').onclick = () => {{
+    drawnObjects=drawnObjects.filter(obj=>!manualWedgeDraftIds.includes(obj.id)); manualWedgeDraftIds=[]; manualWedgeStep=0;
+    clearPreviews(); activeTool='line'; activeField=null; $('line-tool-group').classList.remove('kind-open'); $('result-box').textContent=''; render();
+  }};
+  $('line-kind-wedge').onclick = () => {{
+    drawnObjects=drawnObjects.filter(obj=>!manualWedgeDraftIds.includes(obj.id)); manualWedgeDraftIds=[]; manualWedgeStep=0;
+    clearPreviews(); activeTool='manual-wedge'; activeField=null; lineAnchor=null; $('line-tool-group').classList.remove('kind-open');
+    $('result-box').textContent='Draw the upper wedge line.'; updatePanel(); render();
+  }};
   $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
   $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');
+  $('save-manual-wedge').onclick = saveManualWedge;
   document.querySelectorAll('.color-dot').forEach(b => b.onclick = () => {{ lineColor = b.dataset.color; $('line-color-indicator').style.background=b.dataset.color; $('line-color-picker').classList.remove('open'); }});
   $('download-chart-png').onclick = async () => {{
     try {{
@@ -3526,8 +3729,31 @@ class LightweightChartLevelSelectorUI:
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('setup-debug-btn').onclick = () => copySetupDebug();
-  $('debug-tools').onclick = renderDebugChooser;
-  $('debug-dialog-close').onclick = () => {{ $('debug-dialog').classList.remove('open'); debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud(); }};
+  $('debug-tools').onclick = () => selectedJournalTechnique()==='Kliny'?renderGeometryEditor('wedge'):renderDebugChooser();
+  $('debug-dialog-close').onclick = () => {{
+    $('debug-dialog').classList.remove('open'); debugShowSidetrends=false;
+    const reportOpen=$('calc-drawer')?.classList.contains('open')&&$('calc-table')?.classList.contains('debug-report');
+    if(!reportOpen) restoreUnkeptDebugCorrection();
+    drawCloud();
+  }};
+  (() => {{
+    const dialog=$('debug-dialog'), handle=dialog?.querySelector('.debug-head');
+    let drag=null;
+    handle?.addEventListener('pointerdown',ev=>{{
+      if(ev.target.closest('button'))return;
+      const rect=dialog.getBoundingClientRect();
+      drag={{id:ev.pointerId,dx:ev.clientX-rect.left,dy:ev.clientY-rect.top}};
+      handle.setPointerCapture?.(ev.pointerId); ev.preventDefault();
+    }});
+    handle?.addEventListener('pointermove',ev=>{{
+      if(!drag||drag.id!==ev.pointerId)return;
+      const maxLeft=Math.max(0,window.innerWidth-dialog.offsetWidth),maxTop=Math.max(0,window.innerHeight-dialog.offsetHeight);
+      dialog.style.left=`${{Math.max(0,Math.min(maxLeft,ev.clientX-drag.dx))}}px`;
+      dialog.style.top=`${{Math.max(0,Math.min(maxTop,ev.clientY-drag.dy))}}px`;
+    }});
+    const stop=ev=>{{if(!drag||drag.id!==ev.pointerId)return;handle.releasePointerCapture?.(ev.pointerId);drag=null;}};
+    handle?.addEventListener('pointerup',stop); handle?.addEventListener('pointercancel',stop);
+  }})();
   $('find-new-wedge').onclick = () => findNewWedge('both');
   $('find-new-upper-wedge').onclick = () => findNewWedge('upper');
   $('find-new-lower-wedge').onclick = () => findNewWedge('lower');
@@ -3549,8 +3775,12 @@ class LightweightChartLevelSelectorUI:
   $('delete-object').onclick = () => {{ const id = $('object-picker').value; if (!id) return; if (id.startsWith('fib-group:')) {{ const gid = id.split(':')[1]; drawnObjects = drawnObjects.filter(o => o.group_id !== gid); }} else if (id.startsWith('obj-index:')) {{ const idx = Number(id.split(':')[1]); drawnObjects = drawnObjects.filter((_, i) => i !== idx); }} else drawnObjects = drawnObjects.filter(o => o.id !== id); render(); }};
 
   function commitLineDrawing(time, price) {{
-    const obj = {{id:crypto.randomUUID(), type:'line', label:'LINE', x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, color:lineColor}};
+    const manualWedge=activeTool==='manual-wedge',side=manualWedgeStep===0?'upper':'lower';
+    const obj = manualWedge
+      ? {{id:crypto.randomUUID(), type:'wedge', label:`My ${{side}} wedge`, x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, anchor_x:[lineAnchor.x,time], anchor_y:[lineAnchor.y,price], color:side==='upper'?'#dc2626':'#2563eb', group_id:'auto-wedge', free_extension:false, saved_by_user:true}}
+      : {{id:crypto.randomUUID(), type:'line', label:'LINE', x0:lineAnchor.x, y0:lineAnchor.y, x1:time, y1:price, color:lineColor}};
     drawnObjects.push(obj);
+    if(manualWedge) manualWedgeDraftIds.push(obj.id);
     const objKey = `obj:${{obj.id}}`;
     const deleteFn = () => {{ drawnObjects = drawnObjects.filter(o => o.id !== obj.id); hiddenLegendKeys.delete(objKey); }};
     addLegend(obj.label, obj.color, objKey, deleteFn);
@@ -3568,8 +3798,38 @@ class LightweightChartLevelSelectorUI:
       if (series) objectSeries.set(obj, series);
     }}
     lineAnchor = null;
+    if(manualWedge) {{
+      manualWedgeStep += 1;
+      if(manualWedgeStep < 2) $('result-box').textContent='Draw the lower wedge line.';
+      else {{
+        activeTool='level'; applyWedgeDerivedLevels(true); render();
+        $('save-manual-wedge').classList.add('ready');
+        $('result-box').textContent='';
+        return;
+      }}
+    }}
     updatePanel();
     requestAnimationFrame(drawCloud);
+  }}
+
+  async function saveManualWedge() {{
+    const button=$('save-manual-wedge'); if(button) button.disabled=true;
+    const wedgeObjects=drawnObjects.filter(obj=>manualWedgeDraftIds.includes(obj.id)).map(deepClone);
+    const payload={{...deepClone(P.values||{{}}),__saved_manual_wedges__:wedgeObjects,__saved_wedge_by_user__:true}};
+    try {{
+      const resp=await fetch('/save',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{levels:payload,screenshot:null}})}}),data=await resp.json();
+      if(!resp.ok||!data.ok) throw new Error(data.error||String(resp.status));
+      manualWedgeDraftIds=[];
+      levels.__saved_manual_wedges__=wedgeObjects;
+      levels.__saved_wedge_by_user__=true;
+      wedgeOnlySavedForScanner=true;
+      $('save-manual-wedge').classList.remove('ready');
+      $('result-box').textContent='Wedge saved for wedge scanner searches.';
+      try {{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:true}},'*');}} catch(_err) {{}}
+    }} catch(err) {{
+      if(button) button.disabled=false;
+      $('result-box').textContent=`Could not save wedge: ${{err.message||err}}`;
+    }}
   }}
 
   function forgetLevelSeries(key) {{
@@ -3645,7 +3905,12 @@ class LightweightChartLevelSelectorUI:
       $('result-box').textContent = '';
       percentDiffAnchor = null; activeTool = 'level'; updatePanel(); return;
     }}
-    if (activeTool === 'line') {{ if (!lineAnchor) {{ lineAnchor = {{x:time, y:price}}; updateLinePreview(addDays(time, 1), price); updatePanel(); }} else {{ commitLineDrawing(time, price); }} return; }}
+    if (activeTool === 'line' || activeTool === 'manual-wedge') {{
+      const row=nearest(time),manualPrice=manualWedgeStep===0?Number(row.high):Number(row.low),anchorTime=activeTool==='manual-wedge'?row.time:time,anchorPrice=activeTool==='manual-wedge'?manualPrice:price;
+      if (!lineAnchor) {{ lineAnchor = {{x:anchorTime, y:anchorPrice}}; updateLinePreview(addDays(anchorTime, 1), anchorPrice); updatePanel(); }}
+      else commitLineDrawing(anchorTime,anchorPrice);
+      return;
+    }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
       if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
@@ -3669,7 +3934,7 @@ class LightweightChartLevelSelectorUI:
     const dayText = day == null ? '--' : (day>=0?'+':'') + day.toFixed(2)+'%';
     const dayColor = day == null ? '#e5e7eb' : (day >= 0 ? '#22c55e' : '#ef4444');
     $('cursor-stats').innerHTML = `<span class="cursor-stat"><span class="cursor-label">D:</span><span class="cursor-value">${{row.time}}</span></span><span class="cursor-stat"><span class="cursor-label">O:</span><span class="cursor-value">${{fmt(row.open)}}</span></span><span class="cursor-stat"><span class="cursor-label">H:</span><span class="cursor-value">${{fmt(row.high)}}</span></span><span class="cursor-stat"><span class="cursor-label">L:</span><span class="cursor-value">${{fmt(row.low)}}</span></span><span class="cursor-stat"><span class="cursor-label">C:</span><span class="cursor-value">${{fmt(row.close)}}</span></span><span class="cursor-stat cursor-day"><span class="cursor-label">DAY:</span><span class="cursor-value" style="color:${{dayColor}}">${{dayText}}</span></span><span class="cursor-stat"><span class="cursor-label">CURSOR:</span><span class="cursor-value">${{Number.isFinite(cursor) ? fmt(cursor) : '--'}}</span></span>`;
-    if (activeTool === 'line' && lineAnchor && Number.isFinite(cursor)) updateLinePreview(time, cursor);
+    if ((activeTool === 'line' || activeTool === 'manual-wedge') && lineAnchor && Number.isFinite(cursor)) updateLinePreview(time, cursor);
     if (activeTool === 'fib' && fibAnchor && time) updateFibPreview(time);
   }});
 
@@ -3785,6 +4050,14 @@ class LightweightChartLevelSelectorUI:
     updateJournalTouchesVisibility();
     if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
   }}
+  function drawChartOverlayForExport(ctx,overlay,base,destinationY=0) {{
+    if(!overlay||!overlay.width||!overlay.height||!base?.width||!base?.height)return;
+    // The live overlay covers chart-wrap, while Lightweight Charts reserves a
+    // short strip for its time axis. Crop instead of scaling the overlay;
+    // scaling moved wedge lines and touch markers vertically in PNG exports.
+    const sourceWidth=Math.min(overlay.width,base.width),sourceHeight=Math.min(overlay.height,base.height);
+    ctx.drawImage(overlay,0,0,sourceWidth,sourceHeight,0,destinationY,base.width,base.height);
+  }}
   async function captureChartPng() {{
     // Lightweight Charts only captures its own canvases. Compose our overlay
     // and a compact context header so exported images match what the user sees.
@@ -3819,7 +4092,7 @@ class LightweightChartLevelSelectorUI:
     canvas.height = base.height + headerHeight + calculationHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(base, 0, headerHeight);
-    if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, headerHeight, base.width, base.height);
+    drawChartOverlayForExport(ctx,overlay,base,headerHeight);
 
     const y0 = 0;
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, headerHeight);
@@ -3930,7 +4203,7 @@ class LightweightChartLevelSelectorUI:
       canvas.height = base.height + drawerHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(base, 0, 0);
-      if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
+      drawChartOverlayForExport(ctx,overlay,base,0);
       if (drawerHeight) {{
         const y0 = base.height;
         const b = calcData.basics || {{}};
@@ -4038,7 +4311,7 @@ class LightweightChartLevelSelectorUI:
     if (currentWedgeGeometry !== initialWedgeGeometry) savedWedgeByUser = currentWedgeGeometry !== '[]';
     return {{...levels,
       __saved_fibo_by_user__:savedFiboByUser,
-      __saved_wedge_by_user__:savedWedgeByUser,
+      __saved_wedge_by_user__:savedWedgeByUser||wedgeOnlySavedForScanner,
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
@@ -4063,6 +4336,8 @@ class LightweightChartLevelSelectorUI:
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
     $('calc-title').textContent='Position calculation';
+    drawer.querySelector('.calc-toolbar')?.classList.remove('debug-instrument');
+    $('debug-report-identity').textContent='';
     table.classList.remove('debug-report');
     drawer.classList.remove('debug-report-mode');
     drawer.classList.add('open');
@@ -4116,7 +4391,7 @@ class LightweightChartLevelSelectorUI:
     }}
   }}
   $('calculate-btn').onclick = () => calculatePosition(true);
-  $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); restoreUnkeptDebugCorrection(); window.dispatchEvent(new Event('resize')); }};
+  $('calc-close').onclick = () => {{ $('calc-drawer').classList.remove('open'); $('calc-drawer').closest('.main')?.classList.remove('calc-open'); debugShowSidetrends=false; restoreUnkeptDebugCorrection(); drawCloud(); window.dispatchEvent(new Event('resize')); }};
 
   $('saved-fibo-status').onclick = async () => {{
     if (!savedFiboByUser && !savedWedgeByUser) {{
@@ -4141,22 +4416,24 @@ class LightweightChartLevelSelectorUI:
       }}
       return;
     }}
+    const releaseWedgeOnlySave=savedWedgeByUser&&selectedJournalTechnique()==='Kliny';
     savedFiboByUser = false;
     savedWedgeByUser = false;
+    if(releaseWedgeOnlySave) {{wedgeOnlySavedForScanner=false;delete levels.__saved_manual_wedges__;}}
     // The visible lines may remain as a reference, but from this point their
     // current geometry is the non-authoritative baseline. A later ordinary
     // save must not silently promote the released override back to saved.
     initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
     initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
     levels.__saved_fibo_by_user__ = false;
-    levels.__saved_wedge_by_user__ = false;
+    levels.__saved_wedge_by_user__ = wedgeOnlySavedForScanner;
     refreshSavedFiboStatus();
     const payload = collectLevelsForSave(false);
     payload.__saved_fibo_by_user__ = false;
-    payload.__saved_wedge_by_user__ = false;
+    payload.__saved_wedge_by_user__ = wedgeOnlySavedForScanner;
     const resp = await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload, screenshot:null}})}});
     const data = await resp.json().catch(() => ({{}}));
-    if(resp.ok&&data.ok){{try{{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:false,wedge:false}},'*');}}catch(e){{}}}}
+    if(resp.ok&&data.ok){{try{{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:false,wedge:wedgeOnlySavedForScanner}},'*');}}catch(e){{}}}}
     $('result-box').textContent = resp.ok && data.ok ? 'Saved scanner configuration released. The next scan will use automatic geometry.' : 'Could not release saved configuration.';
   }};
   refreshSavedFiboStatus();

@@ -350,6 +350,28 @@ def test_bdx_sideways_shelf_before_marginal_top_invalidates_harami_fibo():
     assert any("stalled in a completed month-long side trend" in item for item in explain)
 
 
+def test_gvt_reclaimed_wick_does_not_hide_month_long_side_trend():
+    frame = _fixture("data/csv/stocks/GVT_WA.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    start = int(frame.index[dates == "2026-07-15"][0])
+    peak = int(frame.index[dates == "2026-09-03"][0])
+    impulse = frame.iloc[start:peak + 1]
+
+    # The 3 August low was reclaimed by the close.  It is an interior wick in
+    # the July-August range rather than a trend bottom that should widen the
+    # channel and conceal the completed sideways phase.
+    assert scanner._completed_month_side_trend_phases(impulse)
+    assert scanner._impulse_has_disqualifying_month_side_trend(impulse) is True
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-07-15", "2026-09-03"),
+    )
+
+    assert result is None
+
+
 def test_cdr_mature_post_base_leg_is_not_bdx_style_terminal_stall():
     frame = _fixture("data/csv/stocks/CDR_WA.csv")
     dates = frame["Date"].dt.strftime("%Y-%m-%d")

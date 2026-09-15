@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "stockhelper"
-version = "0.2.0"
+version = "1.0.0"
 description = "Trading position sizing, risk analysis, and chart-assisted config workflow for stocks, forex, and commodities."
 authors = ["StockHelper Contributors"]
 readme = "README.md"
