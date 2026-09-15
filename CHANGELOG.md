@@ -6,6 +6,7 @@
 - Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
 - Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
 - Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo, and saved the reviewed GRX July-September correction.
+- Persisted the reviewed ATT and SGN sidetrend boundary corrections and ATT invalid-range decisions across both session aliases.
 
 All notable release changes for StockHelper are documented here.
 
