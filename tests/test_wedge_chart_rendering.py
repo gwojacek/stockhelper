@@ -49,7 +49,7 @@ def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
     assert "maxShoulderSessions=12" in detector
     assert "boundaryGap" in detector
     assert "withinCoreEnvelope" in detector
-    assert "envelopePadding=strictCore?0.022:0.03" in detector
+    assert "envelopePadding=strictCore?0.022:0.035" in detector
     assert "strictCoreStarts=new Set()" in detector
     assert "shadowsStrictCore" in detector
     assert "backwardLimit=strictCore?maxShoulderSessions:2" in detector
@@ -58,14 +58,14 @@ def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
     assert "bestWidth <= 0.185" not in detector
 
 
-def test_sidetrend_scanner_matches_sap_review_boundaries():
+def _run_sidetrend_detector(csv_name):
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is required to execute the embedded detector")
     source = UI_SOURCE.read_text(encoding="utf-8")
     detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
     detector = detector.replace("{{", "{").replace("}}", "}")
-    csv_path = UI_SOURCE.parents[1] / "data" / "csv" / "stocks" / "SAP_DE.csv"
+    csv_path = UI_SOURCE.parents[1] / "data" / "csv" / "stocks" / csv_name
     with csv_path.open(encoding="utf-8", newline="") as handle:
         rows = [
             {"time": row["Date"], "high": float(row["High"]), "low": float(row["Low"]), "close": float(row["Close"])}
@@ -74,11 +74,24 @@ def test_sidetrend_scanner_matches_sap_review_boundaries():
         ]
     script = f"const ohlc={json.dumps(rows)};{detector};console.log(JSON.stringify(detectedMonthlySidetrends()));"
     result = subprocess.run([node, "-e", script], check=True, capture_output=True, text=True)
-    ranges = {(item["start"], item["end"]) for item in json.loads(result.stdout)}
+    return {(item["start"], item["end"]) for item in json.loads(result.stdout)}
+
+
+def test_sidetrend_scanner_matches_sap_review_boundaries():
+    ranges = _run_sidetrend_detector("SAP_DE.csv")
 
     assert ("2025-09-18", "2025-11-05") in ranges
     assert ("2026-01-29", "2026-03-18") in ranges
     assert ("2026-06-19", "2026-07-23") in ranges
+    assert ("2025-06-25", "2025-08-08") not in ranges
+
+
+def test_sidetrend_scanner_matches_puma_review_boundaries():
+    ranges = _run_sidetrend_detector("PUM_DE.csv")
+
+    assert ("2025-09-18", "2025-10-29") in ranges
+    assert ("2026-02-03", "2026-03-18") in ranges
+    assert ("2026-06-01", "2026-08-14") in ranges
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():

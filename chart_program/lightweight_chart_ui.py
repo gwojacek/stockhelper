@@ -1689,6 +1689,14 @@ class LightweightChartLevelSelectorUI:
     const coreLimits={{channelWidth:0.09,regressionMove:0.01,endpointMove:0.08,trendFit:0.35}};
     const volatileCoreLimits={{channelWidth:0.11,regressionMove:0.03,endpointMove:0.08,trendFit:0.35}};
     const phaseLimits={{channelWidth:0.185,regressionMove:0.06,endpointMove:0.10,trendFit:0.60}};
+    const phaseQuality=sample=>{{
+      const closes=sample.map(row=>Number(row.close)),size=closes.length,mean=closes.reduce((sum,value)=>sum+value,0)/size,xMean=(size-1)/2;
+      let numerator=0,denominator=0,total=0,residual=0;
+      closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;total+=(value-mean)**2;}});
+      const slope=numerator/Math.max(denominator,1);
+      closes.forEach((value,index)=>{{residual+=(value-(mean+slope*(index-xMean)))**2;}});
+      return Math.abs(slope)*(size-1)/Math.max(Math.abs(mean),1e-9)+(total>1e-9?1-residual/total:0);
+    }};
     const boundaryGap=(left,right)=>Math.abs(Number(right.close)-Number(left.close))/Math.max(Math.abs(Number(left.close)),1e-9);
     const strictCoreStarts=new Set();
     for(let index=0;index+minSessions<=ohlc.length;index++)if(score(ohlc.slice(index,index+minSessions),coreLimits))strictCoreStarts.add(index);
@@ -1699,7 +1707,7 @@ class LightweightChartLevelSelectorUI:
       const shadowsStrictCore=[...strictCoreStarts].some(index=>index>start&&index<=end);
       if(!strictCore&&(shadowsStrictCore||!score(opening,volatileCoreLimits)))continue;
       const coreHigh=Math.max(...opening.map(row=>Number(row.high))),coreLow=Math.min(...opening.map(row=>Number(row.low)));
-      const envelopePadding=strictCore?0.022:0.03;
+      const envelopePadding=strictCore?0.022:0.035;
       const withinCoreEnvelope=row=>Number(row.high)<=coreHigh*(1+envelopePadding)&&Number(row.low)>=coreLow*(1-envelopePadding);
       let phaseStart=start;
       const backwardLimit=strictCore?maxShoulderSessions:2;
@@ -1713,9 +1721,44 @@ class LightweightChartLevelSelectorUI:
         if(score(ohlc.slice(phaseStart,candidate+1),phaseLimits))phaseEnd=candidate;
       }}
       end=phaseEnd;
-      ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[phaseStart].time,scannerEnd:ohlc[end].time,start:ohlc[phaseStart].time,end:ohlc[end].time,valid:true,_endIndex:end}});start=end;
+      // A core can sit late inside a long channel. Search past temporary
+      // non-qualifying shoulders, but move the start only when the complete
+      // range is materially flatter than the scanner's original range.
+      const originalStart=phaseStart;
+      let bestStart=phaseStart,earliestStart=phaseStart,bestQuality=phaseQuality(ohlc.slice(phaseStart,end+1));
+      for(let candidate=phaseStart-1,checked=0;candidate>=0&&checked<23;candidate--,checked++){{
+        if(ranges.length&&candidate<=ranges.at(-1)._endIndex)break;
+        const sample=ohlc.slice(candidate,end+1),quality=phaseQuality(sample);
+        if(score(sample,phaseLimits)){{
+          earliestStart=candidate;
+          if(withinCoreEnvelope(ohlc[candidate])&&quality<bestQuality*0.8){{bestStart=candidate;bestQuality=quality;}}
+        }}
+      }}
+      if(originalStart-earliestStart>=15)phaseStart=earliestStart;
+      else if(originalStart-bestStart>=5)phaseStart=bestStart;
+      const previous=ranges.at(-1);
+      if(previous&&phaseStart-previous._endIndex<=10){{
+        const meanClose=(from,to)=>ohlc.slice(from,to+1).reduce((sum,row)=>sum+Number(row.close),0)/(to-from+1);
+        if(Math.abs(meanClose(phaseStart,end)-meanClose(previous._startIndex,previous._endIndex))/Math.max(Math.abs(meanClose(previous._startIndex,previous._endIndex)),1e-9)>0.03){{start=end;continue;}}
+      }}
+      ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[phaseStart].time,scannerEnd:ohlc[end].time,start:ohlc[phaseStart].time,end:ohlc[end].time,valid:true,_startIndex:phaseStart,_endIndex:end}});start=end;
     }}
-    ranges.forEach(range=>delete range._endIndex);
+    // A high-volatility reset can start a valid shelf without ever producing
+    // a narrow core.  Only admit this broader seed immediately after a >5%
+    // shock and away from an already detected phase.
+    const resetCoreLimits={{channelWidth:0.14,regressionMove:0.03,endpointMove:0.08,trendFit:0.20}};
+    const resetPhaseLimits={{channelWidth:0.185,regressionMove:0.08,endpointMove:0.10,trendFit:0.60}};
+    const resetStarts=[];
+    for(let start=2;start+minSessions<=ohlc.length;start++)if(boundaryGap(ohlc[start-2],ohlc[start-1])>0.05&&score(ohlc.slice(start,start+minSessions),resetCoreLimits))resetStarts.push(start);
+    for(const start of resetStarts){{
+      const overlaps=ranges.some(range=>start<=range._endIndex+10&&start+minSessions-1>=range._startIndex-10);
+      if(overlaps||resetStarts.some(later=>later>start&&later<=start+2))continue;
+      let end=start+minSessions-1;
+      for(let candidate=end+1;candidate<ohlc.length&&candidate<start+35;candidate++)if(score(ohlc.slice(start,candidate+1),resetPhaseLimits))end=candidate;
+      ranges.push({{scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true,_startIndex:start,_endIndex:end}});
+    }}
+    ranges.sort((a,b)=>a._startIndex-b._startIndex).forEach((range,index)=>range.id=`S${{index+1}}`);
+    ranges.forEach(range=>{{delete range._startIndex;delete range._endIndex;}});
     return ranges;
   }}
 
