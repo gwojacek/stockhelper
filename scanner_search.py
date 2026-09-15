@@ -3962,13 +3962,14 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
             pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern_name)}"
         return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
     if mode == "wedge" and wedge is not None:
+        saved_flag = " --wedge-saved-by-user" if wedge.saved_by_user else ""
         return (
             f"{base} --wedge-lines "
             f"--wedge-upper-start {wedge.upper_start_date},{wedge.upper_start_price} "
             f"--wedge-upper-end {wedge.upper_end_date},{wedge.upper_end_price} "
             f"--wedge-lower-start {wedge.lower_start_date},{wedge.lower_start_price} "
             f"--wedge-lower-end {wedge.lower_end_date},{wedge.lower_end_price} "
-            f"--wedge-right"
+            f"--wedge-right{saved_flag}"
         )
     return base + " --ichimoku-mode on"
 

@@ -159,6 +159,19 @@ def test_wedge_only_save_geometry_is_hidden_from_non_wedge_charts():
     assert 'obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge"' in source
 
 
+def test_saved_wedge_chart_loads_exact_user_geometry_after_allsearch():
+    selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
+    scanner_source = SCANNER_SOURCE.read_text(encoding="utf-8")
+
+    assert 'parser.add_argument("--wedge-saved-by-user", action="store_true")' in selector_source
+    assert 'saved_flag = " --wedge-saved-by-user" if wedge.saved_by_user else ""' in scanner_source
+    assert 'if args.wedge_saved_by_user and isinstance(dedicated_wedge, list)' in selector_source
+    assert 'existing["drawn_objects"] = json.loads(json.dumps(dedicated_wedge))' in selector_source
+    exact_load = selector_source.index('existing["drawn_objects"] = json.loads(json.dumps(dedicated_wedge))')
+    auto_snap = selector_source.index('up0 = _snap_wedge_anchor(up0, "upper")')
+    assert exact_load < auto_snap
+
+
 def test_wedge_debug_button_opens_its_only_tool_directly():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
