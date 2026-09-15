@@ -256,17 +256,17 @@ def test_sidetrends_are_sorted_and_distant_ranges_start_unselected():
     assert "valid:sidetrendNearFibo(range)" in source
     assert "String(a.start).localeCompare(String(b.start))" in source
     assert "String(b.start).localeCompare(String(a.start))" in source
-    assert ".filter(r=>r.valid).sort((a,b)=>String(b.start)" in source
+    assert ".filter(r=>(r.valid||r.markedInvalid)" in source
 
 
 def test_unselected_sidetrends_are_hidden_until_requested():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
     assert "let debugShowUnselected = false" in source
-    assert "if(!range.valid&&!debugShowUnselected)return" in source
+    assert "if(!range.valid&&!range.markedInvalid&&!debugShowUnselected)return" in source
     assert 'id="debug-show-unselected"' in source
     assert "debugShowUnselected=!debugShowUnselected" in source
-    assert "[...(debugSideRanges||[])].filter(r=>r.valid).sort" in source
+    assert "const reportSidetrends=[...(debugSideRanges||[])]" in source
 
 
 def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
@@ -314,7 +314,7 @@ def test_sidetrend_report_orders_selected_data_before_complete_fibo_data():
     source = UI_SOURCE.read_text(encoding="utf-8")
     report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
 
-    selected_data = "[...(debugSideRanges||[])].filter(r=>r.valid).sort"
+    selected_data = "const reportSidetrends=[...(debugSideRanges||[])]"
     assert report.index(selected_data) < report.index("Complete Fibo candle data")
     assert "copyData.push(`COMPLETE FIBO DATA" in report
     assert "<tr><td>Move (%)" not in source[source.index("const geometrySummary"):source.index("$('debug-dialog-body').innerHTML", source.index("const geometrySummary"))]
@@ -390,3 +390,23 @@ def test_scanner_wedge_projection_is_capped_at_thirty_candles():
         ui_source.index("function wedgeLineThroughExtremeObjects"):
         ui_source.index("function findAlternativeWedgeCandidate")
     ]
+
+
+def test_sidetrend_can_be_explicitly_marked_invalid_and_saved():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "range.markedInvalid=!range.markedInvalid" in source
+    assert "Marked invalid" in source
+    assert "levels.__saved_invalid_sidetrends__=" in source
+    assert "Array.isArray(levels.__saved_invalid_sidetrends__)" in source
+
+
+def test_changed_sidetrend_report_tab_excludes_all_fibo_data():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    assert "Changed / invalid" in report
+    assert "debugSidetrendReportFilter!=='changed'" in report
+    assert "sidetrendChanged(r)" in report
+    assert "if(boundary && debugSidetrendReportFilter!=='changed')" in report
+    assert "mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0" in report
