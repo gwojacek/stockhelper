@@ -1,4 +1,10 @@
+import csv
+import json
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
@@ -31,19 +37,48 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert "debug-add-sidetrend" in source
 
 
-def test_sidetrend_scanner_grows_mean_reverting_month_scale_channels():
+def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
 
     assert "minSessions=19" in detector
-    assert "maxChannelWidth=0.185" in detector
-    assert "maxRegressionMove=0.03" in detector
-    assert "maxTrendFit=0.35" in detector
-    assert "trendFit<=maxTrendFit" in detector
-    assert "if(!score(ohlc.slice(start,end+1)))continue" in detector
-    assert "score(ohlc.slice(start,candidate+1))" in detector
+    assert "coreLimits={{channelWidth:0.09" in detector
+    assert "volatileCoreLimits={{channelWidth:0.11,regressionMove:0.03" in detector
+    assert "phaseLimits={{channelWidth:0.185,regressionMove:0.06" in detector
+    assert "maxBackwardGap=0.055,maxForwardGap=0.04" in detector
+    assert "maxShoulderSessions=12" in detector
+    assert "boundaryGap" in detector
+    assert "withinCoreEnvelope" in detector
+    assert "envelopePadding=strictCore?0.022:0.03" in detector
+    assert "strictCoreStarts=new Set()" in detector
+    assert "shadowsStrictCore" in detector
+    assert "backwardLimit=strictCore?maxShoulderSessions:2" in detector
+    assert "phaseStart=candidate" in detector
     assert "days < 30" not in detector
     assert "bestWidth <= 0.185" not in detector
+
+
+def test_sidetrend_scanner_matches_sap_review_boundaries():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required to execute the embedded detector")
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
+    detector = detector.replace("{{", "{").replace("}}", "}")
+    csv_path = UI_SOURCE.parents[1] / "data" / "csv" / "stocks" / "SAP_DE.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = [
+            {"time": row["Date"], "high": float(row["High"]), "low": float(row["Low"]), "close": float(row["Close"])}
+            for row in csv.DictReader(handle)
+            if row["Date"] >= "2025-09-01"
+        ]
+    script = f"const ohlc={json.dumps(rows)};{detector};console.log(JSON.stringify(detectedMonthlySidetrends()));"
+    result = subprocess.run([node, "-e", script], check=True, capture_output=True, text=True)
+    ranges = {(item["start"], item["end"]) for item in json.loads(result.stdout)}
+
+    assert ("2025-09-18", "2025-11-05") in ranges
+    assert ("2026-01-29", "2026-03-18") in ranges
+    assert ("2026-06-19", "2026-07-23") in ranges
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():

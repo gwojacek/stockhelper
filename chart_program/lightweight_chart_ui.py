@@ -1667,15 +1667,15 @@ class LightweightChartLevelSelectorUI:
     $('chart-wrap').releasePointerCapture?.(ev.pointerId); sidetrendDrag=null; renderSidetrendEditor(); ev.preventDefault(); ev.stopImmediatePropagation?.(); return true;
   }}
   function detectedMonthlySidetrends() {{
-    // Start with one trading month, then score the complete growing phase.
-    // Fixed narrow rolling windows missed wider but mean-reverting shelves
-    // (SAP), while merging those windows could bridge a directional sell-off.
-    const ranges=[],minSessions=19,maxChannelWidth=0.185,maxRegressionMove=0.03,maxEndpointMove=0.10,maxTrendFit=0.35;
-    const score=sample=>{{
+    // Find a convincing one-month core, then recover the quieter shoulders
+    // around it.  This keeps directional cycles out while allowing SAP-like
+    // volatile shelves whose full range is wider than their stable core.
+    const ranges=[],minSessions=19,maxShoulderSessions=12,maxBackwardGap=0.055,maxForwardGap=0.04;
+    const score=(sample,limits)=>{{
       const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low)),closes=sample.map(row=>Number(row.close));
       if([...highs,...lows,...closes].some(value=>!Number.isFinite(value)))return false;
       const size=sample.length,hi=Math.max(...highs),lo=Math.min(...lows),mid=(hi+lo)/2;
-      if(!mid||(hi-lo)/Math.abs(mid)>maxChannelWidth)return false;
+      if(!mid||(hi-lo)/Math.abs(mid)>limits.channelWidth)return false;
       const mean=closes.reduce((sum,value)=>sum+value,0)/size,xMean=(size-1)/2;
       let numerator=0,denominator=0,totalVariance=0,residualVariance=0;
       closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;totalVariance+=(value-mean)**2;}});
@@ -1684,20 +1684,38 @@ class LightweightChartLevelSelectorUI:
       const regressionMove=Math.abs(slope)*(size-1)/Math.max(Math.abs(mean),1e-9);
       const endpointMove=Math.abs(closes.at(-1)-closes[0])/Math.max(Math.abs(closes[0]),1e-9);
       const trendFit=totalVariance>1e-9?1-residualVariance/totalVariance:0;
-      return regressionMove<=maxRegressionMove&&endpointMove<=maxEndpointMove&&trendFit<=maxTrendFit;
+      return regressionMove<=limits.regressionMove&&endpointMove<=limits.endpointMove&&trendFit<=limits.trendFit;
     }};
+    const coreLimits={{channelWidth:0.09,regressionMove:0.01,endpointMove:0.08,trendFit:0.35}};
+    const volatileCoreLimits={{channelWidth:0.11,regressionMove:0.03,endpointMove:0.08,trendFit:0.35}};
+    const phaseLimits={{channelWidth:0.185,regressionMove:0.06,endpointMove:0.10,trendFit:0.60}};
+    const boundaryGap=(left,right)=>Math.abs(Number(right.close)-Number(left.close))/Math.max(Math.abs(Number(left.close)),1e-9);
+    const strictCoreStarts=new Set();
+    for(let index=0;index+minSessions<=ohlc.length;index++)if(score(ohlc.slice(index,index+minSessions),coreLimits))strictCoreStarts.add(index);
     for(let start=0;start+minSessions<=ohlc.length;start++) {{
       let end=start+minSessions-1;
-      // Never wait for a much later endpoint to make an initially directional
-      // leg look flat in hindsight.  A candidate must first qualify on its own
-      // opening month; only then may that same phase grow.
-      if(!score(ohlc.slice(start,end+1)))continue;
-      for(let candidate=end+1;candidate<ohlc.length;candidate++) {{
-        if(score(ohlc.slice(start,candidate+1)))end=candidate;
-        else break;
+      const opening=ohlc.slice(start,end+1);
+      const strictCore=strictCoreStarts.has(start);
+      const shadowsStrictCore=[...strictCoreStarts].some(index=>index>start&&index<=end);
+      if(!strictCore&&(shadowsStrictCore||!score(opening,volatileCoreLimits)))continue;
+      const coreHigh=Math.max(...opening.map(row=>Number(row.high))),coreLow=Math.min(...opening.map(row=>Number(row.low)));
+      const envelopePadding=strictCore?0.022:0.03;
+      const withinCoreEnvelope=row=>Number(row.high)<=coreHigh*(1+envelopePadding)&&Number(row.low)>=coreLow*(1-envelopePadding);
+      let phaseStart=start;
+      const backwardLimit=strictCore?maxShoulderSessions:2;
+      for(let candidate=start-1,checked=0;candidate>=0&&checked<backwardLimit;candidate--,checked++){{
+        if((ranges.length&&candidate<=ranges.at(-1)._endIndex)||!withinCoreEnvelope(ohlc[candidate])||boundaryGap(ohlc[candidate],ohlc[candidate+1])>maxBackwardGap)break;
+        if(score(ohlc.slice(candidate,end+1),phaseLimits))phaseStart=candidate;
       }}
-      ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true}});start=end;
+      let phaseEnd=end;
+      for(let candidate=end+1,checked=0;candidate<ohlc.length&&checked<maxShoulderSessions;candidate++,checked++){{
+        if(!withinCoreEnvelope(ohlc[candidate])||boundaryGap(ohlc[candidate-1],ohlc[candidate])>maxForwardGap)break;
+        if(score(ohlc.slice(phaseStart,candidate+1),phaseLimits))phaseEnd=candidate;
+      }}
+      end=phaseEnd;
+      ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[phaseStart].time,scannerEnd:ohlc[end].time,start:ohlc[phaseStart].time,end:ohlc[end].time,valid:true,_endIndex:end}});start=end;
     }}
+    ranges.forEach(range=>delete range._endIndex);
     return ranges;
   }}
 

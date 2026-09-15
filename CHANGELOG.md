@@ -1,6 +1,6 @@
 # Changelog
 
-- Improved sidetrend review detection to grow complete month-scale, mean-reverting channels, include wider volatile shelves, trim directional entry/exit candles, and reject directional cycles that merely finish near their starting price.
+- Improved sidetrend review detection to seed stable month-scale cores, recover their wider mean-reverting shoulders in both directions, stop at material price gaps, and reject directional cycles that merely finish near their starting price.
 
 All notable release changes for StockHelper are documented here.
 
