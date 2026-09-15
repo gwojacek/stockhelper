@@ -59,7 +59,7 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "Fibo formation containing the sidetrend" in source
     assert "renderGeometryEditor(debugCorrectionKind, true)" in source
     assert "correctedCells=same?['-','-','-','-']" in source
-    assert "reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']" in source
+    assert "reportHeaders=mode==='sidetrend'?['#','From (scanner)','To (scanner)','Days (scanner)','From (corrected)','To (corrected)','Days (corrected)','Difference','Status']" in source
     assert "rows.push(['Anchor A'" in source
     assert "rows.push(['Anchor B'" in source
     assert "rows.push(['Length (calendar days)'" in source
@@ -256,17 +256,17 @@ def test_sidetrends_are_sorted_and_distant_ranges_start_unselected():
     assert "valid:sidetrendNearFibo(range)" in source
     assert "String(a.start).localeCompare(String(b.start))" in source
     assert "String(b.start).localeCompare(String(a.start))" in source
-    assert ".filter(r=>r.valid).sort((a,b)=>String(b.start)" in source
+    assert ".filter(r=>(r.valid||r.markedInvalid)" in source
 
 
 def test_unselected_sidetrends_are_hidden_until_requested():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
     assert "let debugShowUnselected = false" in source
-    assert "if(!range.valid&&!debugShowUnselected)return" in source
+    assert "if(!range.valid&&!range.markedInvalid&&!debugShowUnselected)return" in source
     assert 'id="debug-show-unselected"' in source
     assert "debugShowUnselected=!debugShowUnselected" in source
-    assert "[...(debugSideRanges||[])].filter(r=>r.valid).sort" in source
+    assert "const reportSidetrends=[...(debugSideRanges||[])]" in source
 
 
 def test_chart_reserves_space_below_the_lightweight_canvas_for_time_axis():
@@ -314,7 +314,7 @@ def test_sidetrend_report_orders_selected_data_before_complete_fibo_data():
     source = UI_SOURCE.read_text(encoding="utf-8")
     report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
 
-    selected_data = "[...(debugSideRanges||[])].filter(r=>r.valid).sort"
+    selected_data = "const reportSidetrends=[...(debugSideRanges||[])]"
     assert report.index(selected_data) < report.index("Complete Fibo candle data")
     assert "copyData.push(`COMPLETE FIBO DATA" in report
     assert "<tr><td>Move (%)" not in source[source.index("const geometrySummary"):source.index("$('debug-dialog-body').innerHTML", source.index("const geometrySummary"))]
@@ -390,3 +390,37 @@ def test_scanner_wedge_projection_is_capped_at_thirty_candles():
         ui_source.index("function wedgeLineThroughExtremeObjects"):
         ui_source.index("function findAlternativeWedgeCandidate")
     ]
+
+
+def test_sidetrend_can_be_explicitly_marked_invalid_and_saved():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "range.markedInvalid=!range.markedInvalid" in source
+    assert "Marked invalid" in source
+    assert "levels.__saved_invalid_sidetrends__=" in source
+    assert "Array.isArray(levels.__saved_invalid_sidetrends__)" in source
+
+
+def test_changed_sidetrend_report_tab_excludes_all_fibo_data():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    assert "Changed / invalid" in report
+    assert "debugSidetrendReportFilter!=='changed'" in report
+    assert "sidetrendChanged(r)" in report
+    assert "if(boundary && debugSidetrendReportFilter!=='changed')" in report
+    assert "mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0" in report
+
+
+def test_corrected_sidetrend_report_uses_union_of_scanner_and_corrected_dates():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    assert "function showCorrectionReport" in report
+    assert "const sidetrendCoverage=r=>" in report
+    assert "r.scannerStart<r.start?r.scannerStart:r.start" in report
+    assert "r.scannerEnd>r.end?r.scannerEnd:r.end" in report
+    assert "scannerCandlesCsv(500,coverage.start)" in report
+    assert "line.slice(0,10)>coverage.end" in report
+    assert "full coverage ${{coverage.start}} → ${{coverage.end}}" in report
+    assert "sidetrendDateDifference(r)" in report
