@@ -5592,16 +5592,25 @@ def _find_manual_unbroken_wedge_setup(df: pd.DataFrame, ticker: str) -> WedgeSca
     w = w.dropna(subset=["Date", "Open", "High", "Low", "Close"]).sort_values("Date").reset_index(drop=True)
     date_to_idx = {str(pd.to_datetime(dt).date()): i for i, dt in enumerate(w["Date"])}
 
-    def _idx_anchor(raw: tuple[str, float]) -> tuple[int, float] | None:
+    def _idx_anchor(raw: tuple[str, float], *, allow_nearest: bool = False) -> tuple[int, float] | None:
         try:
-            key = str(pd.to_datetime(raw[0]).date())
+            timestamp = pd.to_datetime(raw[0])
+            key = str(timestamp.date())
         except Exception:
             return None
         idx = date_to_idx.get(key)
+        if idx is None and allow_nearest:
+            # A manually dragged second endpoint is a free line-definition
+            # point, not a candle touch. It may sit on a weekend or in future
+            # whitespace, so validate the line against the nearest available
+            # candle instead of rejecting otherwise valid saved geometry.
+            distances = (w["Date"] - timestamp).abs()
+            if not distances.empty:
+                idx = int(distances.idxmin())
         return None if idx is None else (idx, float(raw[1]))
 
-    up0 = _idx_anchor(upper_raw[0]); up1 = _idx_anchor(upper_raw[1])
-    lo0 = _idx_anchor(lower_raw[0]); lo1 = _idx_anchor(lower_raw[1])
+    up0 = _idx_anchor(upper_raw[0]); up1 = _idx_anchor(upper_raw[1], allow_nearest=True)
+    lo0 = _idx_anchor(lower_raw[0]); lo1 = _idx_anchor(lower_raw[1], allow_nearest=True)
     if up0 is None or up1 is None or lo0 is None or lo1 is None or up0[0] == up1[0] or lo0[0] == lo1[0]:
         return None
     upper_a, upper_b = up0, up1

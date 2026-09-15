@@ -832,7 +832,8 @@ class LightweightChartLevelSelectorUI:
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
   let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
-  let savedWedgeByUser = levels.__saved_wedge_by_user__ === true || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
+  const isolatedManualWedgeSave=Array.isArray(levels.__saved_manual_wedges__)&&levels.__saved_manual_wedges__.length>=2;
+  let savedWedgeByUser = (levels.__saved_wedge_by_user__ === true && (!isolatedManualWedgeSave || initialWedgeGeometry !== '[]')) || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
   const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; const invalid=savedFiboByUser&&levels.__saved_fibo_invalid__; btn.classList.toggle('active',saved); btn.classList.toggle('invalid-save',!!invalid); let invalidDays=0; if(invalid){{const due=Date.parse(invalid.delete_on||'');if(Number.isFinite(due))invalidDays=Math.max(0,Math.ceil((due-Date.now())/86400000));}} btn.title=invalid?`Invalid saved Fibo — will be dropped in ${{invalidDays}} day${{invalidDays===1?'':'s'}}; click to remove now`:(saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'); const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=invalid?'⚠ Invalid save':(saved?'💾 Chart saved':'💾 Save chart'); if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
@@ -4039,6 +4040,14 @@ class LightweightChartLevelSelectorUI:
     updateJournalTouchesVisibility();
     if (touches && (force || !touches.dataset.manual) && reasonUsesTouches(reason?.value)) touches.value = wedgeTouchCountText();
   }}
+  function drawChartOverlayForExport(ctx,overlay,base,destinationY=0) {{
+    if(!overlay||!overlay.width||!overlay.height||!base?.width||!base?.height)return;
+    // The live overlay covers chart-wrap, while Lightweight Charts reserves a
+    // short strip for its time axis. Crop instead of scaling the overlay;
+    // scaling moved wedge lines and touch markers vertically in PNG exports.
+    const sourceWidth=Math.min(overlay.width,base.width),sourceHeight=Math.min(overlay.height,base.height);
+    ctx.drawImage(overlay,0,0,sourceWidth,sourceHeight,0,destinationY,base.width,base.height);
+  }}
   async function captureChartPng() {{
     // Lightweight Charts only captures its own canvases. Compose our overlay
     // and a compact context header so exported images match what the user sees.
@@ -4073,7 +4082,7 @@ class LightweightChartLevelSelectorUI:
     canvas.height = base.height + headerHeight + calculationHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(base, 0, headerHeight);
-    if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, headerHeight, base.width, base.height);
+    drawChartOverlayForExport(ctx,overlay,base,headerHeight);
 
     const y0 = 0;
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, headerHeight);
@@ -4184,7 +4193,7 @@ class LightweightChartLevelSelectorUI:
       canvas.height = base.height + drawerHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(base, 0, 0);
-      if (overlay && overlay.width && overlay.height) ctx.drawImage(overlay, 0, 0, base.width, base.height);
+      drawChartOverlayForExport(ctx,overlay,base,0);
       if (drawerHeight) {{
         const y0 = base.height;
         const b = calcData.basics || {{}};

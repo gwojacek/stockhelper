@@ -129,6 +129,8 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "obj.anchor_y=[y0,y1]" in source
     assert "futureTimes[Math.min(59,futureTimes.length-1)]" in source
     assert "__saved_manual_wedges__:wedgeObjects,__saved_wedge_by_user__:true" in source
+    assert "isolatedManualWedgeSave=Array.isArray(levels.__saved_manual_wedges__)" in source
+    assert "!isolatedManualWedgeSave || initialWedgeGeometry !== '[]'" in source
     save_function = source[source.index("async function saveManualWedge()"):source.index("function forgetLevelSeries")]
     assert "collectLevelsForSave" not in save_function
     assert "savedWedgeByUser=true" not in save_function
@@ -137,6 +139,9 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     scanner_source = SCANNER_SOURCE.read_text(encoding="utf-8")
     assert 'state.get("__saved_manual_wedges__")' in scanner_source
     assert 'len(state["__saved_manual_wedges__"]) >= 2' in scanner_source
+    assert "def _idx_anchor(raw: tuple[str, float], *, allow_nearest: bool = False)" in scanner_source
+    assert "up1 = _idx_anchor(upper_raw[1], allow_nearest=True)" in scanner_source
+    assert "lo1 = _idx_anchor(lower_raw[1], allow_nearest=True)" in scanner_source
     assert "const isExtreme=side==='upper'?isHigh:isLow" in source
     assert "const target=Math.min(rows.length-2,nearest(date).idx)" in source
     assert "if(isExtreme(i))return i" in source
@@ -263,6 +268,16 @@ def test_save_chart_and_png_buttons_have_identical_dimensions():
     source = UI_SOURCE.read_text(encoding="utf-8")
 
     assert ".chart-save-actions button {{ box-sizing:border-box; flex:0 0 150px; width:150px; height:34px; min-height:34px; padding:5px 10px; }}" in source
+
+
+def test_png_export_crops_overlay_instead_of_rescaling_wedge_geometry():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "function drawChartOverlayForExport(ctx,overlay,base,destinationY=0)" in source
+    assert "sourceWidth=Math.min(overlay.width,base.width)" in source
+    assert "sourceHeight=Math.min(overlay.height,base.height)" in source
+    assert "drawChartOverlayForExport(ctx,overlay,base,headerHeight)" in source
+    assert "drawChartOverlayForExport(ctx,overlay,base,0)" in source
 
 
 def test_sidetrend_report_orders_selected_data_before_complete_fibo_data():
