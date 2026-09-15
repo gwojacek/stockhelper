@@ -29,8 +29,19 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert 'type="checkbox"' in source
     assert 'type="date"' in source
     assert "debug-add-sidetrend" in source
-    assert "bestWidth <= 0.185" in source
-    assert "Math.abs(last-first)" in source
+
+
+def test_sidetrend_scanner_uses_tight_fixed_windows_instead_of_endpoint_cycles():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
+
+    assert "windowSize=19" in detector
+    assert "maxChannelWidth=0.09" in detector
+    assert "maxRegressionMove=0.01" in detector
+    assert "regressionMove<=maxRegressionMove" in detector
+    assert "start>previous[1]+3" in detector
+    assert "days < 30" not in detector
+    assert "bestWidth <= 0.185" not in detector
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():

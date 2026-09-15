@@ -1667,30 +1667,36 @@ class LightweightChartLevelSelectorUI:
     $('chart-wrap').releasePointerCapture?.(ev.pointerId); sidetrendDrag=null; renderSidetrendEditor(); ev.preventDefault(); ev.stopImmediatePropagation?.(); return true;
   }}
   function detectedMonthlySidetrends() {{
-    const ranges = [];
-    for (let start=0; start<ohlc.length; start++) {{
-      let end=start;
-      for (let j=start+1; j<ohlc.length; j++) {{
-        const days=(Date.parse(ohlc[j].time)-Date.parse(ohlc[start].time))/86400000;
-        if (days < 30) continue;
-        const sample=ohlc.slice(start,j+1);
-        const extremes=[...sample.keys()].sort((a,b)=>Number(sample[b].high)-Number(sample[a].high)).slice(0,3)
-          .concat([...sample.keys()].sort((a,b)=>Number(sample[a].low)-Number(sample[b].low)).slice(0,3))
-          .filter((idx,pos,all)=>{{
-            if(idx<2||idx>sample.length-4||all.indexOf(idx)!==pos)return false;
-            const row=sample[idx],close=Number(row.close),lo=Number(row.low),hi=Number(row.high);
-            return (close-lo)/Math.max(Math.abs(lo),1e-9)>0.08||(hi-close)/Math.max(Math.abs(hi),1e-9)>0.08;
-          }});
-        let bestWidth=Infinity;
-        const score=excluded=>{{const kept=sample.filter((_row,idx)=>!excluded.includes(idx));const hi=Math.max(...kept.map(r=>Number(r.high))),lo=Math.min(...kept.map(r=>Number(r.low))),mid=(hi+lo)/2;if(mid)bestWidth=Math.min(bestWidth,(hi-lo)/mid);}};
-        score([]);
-        extremes.forEach((a,i)=>{{score([a]);extremes.slice(i+1).forEach(b=>score([a,b]));}});
-        const first=sample.slice(0,3).map(r=>Number(r.close)).sort((a,b)=>a-b)[1],last=sample.slice(-3).map(r=>Number(r.close)).sort((a,b)=>a-b)[1];
-        if (bestWidth <= 0.185 && Math.abs(last-first)/Math.max(Math.abs(first),1e-9)<=0.08) end=j; else if (end>start) break;
-      }}
-      if (end>start) {{ ranges.push({{id:`S${{ranges.length+1}}`, scannerStart:ohlc[start].time, scannerEnd:ohlc[end].time, start:ohlc[start].time, end:ohlc[end].time, valid:true}}); start=end; }}
+    // A month-scale shelf is 19 trading sessions, rather than an arbitrary
+    // pair of dates 30 calendar days apart.  Score each fixed window first and
+    // then merge its overlaps.  Scoring an ever-growing range made the quiet
+    // middle of a rise-and-fall cycle hide both directional legs (ATT S3/S4),
+    // while also attaching the sell-off and breakout candles to real shelves.
+    const windowSize=19, maxChannelWidth=0.09, maxRegressionMove=0.01, maxEndpointMove=0.08;
+    const qualifying=[];
+    for(let start=0;start+windowSize<=ohlc.length;start++) {{
+      const sample=ohlc.slice(start,start+windowSize);
+      const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low)),closes=sample.map(row=>Number(row.close));
+      if([...highs,...lows,...closes].some(value=>!Number.isFinite(value)))continue;
+      const hi=Math.max(...highs),lo=Math.min(...lows),mid=(hi+lo)/2;
+      if(!mid||(hi-lo)/Math.abs(mid)>maxChannelWidth)continue;
+      const mean=closes.reduce((sum,value)=>sum+value,0)/windowSize;
+      const xMean=(windowSize-1)/2;
+      let numerator=0,denominator=0;
+      closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;}});
+      const regressionMove=Math.abs(numerator/Math.max(denominator,1))*(windowSize-1)/Math.max(Math.abs(mean),1e-9);
+      const endpointMove=Math.abs(closes.at(-1)-closes[0])/Math.max(Math.abs(closes[0]),1e-9);
+      if(regressionMove<=maxRegressionMove&&endpointMove<=maxEndpointMove)qualifying.push([start,start+windowSize-1]);
     }}
-    return ranges;
+    const phases=[];
+    qualifying.forEach(([start,end])=>{{
+      const previous=phases.at(-1);
+      // Qualifying rolling windows from one shelf overlap.  The small grace
+      // also prevents one noisy window from splitting the same price channel.
+      if(!previous||start>previous[1]+3)phases.push([start,end]);
+      else previous[1]=Math.max(previous[1],end);
+    }});
+    return phases.map(([start,end],index)=>({{id:`S${{index+1}}`,scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true}}));
   }}
 
   function sidetrendNearFibo(range) {{

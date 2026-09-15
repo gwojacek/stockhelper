@@ -1,5 +1,7 @@
 # Changelog
 
+- Tightened sidetrend review detection to merge flat 19-session price channels, trim directional entry/exit candles, and reject broad rise-and-fall cycles that only appear sideways from their endpoints.
+
 All notable release changes for StockHelper are documented here.
 
 The project currently documents release tags `1.0` through `9.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
