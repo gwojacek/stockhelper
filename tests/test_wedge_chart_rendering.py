@@ -4,6 +4,7 @@ from pathlib import Path
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
 I18N_SOURCE = Path(__file__).resolve().parents[1] / "utilities" / "web_i18n.py"
 SCANNER_SOURCE = Path(__file__).resolve().parents[1] / "scanner_search.py"
+LEVEL_SELECTOR_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "level_selector.py"
 
 
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
@@ -148,6 +149,14 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "manualWedgeDraftIds=replacement.map(obj=>obj.id)" in source
     assert "const scannerWedges=initialScannerDrawnObjects.filter(isWedgeLineObject)" in source
     assert "if (scannerWedges.length < 2) return false" in source
+
+
+def test_wedge_only_save_geometry_is_hidden_from_non_wedge_charts():
+    source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
+
+    assert 'wedge_only_save = existing.get("__saved_manual_wedges__")' in source
+    assert "if not args.wedge_lines and isinstance(wedge_only_save, list)" in source
+    assert 'obj.get("type") == "wedge" or obj.get("group_id") == "auto-wedge"' in source
 
 
 def test_wedge_debug_button_opens_its_only_tool_directly():
