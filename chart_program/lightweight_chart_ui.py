@@ -1915,6 +1915,19 @@ class LightweightChartLevelSelectorUI:
     const geometryCells=obj=>{{const value=debugGeometryValues(obj);return value?[String(value.x0||'').slice(0,10),fmt(value.y0),String(value.x1||'').slice(0,10),fmt(value.y1)]:['—','—','—','—'];}};
     const rows=[];
     const sidetrendChanged=r=>!!r.markedInvalid||r.scannerStart==='not found'||r.start!==r.scannerStart||r.end!==r.scannerEnd;
+    const sidetrendCoverage=r=>{{
+      const scannerFound=r.scannerStart!=='not found'&&r.scannerEnd!=='not found';
+      return {{start:scannerFound&&r.scannerStart<r.start?r.scannerStart:r.start,end:scannerFound&&r.scannerEnd>r.end?r.scannerEnd:r.end}};
+    }};
+    const sidetrendDateDifference=r=>{{
+      if(r.markedInvalid)return'Removed';
+      if(r.scannerStart==='not found')return'Added';
+      const delta=(before,after)=>Math.round((Date.parse(after)-Date.parse(before))/86400000);
+      const startDelta=delta(r.scannerStart,r.start),endDelta=delta(r.scannerEnd,r.end);
+      if(!startDelta&&!endDelta)return'—';
+      const signed=value=>`${{value>0?'+':''}}${{value}}d`;
+      return `Start ${{signed(startDelta)}}; End ${{signed(endDelta)}}`;
+    }};
     const reportSidetrends=[...(debugSideRanges||[])].filter(r=>(r.valid||r.markedInvalid)&&(debugSidetrendReportFilter!=='changed'||sidetrendChanged(r))).sort((a,b)=>String(b.start).localeCompare(String(a.start)));
     if(mode==='fibo') {{
       const before=scannerGeometry[0],after=correctedGeometry[0],same=geometry(before)===geometry(after);
@@ -1930,9 +1943,9 @@ class LightweightChartLevelSelectorUI:
       rows.push([`${{side}} line`,scannerCells[0],correctedCells[0],scannerCells[2],correctedCells[2],scannerCells[1],correctedCells[1],scannerCells[3],correctedCells[3]]);
     }});
     else reportSidetrends.forEach(r=>{{
-      const days=Math.max(0,Math.round((Date.parse(r.end)-Date.parse(r.start))/86400000));
-      const scanner=r.scannerStart==='not found'?'—':'✓',modified=r.markedInvalid?'Marked invalid':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
-      rows.push([r.id,r.start,r.end,String(days),scanner,modified]);
+      const days=(start,end)=>Math.max(0,Math.round((Date.parse(end)-Date.parse(start))/86400000));
+      const scannerFound=r.scannerStart!=='not found',modified=r.markedInvalid?'Marked invalid':(r.start!==r.scannerStart||r.end!==r.scannerEnd?'Adjusted':'No changes');
+      rows.push([r.id,scannerFound?r.scannerStart:'—',scannerFound?r.scannerEnd:'—',scannerFound?String(days(r.scannerStart,r.scannerEnd)):'—',r.markedInvalid?'—':r.start,r.markedInvalid?'—':r.end,r.markedInvalid?'—':String(days(r.start,r.end)),sidetrendDateDifference(r),modified]);
     }});
     const esc=value=>String(value??'').replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
     drawer.querySelector('.calc-toolbar')?.classList.add('debug-instrument');
@@ -1940,7 +1953,7 @@ class LightweightChartLevelSelectorUI:
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
     let dataHtml='',copyData=[];
     if(mode==='sidetrend') {{
-      reportSidetrends.forEach(r=>{{const csv=scannerCandlesCsv(500,r.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>r.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');dataHtml+=csvTable(selected,`${{r.id}} · ${{r.start}} → ${{r.end}}`);copyData.push(`${{r.id}} DATA\\n${{selected}}`);}});
+      reportSidetrends.forEach(r=>{{const coverage=sidetrendCoverage(r),csv=scannerCandlesCsv(500,coverage.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>coverage.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');const comparison=r.scannerStart==='not found'?`added ${{r.start}} → ${{r.end}}`:(r.markedInvalid?`invalid · scanner ${{r.scannerStart}} → ${{r.scannerEnd}}`:`scanner ${{r.scannerStart}} → ${{r.scannerEnd}} · corrected ${{r.start}} → ${{r.end}}`);dataHtml+=csvTable(selected,`${{r.id}} · ${{comparison}} · full coverage ${{coverage.start}} → ${{coverage.end}}`);copyData.push(`${{r.id}} DATA · FULL COVERAGE ${{coverage.start}} → ${{coverage.end}}\\n${{selected}}`);}});
       const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
       if(boundary && debugSidetrendReportFilter!=='changed') {{
         const start=String(boundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
@@ -1951,7 +1964,7 @@ class LightweightChartLevelSelectorUI:
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
     const fibInfo=mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
-    const reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','End date (scanner)','End date (corrected)','Start price (scanner)','Start price (corrected)','End price (scanner)','End price (corrected)']);
+    const reportHeaders=mode==='sidetrend'?['#','From (scanner)','To (scanner)','Days (scanner)','From (corrected)','To (corrected)','Days (corrected)','Difference','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','End date (scanner)','End date (corrected)','Start price (scanner)','Start price (corrected)','End price (scanner)','End price (corrected)']);
     table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
     drawer.classList.add('open'); drawer.closest('.main')?.classList.add('calc-open');

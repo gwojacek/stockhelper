@@ -59,7 +59,7 @@ def test_debug_editors_use_comparison_tables_and_save_sidetrends():
     assert "Fibo formation containing the sidetrend" in source
     assert "renderGeometryEditor(debugCorrectionKind, true)" in source
     assert "correctedCells=same?['-','-','-','-']" in source
-    assert "reportHeaders=mode==='sidetrend'?['#','From','To','Days','Scanner','Status']" in source
+    assert "reportHeaders=mode==='sidetrend'?['#','From (scanner)','To (scanner)','Days (scanner)','From (corrected)','To (corrected)','Days (corrected)','Difference','Status']" in source
     assert "rows.push(['Anchor A'" in source
     assert "rows.push(['Anchor B'" in source
     assert "rows.push(['Length (calendar days)'" in source
@@ -410,3 +410,17 @@ def test_changed_sidetrend_report_tab_excludes_all_fibo_data():
     assert "sidetrendChanged(r)" in report
     assert "if(boundary && debugSidetrendReportFilter!=='changed')" in report
     assert "mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0" in report
+
+
+def test_corrected_sidetrend_report_uses_union_of_scanner_and_corrected_dates():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    assert "function showCorrectionReport" in report
+    assert "const sidetrendCoverage=r=>" in report
+    assert "r.scannerStart<r.start?r.scannerStart:r.start" in report
+    assert "r.scannerEnd>r.end?r.scannerEnd:r.end" in report
+    assert "scannerCandlesCsv(500,coverage.start)" in report
+    assert "line.slice(0,10)>coverage.end" in report
+    assert "full coverage ${{coverage.start}} → ${{coverage.end}}" in report
+    assert "sidetrendDateDifference(r)" in report
