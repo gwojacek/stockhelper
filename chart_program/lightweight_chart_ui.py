@@ -1776,6 +1776,18 @@ class LightweightChartLevelSelectorUI:
         const exitMove=Math.abs(Number(ohlc[nextEnd].close)-Number(ohlc[range._endIndex].close))/Math.max(Math.abs(Number(ohlc[range._endIndex].close)),1e-9);
         if(exitMove<0.03)range={{...range,scannerStart:ohlc[shiftedStart].time,start:ohlc[shiftedStart].time,scannerEnd:ohlc[nextEnd].time,end:ohlc[nextEnd].time,_startIndex:shiftedStart,_endIndex:nextEnd}};
       }}
+      let lastPeak=range._startIndex;
+      for(let index=range._startIndex+1;index<=range._endIndex;index++)if(Number(ohlc[index].high)>=Number(ohlc[lastPeak].high))lastPeak=index;
+      const riseIntoPeak=(Number(ohlc[lastPeak].close)-Number(ohlc[range._startIndex].close))/Math.max(Math.abs(Number(ohlc[range._startIndex].close)),1e-9);
+      const postPeakSessions=range._endIndex-lastPeak+1;
+      const approach=ohlc.slice(Math.max(0,range._startIndex-15),range._startIndex+1).map(row=>Number(row.close));
+      const approachLow=Math.min(...approach),approachGain=(Number(ohlc[range._startIndex].close)-approachLow)/Math.max(Math.abs(approachLow),1e-9);
+      // A range which climbs into a fresh high and only then starts a short
+      // pullback is still the top of the incline.  It becomes a completed
+      // sidetrend only after a full trading month has elapsed past the last
+      // equal high, rather than merely because its endpoints look flat.
+      const reachesLatest=range._endIndex>=ohlc.length-3;
+      if(reachesLatest&&lastPeak-range._startIndex>=3&&approachGain>0.08&&riseIntoPeak>0.06&&postPeakSessions<minSessions)return;
       const calendarDays=(Date.parse(ohlc[range._endIndex].time)-Date.parse(ohlc[range._startIndex].time))/86400000;
       if(calendarDays<=60){{normalizedRanges.push(range);return;}}
       let split=-1;

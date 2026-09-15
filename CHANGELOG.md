@@ -4,6 +4,7 @@
 - Updated the WIG scanner universe by removing stale MOJ and PUR entries and adding MQR (MultiQure SA).
 - Persisted the reviewed GRX sidetrend corrections and invalid-range decisions for future scans.
 - Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
+- Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
 
 All notable release changes for StockHelper are documented here.
 

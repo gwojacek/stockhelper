@@ -106,6 +106,15 @@ def test_sidetrend_scanner_matches_puma_review_boundaries():
     assert ("2026-06-01", "2026-08-14") not in ranges
 
 
+def test_sidetrend_scanner_rejects_grx_top_of_incline_pullback():
+    ranges = _run_sidetrend_detector("GRX_WA.csv")
+
+    assert ("2026-08-13", "2026-09-15") not in ranges
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
+    assert "reachesLatest&&lastPeak-range._startIndex>=3&&approachGain>0.08" in detector
+
+
 def test_chart_debug_reports_include_ticker_and_full_name():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
