@@ -70,7 +70,6 @@ def _run_sidetrend_detector(csv_name):
         rows = [
             {"time": row["Date"], "high": float(row["High"]), "low": float(row["Low"]), "close": float(row["Close"])}
             for row in csv.DictReader(handle)
-            if row["Date"] >= "2025-09-01"
         ]
     script = f"const ohlc={json.dumps(rows)};{detector};console.log(JSON.stringify(detectedMonthlySidetrends()));"
     result = subprocess.run([node, "-e", script], check=True, capture_output=True, text=True)
@@ -80,10 +79,13 @@ def _run_sidetrend_detector(csv_name):
 def test_sidetrend_scanner_matches_sap_review_boundaries():
     ranges = _run_sidetrend_detector("SAP_DE.csv")
 
-    assert ("2025-09-18", "2025-11-05") in ranges
     assert ("2026-01-29", "2026-03-18") in ranges
     assert ("2026-06-19", "2026-07-23") in ranges
     assert ("2025-06-25", "2025-08-08") not in ranges
+    assert ("2025-04-30", "2025-06-13") in ranges
+    assert ("2025-08-13", "2025-09-09") in ranges
+    assert ("2025-09-17", "2025-11-05") in ranges
+    assert ("2025-11-17", "2026-01-09") in ranges
 
 
 def test_sidetrend_scanner_matches_puma_review_boundaries():
@@ -91,7 +93,7 @@ def test_sidetrend_scanner_matches_puma_review_boundaries():
 
     assert ("2025-09-18", "2025-10-29") in ranges
     assert ("2026-02-03", "2026-03-18") in ranges
-    assert ("2026-06-01", "2026-08-14") in ranges
+    assert ("2026-06-01", "2026-08-14") not in ranges
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():

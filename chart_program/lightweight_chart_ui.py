@@ -1735,14 +1735,62 @@ class LightweightChartLevelSelectorUI:
         }}
       }}
       if(originalStart-earliestStart>=15)phaseStart=earliestStart;
-      else if(originalStart-bestStart>=5)phaseStart=bestStart;
+      else if(originalStart-bestStart>=5&&bestStart>=2&&boundaryGap(ohlc[bestStart-2],ohlc[bestStart-1])>0.10)phaseStart=bestStart;
       const previous=ranges.at(-1);
-      if(previous&&phaseStart-previous._endIndex<=10){{
+      if(previous){{
+        const gapSessions=phaseStart-previous._endIndex-1;
         const meanClose=(from,to)=>ohlc.slice(from,to+1).reduce((sum,row)=>sum+Number(row.close),0)/(to-from+1);
-        if(Math.abs(meanClose(phaseStart,end)-meanClose(previous._startIndex,previous._endIndex))/Math.max(Math.abs(meanClose(previous._startIndex,previous._endIndex)),1e-9)>0.03){{start=end;continue;}}
+        const levelShift=Math.abs(meanClose(phaseStart,end)-meanClose(previous._startIndex,previous._endIndex))/Math.max(Math.abs(meanClose(previous._startIndex,previous._endIndex)),1e-9);
+        if(gapSessions>=5&&gapSessions<=10&&levelShift>0.03){{start=end;continue;}}
       }}
       ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[phaseStart].time,scannerEnd:ohlc[end].time,start:ohlc[phaseStart].time,end:ohlc[end].time,valid:true,_startIndex:phaseStart,_endIndex:end}});start=end;
     }}
+    // Very long candidates often bridge two shelves across a directional
+    // transition. Split only when both sides contain a full month and the
+    // six-session transition moves at least 7%; otherwise discard the broad
+    // candidate instead of presenting a misleading sidetrend (Puma).
+    const normalizedRanges=[];
+    ranges.forEach(range=>{{
+      const prior=normalizedRanges.at(-1);
+      const priorGapDays=prior?(Date.parse(ohlc[range._startIndex].time)-Date.parse(ohlc[prior._endIndex].time))/86400000:Infinity;
+      if(prior&&priorGapDays<=10){{
+        let reset=-1;
+        for(let index=range._startIndex+1;index<=Math.min(range._endIndex,range._startIndex+10);index++){{
+          const change=(Number(ohlc[index].close)-Number(ohlc[index-1].close))/Math.max(Math.abs(Number(ohlc[index-1].close)),1e-9);
+          if(change<=-0.03)reset=index+1;
+        }}
+        if(reset>0&&range._endIndex-reset>=minSessions){{
+          range={{...range,scannerStart:ohlc[reset].time,start:ohlc[reset].time,_startIndex:reset}};
+          const extensionLimit=range._endIndex+12;
+          for(let candidate=range._endIndex+1;candidate<ohlc.length&&candidate<=extensionLimit;candidate++){{
+            const resetDays=(Date.parse(ohlc[candidate].time)-Date.parse(ohlc[reset].time))/86400000;
+            if(resetDays<=55&&score(ohlc.slice(reset,candidate+1),phaseLimits))range={{...range,scannerEnd:ohlc[candidate].time,end:ohlc[candidate].time,_endIndex:candidate}};
+          }}
+        }}
+      }}
+      const firstThree=ohlc.slice(range._startIndex,range._startIndex+3).map(row=>Number(row.close));
+      const firstCandle=ohlc[range._startIndex],firstCandleWidth=(Number(firstCandle.high)-Number(firstCandle.low))/Math.max(Math.abs(Number(firstCandle.close)),1e-9);
+      const smoothEntry=firstCandleWidth<=0.05&&firstThree.length===3&&firstThree[0]<firstThree[1]&&firstThree[1]<firstThree[2]&&(firstThree[2]-firstThree[0])/Math.max(Math.abs(firstThree[0]),1e-9)>0.02;
+      if(smoothEntry&&range._endIndex+1<ohlc.length){{
+        const shiftedStart=range._startIndex+2,nextEnd=range._endIndex+1;
+        const exitMove=Math.abs(Number(ohlc[nextEnd].close)-Number(ohlc[range._endIndex].close))/Math.max(Math.abs(Number(ohlc[range._endIndex].close)),1e-9);
+        if(exitMove<0.03)range={{...range,scannerStart:ohlc[shiftedStart].time,start:ohlc[shiftedStart].time,scannerEnd:ohlc[nextEnd].time,end:ohlc[nextEnd].time,_startIndex:shiftedStart,_endIndex:nextEnd}};
+      }}
+      const calendarDays=(Date.parse(ohlc[range._endIndex].time)-Date.parse(ohlc[range._startIndex].time))/86400000;
+      if(calendarDays<=60){{normalizedRanges.push(range);return;}}
+      let split=-1;
+      for(let index=range._startIndex;index+6<=range._endIndex;index++){{
+        const leftSessions=index-range._startIndex+1,rightSessions=range._endIndex-index-5;
+        const transition=Math.abs(Number(ohlc[index+5].close)-Number(ohlc[index].close))/Math.max(Math.abs(Number(ohlc[index].close)),1e-9);
+        if(leftSessions+3>=minSessions&&rightSessions>=minSessions&&transition>=0.07){{split=index;break;}}
+      }}
+      if(split<0)return;
+      const leftStart=Math.max(0,range._startIndex-Math.max(0,20-(split-range._startIndex+1)));
+      normalizedRanges.push({{...range,scannerStart:ohlc[leftStart].time,start:ohlc[leftStart].time,scannerEnd:ohlc[split].time,end:ohlc[split].time,_startIndex:leftStart,_endIndex:split}});
+      const rightStart=split+6;
+      normalizedRanges.push({{...range,scannerStart:ohlc[rightStart].time,start:ohlc[rightStart].time,_startIndex:rightStart}});
+    }});
+    ranges.splice(0,ranges.length,...normalizedRanges);
     // A high-volatility reset can start a valid shelf without ever producing
     // a narrow core.  Only admit this broader seed immediately after a >5%
     // shock and away from an already detected phase.
