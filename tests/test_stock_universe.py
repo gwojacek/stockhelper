@@ -32,6 +32,7 @@ def test_grx_reviewed_sidetrends_are_persisted():
     corrected = {(item["start"], item["end"]) for item in state["__saved_sidetrends__"]}
     invalid = {(item["scannerStart"], item["scannerEnd"]) for item in state["__saved_invalid_sidetrends__"]}
     assert corrected == {
+        ("2025-08-06", "2025-09-03"),
         ("2025-12-01", "2026-01-08"),
         ("2026-01-29", "2026-03-19"),
         ("2026-03-26", "2026-05-27"),

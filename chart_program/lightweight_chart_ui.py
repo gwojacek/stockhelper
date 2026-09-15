@@ -2080,19 +2080,21 @@ class LightweightChartLevelSelectorUI:
     drawer.querySelector('.calc-toolbar')?.classList.add('debug-instrument');
     $('debug-report-identity').innerHTML=`<strong>${{esc(debugTickerText())}}</strong><span>${{esc(P.sourceName || '-')}}</span>`;
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
+    const reportFiboBoundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
+    const boundaryDates=reportFiboBoundary?[String(reportFiboBoundary.x0||'').slice(0,10),String(reportFiboBoundary.x1||'').slice(0,10)].sort():[];
+    const reportTouchesFibo=boundaryDates.length===2&&reportSidetrends.some(range=>range.valid&&range.start<=boundaryDates[1]&&range.end>=boundaryDates[0]);
     let dataHtml='',copyData=[];
     if(mode==='sidetrend') {{
       reportSidetrends.forEach(r=>{{const coverage=sidetrendCoverage(r),csv=scannerCandlesCsv(500,coverage.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>coverage.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');const comparison=r.scannerStart==='not found'?`added ${{r.start}} → ${{r.end}}`:(r.markedInvalid?`invalid · scanner ${{r.scannerStart}} → ${{r.scannerEnd}}`:`scanner ${{r.scannerStart}} → ${{r.scannerEnd}} · corrected ${{r.start}} → ${{r.end}}`);dataHtml+=csvTable(selected,`${{r.id}} · ${{comparison}} · full coverage ${{coverage.start}} → ${{coverage.end}}`);copyData.push(`${{r.id}} DATA · FULL COVERAGE ${{coverage.start}} → ${{coverage.end}}\\n${{selected}}`);}});
-      const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
-      if(boundary && debugSidetrendReportFilter!=='changed') {{
-        const start=String(boundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
+      if(reportFiboBoundary&&reportTouchesFibo&&debugSidetrendReportFilter!=='changed') {{
+        const start=String(reportFiboBoundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
         dataHtml+=csvTable(csv,`Complete Fibo candle data · from ${{start}}`);copyData.push(`COMPLETE FIBO DATA\\n${{csv}}`);
       }}
     }}
     else {{const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';const at=text.lastIndexOf(marker),nl=at<0?-1:text.indexOf('\\n',at);const csv=nl<0?'No candle data available.':text.slice(nl+1);dataHtml=csvTable(csv,'Candle data');copyData=[csv];}}
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
-    const fibInfo=mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
+    const fibInfo=mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&reportTouchesFibo&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
     const reportHeaders=mode==='sidetrend'?['#','From (scanner)','To (scanner)','Days (scanner)','From (corrected)','To (corrected)','Days (corrected)','Difference','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','End date (scanner)','End date (corrected)','Start price (scanner)','Start price (corrected)','End price (scanner)','End price (corrected)']);
     table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');

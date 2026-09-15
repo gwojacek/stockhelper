@@ -8,6 +8,12 @@
   "__saved_fibo_by_user__": false,
   "__saved_sidetrends__": [
     {
+      "scannerStart": "2025-07-30",
+      "scannerEnd": "2025-09-08",
+      "start": "2025-08-06",
+      "end": "2025-09-03"
+    },
+    {
       "scannerStart": "2026-05-29",
       "scannerEnd": "2026-07-17",
       "start": "2026-06-24",

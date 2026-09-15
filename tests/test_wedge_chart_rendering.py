@@ -490,8 +490,16 @@ def test_changed_sidetrend_report_tab_excludes_all_fibo_data():
     assert "Changed / invalid" in report
     assert "debugSidetrendReportFilter!=='changed'" in report
     assert "sidetrendChanged(r)" in report
-    assert "if(boundary && debugSidetrendReportFilter!=='changed')" in report
-    assert "mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0" in report
+    assert "reportFiboBoundary&&reportTouchesFibo&&debugSidetrendReportFilter!=='changed'" in report
+    assert "debugSidetrendReportFilter!=='changed'&&reportTouchesFibo&&fibStart>=0" in report
+
+
+def test_sidetrend_report_requires_a_selected_valid_fibo_overlap():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    assert "const reportTouchesFibo=" in report
+    assert "reportSidetrends.some(range=>range.valid&&range.start<=boundaryDates[1]&&range.end>=boundaryDates[0])" in report
 
 
 def test_corrected_sidetrend_report_uses_union_of_scanner_and_corrected_dates():
