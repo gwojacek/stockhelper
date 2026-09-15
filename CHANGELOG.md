@@ -1,6 +1,6 @@
 # Changelog
 
-- Tightened sidetrend review detection to merge flat 19-session price channels, trim directional entry/exit candles, and reject broad rise-and-fall cycles that only appear sideways from their endpoints.
+- Improved sidetrend review detection to grow complete month-scale, mean-reverting channels, include wider volatile shelves, trim directional entry/exit candles, and reject directional cycles that merely finish near their starting price.
 
 All notable release changes for StockHelper are documented here.
 

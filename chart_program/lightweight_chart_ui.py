@@ -1667,36 +1667,38 @@ class LightweightChartLevelSelectorUI:
     $('chart-wrap').releasePointerCapture?.(ev.pointerId); sidetrendDrag=null; renderSidetrendEditor(); ev.preventDefault(); ev.stopImmediatePropagation?.(); return true;
   }}
   function detectedMonthlySidetrends() {{
-    // A month-scale shelf is 19 trading sessions, rather than an arbitrary
-    // pair of dates 30 calendar days apart.  Score each fixed window first and
-    // then merge its overlaps.  Scoring an ever-growing range made the quiet
-    // middle of a rise-and-fall cycle hide both directional legs (ATT S3/S4),
-    // while also attaching the sell-off and breakout candles to real shelves.
-    const windowSize=19, maxChannelWidth=0.09, maxRegressionMove=0.01, maxEndpointMove=0.08;
-    const qualifying=[];
-    for(let start=0;start+windowSize<=ohlc.length;start++) {{
-      const sample=ohlc.slice(start,start+windowSize);
+    // Start with one trading month, then score the complete growing phase.
+    // Fixed narrow rolling windows missed wider but mean-reverting shelves
+    // (SAP), while merging those windows could bridge a directional sell-off.
+    const ranges=[],minSessions=19,maxChannelWidth=0.185,maxRegressionMove=0.03,maxEndpointMove=0.10,maxTrendFit=0.35;
+    const score=sample=>{{
       const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low)),closes=sample.map(row=>Number(row.close));
-      if([...highs,...lows,...closes].some(value=>!Number.isFinite(value)))continue;
-      const hi=Math.max(...highs),lo=Math.min(...lows),mid=(hi+lo)/2;
-      if(!mid||(hi-lo)/Math.abs(mid)>maxChannelWidth)continue;
-      const mean=closes.reduce((sum,value)=>sum+value,0)/windowSize;
-      const xMean=(windowSize-1)/2;
-      let numerator=0,denominator=0;
-      closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;}});
-      const regressionMove=Math.abs(numerator/Math.max(denominator,1))*(windowSize-1)/Math.max(Math.abs(mean),1e-9);
+      if([...highs,...lows,...closes].some(value=>!Number.isFinite(value)))return false;
+      const size=sample.length,hi=Math.max(...highs),lo=Math.min(...lows),mid=(hi+lo)/2;
+      if(!mid||(hi-lo)/Math.abs(mid)>maxChannelWidth)return false;
+      const mean=closes.reduce((sum,value)=>sum+value,0)/size,xMean=(size-1)/2;
+      let numerator=0,denominator=0,totalVariance=0,residualVariance=0;
+      closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;totalVariance+=(value-mean)**2;}});
+      const slope=numerator/Math.max(denominator,1);
+      closes.forEach((value,index)=>{{residualVariance+=(value-(mean+slope*(index-xMean)))**2;}});
+      const regressionMove=Math.abs(slope)*(size-1)/Math.max(Math.abs(mean),1e-9);
       const endpointMove=Math.abs(closes.at(-1)-closes[0])/Math.max(Math.abs(closes[0]),1e-9);
-      if(regressionMove<=maxRegressionMove&&endpointMove<=maxEndpointMove)qualifying.push([start,start+windowSize-1]);
+      const trendFit=totalVariance>1e-9?1-residualVariance/totalVariance:0;
+      return regressionMove<=maxRegressionMove&&endpointMove<=maxEndpointMove&&trendFit<=maxTrendFit;
+    }};
+    for(let start=0;start+minSessions<=ohlc.length;start++) {{
+      let end=start+minSessions-1;
+      // Never wait for a much later endpoint to make an initially directional
+      // leg look flat in hindsight.  A candidate must first qualify on its own
+      // opening month; only then may that same phase grow.
+      if(!score(ohlc.slice(start,end+1)))continue;
+      for(let candidate=end+1;candidate<ohlc.length;candidate++) {{
+        if(score(ohlc.slice(start,candidate+1)))end=candidate;
+        else break;
+      }}
+      ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true}});start=end;
     }}
-    const phases=[];
-    qualifying.forEach(([start,end])=>{{
-      const previous=phases.at(-1);
-      // Qualifying rolling windows from one shelf overlap.  The small grace
-      // also prevents one noisy window from splitting the same price channel.
-      if(!previous||start>previous[1]+3)phases.push([start,end]);
-      else previous[1]=Math.max(previous[1],end);
-    }});
-    return phases.map(([start,end],index)=>({{id:`S${{index+1}}`,scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true}}));
+    return ranges;
   }}
 
   function sidetrendNearFibo(range) {{

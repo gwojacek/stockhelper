@@ -31,15 +31,17 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert "debug-add-sidetrend" in source
 
 
-def test_sidetrend_scanner_uses_tight_fixed_windows_instead_of_endpoint_cycles():
+def test_sidetrend_scanner_grows_mean_reverting_month_scale_channels():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
     detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
 
-    assert "windowSize=19" in detector
-    assert "maxChannelWidth=0.09" in detector
-    assert "maxRegressionMove=0.01" in detector
-    assert "regressionMove<=maxRegressionMove" in detector
-    assert "start>previous[1]+3" in detector
+    assert "minSessions=19" in detector
+    assert "maxChannelWidth=0.185" in detector
+    assert "maxRegressionMove=0.03" in detector
+    assert "maxTrendFit=0.35" in detector
+    assert "trendFit<=maxTrendFit" in detector
+    assert "if(!score(ohlc.slice(start,end+1)))continue" in detector
+    assert "score(ohlc.slice(start,candidate+1))" in detector
     assert "days < 30" not in detector
     assert "bestWidth <= 0.185" not in detector
 
