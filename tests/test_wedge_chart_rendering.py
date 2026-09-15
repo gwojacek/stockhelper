@@ -130,11 +130,13 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "obj.anchor_y=[y0,y1]" in source
     assert "futureTimes[Math.min(59,futureTimes.length-1)]" in source
     assert "__saved_manual_wedges__:wedgeObjects,__saved_wedge_by_user__:true" in source
-    assert "isolatedManualWedgeSave=Array.isArray(levels.__saved_manual_wedges__)" in source
-    assert "!isolatedManualWedgeSave || initialWedgeGeometry !== '[]'" in source
+    assert "wedgeOnlySavedForScanner=Array.isArray(levels.__saved_manual_wedges__)" in source
+    assert "!wedgeOnlySavedForScanner || initialWedgeGeometry !== '[]'" in source
     save_function = source[source.index("async function saveManualWedge()"):source.index("function forgetLevelSeries")]
     assert "collectLevelsForSave" not in save_function
     assert "savedWedgeByUser=true" not in save_function
+    assert "levels.__saved_manual_wedges__=wedgeObjects" in save_function
+    assert "wedgeOnlySavedForScanner=true" in save_function
     assert "The wedge is ready to save." not in source
     assert "body:JSON.stringify({{levels:payload,screenshot:null}})" in source
     scanner_source = SCANNER_SOURCE.read_text(encoding="utf-8")
@@ -149,6 +151,9 @@ def test_manual_wedge_line_tool_draws_two_colored_lines_and_saves_them():
     assert "manualWedgeDraftIds=replacement.map(obj=>obj.id)" in source
     assert "const scannerWedges=initialScannerDrawnObjects.filter(isWedgeLineObject)" in source
     assert "if (scannerWedges.length < 2) return false" in source
+    assert "__saved_wedge_by_user__:savedWedgeByUser||wedgeOnlySavedForScanner" in source
+    assert "payload.__saved_wedge_by_user__ = wedgeOnlySavedForScanner" in source
+    assert "wedge:wedgeOnlySavedForScanner" in source
 
 
 def test_wedge_only_save_geometry_is_hidden_from_non_wedge_charts():

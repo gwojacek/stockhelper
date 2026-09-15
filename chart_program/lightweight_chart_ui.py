@@ -832,8 +832,8 @@ class LightweightChartLevelSelectorUI:
   let initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
   let savedFiboByUser = levels.__saved_fibo_by_user__ === true || (levels.__saved_fibo_by_user__ == null && initialFiboGeometry !== '[]');
   let initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
-  const isolatedManualWedgeSave=Array.isArray(levels.__saved_manual_wedges__)&&levels.__saved_manual_wedges__.length>=2;
-  let savedWedgeByUser = (levels.__saved_wedge_by_user__ === true && (!isolatedManualWedgeSave || initialWedgeGeometry !== '[]')) || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
+  let wedgeOnlySavedForScanner=Array.isArray(levels.__saved_manual_wedges__)&&levels.__saved_manual_wedges__.length>=2;
+  let savedWedgeByUser = (levels.__saved_wedge_by_user__ === true && (!wedgeOnlySavedForScanner || initialWedgeGeometry !== '[]')) || (levels.__saved_wedge_by_user__ == null && initialWedgeGeometry !== '[]');
   const refreshSavedFiboStatus = () => {{ const btn=$('saved-fibo-status'); if(btn) {{ const saved=savedFiboByUser||savedWedgeByUser; const invalid=savedFiboByUser&&levels.__saved_fibo_invalid__; btn.classList.toggle('active',saved); btn.classList.toggle('invalid-save',!!invalid); let invalidDays=0; if(invalid){{const due=Date.parse(invalid.delete_on||'');if(Number.isFinite(due))invalidDays=Math.max(0,Math.ceil((due-Date.now())/86400000));}} btn.title=invalid?`Invalid saved Fibo — will be dropped in ${{invalidDays}} day${{invalidDays===1?'':'s'}}; click to remove now`:(saved?'Chart configuration saved until it becomes invalid; click to remove':'Saves chart configuration until it becomes invalid'); const label=btn.querySelector('span:first-child'),remove=btn.querySelector('.saved-remove'); if(label) label.textContent=invalid?'⚠ Invalid save':(saved?'💾 Chart saved':'💾 Save chart'); if(remove) remove.style.display=saved?'':'none'; }} refreshChartContextInfo(); }};
   const initialScannerDrawnObjects = drawnObjects.filter(isScannerDrawnObject).map(deepClone);
   let activeField = null;
@@ -3813,6 +3813,9 @@ class LightweightChartLevelSelectorUI:
       const resp=await fetch('/save',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{levels:payload,screenshot:null}})}}),data=await resp.json();
       if(!resp.ok||!data.ok) throw new Error(data.error||String(resp.status));
       manualWedgeDraftIds=[];
+      levels.__saved_manual_wedges__=wedgeObjects;
+      levels.__saved_wedge_by_user__=true;
+      wedgeOnlySavedForScanner=true;
       $('save-manual-wedge').classList.remove('ready');
       $('result-box').textContent='Wedge saved for wedge scanner searches.';
       try {{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:savedFiboByUser,wedge:true}},'*');}} catch(_err) {{}}
@@ -4301,7 +4304,7 @@ class LightweightChartLevelSelectorUI:
     if (currentWedgeGeometry !== initialWedgeGeometry) savedWedgeByUser = currentWedgeGeometry !== '[]';
     return {{...levels,
       __saved_fibo_by_user__:savedFiboByUser,
-      __saved_wedge_by_user__:savedWedgeByUser,
+      __saved_wedge_by_user__:savedWedgeByUser||wedgeOnlySavedForScanner,
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
@@ -4406,22 +4409,24 @@ class LightweightChartLevelSelectorUI:
       }}
       return;
     }}
+    const releaseWedgeOnlySave=savedWedgeByUser&&selectedJournalTechnique()==='Kliny';
     savedFiboByUser = false;
     savedWedgeByUser = false;
+    if(releaseWedgeOnlySave) {{wedgeOnlySavedForScanner=false;delete levels.__saved_manual_wedges__;}}
     // The visible lines may remain as a reference, but from this point their
     // current geometry is the non-authoritative baseline. A later ordinary
     // save must not silently promote the released override back to saved.
     initialFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
     initialWedgeGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge'));
     levels.__saved_fibo_by_user__ = false;
-    levels.__saved_wedge_by_user__ = false;
+    levels.__saved_wedge_by_user__ = wedgeOnlySavedForScanner;
     refreshSavedFiboStatus();
     const payload = collectLevelsForSave(false);
     payload.__saved_fibo_by_user__ = false;
-    payload.__saved_wedge_by_user__ = false;
+    payload.__saved_wedge_by_user__ = wedgeOnlySavedForScanner;
     const resp = await fetch('/save', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:payload, screenshot:null}})}});
     const data = await resp.json().catch(() => ({{}}));
-    if(resp.ok&&data.ok){{try{{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:false,wedge:false}},'*');}}catch(e){{}}}}
+    if(resp.ok&&data.ok){{try{{window.opener?.postMessage({{type:'stockhelper-saved-setup',ticker:String(P.sourceTicker||P.symbol||'').toUpperCase(),fibo:false,wedge:wedgeOnlySavedForScanner}},'*');}}catch(e){{}}}}
     $('result-box').textContent = resp.ok && data.ok ? 'Saved scanner configuration released. The next scan will use automatic geometry.' : 'Could not release saved configuration.';
   }};
   refreshSavedFiboStatus();
