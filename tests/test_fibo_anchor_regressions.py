@@ -152,6 +152,19 @@ def test_bft_stair_step_shelves_do_not_replace_march_launch_bottom():
     assert peak == pytest.approx(5695.00, abs=0.01)
 
 
+def test_bft_exceptional_stair_step_impulse_survives_broad_pullback_window():
+    frame = _fixture("data/csv/stocks/BFT_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None, "\n".join(explain)
+    assert result.incline_start_date == "2026-03-23"
+    assert result.incline_end_date == "2026-08-14"
+    assert any("retained genuine peak" in item for item in explain)
+    assert any("retained active pullback" in item for item in explain)
+
+
 def test_pur_completed_channel_drops_immature_post_channel_impulse():
     frame = _fixture("data/csv/stocks/PUR_WA.csv").tail(320).reset_index(drop=True)
     peak_idx = int(frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == "2026-08-10"][0])
@@ -548,6 +561,14 @@ def test_regular_fibo_uses_xtb_post_range_structural_launch():
     assert frame.iloc[base[0]]["Date"] == pd.Timestamp("2026-05-28")
     assert base[1] == pytest.approx(95.45, abs=0.01)
     assert any("confirmed structural launch" in item for item in explain)
+
+
+def test_xtb_does_not_emit_short_with_anchor_below_later_impulse_high():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+
+    result = scanner._find_fibo_setup(frame, "short")
+
+    assert result is None
 
 
 def test_xtb_extended_range_does_not_keep_april_pre_range_anchor():
