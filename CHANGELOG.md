@@ -2,12 +2,10 @@
 
 - Improved sidetrend review detection to split long candidates at sustained transitions, discard unsplittable multi-regime ranges, recover post-shock shelves, and refine smooth entry/exit boundaries.
 - Updated the WIG scanner universe by removing stale MOJ and PUR entries and adding MQR (MultiQure SA).
-- Persisted the reviewed GRX sidetrend corrections and invalid-range decisions for future scans.
 - Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
 - Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
-- Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo, and saved the reviewed GRX July-September correction.
-- Persisted the reviewed ATT and SGN sidetrend boundary corrections and ATT invalid-range decisions across both session aliases.
-- Updated the ATT and SGN review state with the latest split/added ATT ranges, revised boundaries, and SGN invalidation decisions.
+- Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo.
+- Cached repeated month-window analysis across overlapping Fibo candidates to restore scan performance.
 
 All notable release changes for StockHelper are documented here.
 

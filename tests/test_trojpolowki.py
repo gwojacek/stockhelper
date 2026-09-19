@@ -503,8 +503,10 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     helper = source[source.index("def _has_completed_month_side_trend"):source.index("def _has_extended_sideways")]
     assert "short decline" in steep
     assert "continuation_min_gain=steep_min_gain" in steep
-    assert "max_days=19" in helper
-    assert "band_pct=0.20" in helper
+    assert "_completed_month_side_trend_phases(df_slice)" in helper
+    assert "@lru_cache(maxsize=512)" in helper
+    assert "window_days = 19" in helper
+    assert "band_pct=band_pct" in helper
     assert "max_progress_pct=0.08" in helper
     assert waiting.index("if _has_extended_sideways") < waiting.index("return not _sideways_correction_near_active_extreme")
     assert "correction, max_days=22, band_pct=0.12" in waiting

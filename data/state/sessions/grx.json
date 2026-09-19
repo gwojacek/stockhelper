@@ -5,51 +5,5 @@
   "__show_ichimoku__": false,
   "drawn_objects": [],
   "__journal_source_technique__": "Fibo",
-  "__saved_fibo_by_user__": false,
-  "__saved_sidetrends__": [
-    {
-      "scannerStart": "2025-07-30",
-      "scannerEnd": "2025-09-08",
-      "start": "2025-08-06",
-      "end": "2025-09-03"
-    },
-    {
-      "scannerStart": "2026-05-29",
-      "scannerEnd": "2026-07-17",
-      "start": "2026-06-24",
-      "end": "2026-08-07"
-    },
-    {
-      "scannerStart": "2026-03-26",
-      "scannerEnd": "2026-05-12",
-      "start": "2026-03-26",
-      "end": "2026-05-27"
-    },
-    {
-      "scannerStart": "2026-02-13",
-      "scannerEnd": "2026-03-19",
-      "start": "2026-01-29",
-      "end": "2026-03-19"
-    },
-    {
-      "scannerStart": "not found",
-      "scannerEnd": "not found",
-      "start": "2025-12-01",
-      "end": "2026-01-08"
-    }
-  ],
-  "__saved_invalid_sidetrends__": [
-    {
-      "scannerStart": "2026-08-13",
-      "scannerEnd": "2026-09-15",
-      "start": "2026-08-13",
-      "end": "2026-09-15"
-    },
-    {
-      "scannerStart": "2025-04-01",
-      "scannerEnd": "2025-05-16",
-      "start": "2025-04-01",
-      "end": "2025-05-16"
-    }
-  ]
+  "__saved_fibo_by_user__": false
 }

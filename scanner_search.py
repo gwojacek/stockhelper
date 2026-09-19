@@ -13,6 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time as dt_time, timedelta
+from functools import lru_cache
 import math
 from itertools import combinations
 from importlib import util
@@ -1074,35 +1075,25 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     # market holidays.  Requiring 22 observations missed complete February
     # ranges such as STX 2026-02-02..27 and allowed an obsolete impulse to span
     # that separate market phase.
-    return _has_long_sideways(
-        df_slice.reset_index(drop=True),
-        max_days=19,
-        band_pct=0.20,
-        max_progress_pct=0.08,
-    )
+    return bool(_completed_month_side_trend_phases(df_slice))
 
 
-def _completed_month_side_trend_phases(
-    df_slice: pd.DataFrame,
-    *,
-    band_pct: float = 0.20,
-) -> list[tuple[int, int]]:
-    """Return distinct four-week channels inside a leg.
-
-    Rolling windows from the same consolidation overlap heavily, so merge
-    adjacent qualifying windows into one phase. Separate ranges divided by a
-    directional leg remain distinct and must not both be absorbed merely
-    because the complete move eventually became very large (STX).
-    """
-    leg = df_slice.reset_index(drop=True)
+@lru_cache(maxsize=512)
+def _completed_month_side_trend_phases_cached(
+    highs_data: tuple[float, ...],
+    lows_data: tuple[float, ...],
+    closes_data: tuple[float, ...],
+    band_pct: float,
+) -> tuple[tuple[int, int], ...]:
+    """Cache repeated rolling-window work across overlapping Fibo candidates."""
     window_days = 19
-    if len(leg) < window_days:
-        return []
-    highs = pd.to_numeric(leg["High"], errors="coerce").reset_index(drop=True)
-    lows = pd.to_numeric(leg["Low"], errors="coerce").reset_index(drop=True)
-    closes = pd.to_numeric(leg["Close"], errors="coerce").reset_index(drop=True)
+    if len(highs_data) < window_days:
+        return ()
+    highs = pd.Series(highs_data, dtype="float64")
+    lows = pd.Series(lows_data, dtype="float64")
+    closes = pd.Series(closes_data, dtype="float64")
     qualifying: list[tuple[int, int]] = []
-    for start in range(0, len(leg) - window_days + 1):
+    for start in range(0, len(highs_data) - window_days + 1):
         end = start + window_days
         stats = _sideways_window_stats(
             highs.iloc[start:end].reset_index(drop=True),
@@ -1120,7 +1111,27 @@ def _completed_month_side_trend_phases(
             phases.append([start, end])
         else:
             phases[-1][1] = max(phases[-1][1], end)
-    return [(start, end) for start, end in phases]
+    return tuple((start, end) for start, end in phases)
+
+
+def _completed_month_side_trend_phases(
+    df_slice: pd.DataFrame,
+    *,
+    band_pct: float = 0.20,
+) -> list[tuple[int, int]]:
+    """Return distinct four-week channels inside a leg.
+
+    Rolling windows from the same consolidation overlap heavily, so merge
+    adjacent qualifying windows into one phase. Separate ranges divided by a
+    directional leg remain distinct and must not both be absorbed merely
+    because the complete move eventually became very large (STX).
+    """
+    if len(df_slice) < 19:
+        return []
+    highs = tuple(pd.to_numeric(df_slice["High"], errors="coerce").astype(float))
+    lows = tuple(pd.to_numeric(df_slice["Low"], errors="coerce").astype(float))
+    closes = tuple(pd.to_numeric(df_slice["Close"], errors="coerce").astype(float))
+    return list(_completed_month_side_trend_phases_cached(highs, lows, closes, float(band_pct)))
 
 
 def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
