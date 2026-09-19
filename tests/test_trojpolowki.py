@@ -521,6 +521,7 @@ def test_fibo_finalization_scans_monthly_sidetrends_once_per_ticker():
     assert "_fibo_crosses_detected_sidetrend" in worker
     assert "_fibo_crosses_saved_sidetrend" in worker
     assert "later_impulse_high > fib_start" in source
+    assert "later_launch = _repeated_range_acceleration_launch_long(" in source
 
 
 def test_fibo_pattern_may_finish_later_but_must_include_initial_touch_candle():

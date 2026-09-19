@@ -8,6 +8,7 @@
 - Restored full Stooq-first health retries for stale Forex caches, matching commodity repair behavior instead of bypassing history refresh for a single missing candle.
 - Made Fibo sidetrend invalidation anchor-aware: completed tight monthly ranges are checked only from the final first anchor through the first 61.8 touch/current candle, after anchor selection has had a chance to restart at a strong post-range impulse.
 - Replaced per-candidate month-window rescans and tuple caching with one tight-range scan per instrument, and rejected short Fibos whose first anchor is superseded by a later high.
+- Tightened Fibo-only sidetrend qualification to reject directional or spike-trimmed windows, preserved BFT-style coherent impulses, and allowed repeated strong post-range legs to advance the first anchor more than once.
 
 All notable release changes for StockHelper are documented here.
 

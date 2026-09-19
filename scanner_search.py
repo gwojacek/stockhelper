@@ -1086,6 +1086,9 @@ def _completed_month_side_trend_phases(
     df_slice: pd.DataFrame,
     *,
     band_pct: float = 0.20,
+    max_progress_pct: float = 0.08,
+    max_outlier_candles: int = 2,
+    max_regression_move_pct: float | None = None,
 ) -> list[tuple[int, int]]:
     """Return distinct four-week channels inside a leg.
 
@@ -1109,11 +1112,20 @@ def _completed_month_side_trend_phases(
             lows.iloc[start:end].reset_index(drop=True),
             closes.iloc[start:end].reset_index(drop=True),
             band_pct=band_pct,
-            max_progress_pct=0.08,
-            max_outlier_candles=2,
+            max_progress_pct=max_progress_pct,
+            max_outlier_candles=max_outlier_candles,
         )
-        if stats is not None:
-            qualifying.append((start, end - 1))
+        if stats is None:
+            continue
+        if max_regression_move_pct is not None:
+            window_closes = closes.iloc[start:end].to_numpy(dtype=float)
+            x = np.arange(window_days, dtype=float)
+            slope = float(np.polyfit(x, window_closes, 1)[0])
+            mean_close = float(np.nanmean(window_closes))
+            regression_move = abs(slope * (window_days - 1)) / max(abs(mean_close), 1e-9)
+            if regression_move > max_regression_move_pct:
+                continue
+        qualifying.append((start, end - 1))
     phases: list[list[int]] = []
     for start, end in qualifying:
         if not phases or start > phases[-1][1] + 3:
@@ -1588,6 +1600,8 @@ def _repeated_range_acceleration_launch_long(
     """
     leg = w.iloc[start_idx:peak_idx + 1].reset_index(drop=True)
     phases = _completed_month_side_trend_phases(leg, band_pct=0.08)
+    if not phases:
+        return None
 
     lows = pd.to_numeric(w["Low"], errors="coerce")
     highs = pd.to_numeric(w["High"], errors="coerce")
@@ -1629,7 +1643,14 @@ def _repeated_range_acceleration_launch_long(
         breaks_prior_month = confirmation_high >= prior_high * 1.03
         total_gain = (float(highs.iloc[peak_idx]) - candidate_low) / max(abs(candidate_low), 1e-9)
         if launch_expansion >= 0.15 and breaks_prior_month and total_gain >= 0.15:
-            return idx
+            # Keep walking a genuinely multi-stage impulse, but only when the
+            # shortened leg contains another completed tight range. Without
+            # that requirement ordinary reaction lows late in XTB-like moves
+            # would repeatedly drag the anchor into the impulse itself.
+            later_launch = _repeated_range_acceleration_launch_long(
+                w, idx, peak_idx, min_impulse_days,
+            )
+            return later_launch if later_launch is not None else idx
     return None
 
 
@@ -5467,7 +5488,13 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
     ordered = df.reset_index(drop=True)
     dates = pd.to_datetime(ordered["Date"], errors="coerce")
     ranges: list[tuple[str, str]] = []
-    for start, end in _completed_month_side_trend_phases(ordered, band_pct=0.08):
+    for start, end in _completed_month_side_trend_phases(
+        ordered,
+        band_pct=0.08,
+        max_progress_pct=0.04,
+        max_outlier_candles=0,
+        max_regression_move_pct=0.035,
+    ):
         start_date = dates.iloc[start]
         end_date = dates.iloc[end]
         if pd.isna(start_date) or pd.isna(end_date):

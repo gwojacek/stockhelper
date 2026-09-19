@@ -152,7 +152,7 @@ def test_bft_stair_step_shelves_do_not_replace_march_launch_bottom():
     assert peak == pytest.approx(5695.00, abs=0.01)
 
 
-def test_bft_fibo_is_rejected_when_tight_monthly_range_remains_after_anchor():
+def test_bft_impulse_is_not_misclassified_as_a_monthly_sidetrend():
     frame = _fixture("data/csv/stocks/BFT_WA.csv")
     explain: list[str] = []
 
@@ -166,7 +166,32 @@ def test_bft_fibo_is_rejected_when_tight_monthly_range_remains_after_anchor():
         result,
         ranges,
         latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
-    ) is True
+    ) is False
+
+
+def test_fibo_clear_sidetrend_requires_flat_untrimmed_month():
+    dates = pd.bdate_range("2026-01-02", periods=19)
+    flat_close = pd.Series([100.0, 101.0, 99.5, 100.5] * 5)[:19]
+    flat = pd.DataFrame({
+        "Date": dates,
+        "Open": flat_close,
+        "High": flat_close + 0.8,
+        "Low": flat_close - 0.8,
+        "Close": flat_close,
+    })
+    directional_close = pd.Series([100.0 + i * 0.38 for i in range(19)])
+    directional = flat.assign(
+        Open=directional_close,
+        High=directional_close + 0.3,
+        Low=directional_close - 0.3,
+        Close=directional_close,
+    )
+    spike = flat.copy()
+    spike.loc[9, "High"] = 112.0
+
+    assert scanner._clear_month_sidetrend_date_ranges(flat)
+    assert scanner._clear_month_sidetrend_date_ranges(directional) == []
+    assert scanner._clear_month_sidetrend_date_ranges(spike) == []
 
 
 def test_pur_completed_channel_drops_immature_post_channel_impulse():
