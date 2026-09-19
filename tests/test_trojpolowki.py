@@ -510,13 +510,15 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "correction, max_days=22, band_pct=0.12" in waiting
 
 
-def test_fibo_finalization_does_not_repeat_monthly_sidetrend_scan():
+def test_fibo_finalization_scans_monthly_sidetrends_once_per_ticker():
     source = Path("scanner_search.py").read_text(encoding="utf-8")
     worker_start = source.index("def _scan_fibo_one(")
     worker_end = source.index("workers_override = _scan_workers_override()", worker_start)
     worker = source[worker_start:worker_end]
 
-    assert "_fibo_has_detected_month_sidetrend" not in source
+    assert "detected_sidetrends = _clear_month_sidetrend_date_ranges(df)" in worker
+    assert worker.count("_clear_month_sidetrend_date_ranges(df)") == 1
+    assert "_fibo_crosses_detected_sidetrend" in worker
     assert "_fibo_crosses_saved_sidetrend" in worker
     assert "later_impulse_high > fib_start" in source
 

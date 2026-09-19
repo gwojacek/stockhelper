@@ -5454,6 +5454,51 @@ def _fibo_crosses_saved_sidetrend(
     )
 
 
+def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]]:
+    """Return completed, tight monthly ranges once for Fibo finalization.
+
+    The broad 20% detector is useful while locating structural reset candidates,
+    but it is intentionally too permissive for invalidating a finished Fibo.
+    Here a range must fit inside an 8% channel for at least 19 sessions.  This
+    keeps directional stair-step moves from being mistaken for consolidation.
+    """
+    if df.empty:
+        return []
+    ordered = df.reset_index(drop=True)
+    dates = pd.to_datetime(ordered["Date"], errors="coerce")
+    ranges: list[tuple[str, str]] = []
+    for start, end in _completed_month_side_trend_phases(ordered, band_pct=0.08):
+        start_date = dates.iloc[start]
+        end_date = dates.iloc[end]
+        if pd.isna(start_date) or pd.isna(end_date):
+            continue
+        ranges.append((str(start_date.date()), str(end_date.date())))
+    return ranges
+
+
+def _fibo_crosses_detected_sidetrend(
+    candidate: FiboScanResult,
+    ranges: list[tuple[str, str]],
+    *,
+    latest_date: str,
+) -> bool:
+    """Reject a completed monthly range after anchor one and before 61.8.
+
+    Anchor selection is responsible for moving the first anchor behind a range
+    when a new strong impulse follows it.  If any complete range still remains
+    between that final anchor and the first 61.8 touch (or today's candle while
+    waiting), the formation is no longer one uninterrupted Fibo cycle.
+    """
+    horizon = candidate.first_61_8_touch_date or latest_date
+    if not horizon:
+        return False
+    return any(
+        candidate.incline_start_date <= start
+        and end <= horizon
+        for start, end in ranges
+    )
+
+
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
     """Warn for five days before removing an invalid saved Fibo."""
     path = _scanner_session_path_for_ticker(ticker)
@@ -8560,19 +8605,24 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
-            # Candidate builders already validate monthly ranges while choosing
-            # and relocating anchors. Re-running that rolling analysis for every
-            # completed candidate here both duplicated the hottest part of the
-            # search and discarded coherent stair-step impulses (XTB/BFT). Keep
-            # explicit user-reviewed sidetrends authoritative without applying
-            # a second, broader automatic veto after candidate construction.
+            # Candidate builders relocate anchor one when a strong post-range
+            # impulse exists. Scan tight monthly ranges only once per ticker,
+            # then reject any candidate that still spans a completed range from
+            # its final first anchor through its first 61.8 touch/current bar.
+            # This avoids the former per-candidate rolling-window rescan.
             saved_sidetrends = _saved_sidetrends_for_ticker(ticker)
+            detected_sidetrends = _clear_month_sidetrend_date_ranges(df)
             latest_date_text = str(pd.to_datetime(df["Date"], errors="coerce").max().date())
             out_rows = [
                 item for item in out_rows
                 if isinstance(item, WedgeScanResult)
-                or not _fibo_crosses_saved_sidetrend(
-                    item, saved_sidetrends, latest_date=latest_date_text,
+                or (
+                    not _fibo_crosses_detected_sidetrend(
+                        item, detected_sidetrends, latest_date=latest_date_text,
+                    )
+                    and not _fibo_crosses_saved_sidetrend(
+                        item, saved_sidetrends, latest_date=latest_date_text,
+                    )
                 )
             ]
             out_rows = _prune_superseded_steep_fibo_rows(out_rows)

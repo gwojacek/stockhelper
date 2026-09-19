@@ -131,6 +131,44 @@ def test_saved_sidetrends_are_loaded_and_invalidate_crossing_fibo(tmp_path, monk
     assert scanner._fibo_crosses_saved_sidetrend(post_anchor, ranges) is True
 
 
+def test_detected_sidetrend_only_invalidates_between_first_anchor_and_61_8():
+    candidate = SimpleNamespace(
+        incline_start_date="2026-04-01",
+        incline_end_date="2026-07-01",
+        first_61_8_touch_date="2026-09-15",
+    )
+
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        [("2026-05-01", "2026-06-01")],
+        latest_date="2026-10-01",
+    ) is True
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        [("2026-02-01", "2026-03-01")],
+        latest_date="2026-10-01",
+    ) is False
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        [("2026-09-16", "2026-10-16")],
+        latest_date="2026-10-16",
+    ) is False
+
+
+def test_detected_sidetrend_uses_latest_candle_before_first_61_8_touch():
+    candidate = SimpleNamespace(
+        incline_start_date="2026-04-01",
+        incline_end_date="2026-07-01",
+        first_61_8_touch_date="",
+    )
+
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        [("2026-08-01", "2026-09-01")],
+        latest_date="2026-09-15",
+    ) is True
+
+
 def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkeypatch):
     sessions = tmp_path / "sessions"
     sessions.mkdir()
