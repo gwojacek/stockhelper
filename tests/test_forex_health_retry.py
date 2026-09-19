@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import os
 from pathlib import Path
 
 import pytest
@@ -265,7 +266,7 @@ def test_forex_health_detects_two_missing_weekday_candles(monkeypatch, tmp_path,
     assert "summary: ok=0, warn=1, total=1" in output
 
 
-def test_forex_health_uses_yahoo_only_when_just_latest_candle_is_missing(monkeypatch, tmp_path, capsys):
+def test_forex_health_retries_normal_remote_path_when_latest_candle_is_missing(monkeypatch, tmp_path, capsys):
     csv_path = tmp_path / "EURJPY.csv"
     expected = scanner.get_expected_latest_session_date("forex", "FOREX", datetime.now(UTC))
     previous = expected - timedelta(days=1)
@@ -281,26 +282,36 @@ def test_forex_health_uses_yahoo_only_when_just_latest_candle_is_missing(monkeyp
     frame.to_csv(csv_path, index=False)
     monkeypatch.setenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "1")
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda *_args: csv_path)
+    calls = []
+
+    def refresh(**kwargs):
+        calls.append(kwargs)
+        assert os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] == "1"
+        assert "STOCKHELPER_STOOQ_TAIL_REFRESH" not in os.environ
+        local = pd.read_csv(csv_path)
+        newest = local.iloc[-1:].copy()
+        newest["Date"] = expected.isoformat()
+        pd.concat([local, newest], ignore_index=True).to_csv(csv_path, index=False)
+        return local, csv_path, {"source": "table_ui+yahoo"}
+
+    monkeypatch.setattr(scanner, "load_or_update_daily_data", refresh)
     monkeypatch.setattr(
         scanner,
-        "load_or_update_daily_data",
-        lambda **_kwargs: pytest.fail("one missing latest FX candle must not trigger Stooq"),
+        "_merge_yahoo_fresh_candle",
+        lambda *_args, **_kwargs: pytest.fail("health check must use the normal Stooq/Yahoo loader"),
     )
-
-    def yahoo_merge(local, symbol, instrument, **_kwargs):
-        assert symbol == "EURJPY"
-        assert instrument == "forex"
-        newest = local.iloc[-1:].copy()
-        newest["Date"] = pd.Timestamp(expected)
-        return pd.concat([local, newest], ignore_index=True), "EURJPY=X", None, 1
-
-    monkeypatch.setattr(scanner, "_merge_yahoo_fresh_candle", yahoo_merge)
 
     scanner._forex_csv_health_check(["EURJPY"], {"EURJPY": "table_ui"})
 
     output = capsys.readouterr().out
-    assert "appended Yahoo newest candle; skipped Stooq history retry" in output
+    assert "preserving base for Stooq/Yahoo refresh" in output
     assert "all forex CSVs complete after retry round 1" in output
+    assert calls == [{
+        "symbol": "EURJPY",
+        "instrument_type": "forex",
+        "persist": True,
+        "fetch_older_data": False,
+    }]
     assert pd.to_datetime(pd.read_csv(csv_path)["Date"]).max().date() == expected
 
 

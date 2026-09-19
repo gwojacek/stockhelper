@@ -5,7 +5,10 @@
 - Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
 - Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
 - Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo.
-- Cached repeated month-window analysis across overlapping Fibo candidates to restore scan performance.
+- Restored full Stooq-first health retries for stale Forex caches, matching commodity repair behavior instead of bypassing history refresh for a single missing candle.
+- Made Fibo sidetrend invalidation anchor-aware: completed tight monthly ranges are checked only from the final first anchor through the first 61.8 touch/current candle, after anchor selection has had a chance to restart at a strong post-range impulse.
+- Replaced per-candidate month-window rescans and tuple caching with one tight-range scan per instrument, and rejected short Fibos whose first anchor is superseded by a later high.
+- Tightened Fibo-only sidetrend qualification to reject directional or spike-trimmed windows, preserved BFT-style coherent impulses, and allowed repeated strong post-range legs to advance the first anchor more than once.
 
 All notable release changes for StockHelper are documented here.
 

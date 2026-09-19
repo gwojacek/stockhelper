@@ -13,7 +13,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time as dt_time, timedelta
-from functools import lru_cache
 import math
 from itertools import combinations
 from importlib import util
@@ -1075,49 +1074,21 @@ def _has_completed_month_side_trend(df_slice: pd.DataFrame) -> bool:
     # market holidays.  Requiring 22 observations missed complete February
     # ranges such as STX 2026-02-02..27 and allowed an obsolete impulse to span
     # that separate market phase.
-    return bool(_completed_month_side_trend_phases(df_slice))
-
-
-@lru_cache(maxsize=512)
-def _completed_month_side_trend_phases_cached(
-    highs_data: tuple[float, ...],
-    lows_data: tuple[float, ...],
-    closes_data: tuple[float, ...],
-    band_pct: float,
-) -> tuple[tuple[int, int], ...]:
-    """Cache repeated rolling-window work across overlapping Fibo candidates."""
-    window_days = 19
-    if len(highs_data) < window_days:
-        return ()
-    highs = pd.Series(highs_data, dtype="float64")
-    lows = pd.Series(lows_data, dtype="float64")
-    closes = pd.Series(closes_data, dtype="float64")
-    qualifying: list[tuple[int, int]] = []
-    for start in range(0, len(highs_data) - window_days + 1):
-        end = start + window_days
-        stats = _sideways_window_stats(
-            highs.iloc[start:end].reset_index(drop=True),
-            lows.iloc[start:end].reset_index(drop=True),
-            closes.iloc[start:end].reset_index(drop=True),
-            band_pct=band_pct,
-            max_progress_pct=0.08,
-            max_outlier_candles=2,
-        )
-        if stats is not None:
-            qualifying.append((start, end - 1))
-    phases: list[list[int]] = []
-    for start, end in qualifying:
-        if not phases or start > phases[-1][1] + 3:
-            phases.append([start, end])
-        else:
-            phases[-1][1] = max(phases[-1][1], end)
-    return tuple((start, end) for start, end in phases)
+    return _has_long_sideways(
+        df_slice.reset_index(drop=True),
+        max_days=19,
+        band_pct=0.20,
+        max_progress_pct=0.08,
+    )
 
 
 def _completed_month_side_trend_phases(
     df_slice: pd.DataFrame,
     *,
     band_pct: float = 0.20,
+    max_progress_pct: float = 0.08,
+    max_outlier_candles: int = 2,
+    max_regression_move_pct: float | None = None,
 ) -> list[tuple[int, int]]:
     """Return distinct four-week channels inside a leg.
 
@@ -1126,12 +1097,42 @@ def _completed_month_side_trend_phases(
     directional leg remain distinct and must not both be absorbed merely
     because the complete move eventually became very large (STX).
     """
-    if len(df_slice) < 19:
+    leg = df_slice.reset_index(drop=True)
+    window_days = 19
+    if len(leg) < window_days:
         return []
-    highs = tuple(pd.to_numeric(df_slice["High"], errors="coerce").astype(float))
-    lows = tuple(pd.to_numeric(df_slice["Low"], errors="coerce").astype(float))
-    closes = tuple(pd.to_numeric(df_slice["Close"], errors="coerce").astype(float))
-    return list(_completed_month_side_trend_phases_cached(highs, lows, closes, float(band_pct)))
+    highs = pd.to_numeric(leg["High"], errors="coerce").reset_index(drop=True)
+    lows = pd.to_numeric(leg["Low"], errors="coerce").reset_index(drop=True)
+    closes = pd.to_numeric(leg["Close"], errors="coerce").reset_index(drop=True)
+    qualifying: list[tuple[int, int]] = []
+    for start in range(0, len(leg) - window_days + 1):
+        end = start + window_days
+        stats = _sideways_window_stats(
+            highs.iloc[start:end].reset_index(drop=True),
+            lows.iloc[start:end].reset_index(drop=True),
+            closes.iloc[start:end].reset_index(drop=True),
+            band_pct=band_pct,
+            max_progress_pct=max_progress_pct,
+            max_outlier_candles=max_outlier_candles,
+        )
+        if stats is None:
+            continue
+        if max_regression_move_pct is not None:
+            window_closes = closes.iloc[start:end].to_numpy(dtype=float)
+            x = np.arange(window_days, dtype=float)
+            slope = float(np.polyfit(x, window_closes, 1)[0])
+            mean_close = float(np.nanmean(window_closes))
+            regression_move = abs(slope * (window_days - 1)) / max(abs(mean_close), 1e-9)
+            if regression_move > max_regression_move_pct:
+                continue
+        qualifying.append((start, end - 1))
+    phases: list[list[int]] = []
+    for start, end in qualifying:
+        if not phases or start > phases[-1][1] + 3:
+            phases.append([start, end])
+        else:
+            phases[-1][1] = max(phases[-1][1], end)
+    return [(start, end) for start, end in phases]
 
 
 def _completed_month_side_trend_count(df_slice: pd.DataFrame) -> int:
@@ -1599,6 +1600,8 @@ def _repeated_range_acceleration_launch_long(
     """
     leg = w.iloc[start_idx:peak_idx + 1].reset_index(drop=True)
     phases = _completed_month_side_trend_phases(leg, band_pct=0.08)
+    if not phases:
+        return None
 
     lows = pd.to_numeric(w["Low"], errors="coerce")
     highs = pd.to_numeric(w["High"], errors="coerce")
@@ -1640,7 +1643,14 @@ def _repeated_range_acceleration_launch_long(
         breaks_prior_month = confirmation_high >= prior_high * 1.03
         total_gain = (float(highs.iloc[peak_idx]) - candidate_low) / max(abs(candidate_low), 1e-9)
         if launch_expansion >= 0.15 and breaks_prior_month and total_gain >= 0.15:
-            return idx
+            # Keep walking a genuinely multi-stage impulse, but only when the
+            # shortened leg contains another completed tight range. Without
+            # that requirement ordinary reaction lows late in XTB-like moves
+            # would repeatedly drag the anchor into the impulse itself.
+            later_launch = _repeated_range_acceleration_launch_long(
+                w, idx, peak_idx, min_impulse_days,
+            )
+            return later_launch if later_launch is not None else idx
     return None
 
 
@@ -2394,20 +2404,6 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                 and oldest != "-"
                 and date.fromisoformat(oldest) <= oldest_tolerance
             )
-            if history_complete and missing == 1 and yahoo_like < YAHOO_RECENT_CANDLE_REBASE_THRESHOLD:
-                # Stooq's daily table commonly ends at yesterday.  When the
-                # rolling history is already complete and only today's session
-                # is absent, fetching ten Stooq pages cannot repair anything.
-                # Append Yahoo's single freshest row directly instead.
-                local = pd.read_csv(csv_path)
-                merged, _candidate, _name, added = _merge_yahoo_fresh_candle(
-                    local, raw, "forex", trim_to_last_year=False
-                )
-                if added <= 0:
-                    raise ValueError("Yahoo did not provide the missing latest FX candle")
-                merged.to_csv(csv_path, index=False)
-                print(f"[forex-check] {raw}: appended Yahoo newest candle; skipped Stooq history retry")
-                return "cache+yahoo"
             contaminated_tail = (
                 history_complete
                 and missing == 0
@@ -2429,9 +2425,21 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                             f"[forex-check] {raw}: healthy history with {yahoo_like} Yahoo-like tail rows; "
                             "refreshing only newest Stooq page before Yahoo latest-candle merge"
                         )
-                    else:
+                    elif not history_complete:
                         os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
                         csv_path.unlink(missing_ok=True)
+                        print(f"[forex-check] {raw}: incomplete/unreadable history; performing full replacement")
+                    else:
+                        # Match commodity repair semantics: retain a complete
+                        # Stooq base and run the normal remote refresh path.
+                        # That path retries Stooq before merging Yahoo's newest
+                        # candle, instead of silently bypassing Stooq whenever
+                        # exactly one FX session is absent.
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        print(
+                            f"[forex-check] {raw}: healthy rolling history but "
+                            f"missing {missing} session(s); preserving base for Stooq/Yahoo refresh"
+                        )
                     _df, _path, meta = load_or_update_daily_data(
                         symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
                     )
@@ -5467,25 +5475,55 @@ def _fibo_crosses_saved_sidetrend(
     )
 
 
-def _fibo_has_detected_month_sidetrend(df: pd.DataFrame, candidate: FiboScanResult) -> bool:
-    """Reject old anchors and corrections separated by an automatic side phase.
+def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]]:
+    """Return completed, tight monthly ranges once for Fibo finalization.
 
-    A new formation remains possible, but its first anchor must occur after the
-    completed range.  Therefore this check never relocates an old anchor; the
-    normal selector must independently find a sufficiently mature new impulse.
+    The broad 20% detector is useful while locating structural reset candidates,
+    but it is intentionally too permissive for invalidating a finished Fibo.
+    Here a range must fit inside an 8% channel for at least 19 sessions.  This
+    keeps directional stair-step moves from being mistaken for consolidation.
     """
-    dates = pd.to_datetime(df["Date"], errors="coerce")
-    start = pd.to_datetime(candidate.incline_start_date, errors="coerce")
-    end = pd.to_datetime(candidate.incline_end_date, errors="coerce")
-    touch = pd.to_datetime(candidate.first_61_8_touch_date, errors="coerce")
-    if pd.isna(start) or pd.isna(end):
+    if df.empty:
+        return []
+    ordered = df.reset_index(drop=True)
+    dates = pd.to_datetime(ordered["Date"], errors="coerce")
+    ranges: list[tuple[str, str]] = []
+    for start, end in _completed_month_side_trend_phases(
+        ordered,
+        band_pct=0.08,
+        max_progress_pct=0.04,
+        max_outlier_candles=0,
+        max_regression_move_pct=0.035,
+    ):
+        start_date = dates.iloc[start]
+        end_date = dates.iloc[end]
+        if pd.isna(start_date) or pd.isna(end_date):
+            continue
+        ranges.append((str(start_date.date()), str(end_date.date())))
+    return ranges
+
+
+def _fibo_crosses_detected_sidetrend(
+    candidate: FiboScanResult,
+    ranges: list[tuple[str, str]],
+    *,
+    latest_date: str,
+) -> bool:
+    """Reject a completed monthly range after anchor one and before 61.8.
+
+    Anchor selection is responsible for moving the first anchor behind a range
+    when a new strong impulse follows it.  If any complete range still remains
+    between that final anchor and the first 61.8 touch (or today's candle while
+    waiting), the formation is no longer one uninterrupted Fibo cycle.
+    """
+    horizon = candidate.first_61_8_touch_date or latest_date
+    if not horizon:
         return False
-    impulse = df.loc[(dates >= start) & (dates <= end)].reset_index(drop=True)
-    if _has_completed_month_side_trend(impulse):
-        return True
-    correction_end = touch if not pd.isna(touch) else dates.max()
-    correction = df.loc[(dates >= end) & (dates <= correction_end)].reset_index(drop=True)
-    return _has_completed_month_side_trend(correction)
+    return any(
+        candidate.incline_start_date <= start
+        and end <= horizon
+        for start, end in ranges
+    )
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
@@ -7374,9 +7412,22 @@ def _find_fibo_3p_steep_setup(
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
-    if _sideways_range_spans_impulse_end(w, i_peak):
+    peak_spanning_sideways = _sideways_range_spans_impulse_end(w, i_peak)
+    preliminary_gain = (fib_end - fib_start) / max(abs(fib_start), 1e-9)
+    preliminary_daily_gain = preliminary_gain / max(incline_days, 1)
+    exceptional_impulse_into_peak = (
+        preliminary_gain >= 0.50
+        and preliminary_daily_gain >= 0.003
+    )
+    if peak_spanning_sideways and not exceptional_impulse_into_peak:
         _log("Rejected 3P steep: selected high is inside a completed month-long side trend.")
         return None
+    if peak_spanning_sideways:
+        _log(
+            "3P steep: retained genuine peak despite a straddling range because "
+            f"the complete impulse gained {preliminary_gain * 100:.2f}% at "
+            f"{preliminary_daily_gain * 100:.2f}% per session."
+        )
 
     early_sideways = _early_sideways_after_anchor_window(
         w,
@@ -7439,9 +7490,11 @@ def _find_fibo_3p_steep_setup(
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
-    if not _mirrored_short and _has_completed_month_side_trend(
-        w.iloc[i_peak + 1:].reset_index(drop=True)
-    ):
+    long_correction_has_month_side_trend = (
+        not _mirrored_short
+        and _has_completed_month_side_trend(w.iloc[i_peak + 1:].reset_index(drop=True))
+    )
+    if long_correction_has_month_side_trend and not exceptional_impulse_into_peak:
         # Column one/two describes an active correction, not a stock which has
         # spent a complete month (or two) parked in a range after its peak.
         # This guard is deliberately independent of the latest close's place
@@ -7449,6 +7502,14 @@ def _find_fibo_3p_steep_setup(
         # the channel boundary.
         _log("Rejected 3P steep: post-peak correction contains a completed month-long side trend.")
         return None
+    if (
+        long_correction_has_month_side_trend
+        and exceptional_impulse_into_peak
+    ):
+        _log(
+            "3P steep: retained active pullback after an exceptional impulse; "
+            "the broad correction window is not treated as a settled post-peak shelf."
+        )
     if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):
         # A completed month-long base ends the old short cycle even when price
         # subsequently breaks upward and is currently near the recovery high.
@@ -7971,6 +8032,13 @@ def _find_fibo_setup(
         return None
     fib_start = float(high.iloc[i_start])
     fib_end = float(low.iloc[i_bottom])
+    later_impulse_high = float(pd.to_numeric(high.iloc[i_start + 1:i_bottom + 1], errors="coerce").max())
+    if later_impulse_high > fib_start:
+        _log(
+            "Rejected short: first anchor is not the impulse's local top; "
+            f"a later candle reached {later_impulse_high:.4f} above {fib_start:.4f}."
+        )
+        return None
     rng = fib_start - fib_end
     if rng <= 0:
         _log("Rejected short: non-positive fib range.")
@@ -8564,17 +8632,21 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
-            # A broad steep leg with a genuine monthly range is superseded only
-            # when this same scan found a much smaller regular long formation.
-            # This removes JP225's stale broad leg while preserving stepwise
-            # trends such as ROST when no actionable nested replacement exists.
+            # Candidate builders relocate anchor one when a strong post-range
+            # impulse exists. Scan tight monthly ranges only once per ticker,
+            # then reject any candidate that still spans a completed range from
+            # its final first anchor through its first 61.8 touch/current bar.
+            # This avoids the former per-candidate rolling-window rescan.
             saved_sidetrends = _saved_sidetrends_for_ticker(ticker)
+            detected_sidetrends = _clear_month_sidetrend_date_ranges(df)
             latest_date_text = str(pd.to_datetime(df["Date"], errors="coerce").max().date())
             out_rows = [
                 item for item in out_rows
                 if isinstance(item, WedgeScanResult)
                 or (
-                    not _fibo_has_detected_month_sidetrend(df, item)
+                    not _fibo_crosses_detected_sidetrend(
+                        item, detected_sidetrends, latest_date=latest_date_text,
+                    )
                     and not _fibo_crosses_saved_sidetrend(
                         item, saved_sidetrends, latest_date=latest_date_text,
                     )

@@ -152,6 +152,48 @@ def test_bft_stair_step_shelves_do_not_replace_march_launch_bottom():
     assert peak == pytest.approx(5695.00, abs=0.01)
 
 
+def test_bft_impulse_is_not_misclassified_as_a_monthly_sidetrend():
+    frame = _fixture("data/csv/stocks/BFT_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None, "\n".join(explain)
+    assert result.incline_start_date == "2026-03-23"
+    assert result.incline_end_date == "2026-08-14"
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+    assert scanner._fibo_crosses_detected_sidetrend(
+        result,
+        ranges,
+        latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+    ) is False
+
+
+def test_fibo_clear_sidetrend_requires_flat_untrimmed_month():
+    dates = pd.bdate_range("2026-01-02", periods=19)
+    flat_close = pd.Series([100.0, 101.0, 99.5, 100.5] * 5)[:19]
+    flat = pd.DataFrame({
+        "Date": dates,
+        "Open": flat_close,
+        "High": flat_close + 0.8,
+        "Low": flat_close - 0.8,
+        "Close": flat_close,
+    })
+    directional_close = pd.Series([100.0 + i * 0.38 for i in range(19)])
+    directional = flat.assign(
+        Open=directional_close,
+        High=directional_close + 0.3,
+        Low=directional_close - 0.3,
+        Close=directional_close,
+    )
+    spike = flat.copy()
+    spike.loc[9, "High"] = 112.0
+
+    assert scanner._clear_month_sidetrend_date_ranges(flat)
+    assert scanner._clear_month_sidetrend_date_ranges(directional) == []
+    assert scanner._clear_month_sidetrend_date_ranges(spike) == []
+
+
 def test_pur_completed_channel_drops_immature_post_channel_impulse():
     frame = _fixture("data/csv/stocks/PUR_WA.csv").tail(320).reset_index(drop=True)
     peak_idx = int(frame.index[frame["Date"].dt.strftime("%Y-%m-%d") == "2026-08-10"][0])
@@ -548,6 +590,27 @@ def test_regular_fibo_uses_xtb_post_range_structural_launch():
     assert frame.iloc[base[0]]["Date"] == pd.Timestamp("2026-05-28")
     assert base[1] == pytest.approx(95.45, abs=0.01)
     assert any("confirmed structural launch" in item for item in explain)
+
+
+def test_xtb_does_not_emit_short_with_anchor_below_later_impulse_high():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+
+    result = scanner._find_fibo_setup(frame, "short")
+
+    assert result is None
+
+
+def test_xtb_long_has_no_clear_monthly_range_after_reanchoring():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    result = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert result is not None
+    assert result.incline_start_date == "2026-05-28"
+    assert scanner._fibo_crosses_detected_sidetrend(
+        result,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+    ) is False
 
 
 def test_xtb_extended_range_does_not_keep_april_pre_range_anchor():
