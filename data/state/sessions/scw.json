@@ -116,7 +116,7 @@
       "auto_wedge": true
     }
   },
-  "__journal_source_technique__": "Fibo",
+  "__journal_source_technique__": "Ichimoku",
   "__wedge_auto_high__": true,
   "__wedge_auto_low__": true,
   "calculation_currency": "PLN",
@@ -124,8 +124,7 @@
   "__saved_wedge_by_user__": false,
   "__scanner_breakout_date__": "2026-05-28",
   "__scanner_breakout_direction__": "short",
-  "__scanner_retest_count__": "3",
-  "__scanner_latest_retest_date__": "2026-09-10",
-  "__scanner_latest_retest_pattern__": "bearish_engulfing",
-  "__scanner_previous_respect_months__": "5.3"
+  "__scanner_retest_count__": "4",
+  "__scanner_latest_retest_date__": "2026-09-14",
+  "__scanner_latest_retest_pattern__": "bearish_harami"
 }

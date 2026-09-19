@@ -5,9 +5,80 @@
   "__show_ichimoku__": true,
   "drawn_objects": [],
   "__journal_source_technique__": "Ichimoku",
+  "__saved_fibo_by_user__": false,
+  "__saved_manual_wedges__": [
+    {
+      "id": "a163c51e-50de-44b1-af63-9ef7dae832ed",
+      "type": "wedge",
+      "label": "My upper wedge",
+      "x0": "2026-08-05",
+      "y0": 48.47999954223633,
+      "x1": "2026-10-26",
+      "y1": 43.98,
+      "anchor_x": [
+        "2026-08-05",
+        "2026-10-26"
+      ],
+      "anchor_y": [
+        48.47999954223633,
+        43.98
+      ],
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": true,
+      "saved_by_user": true
+    },
+    {
+      "id": "bcbf7ccc-125a-4aab-b017-1bac433fc7db",
+      "type": "wedge",
+      "label": "My lower wedge",
+      "x0": "2026-07-15",
+      "y0": 40.400001525878906,
+      "x1": "2026-11-18",
+      "y1": 45.82,
+      "anchor_x": [
+        "2026-07-15",
+        "2026-11-18"
+      ],
+      "anchor_y": [
+        40.400001525878906,
+        45.82
+      ],
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true,
+      "saved_by_user": true
+    }
+  ],
+  "__saved_wedge_by_user__": false,
+  "position_type": "long",
+  "capital": 304000,
+  "calculation_currency": "PLN",
+  "high": 48.48,
+  "__wedge_auto_high__": true,
+  "low": 40.4,
+  "__wedge_auto_low__": true,
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 48.48,
+      "plot_price": 48.48,
+      "date": "2026-08-05",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 40.4,
+      "plot_price": 40.4,
+      "date": "2026-07-15",
+      "auto_wedge": true
+    }
+  },
   "__scanner_breakout_date__": "2026-07-02",
   "__scanner_breakout_direction__": "long",
   "__scanner_retest_count__": "0",
-  "__scanner_previous_respect_months__": "3.9",
-  "__saved_fibo_by_user__": false
+  "__scanner_previous_respect_months__": "3.9"
 }
