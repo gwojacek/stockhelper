@@ -169,6 +169,20 @@ def test_detected_sidetrend_uses_latest_candle_before_first_61_8_touch():
     ) is True
 
 
+def test_anchor_inside_sidetrend_is_invalid_when_month_remains_after_anchor():
+    candidate = SimpleNamespace(
+        incline_start_date="2026-06-24",
+        incline_end_date="2026-09-17",
+        first_61_8_touch_date="",
+    )
+
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        [("2026-05-14", "2026-08-13")],
+        latest_date="2026-09-18",
+    ) is True
+
+
 def test_explicitly_released_fibo_geometry_is_not_authoritative(tmp_path, monkeypatch):
     sessions = tmp_path / "sessions"
     sessions.mkdir()

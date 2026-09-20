@@ -61,6 +61,9 @@ def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
     assert "withinCoreEnvelope" in detector
     assert "envelopePadding=strictCore?0.022:0.035" in detector
     assert "strictCoreStarts=new Set()" in detector
+    assert "medianCrossings" in detector
+    assert "const broadLimits={{channelWidth:0.19" in detector
+    assert "for(const size of [22,26,30,34,38,42,46])" in detector
     assert "shadowsStrictCore" in detector
     assert "backwardLimit=strictCore?maxShoulderSessions:2" in detector
     assert "phaseStart=candidate" in detector
@@ -113,6 +116,20 @@ def test_sidetrend_scanner_rejects_grx_top_of_incline_pullback():
     source = UI_SOURCE.read_text(encoding="utf-8")
     detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
     assert "reachesLatest&&lastPeak-range._startIndex>=3&&approachGain>0.08" in detector
+
+
+@pytest.mark.parametrize(
+    ("csv_name", "expected_start", "expected_end"),
+    [
+        ("WAS_WA.csv", "2026-08-07", "2026-09-08"),
+        ("LWB_WA.csv", "2026-06-25", "2026-08-07"),
+        ("DIG_WA.csv", "2026-07-07", "2026-09-03"),
+    ],
+)
+def test_sidetrend_scanner_recovers_volatile_oscillating_months(csv_name, expected_start, expected_end):
+    ranges = _run_sidetrend_detector(csv_name)
+
+    assert any(start <= expected_start and end >= expected_end for start, end in ranges)
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():

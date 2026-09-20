@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -192,6 +193,21 @@ def test_fibo_clear_sidetrend_requires_flat_untrimmed_month():
     assert scanner._clear_month_sidetrend_date_ranges(flat)
     assert scanner._clear_month_sidetrend_date_ranges(directional) == []
     assert scanner._clear_month_sidetrend_date_ranges(spike) == []
+
+
+@pytest.mark.parametrize(
+    ("csv_name", "expected_start", "expected_end"),
+    [
+        ("WAS_WA.csv", "2026-08-04", "2026-09-08"),
+        ("LWB_WA.csv", "2026-06-25", "2026-08-07"),
+        ("DIG_WA.csv", "2026-07-07", "2026-09-03"),
+    ],
+)
+def test_fibo_sidetrends_include_volatile_oscillating_ranges(csv_name, expected_start, expected_end):
+    frame = _fixture(f"data/csv/stocks/{csv_name}")
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+
+    assert any(start <= expected_start and end >= expected_end for start, end in ranges)
 
 
 def test_pur_completed_channel_drops_immature_post_channel_impulse():
@@ -598,6 +614,17 @@ def test_xtb_does_not_emit_short_with_anchor_below_later_impulse_high():
     result = scanner._find_fibo_setup(frame, "short")
 
     assert result is None
+
+
+def test_xtb_short_is_rejected_when_later_high_pierces_first_anchor():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    candidate = SimpleNamespace(
+        direction="short",
+        incline_start_date="2026-08-12",
+        incline_end_date="2026-09-11",
+    )
+
+    assert scanner._fibo_first_anchor_remains_extreme(frame, candidate) is False
 
 
 def test_xtb_long_has_no_clear_monthly_range_after_reanchoring():
