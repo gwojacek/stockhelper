@@ -5497,8 +5497,9 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
     # Some genuine shelves are deliberately volatile (WAS/LWB/DIG): they have
     # no narrow 8% core, but repeatedly cross their median and finish near the
     # level where they started. Detect those as whole, untrimmed 22-46 session
-    # blocks. Requiring a 15-19% envelope keeps this fallback away from the
-    # narrow rolling pauses already handled above and from ordinary inclines.
+    # blocks. Shorter one-month blocks use an 11-19% envelope (MQR), while
+    # longer blocks must span 15-19%; this keeps the fallback selective enough
+    # not to suppress most otherwise valid WIG Fibos.
     highs = pd.to_numeric(ordered["High"], errors="coerce").to_numpy(dtype=float)
     lows = pd.to_numeric(ordered["Low"], errors="coerce").to_numpy(dtype=float)
     closes = pd.to_numeric(ordered["Close"], errors="coerce").to_numpy(dtype=float)
@@ -5525,9 +5526,10 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
         last = np.median(close_windows[:, -3:], axis=1)
         endpoint_move = np.abs(last - first) / np.maximum(np.abs(first), 1e-9)
         regression_move = np.abs(slopes * (size - 1)) / np.maximum(np.abs(means), 1e-9)
+        min_width = 0.11 if size <= 26 else 0.15
         eligible = (
             np.isfinite(close_windows).all(axis=1)
-            & (width >= 0.15)
+            & (width >= min_width)
             & (width <= 0.19)
             & (endpoint_move <= 0.08)
             & (regression_move <= 0.065)
@@ -5539,7 +5541,8 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
             signs = np.sign(window - median)
             signs = signs[signs != 0]
             crossings = int(np.sum(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
-            if crossings < 5:
+            min_crossings = 10 if size <= 26 else 8
+            if crossings < min_crossings:
                 continue
             broad_candidates.append((start, start + size - 1))
     # Keep maximal overlapping broad candidates. Their union is used only
@@ -5591,6 +5594,12 @@ def _fibo_crosses_detected_sidetrend(
             continue
         if phase_start >= anchor:
             return True
+        # Anchor one cannot be placed near the beginning of a shelf merely
+        # because fewer than 28 calendar days remain. MQR's July anchor is the
+        # representative case: it sits only days after the shelf began and the
+        # breakout launch belongs near the shelf's end.
+        if anchor - phase_start <= pd.Timedelta(days=14):
+            return True
         # An anchor placed inside an already-running shelf is invalid only
         # when a full calendar month of that shelf remains after the anchor.
         if phase_end - anchor >= pd.Timedelta(days=28):
@@ -5598,11 +5607,11 @@ def _fibo_crosses_detected_sidetrend(
     return False
 
 
-def _fibo_first_anchor_remains_extreme(
+def _fibo_anchors_remain_extreme(
     df: pd.DataFrame,
     candidate: FiboScanResult,
 ) -> bool:
-    """Ensure no candle between the two anchors supersedes anchor one."""
+    """Ensure neither Fibo anchor is superseded before the 61.8 horizon."""
     dates = pd.to_datetime(df["Date"], errors="coerce")
     start = pd.Timestamp(candidate.incline_start_date)
     end = pd.Timestamp(candidate.incline_end_date)
@@ -5614,9 +5623,24 @@ def _fibo_first_anchor_remains_extreme(
         return False
     if candidate.direction == "short":
         anchor = float(pd.to_numeric(first_rows["High"], errors="coerce").max())
-        return float(pd.to_numeric(impulse["High"], errors="coerce").max()) <= anchor + 1e-9
-    anchor = float(pd.to_numeric(first_rows["Low"], errors="coerce").min())
-    return float(pd.to_numeric(impulse["Low"], errors="coerce").min()) >= anchor - 1e-9
+        if float(pd.to_numeric(impulse["High"], errors="coerce").max()) > anchor + 1e-9:
+            return False
+    else:
+        anchor = float(pd.to_numeric(first_rows["Low"], errors="coerce").min())
+        if float(pd.to_numeric(impulse["Low"], errors="coerce").min()) < anchor - 1e-9:
+            return False
+    horizon = pd.to_datetime(candidate.first_61_8_touch_date, errors="coerce")
+    if pd.isna(horizon):
+        horizon = dates.max()
+    correction = df.loc[(dates >= end) & (dates <= horizon)]
+    second_rows = impulse.loc[pd.to_datetime(impulse["Date"], errors="coerce") == end]
+    if correction.empty or second_rows.empty:
+        return False
+    if candidate.direction == "short":
+        second_anchor = float(pd.to_numeric(second_rows["Low"], errors="coerce").min())
+        return float(pd.to_numeric(correction["Low"], errors="coerce").min()) >= second_anchor - 1e-9
+    second_anchor = float(pd.to_numeric(second_rows["High"], errors="coerce").max())
+    return float(pd.to_numeric(correction["High"], errors="coerce").max()) <= second_anchor + 1e-9
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
@@ -8737,7 +8761,7 @@ def run_fibo_search(target: str) -> int:
                 item for item in out_rows
                 if isinstance(item, WedgeScanResult)
                 or (
-                    _fibo_first_anchor_remains_extreme(df, item)
+                    _fibo_anchors_remain_extreme(df, item)
                     and not _fibo_crosses_detected_sidetrend(
                         item, detected_sidetrends, latest_date=latest_date_text,
                     )

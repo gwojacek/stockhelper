@@ -71,7 +71,7 @@ def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
     assert "bestWidth <= 0.185" not in detector
 
 
-def _run_sidetrend_detector(csv_name):
+def _run_sidetrend_detector(csv_name, boundary=None):
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is required to execute the embedded detector")
@@ -84,7 +84,8 @@ def _run_sidetrend_detector(csv_name):
             {"time": row["Date"], "high": float(row["High"]), "low": float(row["Low"]), "close": float(row["Close"])}
             for row in csv.DictReader(handle)
         ]
-    script = f"const ohlc={json.dumps(rows)};{detector};console.log(JSON.stringify(detectedMonthlySidetrends()));"
+    initial_objects = [] if boundary is None else [{"type": "fib-boundary", **boundary}]
+    script = f"const ohlc={json.dumps(rows)},initialScannerDrawnObjects={json.dumps(initial_objects)};{detector};console.log(JSON.stringify(detectedMonthlySidetrends()));"
     result = subprocess.run([node, "-e", script], check=True, capture_output=True, text=True)
     return {(item["start"], item["end"]) for item in json.loads(result.stdout)}
 
@@ -130,6 +131,21 @@ def test_sidetrend_scanner_recovers_volatile_oscillating_months(csv_name, expect
     ranges = _run_sidetrend_detector(csv_name)
 
     assert any(start <= expected_start and end >= expected_end for start, end in ranges)
+
+
+def test_mqr_shelf_is_detected_around_invalid_first_anchor():
+    ranges = _run_sidetrend_detector("MQR_WA.csv")
+
+    assert any(start <= "2026-07-06" and end >= "2026-07-31" for start, end in ranges)
+
+
+def test_bft_peak_straddling_pullback_is_not_added_as_volatile_shelf():
+    ranges = _run_sidetrend_detector(
+        "BFT_WA.csv",
+        {"x0": "2026-03-23", "x1": "2026-08-14"},
+    )
+
+    assert not any(start < "2026-08-14" < end for start, end in ranges if start >= "2026-07-01")
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():

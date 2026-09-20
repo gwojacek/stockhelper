@@ -1763,7 +1763,9 @@ class LightweightChartLevelSelectorUI:
       const end=start+size-1,sample=ohlc.slice(start,end+1);
       const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low));
       const hi=Math.max(...highs),lo=Math.min(...lows),width=(hi-lo)/Math.max(Math.abs((hi+lo)/2),1e-9);
-      if(width<0.15||!score(sample,broadLimits)||medianCrossings(sample)<5)continue;
+      const minWidth=size<=26?0.11:0.15;
+      const minCrossings=size<=26?10:8;
+      if(width<minWidth||!score(sample,broadLimits)||medianCrossings(sample)<minCrossings)continue;
       const startTime=Date.parse(ohlc[start].time),endTime=Date.parse(ohlc[end].time);
       if(Number.isFinite(fibAnchorDate)&&startTime<fibAnchorDate&&endTime>fibAnchorDate&&endTime-fibAnchorDate<28*86400000)continue;
       if(Number.isFinite(fibSecondDate)&&startTime<fibSecondDate&&endTime>fibSecondDate)continue;
@@ -1846,6 +1848,10 @@ class LightweightChartLevelSelectorUI:
       if(ranges.some(range=>candidate.start<=range._endIndex&&candidate.end>=range._startIndex))continue;
       ranges.push({{id:'',scannerStart:ohlc[candidate.start].time,scannerEnd:ohlc[candidate.end].time,start:ohlc[candidate.start].time,end:ohlc[candidate.end].time,valid:true,_startIndex:candidate.start,_endIndex:candidate.end}});
     }}
+    if(Number.isFinite(fibSecondDate))ranges.splice(0,ranges.length,...ranges.filter(range=>{{
+      const startTime=Date.parse(ohlc[range._startIndex].time),endTime=Date.parse(ohlc[range._endIndex].time);
+      return !(startTime<fibSecondDate&&fibSecondDate<endTime);
+    }}));
     ranges.sort((a,b)=>a._startIndex-b._startIndex).forEach((range,index)=>range.id=`S${{index+1}}`);
     ranges.forEach(range=>{{delete range._startIndex;delete range._endIndex;}});
     return ranges;

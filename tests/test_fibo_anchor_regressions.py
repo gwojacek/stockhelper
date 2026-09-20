@@ -622,9 +622,28 @@ def test_xtb_short_is_rejected_when_later_high_pierces_first_anchor():
         direction="short",
         incline_start_date="2026-08-12",
         incline_end_date="2026-09-11",
+        first_61_8_touch_date="",
     )
 
-    assert scanner._fibo_first_anchor_remains_extreme(frame, candidate) is False
+    assert scanner._fibo_anchors_remain_extreme(frame, candidate) is False
+
+
+def test_mqr_anchor_cannot_start_inside_shelf_or_miss_next_higher_peak():
+    frame = _fixture("data/csv/stocks/MQR_WA.csv")
+    candidate = SimpleNamespace(
+        direction="long",
+        incline_start_date="2026-07-06",
+        incline_end_date="2026-08-07",
+        first_61_8_touch_date="2026-09-11",
+    )
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        ranges,
+        latest_date="2026-09-11",
+    ) is True
+    assert scanner._fibo_anchors_remain_extreme(frame, candidate) is False
 
 
 def test_xtb_long_has_no_clear_monthly_range_after_reanchoring():

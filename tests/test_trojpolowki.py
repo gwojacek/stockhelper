@@ -520,7 +520,7 @@ def test_fibo_finalization_scans_monthly_sidetrends_once_per_ticker():
     assert worker.count("_clear_month_sidetrend_date_ranges(df)") == 1
     assert "_fibo_crosses_detected_sidetrend" in worker
     assert "_fibo_crosses_saved_sidetrend" in worker
-    assert "_fibo_first_anchor_remains_extreme(df, item)" in worker
+    assert "_fibo_anchors_remain_extreme(df, item)" in worker
     assert "later_impulse_high > fib_start" in source
     assert "later_launch = _repeated_range_acceleration_launch_long(" in source
 
