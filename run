@@ -1551,7 +1551,19 @@ def _read_previous_fibo_board(path: Path) -> dict[tuple[str, str, str], tuple[st
     if not path.exists():
         return {}
     lines = path.read_text(encoding="utf-8").splitlines()
-    header_idx = next((idx for idx, line in enumerate(lines) if line.startswith("|") and "Steep incline" in line), None)
+    # Accept both the legacy heading and the current user-facing heading.  The
+    # board was renamed from "Steep incline" to "Strong impulse"; requiring
+    # only the old text made every current board look empty, so no disappeared
+    # setup could ever enter the recent-dropout history.
+    header_idx = next(
+        (
+            idx
+            for idx, line in enumerate(lines)
+            if line.startswith("|")
+            and ("Steep incline" in line or "Strong impulse" in line)
+        ),
+        None,
+    )
     if header_idx is None:
         return {}
     previous: dict[tuple[str, str, str], tuple[str, int]] = {}

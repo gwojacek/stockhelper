@@ -72,6 +72,21 @@ def test_ftnt_exceptional_post_base_impulse_survives_loose_month_window():
     assert any("monthly pause absorbed" in message for message in explain)
 
 
+def test_bft_live_impulse_is_not_rejected_by_unfinished_correction_range():
+    frame = _fixture("data/csv/stocks/BFT_WA.csv")
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert result is not None
+    assert result.incline_start_date == "2026-03-23"
+    assert result.incline_end_date == "2026-08-14"
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+    latest = frame["Date"].max().date().isoformat()
+    assert not scanner._fibo_crosses_detected_sidetrend(
+        result, ranges, latest_date=latest,
+    )
+
+
 @pytest.mark.parametrize(
     ("path", "direction"),
     [

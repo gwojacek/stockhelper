@@ -356,6 +356,29 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     assert "DROP ↗️ (2026-06-01)" not in (tmp_path / "fibo_dropouts.json").read_text(encoding="utf-8")
 
 
+def test_current_strong_impulse_header_is_read_for_dropout_history(tmp_path: Path):
+    mod = load_run_module()
+    board = tmp_path / "fibo.md"
+    board.write_text(
+        "# Trójpolówki — Fibo\n\n"
+        "| 🚀 Strong impulse | ⚠️ Waiting 23.6→61.8 | 🎯 Near 61.8 > 75% / deeper pullback | ✅ Pattern ≤14d / SL intact | 🕘 Recent dropouts (10d) |\n"
+        "|---|---|---|---|---|\n"
+        "| **🇵🇱 BFT ↗️ (2026-03-23)** <!--fibo-end:2026-08-14-->[link](https://example.test/?s=BFT.WA) |  |  |  |  |\n",
+        encoding="utf-8",
+    )
+
+    assert mod._read_previous_fibo_board(board) == {
+        ("BFT", "long", "2026-03-23"): (
+            "**🇵🇱 BFT ↗️ (2026-03-23)** <!--fibo-end:2026-08-14-->[link](https://example.test/?s=BFT.WA)",
+            0,
+        )
+    }
+
+    mod._write_trojpolowki_fibo([], tmp_path, datetime(2026, 9, 20, 9, 0, 0))
+    assert "BFT ↗️ (2026-03-23)" in board.read_text(encoding="utf-8")
+    assert "OTHER_SETUP_FILTER" in board.read_text(encoding="utf-8")
+
+
 def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
     source = Path("run").read_text(encoding="utf-8")
     fibo_branch = source[source.index('elif "fibo" in section_id:'):source.index('else:', source.index('elif "fibo" in section_id:'))]
