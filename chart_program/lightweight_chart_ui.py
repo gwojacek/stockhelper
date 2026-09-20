@@ -1697,6 +1697,12 @@ class LightweightChartLevelSelectorUI:
       closes.forEach((value,index)=>{{residual+=(value-(mean+slope*(index-xMean)))**2;}});
       return Math.abs(slope)*(size-1)/Math.max(Math.abs(mean),1e-9)+(total>1e-9?1-residual/total:0);
     }};
+    const medianCrossings=sample=>{{
+      const values=sample.map(row=>Number(row.close)).sort((a,b)=>a-b),median=values[Math.floor(values.length/2)];
+      const signs=sample.map(row=>Math.sign(Number(row.close)-median)).filter(Boolean);
+      let crossings=0;for(let index=1;index<signs.length;index++)if(signs[index]!==signs[index-1])crossings++;
+      return crossings;
+    }};
     const boundaryGap=(left,right)=>Math.abs(Number(right.close)-Number(left.close))/Math.max(Math.abs(Number(left.close)),1e-9);
     const strictCoreStarts=new Set();
     for(let index=0;index+minSessions<=ohlc.length;index++)if(score(ohlc.slice(index,index+minSessions),coreLimits))strictCoreStarts.add(index);
@@ -1744,6 +1750,24 @@ class LightweightChartLevelSelectorUI:
         if(gapSessions>=5&&gapSessions<=10&&levelShift>0.03){{start=end;continue;}}
       }}
       ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[phaseStart].time,scannerEnd:ohlc[end].time,start:ohlc[phaseStart].time,end:ohlc[end].time,valid:true,_startIndex:phaseStart,_endIndex:end}});start=end;
+    }}
+    // Volatile but genuinely oscillating shelves such as WAS/LWB/DIG may not
+    // contain a narrow 9% core. Search a small set of complete month-scale
+    // widths, require repeated median crossings, and never trim spike candles.
+    const broadLimits={{channelWidth:0.19,regressionMove:0.065,endpointMove:0.08,trendFit:0.60}};
+    const fibBoundary=typeof initialScannerDrawnObjects!=='undefined'?initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary'):null;
+    const fibAnchorDate=fibBoundary?Date.parse(String(fibBoundary.x0||'').slice(0,10)):NaN;
+    const fibSecondDate=fibBoundary?Date.parse(String(fibBoundary.x1||'').slice(0,10)):NaN;
+    const broadCandidates=[];
+    for(const size of [22,26,30,34,38,42,46])for(let start=0;start+size<=ohlc.length;start++){{
+      const end=start+size-1,sample=ohlc.slice(start,end+1);
+      const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low));
+      const hi=Math.max(...highs),lo=Math.min(...lows),width=(hi-lo)/Math.max(Math.abs((hi+lo)/2),1e-9);
+      if(width<0.15||!score(sample,broadLimits)||medianCrossings(sample)<5)continue;
+      const startTime=Date.parse(ohlc[start].time),endTime=Date.parse(ohlc[end].time);
+      if(Number.isFinite(fibAnchorDate)&&startTime<fibAnchorDate&&endTime>fibAnchorDate&&endTime-fibAnchorDate<28*86400000)continue;
+      if(Number.isFinite(fibSecondDate)&&startTime<fibSecondDate&&endTime>fibSecondDate)continue;
+      broadCandidates.push({{start,end}});
     }}
     // Very long candidates often bridge two shelves across a directional
     // transition. Split only when both sides contain a full month and the
@@ -1816,6 +1840,11 @@ class LightweightChartLevelSelectorUI:
       let end=start+minSessions-1;
       for(let candidate=end+1;candidate<ohlc.length&&candidate<start+35;candidate++)if(score(ohlc.slice(start,candidate+1),resetPhaseLimits))end=candidate;
       ranges.push({{scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true,_startIndex:start,_endIndex:end}});
+    }}
+    broadCandidates.sort((a,b)=>(b.end-b.start)-(a.end-a.start)||a.start-b.start);
+    for(const candidate of broadCandidates){{
+      if(ranges.some(range=>candidate.start<=range._endIndex&&candidate.end>=range._startIndex))continue;
+      ranges.push({{id:'',scannerStart:ohlc[candidate.start].time,scannerEnd:ohlc[candidate.end].time,start:ohlc[candidate.start].time,end:ohlc[candidate.end].time,valid:true,_startIndex:candidate.start,_endIndex:candidate.end}});
     }}
     ranges.sort((a,b)=>a._startIndex-b._startIndex).forEach((range,index)=>range.id=`S${{index+1}}`);
     ranges.forEach(range=>{{delete range._startIndex;delete range._endIndex;}});

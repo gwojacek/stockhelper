@@ -5487,14 +5487,77 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
         return []
     ordered = df.reset_index(drop=True)
     dates = pd.to_datetime(ordered["Date"], errors="coerce")
-    ranges: list[tuple[str, str]] = []
-    for start, end in _completed_month_side_trend_phases(
+    phase_indexes: list[tuple[int, int]] = list(_completed_month_side_trend_phases(
         ordered,
         band_pct=0.08,
         max_progress_pct=0.04,
         max_outlier_candles=0,
         max_regression_move_pct=0.035,
-    ):
+    ))
+    # Some genuine shelves are deliberately volatile (WAS/LWB/DIG): they have
+    # no narrow 8% core, but repeatedly cross their median and finish near the
+    # level where they started. Detect those as whole, untrimmed 22-46 session
+    # blocks. Requiring a 15-19% envelope keeps this fallback away from the
+    # narrow rolling pauses already handled above and from ordinary inclines.
+    highs = pd.to_numeric(ordered["High"], errors="coerce").to_numpy(dtype=float)
+    lows = pd.to_numeric(ordered["Low"], errors="coerce").to_numpy(dtype=float)
+    closes = pd.to_numeric(ordered["Close"], errors="coerce").to_numpy(dtype=float)
+    broad_candidates: list[tuple[int, int]] = []
+    for size in (22, 26, 30, 34, 38, 42, 46):
+        if len(ordered) < size:
+            continue
+        x = np.arange(size, dtype=float)
+        x_centered = x - float(x.mean())
+        x_variance = float(np.dot(x_centered, x_centered))
+        close_windows = np.lib.stride_tricks.sliding_window_view(closes, size)
+        high_windows = np.lib.stride_tricks.sliding_window_view(highs, size)
+        low_windows = np.lib.stride_tricks.sliding_window_view(lows, size)
+        means = np.mean(close_windows, axis=1)
+        centered = close_windows - means[:, None]
+        slopes = centered @ x_centered / max(x_variance, 1e-9)
+        total_variance = np.sum(centered * centered, axis=1)
+        residual = centered - slopes[:, None] * x_centered
+        trend_fit = 1.0 - np.sum(residual * residual, axis=1) / np.maximum(total_variance, 1e-9)
+        hi = np.max(high_windows, axis=1)
+        lo = np.min(low_windows, axis=1)
+        width = (hi - lo) / np.maximum(np.abs((hi + lo) / 2.0), 1e-9)
+        first = np.median(close_windows[:, :3], axis=1)
+        last = np.median(close_windows[:, -3:], axis=1)
+        endpoint_move = np.abs(last - first) / np.maximum(np.abs(first), 1e-9)
+        regression_move = np.abs(slopes * (size - 1)) / np.maximum(np.abs(means), 1e-9)
+        eligible = (
+            np.isfinite(close_windows).all(axis=1)
+            & (width >= 0.15)
+            & (width <= 0.19)
+            & (endpoint_move <= 0.08)
+            & (regression_move <= 0.065)
+            & (trend_fit <= 0.60)
+        )
+        for start in np.flatnonzero(eligible).tolist():
+            window = close_windows[start]
+            median = float(np.median(window))
+            signs = np.sign(window - median)
+            signs = signs[signs != 0]
+            crossings = int(np.sum(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
+            if crossings < 5:
+                continue
+            broad_candidates.append((start, start + size - 1))
+    # Keep maximal overlapping broad candidates. Their union is used only
+    # when it remains within the 19% volatility ceiling.
+    all_candidates = sorted(phase_indexes + broad_candidates)
+    phase_indexes = []
+    for start, end in all_candidates:
+        if phase_indexes and start <= phase_indexes[-1][1] + 3:
+            merged_start = phase_indexes[-1][0]
+            merged_end = max(phase_indexes[-1][1], end)
+            hi = float(np.max(highs[merged_start:merged_end + 1]))
+            lo = float(np.min(lows[merged_start:merged_end + 1]))
+            if (hi - lo) / max(abs((hi + lo) / 2.0), 1e-9) <= 0.19:
+                phase_indexes[-1] = (merged_start, merged_end)
+                continue
+        phase_indexes.append((start, end))
+    ranges: list[tuple[str, str]] = []
+    for start, end in sorted(phase_indexes):
         start_date = dates.iloc[start]
         end_date = dates.iloc[end]
         if pd.isna(start_date) or pd.isna(end_date):
@@ -5519,11 +5582,41 @@ def _fibo_crosses_detected_sidetrend(
     horizon = candidate.first_61_8_touch_date or latest_date
     if not horizon:
         return False
-    return any(
-        candidate.incline_start_date <= start
-        and end <= horizon
-        for start, end in ranges
-    )
+    anchor = pd.Timestamp(candidate.incline_start_date)
+    limit = pd.Timestamp(horizon)
+    for start, end in ranges:
+        phase_start = pd.Timestamp(start)
+        phase_end = pd.Timestamp(end)
+        if phase_end > limit or phase_end < anchor:
+            continue
+        if phase_start >= anchor:
+            return True
+        # An anchor placed inside an already-running shelf is invalid only
+        # when a full calendar month of that shelf remains after the anchor.
+        if phase_end - anchor >= pd.Timedelta(days=28):
+            return True
+    return False
+
+
+def _fibo_first_anchor_remains_extreme(
+    df: pd.DataFrame,
+    candidate: FiboScanResult,
+) -> bool:
+    """Ensure no candle between the two anchors supersedes anchor one."""
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    start = pd.Timestamp(candidate.incline_start_date)
+    end = pd.Timestamp(candidate.incline_end_date)
+    impulse = df.loc[(dates >= start) & (dates <= end)]
+    if impulse.empty:
+        return False
+    first_rows = impulse.loc[pd.to_datetime(impulse["Date"], errors="coerce") == start]
+    if first_rows.empty:
+        return False
+    if candidate.direction == "short":
+        anchor = float(pd.to_numeric(first_rows["High"], errors="coerce").max())
+        return float(pd.to_numeric(impulse["High"], errors="coerce").max()) <= anchor + 1e-9
+    anchor = float(pd.to_numeric(first_rows["Low"], errors="coerce").min())
+    return float(pd.to_numeric(impulse["Low"], errors="coerce").min()) >= anchor - 1e-9
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
@@ -8644,7 +8737,8 @@ def run_fibo_search(target: str) -> int:
                 item for item in out_rows
                 if isinstance(item, WedgeScanResult)
                 or (
-                    not _fibo_crosses_detected_sidetrend(
+                    _fibo_first_anchor_remains_extreme(df, item)
+                    and not _fibo_crosses_detected_sidetrend(
                         item, detected_sidetrends, latest_date=latest_date_text,
                     )
                     and not _fibo_crosses_saved_sidetrend(
