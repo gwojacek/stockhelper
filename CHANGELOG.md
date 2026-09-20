@@ -1,5 +1,8 @@
 # Changelog
 
+- Fixed current 3P boards failing to populate recent Fibo dropouts after the first column was renamed from “Steep incline” to “Strong impulse”.
+- Kept live exceptional impulses such as BFT in Fibo results when a range candidate extends through the newest candle and therefore is not yet a completed monthly sidetrend.
+
 - Improved sidetrend review detection to split long candidates at sustained transitions, discard unsplittable multi-regime ranges, recover post-shock shelves, and refine smooth entry/exit boundaries.
 - Updated the WIG scanner universe by removing stale MOJ and PUR entries and adding MQR (MultiQure SA).
 - Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.

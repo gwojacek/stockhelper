@@ -5561,6 +5561,13 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
         phase_indexes.append((start, end))
     ranges: list[tuple[str, str]] = []
     for start, end in sorted(phase_indexes):
+        # Fibo invalidation is based on a *completed* shelf.  A candidate that
+        # grows through the newest candle has no confirmed exit yet and is
+        # frequently just the impulse peak plus its still-active correction
+        # (BFT is the representative case).  Calling that a completed monthly
+        # sidetrend removed excellent live impulses from column one.
+        if end >= len(ordered) - 1:
+            continue
         start_date = dates.iloc[start]
         end_date = dates.iloc[end]
         if pd.isna(start_date) or pd.isna(end_date):
