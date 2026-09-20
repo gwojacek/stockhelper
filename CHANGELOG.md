@@ -10,6 +10,7 @@
 - Replaced per-candidate month-window rescans and tuple caching with one tight-range scan per instrument, and rejected short Fibos whose first anchor is superseded by a later high.
 - Tightened Fibo-only sidetrend qualification to reject directional or spike-trimmed windows, preserved BFT-style coherent impulses, and allowed repeated strong post-range legs to advance the first anchor more than once.
 - Added oscillation-based volatile sidetrends for WAS/LWB/DIG, invalidated Fibos whose first anchor sits inside a continuing month-long shelf, and applied the first-anchor extreme check to every regular, steep, and saved Fibo result.
+- Reduced volatile-shelf over-filtering with stricter oscillation requirements, rejected anchors placed near a shelf's beginning, and required both Fibo anchors to remain the true extrema through the first 61.8 horizon (including MQR's later peak).
 
 All notable release changes for StockHelper are documented here.
 
