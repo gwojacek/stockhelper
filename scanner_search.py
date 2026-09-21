@@ -55,6 +55,41 @@ MARKET_REFRESH_LOCK = threading.Lock()
 REFRESH_STATE_FILE = STATE_DATA_DIR / "sessions" / "search_refresh_state.json"
 API_METAL_COMMODITIES: set[str] = set()
 
+# Accumulated for the in-process allsearch runner.  Health warnings are kept
+# separate by market so one slightly stale instrument can be reported at the
+# end without hiding the otherwise usable results from that market.
+MARKET_DATA_WARNINGS: dict[str, set[str]] = {}
+
+
+def _record_market_data_warnings(market: str, warnings: Sequence[str]) -> None:
+    key = str(market or "unknown").upper()
+    if warnings:
+        MARKET_DATA_WARNINGS.setdefault(key, set()).update(str(item) for item in warnings)
+
+
+def reset_market_data_warnings() -> None:
+    MARKET_DATA_WARNINGS.clear()
+
+
+def print_market_data_warnings_summary() -> None:
+    print("\n[allsearch-data] unresolved market-data warnings by group:")
+    populated = False
+    for market in sorted(MARKET_DATA_WARNINGS):
+        warnings = sorted(MARKET_DATA_WARNINGS[market])
+        if not warnings:
+            continue
+        populated = True
+        print(f"[allsearch-data] {market} ({len(warnings)}):")
+        for warning in warnings:
+            print(f"[allsearch-data]   - {warning}")
+    if not populated:
+        print("[allsearch-data] none")
+
+
+def _market_data_warning_limit_exceeded(warning_count: int, market_size: int) -> bool:
+    """Allow up to 10% incomplete instruments before stopping a market scan."""
+    return market_size <= 0 or (warning_count / market_size) > 0.10
+
 
 @dataclass(frozen=True)
 class MarketDataRule:
@@ -2293,8 +2328,10 @@ def _commodity_csv_health_check(members: Sequence[str]) -> list[str]:
             f"[commodity-check] final group summary: ok={len(final_checked) - len(final_retry)}, "
             f"warn={len(final_retry)}, total={len(final_checked)}"
         )
+        _record_market_data_warnings("commodities", final_retry)
         return final_retry
 
+    _record_market_data_warnings("commodities", retry_tickers)
     return retry_tickers
 
 
@@ -2312,7 +2349,7 @@ def _forex_missing_session_count(latest: date, expected_latest: date) -> int:
     )
 
 
-def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> None:
+def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> list[str]:
     """Report and retry FX caches that are incomplete or missing recent sessions."""
     source_by_ticker = {
         (ticker or "").strip().upper(): source
@@ -2384,7 +2421,8 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     )
     retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
     if not retry_tickers or os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY", "1") == "0":
-        return
+        _record_market_data_warnings("forex", retry_tickers)
+        return retry_tickers
 
     try:
         retry_workers_setting = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "4")))
@@ -2493,6 +2531,8 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
             os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         else:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force_refresh
+    _record_market_data_warnings("forex", retry_tickers)
+    return retry_tickers
 
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
@@ -3107,6 +3147,7 @@ def _print_stale_stock_data_warning(
 ) -> None:
     stale = _stale_stock_data_warnings(group_name, members, exchange_suffix)
     if stale:
+        _record_market_data_warnings(group_name, stale)
         print(
             "\033[31;1m[DATA WARNING] No new stock data for at least 3 days versus "
             f"the newest stock in this run. Check and remove: {'; '.join(stale)}\033[0m",
@@ -4901,11 +4942,19 @@ def run_ichimoku_search(target: str) -> int:
         os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
         os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
         if unresolved:
+            ratio = len(unresolved) / max(len(members), 1)
+            if _market_data_warning_limit_exceeded(len(unresolved), len(members)):
+                print(
+                    "[commodity-check] aborting Ichimoku: unresolved commodity history exceeds "
+                    f"the 10% market threshold ({len(unresolved)}/{len(members)}={ratio:.1%}): "
+                    f"{', '.join(unresolved)}"
+                )
+                return 1
             print(
-                "[commodity-check] aborting Ichimoku: commodity history is still unhealthy after repair: "
+                "[commodity-check] continuing Ichimoku with unresolved warnings within "
+                f"the 10% market threshold ({len(unresolved)}/{len(members)}={ratio:.1%}): "
                 f"{', '.join(unresolved)}"
             )
-            return 1
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:

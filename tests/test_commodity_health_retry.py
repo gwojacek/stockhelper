@@ -119,3 +119,24 @@ def test_health_check_warns_when_full_commodity_cache_is_stale(monkeypatch, tmp_
     assert "WARN COCOA" in output
     assert "missing_candles=" in output
     assert "summary: ok=0, warn=1, total=1" in output
+
+
+def test_market_health_threshold_allows_at_most_ten_percent():
+    assert not scanner._market_data_warning_limit_exceeded(1, 16)
+    assert not scanner._market_data_warning_limit_exceeded(1, 10)
+    assert scanner._market_data_warning_limit_exceeded(2, 16)
+    assert scanner._market_data_warning_limit_exceeded(1, 9)
+
+
+def test_market_data_warning_summary_is_grouped(monkeypatch, capsys):
+    scanner.reset_market_data_warnings()
+    scanner._record_market_data_warnings("commodities", ["COCOA"])
+    scanner._record_market_data_warnings("wig", ["MOJ (last candle 2026-07-30)"])
+
+    scanner.print_market_data_warnings_summary()
+
+    output = capsys.readouterr().out
+    assert "COMMODITIES (1):" in output
+    assert "  - COCOA" in output
+    assert "WIG (1):" in output
+    assert "  - MOJ (last candle 2026-07-30)" in output

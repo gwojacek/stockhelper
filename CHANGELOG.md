@@ -1,5 +1,8 @@
 # Changelog
 
+- Allowed allsearch to continue when at most 10% of a market group remains stale after data repair, while still stopping groups whose unresolved share exceeds that threshold.
+- Added an end-of-allsearch market-data warning summary grouped by market, so tolerated missing or stale instruments remain visible after both scanner phases finish.
+
 - Fixed current 3P boards failing to populate recent Fibo dropouts after the first column was renamed from “Steep incline” to “Strong impulse”.
 - Kept live exceptional impulses such as BFT in Fibo results when a range candidate extends through the newest candle and therefore is not yet a completed monthly sidetrend.
 
