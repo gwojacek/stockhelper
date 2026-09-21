@@ -904,6 +904,52 @@ def test_app_active_volatile_month_shelf_invalidates_old_short_fibo():
     assert any(start <= "2026-08-11" and end == "2026-09-18" for start, end in ranges)
 
 
+def test_dnp_peak_pullback_window_does_not_invalidate_coherent_impulse():
+    frame = _fixture("data/csv/stocks/DNP_WA.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 35.32, 35.47, 34.82, 35.00, 2452882),
+            ("2026-09-15", 35.02, 35.65, 34.52, 35.50, 4561381),
+            ("2026-09-16", 35.45, 35.94, 35.20, 35.80, 3247619),
+            ("2026-09-17", 36.00, 36.32, 35.82, 36.15, 4251167),
+            ("2026-09-18", 36.20, 36.45, 35.66, 35.74, 3382248),
+            ("2026-09-21", 35.99, 36.04, 35.14, 35.49, 3389905),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+    candidate = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-07-08", "2026-09-08"),
+    )
+
+    assert candidate is not None
+    assert candidate.status == "returned_before_61_8"
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date="2026-09-21",
+        df=frame,
+    ) is False
+
+
+@pytest.mark.parametrize("csv_name", ["ACP_WA.csv", "PCO_WA.csv"])
+def test_strong_wig_impulses_survive_final_sidetrend_filter(csv_name):
+    frame = _fixture(f"data/csv/stocks/{csv_name}")
+    candidate = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert candidate is not None
+    assert scanner._fibo_anchors_remain_extreme(frame, candidate)
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+        df=frame,
+    ) is False
+
+
 def test_pre_61_8_return_moves_back_to_strong_impulse_column():
     assert scanner._fibo_pre_61_8_status("long", 35.56, 35.17) == "returned_before_61_8"
     assert scanner._fibo_pre_61_8_status("long", 35.00, 35.17) == "reached_23_6_waiting_for_61_8"
@@ -911,7 +957,53 @@ def test_pre_61_8_return_moves_back_to_strong_impulse_column():
 
 def test_bas_coherent_stair_step_impulse_is_not_a_terminal_stall():
     frame = _fixture("data/csv/stocks/BAS_DE.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 51.99, 52.67, 51.82, 52.38, 1592018),
+            ("2026-09-15", 52.08, 52.08, 51.24, 51.84, 1576258),
+            ("2026-09-16", 51.80, 52.56, 51.80, 52.13, 1712624),
+            ("2026-09-17", 52.04, 52.65, 51.84, 52.37, 1462275),
+            ("2026-09-21", 51.25, 51.91, 51.22, 51.84, 199626),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
     dates = frame["Date"].dt.strftime("%Y-%m-%d")
     impulse = frame.loc[(dates >= "2026-07-01") & (dates <= "2026-09-09")]
 
     assert scanner._impulse_stalls_before_peak(impulse) is False
+    candidate = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-07-01", "2026-09-09"),
+    )
+    assert candidate is not None
+    assert candidate.status == "reached_23_6_waiting_for_61_8"
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date="2026-09-21",
+        df=frame,
+    ) is False
+
+
+def test_single_instrument_dropout_explain_does_not_validate_literal_single(monkeypatch):
+    frame = pd.DataFrame(
+        [("2026-09-18", 10.0, 10.5, 9.5, 10.1, 1000)],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_get_members",
+        lambda _scope: (_ for _ in ()).throw(AssertionError("must not validate SINGLE")),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_load_daily_data_with_retries",
+        lambda **_kwargs: (frame, None, None),
+    )
+    monkeypatch.setattr(scanner, "_find_fibo_3p_steep_setup", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(scanner, "_find_fibo_setup", lambda *_args, **_kwargs: None)
+
+    assert scanner.run_fibo_explain("single", "BAS.DE") == 0

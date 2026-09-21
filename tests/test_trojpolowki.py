@@ -456,6 +456,7 @@ def test_chart_fibo_debug_ends_with_requested_csv_data():
     assert "61.8 value:" in snapshot
     assert "61.8 pattern:" in snapshot
     assert "CSV candles since first anchor" in snapshot
+    assert "SIDETRENDS (>30 calendar days; review candidates):" not in snapshot
     assert "FIBO ANCHOR / CHANNEL DEBUG" not in snapshot
     assert "scanner audit command" not in snapshot
 

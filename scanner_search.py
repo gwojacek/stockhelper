@@ -1236,6 +1236,24 @@ def _impulse_has_disqualifying_month_side_trend(
     return not exceptional_continuation
 
 
+def _is_coherent_directional_impulse(
+    frame: pd.DataFrame,
+    direction: str = "long",
+) -> bool:
+    """Return whether closes describe one strong, orderly directional leg."""
+    closes = pd.to_numeric(frame["Close"], errors="coerce").to_numpy(dtype=float)
+    if len(closes) < 3 or not np.isfinite(closes).all():
+        return False
+    x = np.arange(len(closes), dtype=float)
+    correlation = float(np.corrcoef(x, closes)[0, 1])
+    slope = float(np.polyfit(x, closes, 1)[0])
+    signed_move = slope * (len(closes) - 1) / max(abs(float(np.mean(closes))), 1e-9)
+    if direction == "short":
+        correlation = -correlation
+        signed_move = -signed_move
+    return correlation >= 0.80 and signed_move >= 0.10
+
+
 def _impulse_stalls_before_peak(
     df_slice: pd.DataFrame,
     *,
@@ -1265,18 +1283,12 @@ def _impulse_stalls_before_peak(
         return False
     lows = pd.to_numeric(leg["Low"], errors="coerce")
     highs = pd.to_numeric(leg["High"], errors="coerce")
-    closes = pd.to_numeric(leg["Close"], errors="coerce").to_numpy(dtype=float)
     # A smooth stair-step advance can put its final month inside the loose
     # 15% channel even though it is still one coherent impulse (BAS).  Reserve
     # the stall rejection for genuinely flat/marginal tops rather than a leg
     # whose full-series regression still explains a strong rise.
-    x = np.arange(len(closes), dtype=float)
-    if np.isfinite(closes).all() and len(closes) >= 3:
-        correlation = float(np.corrcoef(x, closes)[0, 1])
-        slope = float(np.polyfit(x, closes, 1)[0])
-        regression_move = slope * (len(closes) - 1) / max(abs(float(np.mean(closes))), 1e-9)
-        if correlation >= 0.85 and regression_move >= 0.10:
-            return False
+    if _is_coherent_directional_impulse(leg, "long"):
+        return False
     launch = float(lows.iloc[0])
     pre_channel_high = float(highs.iloc[:channel_start + 1].max())
     gain_before_channel = (pre_channel_high - launch) / max(abs(launch), 1e-9)
@@ -5688,6 +5700,7 @@ def _fibo_crosses_detected_sidetrend(
     ranges: list[tuple[str, str]],
     *,
     latest_date: str,
+    df: pd.DataFrame | None = None,
 ) -> bool:
     """Reject a completed monthly range after anchor one and before 61.8.
 
@@ -5700,11 +5713,48 @@ def _fibo_crosses_detected_sidetrend(
     if not horizon:
         return False
     anchor = pd.Timestamp(candidate.incline_start_date)
+    second_anchor = pd.Timestamp(candidate.incline_end_date)
     limit = pd.Timestamp(horizon)
+    # Finalization must agree with candidate construction. A coherent strong
+    # leg may contain internal pauses, and its peak plus the first few pullback
+    # candles can resemble an active month window. Those are not completed
+    # cycles separating the two anchors (DNP/BAS/PCO); a shelf that persists
+    # well after anchor two remains disqualifying (APP).
+    impulse = pd.DataFrame()
+    if df is not None and not df.empty:
+        impulse_dates = pd.to_datetime(df["Date"], errors="coerce")
+        impulse = df.loc[(impulse_dates >= anchor) & (impulse_dates <= second_anchor)]
+    coherent_impulse = _is_coherent_directional_impulse(impulse, candidate.direction) if not impulse.empty else False
+    if not coherent_impulse and impulse.empty:
+        try:
+            fib_range = abs(float(candidate.fib_23_6) - float(candidate.fib_61_8)) / 0.382
+            if candidate.direction == "short":
+                first_price = float(candidate.fib_23_6) + 0.764 * fib_range
+            else:
+                first_price = float(candidate.fib_23_6) - 0.764 * fib_range
+            gain = fib_range / max(abs(first_price), 1e-9)
+            bars = max(int(candidate.incline_duration_days), 1)
+            coherent_impulse = gain >= 0.30 and gain / bars >= 0.003
+        except (AttributeError, TypeError, ValueError):
+            coherent_impulse = False
     for start, end in ranges:
         phase_start = pd.Timestamp(start)
         phase_end = pd.Timestamp(end)
         if phase_end > limit or phase_end < anchor:
+            continue
+        if coherent_impulse and phase_end <= second_anchor:
+            continue
+        if (
+            coherent_impulse
+            and phase_start <= second_anchor <= phase_end
+            and (
+                phase_end - second_anchor <= pd.Timedelta(days=14)
+                or (
+                    str(getattr(candidate, "status", "")).startswith("3p_steep")
+                    and phase_end == limit
+                )
+            )
+        ):
             continue
         if phase_start >= anchor:
             return True
@@ -8066,6 +8116,11 @@ def _find_fibo_setup(
             continuation_min_gain=0.15 if recent_peak_waiting and not _mirrored_short else 0.30,
             continuation_min_daily_gain=0.003 if recent_peak_waiting and not _mirrored_short else 0.006,
         )
+        if impulse_side_disqualifying and _is_coherent_directional_impulse(
+            impulse_seg, "short" if _mirrored_short else "long"
+        ):
+            impulse_side_disqualifying = False
+            _log(f"{direction.capitalize()}: retained coherent impulse across internal monthly pauses.")
         if impulse_side_disqualifying:
             # A first 61.8 touch is an active, incomplete reversal event. Keep
             # its original anchors during the three-candle confirmation window
@@ -8881,7 +8936,7 @@ def run_fibo_search(target: str) -> int:
                 or (
                     _fibo_anchors_remain_extreme(df, item)
                     and not _fibo_crosses_detected_sidetrend(
-                        item, detected_sidetrends, latest_date=latest_date_text,
+                        item, detected_sidetrends, latest_date=latest_date_text, df=df,
                     )
                     and not _fibo_crosses_saved_sidetrend(
                         item, saved_sidetrends, latest_date=latest_date_text,
@@ -9199,7 +9254,13 @@ def run_fibo_search(target: str) -> int:
 
 
 def run_fibo_explain(scope: str, symbol: str) -> int:
-    group_name, _, _, exchange_suffix = _get_members(scope)
+    # `python run -explain BAS.DE` has no explicit search scope. Passing the
+    # parser's sentinel "single" through `_get_members` treated SINGLE as an
+    # instrument and failed scope validation before diagnostics could run.
+    if str(scope or "").strip().lower() == "single":
+        group_name, exchange_suffix = "single", ""
+    else:
+        group_name, _, _, exchange_suffix = _get_members(scope)
     ticker = symbol.strip().upper()
     instrument = "stock"
     if group_name == "forex":

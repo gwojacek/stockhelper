@@ -107,8 +107,8 @@ def test_fibo_preview_does_not_shift_the_chart_viewport():
     preview = source[source.index("function drawFibPreview"):source.index("function updateFibPreview")]
 
     assert "const viewport = captureViewport();" in preview
-    assert "const xEnd = P.ohlc[P.ohlc.length - 1].time;" in preview
-    assert "addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880" not in preview
+    assert "const xEnd = addDays(" in preview
+    assert "Math.max(2880, Math.abs(row2.idx - row1.idx) * 24)" in preview
     assert "restoreViewport(viewport);" in preview
 
 
