@@ -1,5 +1,8 @@
 # Changelog
 
+- Added the 23.6% level to both automatic scanner and manually drawn Fibonacci groups in the lightweight chart.
+- Tightened Fibo lifecycle validation: second anchors must be the true impulse extreme, harami confirmations must close back across 61.8, active tight correction shelves invalidate stale formations, and strong post-pause impulses such as ACP remain eligible.
+
 - Allowed allsearch to continue when at most 10% of a market group remains stale after data repair, while still stopping groups whose unresolved share exceeds that threshold.
 - Added an end-of-allsearch market-data warning summary grouped by market, so tolerated missing or stale instruments remain visible after both scanner phases finish.
 
