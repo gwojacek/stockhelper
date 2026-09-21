@@ -1256,10 +1256,14 @@ class LightweightChartLevelSelectorUI:
     const isShort = secondMid < firstMid;
     const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    // A temporary preview must not introduce a far-future time point. Doing
-    // so makes Lightweight Charts expand/shift the visible time range after
-    // the first anchor click, only to jump back when the Fibo is committed.
-    const xEnd = P.ohlc[P.ohlc.length - 1].time;
+    // Match the committed Fibo's right extension, then restore the captured
+    // viewport below so the far-future endpoint cannot shift the chart. Ending
+    // previews at the last candle left a conspicuous empty rectangle on charts
+    // whose viewport already included future space.
+    const xEnd = addDays(
+      P.ohlc[P.ohlc.length - 1].time,
+      Math.max(2880, Math.abs(row2.idx - row1.idx) * 24),
+    );
     const needed = fibRatios.length + 1;
     while (fibPreviewSeries.length < needed) {{
       fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
@@ -1879,11 +1883,6 @@ class LightweightChartLevelSelectorUI:
     const correctedBoundary = [...currentBoundaries].reverse().find(obj => !scannerBoundary || obj.x0 !== scannerBoundary.x0 || obj.x1 !== scannerBoundary.x1 || Number(obj.y0) !== Number(scannerBoundary.y0) || Number(obj.y1) !== Number(scannerBoundary.y1));
     const boundaryText = obj => obj ? `${{String(obj.x0).slice(0,10)}} @ ${{fmt(obj.y0)}} -> ${{String(obj.x1).slice(0,10)}} @ ${{fmt(obj.y1)}}` : 'none';
     lines.push(`${{boundaryText(scannerBoundary)}},${{boundaryText(correctedBoundary || scannerBoundary)}},${{correctedBoundary ? 'Adjusted' : 'No change'}}`);
-    lines.push('');
-    lines.push('SIDETRENDS (>30 calendar days; review candidates):');
-    const sideRanges = debugSideRanges || detectedMonthlySidetrends();
-    if (sideRanges.length) sideRanges.forEach(r=>lines.push(`${{r.id}},${{r.scannerStart}} -> ${{r.scannerEnd}},${{r.valid ? `${{r.start}} -> ${{r.end}}` : '-'}},${{!r.valid ? 'Marked invalid' : (r.start !== r.scannerStart || r.end !== r.scannerEnd ? 'Adjusted' : 'No change')}}`));
-    else lines.push('none');
     if (!fibs.length) lines.push('No Fibonacci lines on chart.');
     const groups = new Map();
     fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
