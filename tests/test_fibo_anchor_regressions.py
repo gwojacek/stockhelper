@@ -882,3 +882,36 @@ def test_bayn_active_flat_correction_is_detected_as_sidetrend():
     frame = pd.concat([frame, recent], ignore_index=True)
 
     assert ("2026-07-27", "2026-09-21") in scanner._clear_month_sidetrend_date_ranges(frame)
+
+
+def test_app_active_volatile_month_shelf_invalidates_old_short_fibo():
+    frame = _fixture("data/csv/stocks/APP_US.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 324.04, 338.34, 320.40, 334.24, 5056600),
+            ("2026-09-15", 328.33, 334.46, 323.80, 331.46, 6604900),
+            ("2026-09-16", 333.58, 336.44, 322.01, 326.56, 3522600),
+            ("2026-09-17", 331.86, 333.43, 314.82, 321.60, 4537400),
+            ("2026-09-18", 323.39, 328.15, 307.76, 308.06, 10936300),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+
+    assert any(start <= "2026-08-11" and end == "2026-09-18" for start, end in ranges)
+
+
+def test_pre_61_8_return_moves_back_to_strong_impulse_column():
+    assert scanner._fibo_pre_61_8_status("long", 35.56, 35.17) == "returned_before_61_8"
+    assert scanner._fibo_pre_61_8_status("long", 35.00, 35.17) == "reached_23_6_waiting_for_61_8"
+
+
+def test_bas_coherent_stair_step_impulse_is_not_a_terminal_stall():
+    frame = _fixture("data/csv/stocks/BAS_DE.csv")
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    impulse = frame.loc[(dates >= "2026-07-01") & (dates <= "2026-09-09")]
+
+    assert scanner._impulse_stalls_before_peak(impulse) is False

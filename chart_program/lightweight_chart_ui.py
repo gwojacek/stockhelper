@@ -4111,7 +4111,11 @@ class LightweightChartLevelSelectorUI:
     }}
     if (activeTool === 'fib') {{
       const row = nearest(time); const mid = (row.low + row.high) / 2;
-      if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
+      // A single anchor has no Fibo geometry yet.  Do not create empty preview
+      // series until the pointer reaches a different candle: Lightweight
+      // Charts otherwise reserves a blank price-scale marker/plot area until
+      // the second anchor is clicked.
+      if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
       const paletteIndex = nextFibPaletteIndex();
