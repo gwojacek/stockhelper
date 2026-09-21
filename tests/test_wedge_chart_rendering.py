@@ -15,9 +15,21 @@ LEVEL_SELECTOR_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / 
 
 def test_lightweight_fibonacci_drawings_include_23_6_for_scanner_and_manual_groups():
     source = UI_SOURCE.read_text(encoding="utf-8")
+    selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
+    scanner_source = SCANNER_SOURCE.read_text(encoding="utf-8")
 
     assert "const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];" in source
     assert "fibRatios.forEach((r) =>" in source
+    assert "levels = [0.0, 0.236, 0.382, 0.5, 0.618, 1.0]" in selector_source
+    assert "--fibo-lines 6" in scanner_source
+
+
+def test_first_fibonacci_anchor_does_not_create_empty_preview_series():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    first_anchor = "if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updatePanel(); return; }}"
+    assert first_anchor in source
+    assert "fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time)" not in source
 
 
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():

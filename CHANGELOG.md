@@ -1,5 +1,6 @@
 # Changelog
 
+- Completed 23.6% rendering for scanner-opened Fibos, removed the empty first-anchor preview artifact, returned reclaimed 23.6 setups to the strong-impulse column, and recognized active volatile monthly shelves such as APP before finalizing Fibos.
 - Added the 23.6% level to both automatic scanner and manually drawn Fibonacci groups in the lightweight chart.
 - Tightened Fibo lifecycle validation: second anchors must be the true impulse extreme, harami confirmations must close back across 61.8, active tight correction shelves invalidate stale formations, and strong post-pause impulses such as ACP remain eligible.
 

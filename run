@@ -318,7 +318,7 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         if not start or not end:
             return cmd
         return (
-            f"{cmd} --fibo-lines 5 --fibo-anchor-start {shlex.quote(start)} "
+            f"{cmd} --fibo-lines 6 --fibo-anchor-start {shlex.quote(start)} "
             f"--fibo-anchor-end {shlex.quote(end)} --fibo-right"
         )
     if row.scanner == "ICHIMOKU":
@@ -365,8 +365,8 @@ def _chart_command_for_row(row: ScannerRow) -> str:
         if "->" in incline:
             start, end = [p.strip() for p in incline.split("->", 1)]
             if start and end:
-                return f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
-        return f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode off --fibo-lines 5{pattern_args}"
+                return f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode off --fibo-lines 6 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
+        return f"python run -c {ticker_cmd}{instrument_arg} --ichimoku-mode off --fibo-lines 6{pattern_args}"
     return f"python run -c {ticker_cmd}{instrument_arg}"
 
 
@@ -2744,7 +2744,7 @@ def _build_html_report(scopes: list[str], output_path: Path) -> None:
             etf_tickers = {symbol.upper() for _name, symbol in ETFS_MARKET}
             detected_instrument = "etf" if ticker.upper() in etf_tickers else detect_instrument_type(ticker)
             instrument_arg = f" --instrument {detected_instrument}" if detected_instrument in {"etf", "forex"} else ""
-            cmd = html.escape(f"python run -c {ticker}{instrument_arg} --ichimoku-mode off --fibo-lines 5{start_arg}{end_arg} --fibo-right")
+            cmd = html.escape(f"python run -c {ticker}{instrument_arg} --ichimoku-mode off --fibo-lines 6{start_arg}{end_arg} --fibo-right")
         else:
             cmd = html.escape(f"python run -c {ticker}")
         stooq = stooq_url or (row.chart_url if row and row.chart_url else _stooq_chart_url(ticker))

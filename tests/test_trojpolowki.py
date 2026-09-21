@@ -383,7 +383,7 @@ def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
     source = Path("run").read_text(encoding="utf-8")
     fibo_branch = source[source.index('elif "fibo" in section_id:'):source.index('else:', source.index('elif "fibo" in section_id:'))]
     assert "troj_row_by_ticker.get(ticker)" not in fibo_branch
-    assert "--ichimoku-mode off --fibo-lines 5" in source
+    assert "--ichimoku-mode off --fibo-lines 6" in source
 
 
 def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
@@ -1738,7 +1738,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text
-    assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
+    assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 6 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text
 

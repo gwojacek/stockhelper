@@ -1265,6 +1265,18 @@ def _impulse_stalls_before_peak(
         return False
     lows = pd.to_numeric(leg["Low"], errors="coerce")
     highs = pd.to_numeric(leg["High"], errors="coerce")
+    closes = pd.to_numeric(leg["Close"], errors="coerce").to_numpy(dtype=float)
+    # A smooth stair-step advance can put its final month inside the loose
+    # 15% channel even though it is still one coherent impulse (BAS).  Reserve
+    # the stall rejection for genuinely flat/marginal tops rather than a leg
+    # whose full-series regression still explains a strong rise.
+    x = np.arange(len(closes), dtype=float)
+    if np.isfinite(closes).all() and len(closes) >= 3:
+        correlation = float(np.corrcoef(x, closes)[0, 1])
+        slope = float(np.polyfit(x, closes, 1)[0])
+        regression_move = slope * (len(closes) - 1) / max(abs(float(np.mean(closes))), 1e-9)
+        if correlation >= 0.85 and regression_move >= 0.10:
+            return False
     launch = float(lows.iloc[0])
     pre_channel_high = float(highs.iloc[:channel_start + 1].max())
     gain_before_channel = (pre_channel_high - launch) / max(abs(launch), 1e-9)
@@ -4025,7 +4037,7 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
         )
         if pattern_after_anchor and pattern_name and pattern_name.lower() not in {"-", "none"}:
             pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern_name)}"
-        return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
+        return f"{base} --fibo-lines 6 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
     if mode == "wedge" and wedge is not None:
         saved_flag = " --wedge-saved-by-user" if wedge.saved_by_user else ""
         return (
@@ -5632,7 +5644,7 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
         signs = np.sign(suffix - median)
         signs = signs[signs != 0]
         crossings = int(np.sum(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
-        if width <= 0.10 and regression_move <= 0.04 and endpoint_move <= 0.06 and crossings >= 6:
+        if width <= 0.13 and regression_move <= 0.05 and endpoint_move <= 0.06 and crossings >= 6:
             phase_indexes.append((start, len(ordered) - 1))
             break
     ranges: list[tuple[str, str]] = []
@@ -5661,7 +5673,7 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
             # active block is genuinely tight and flat. This retains BAYN's
             # settled correction shelf while avoiding broad BFT/ACP
             # peak-plus-pullback false ranges.
-            if width > 0.12 or regression_move > 0.05 or endpoint_move > 0.06:
+            if width > 0.13 or regression_move > 0.05 or endpoint_move > 0.06:
                 continue
         start_date = dates.iloc[start]
         end_date = dates.iloc[end]
