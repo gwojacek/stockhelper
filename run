@@ -3758,6 +3758,9 @@ def _retry_missing_scope_csvs_once(scope: str) -> bool:
     return True
 
 def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, force_remote_refresh: bool = False) -> int:
+    from scanner_search import print_market_data_warnings_summary, reset_market_data_warnings
+
+    reset_market_data_warnings()
     _clear_stooq_debug_artifacts()
     # Preserve a shell-provided request across both batch phases; each phase
     # otherwise cleans its temporary environment at completion.
@@ -3796,6 +3799,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     finally:
         os.environ.pop("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", None)
     if code_i != 0:
+        print_market_data_warnings_summary()
         print("[allsearch] Ichimoku phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1
 
@@ -3814,6 +3818,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
         force_remote_refresh=False,
     )
     if code_f != 0:
+        print_market_data_warnings_summary()
         print("[allsearch] FIBO phase failed/stopped; aborting without opening stale/partial HTML report.")
         return 1
 
@@ -3846,6 +3851,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     reopen_scope = "all" if [s.lower() for s in scopes] == DEFAULT_ALLSEARCH_SCOPES else ",".join(scopes).lower()
     print(f"[allsearch] rerun command: python run -allsearch {reopen_scope}")
     print(f"[allsearch] reopen html command: python run --open-allsearch-report {reopen_scope}")
+    print_market_data_warnings_summary()
     report_url = _open_html_report(report_html)
     keep_code = _wait_for_report_server(report_url)
     if keep_code:
