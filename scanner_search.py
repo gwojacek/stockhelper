@@ -5737,6 +5737,23 @@ def _fibo_crosses_detected_sidetrend(
             coherent_impulse = gain >= 0.30 and gain / bars >= 0.003
         except (AttributeError, TypeError, ValueError):
             coherent_impulse = False
+    returned_across_236 = False
+    if df is not None and not df.empty:
+        correction_closes = pd.to_numeric(
+            df.loc[impulse_dates > second_anchor, "Close"], errors="coerce"
+        ).dropna()
+        if not correction_closes.empty:
+            fib_236 = float(candidate.fib_23_6)
+            if candidate.direction == "short":
+                returned_across_236 = bool(
+                    (correction_closes > fib_236).any()
+                    and float(correction_closes.iloc[-1]) < fib_236
+                )
+            else:
+                returned_across_236 = bool(
+                    (correction_closes < fib_236).any()
+                    and float(correction_closes.iloc[-1]) > fib_236
+                )
     for start, end in ranges:
         phase_start = pd.Timestamp(start)
         phase_end = pd.Timestamp(end)
@@ -5746,12 +5763,24 @@ def _fibo_crosses_detected_sidetrend(
             continue
         if (
             coherent_impulse
+            and returned_across_236
+            and phase_start > second_anchor
+            and phase_end == limit
+        ):
+            # A correction which crossed 23.6 and then reclaimed it is back in
+            # the strong-impulse state. Its still-active pullback shelf must not
+            # turn PCO/BFT into a dropout; a pre-23.6 shelf such as APP remains
+            # disqualifying because no reclaim occurred.
+            continue
+        if (
+            coherent_impulse
             and phase_start <= second_anchor <= phase_end
             and (
                 phase_end - second_anchor <= pd.Timedelta(days=14)
                 or (
                     str(getattr(candidate, "status", "")).startswith("3p_steep")
                     and phase_end == limit
+                    and (returned_across_236 or df is None)
                 )
             )
         ):

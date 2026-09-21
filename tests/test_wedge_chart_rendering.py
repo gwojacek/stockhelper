@@ -32,6 +32,21 @@ def test_first_fibonacci_anchor_does_not_create_empty_preview_series():
     assert "fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time)" not in source
 
 
+def test_fibonacci_tool_toggle_clears_abandoned_anchor_and_preserves_viewport():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    handler = source[source.index("$('tool-fib').onclick"):source.index("$('tool-half').onclick")]
+
+    assert "const viewport = captureViewport();" in handler
+    assert "clearPreviews();" in handler
+    assert "fibAnchor=null;" in handler
+    assert "requestAnimationFrame(() => restoreViewport(viewport))" in handler
+
+    completion = source[source.index("if (activeTool === 'fib')"):source.index("if (activeTool === 'half')")]
+    assert "const viewport = captureViewport();" in completion
+    assert "fibAnchor=null; clearPreviews(); activeTool='level'; render();" in completion
+    assert "restoreViewport(viewport); requestAnimationFrame(() => restoreViewport(viewport))" in completion
+
+
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

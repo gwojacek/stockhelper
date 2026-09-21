@@ -902,6 +902,14 @@ def test_app_active_volatile_month_shelf_invalidates_old_short_fibo():
     ranges = scanner._clear_month_sidetrend_date_ranges(frame)
 
     assert any(start <= "2026-08-11" and end == "2026-09-18" for start, end in ranges)
+    candidate = scanner._find_fibo_3p_steep_setup(frame, "short")
+    assert candidate is not None
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        ranges,
+        latest_date="2026-09-18",
+        df=frame,
+    ) is True
 
 
 def test_dnp_peak_pullback_window_does_not_invalidate_coherent_impulse():
@@ -946,6 +954,35 @@ def test_strong_wig_impulses_survive_final_sidetrend_filter(csv_name):
         candidate,
         scanner._clear_month_sidetrend_date_ranges(frame),
         latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+        df=frame,
+    ) is False
+
+
+def test_pco_23_6_reclaim_returns_active_correction_to_strong_impulse():
+    frame = _fixture("data/csv/stocks/PCO_WA.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 40.09, 41.20, 39.71, 41.03, 1119278),
+            ("2026-09-15", 41.00, 42.15, 40.53, 41.70, 1069536),
+            ("2026-09-16", 41.67, 41.69, 40.70, 41.60, 628923),
+            ("2026-09-17", 41.47, 42.45, 41.24, 42.31, 969884),
+            ("2026-09-18", 42.49, 42.71, 41.65, 41.87, 2408895),
+            ("2026-09-21", 42.09, 42.30, 41.50, 42.30, 320699),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+    candidate = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert candidate is not None
+    assert candidate.incline_start_date == "2026-03-23"
+    assert candidate.incline_end_date == "2026-08-05"
+    assert float(candidate.current_close) > float(candidate.fib_23_6)
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date="2026-09-21",
         df=frame,
     ) is False
 
