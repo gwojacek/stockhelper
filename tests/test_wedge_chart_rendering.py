@@ -13,6 +13,13 @@ SCANNER_SOURCE = Path(__file__).resolve().parents[1] / "scanner_search.py"
 LEVEL_SELECTOR_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "level_selector.py"
 
 
+def test_lightweight_fibonacci_drawings_include_23_6_for_scanner_and_manual_groups():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];" in source
+    assert "fibRatios.forEach((r) =>" in source
+
+
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

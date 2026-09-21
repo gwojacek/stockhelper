@@ -1199,7 +1199,7 @@ def _short_bottom_is_inside_month_side_trend(
 def _impulse_has_disqualifying_month_side_trend(
     df_slice: pd.DataFrame,
     *,
-    continuation_min_gain: float = 0.65,
+    continuation_min_gain: float = 0.30,
     continuation_min_daily_gain: float = 0.006,
 ) -> bool:
     """Reject a monthly shelf unless it is absorbed by an exceptional impulse.
@@ -1369,6 +1369,11 @@ def _sideways_range_spans_impulse_end(
         start <= relative_peak - min_before
         and end >= relative_peak + min_after
         and end - start + 1 >= 30
+        # A range that reaches the newest available candle has not broken out
+        # and therefore cannot prove that the selected peak lived inside a
+        # *completed* shelf. ACP's active correction is the representative
+        # false positive; settled correction shelves are handled separately.
+        and end < len(around) - 1
         for start, end in phases
     )
 
@@ -5608,6 +5613,28 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
                 phase_indexes[-1] = (merged_start, merged_end)
                 continue
         phase_indexes.append((start, end))
+    # A still-active correction shelf has no right-side breakout with which to
+    # seed a normal completed window. Preserve a genuinely flat suffix so a
+    # BAYN-like multi-month decline shelf invalidates the old Fibo, while the
+    # tighter width/progress limits keep broad BFT/ACP pullbacks out.
+    for size in range(min(60, len(ordered)), 18, -1):
+        start = len(ordered) - size
+        suffix = closes[start:]
+        mean = max(abs(float(np.mean(suffix))), 1e-9)
+        x = np.arange(size, dtype=float)
+        x_centered = x - float(x.mean())
+        centered = suffix - float(np.mean(suffix))
+        slope = float(np.dot(centered, x_centered) / max(np.dot(x_centered, x_centered), 1e-9))
+        width = (float(np.max(highs[start:])) - float(np.min(lows[start:]))) / mean
+        regression_move = abs(slope * (size - 1)) / mean
+        endpoint_move = abs(float(np.median(suffix[-3:])) - float(np.median(suffix[:3]))) / max(abs(float(np.median(suffix[:3]))), 1e-9)
+        median = float(np.median(suffix))
+        signs = np.sign(suffix - median)
+        signs = signs[signs != 0]
+        crossings = int(np.sum(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
+        if width <= 0.10 and regression_move <= 0.04 and endpoint_move <= 0.06 and crossings >= 6:
+            phase_indexes.append((start, len(ordered) - 1))
+            break
     ranges: list[tuple[str, str]] = []
     for start, end in sorted(phase_indexes):
         # Fibo invalidation is based on a *completed* shelf.  A candidate that
@@ -5616,7 +5643,26 @@ def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]
         # (BFT is the representative case).  Calling that a completed monthly
         # sidetrend removed excellent live impulses from column one.
         if end >= len(ordered) - 1:
-            continue
+            active_closes = closes[start:end + 1]
+            active_highs = highs[start:end + 1]
+            active_lows = lows[start:end + 1]
+            size = len(active_closes)
+            x = np.arange(size, dtype=float)
+            x_centered = x - float(x.mean())
+            centered = active_closes - float(np.mean(active_closes))
+            slope = float(np.dot(centered, x_centered) / max(np.dot(x_centered, x_centered), 1e-9))
+            mean = max(abs(float(np.mean(active_closes))), 1e-9)
+            width = (float(np.max(active_highs)) - float(np.min(active_lows))) / mean
+            regression_move = abs(slope * max(size - 1, 1)) / mean
+            first = float(np.median(active_closes[:3]))
+            last = float(np.median(active_closes[-3:]))
+            endpoint_move = abs(last - first) / max(abs(first), 1e-9)
+            # An unfinished range can invalidate a Fibo only when the whole
+            # active block is genuinely tight and flat. This retains BAYN's
+            # settled correction shelf while avoiding broad BFT/ACP
+            # peak-plus-pullback false ranges.
+            if width > 0.12 or regression_move > 0.05 or endpoint_move > 0.06:
+                continue
         start_date = dates.iloc[start]
         end_date = dates.iloc[end]
         if pd.isna(start_date) or pd.isna(end_date):
@@ -5694,8 +5740,12 @@ def _fibo_anchors_remain_extreme(
         return False
     if candidate.direction == "short":
         second_anchor = float(pd.to_numeric(second_rows["Low"], errors="coerce").min())
+        if float(pd.to_numeric(impulse["Low"], errors="coerce").min()) < second_anchor - 1e-9:
+            return False
         return float(pd.to_numeric(correction["Low"], errors="coerce").min()) >= second_anchor - 1e-9
     second_anchor = float(pd.to_numeric(second_rows["High"], errors="coerce").max())
+    if float(pd.to_numeric(impulse["High"], errors="coerce").max()) > second_anchor + 1e-9:
+        return False
     return float(pd.to_numeric(correction["High"], errors="coerce").max()) <= second_anchor + 1e-9
 
 
@@ -8001,7 +8051,7 @@ def _find_fibo_setup(
             # A newest-peak formation with a decisive immediate pullback is a
             # current setup, not a stale historical leg. Apply the 3P steepness
             # floor so Silver's July-August advance survives its internal shelf.
-            continuation_min_gain=0.15 if recent_peak_waiting and not _mirrored_short else 0.65,
+            continuation_min_gain=0.15 if recent_peak_waiting and not _mirrored_short else 0.30,
             continuation_min_daily_gain=0.003 if recent_peak_waiting and not _mirrored_short else 0.006,
         )
         if impulse_side_disqualifying:

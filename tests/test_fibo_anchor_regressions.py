@@ -829,3 +829,56 @@ def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     )
 
     assert "--scanner-pattern-date" not in command
+
+
+def test_acp_impulse_pause_does_not_remove_valid_waiting_fibo():
+    frame = _fixture("data/csv/stocks/ACP_WA.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 227.60, 229.60, 224.00, 225.40, 139453),
+            ("2026-09-15", 225.70, 226.90, 217.50, 219.60, 159733),
+            ("2026-09-16", 219.70, 221.30, 215.10, 221.30, 187126),
+            ("2026-09-17", 219.90, 228.30, 219.90, 226.20, 130971),
+            ("2026-09-18", 226.40, 229.80, 220.30, 221.40, 337681),
+            ("2026-09-21", 222.40, 224.80, 220.80, 221.30, 21127),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-26", "2026-08-28"),
+    )
+
+    assert result is not None
+    assert result.status == "reached_23_6_waiting_for_61_8"
+
+
+def test_second_anchor_must_be_the_impulse_extreme():
+    frame = _fixture("data/csv/stocks/ARM_US.csv")
+    candidate = scanner._find_fibo_setup(frame, "long", end_offset=0)
+
+    assert candidate is not None
+    assert candidate.incline_end_date == "2026-09-09"
+    assert not scanner._fibo_anchors_remain_extreme(frame, candidate)
+
+
+def test_bayn_active_flat_correction_is_detected_as_sidetrend():
+    frame = _fixture("data/csv/stocks/BAYN_DE.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 48.52, 50.32, 48.30, 49.33, 3112798),
+            ("2026-09-15", 49.79, 50.04, 48.15, 48.71, 2001373),
+            ("2026-09-16", 48.54, 49.42, 48.35, 48.98, 1359637),
+            ("2026-09-17", 49.27, 49.65, 48.70, 49.04, 1758395),
+            ("2026-09-21", 48.40, 48.65, 47.98, 48.58, 232085),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+
+    assert ("2026-07-27", "2026-09-21") in scanner._clear_month_sidetrend_date_ranges(frame)

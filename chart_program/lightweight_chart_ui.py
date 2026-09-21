@@ -998,7 +998,7 @@ class LightweightChartLevelSelectorUI:
   const addDays = (date, days) => {{ const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }};
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
-  const fibRatios = [0, 0.382, 0.5, 0.618, 1];
+  const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];
   const fibGoldenColor = '#facc15';
   const fibHighlightColor = '#22c55e';
   const fibLineColor = fibGoldenColor;
