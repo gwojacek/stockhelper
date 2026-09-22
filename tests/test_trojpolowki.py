@@ -1295,6 +1295,42 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
 
 
+def test_mature_ichimoku_position_across_kijun_stays_in_watch_column(tmp_path: Path):
+    mod = load_run_module()
+    rows = [
+        mod.ScannerRow(
+            market="WIG",
+            scanner="ICHIMOKU",
+            category="position",
+            ticker="APR",
+            status="⚪ above",
+            dates={"start_date": "2026-01-07"},
+            metrics={
+                "months": "8.5",
+                "ichimoku_status": "Under Kijun-sen",
+                "tk_cross": "bearish TK cross",
+                "raw_status": "above",
+            },
+            chart_url="https://stooq.pl/apr",
+        )
+    ]
+
+    text = mod._write_trojpolowki_ichimoku(
+        rows, tmp_path, datetime(2026, 9, 22, 10, 0, 0)
+    ).read_text(encoding="utf-8")
+    data_row = next(
+        line
+        for line in text.splitlines()
+        if line.startswith("| ") and "AUTOPARTN (APR)" in line
+    )
+    cells = [cell.strip() for cell in data_row.strip("|").split("|")]
+
+    assert cells[0] == ""
+    assert "AUTOPARTN (APR)" in cells[1]
+    assert cells[2] == ""
+    assert cells[3] == ""
+
+
 def test_early_ichimoku_is_hidden_from_3p_until_cutoff(tmp_path: Path):
     mod = load_run_module()
     row = mod.ScannerRow(

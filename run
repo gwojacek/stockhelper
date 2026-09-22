@@ -2032,6 +2032,13 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         kijun = info["kijun"]
         return ("above" in side and kijun == "over") or ("below" in side and kijun == "under")
 
+    def _crossed_kijun_watch(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        """Keep price/Kijun disagreement in the watch column at every age."""
+        _row, info = item
+        side = info["cloud_side"]
+        kijun = info["kijun"]
+        return ("above" in side and kijun == "under") or ("below" in side and kijun == "over")
+
     def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
         row, info = item
         if _is_early_breakout_waiting(row):
@@ -2052,6 +2059,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         # or below/under continuation, move it back from watch to strong.
         if _current_continuation(item):
             return "strong"
+        # A mature trend on the opposite side of Kijun is precisely the watch
+        # setup represented by column two.  Test this before the generic 4m+
+        # continuation fallback; otherwise every such WIG row is swallowed by
+        # column one and the watch column can be empty (for example APR).
+        if _crossed_kijun_watch(item):
+            return "watch"
         if row.category == "position" and months < 4.0:
             return "skip"
         if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")) and info["kijun"] != "touched":
