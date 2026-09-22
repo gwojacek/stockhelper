@@ -1,14 +1,84 @@
 {
+  "high": 61.3,
+  "__wedge_auto_high__": true,
+  "low": 42.63,
+  "__wedge_auto_low__": true,
+  "__saved_wedge_by_user__": true,
+  "__saved_fibo_by_user__": false,
+  "position_type": "short",
+  "capital": 304000,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "drawn_objects": [
+    {
+      "id": "80a08bbb-a69c-450a-9725-7d9c39b7eac0",
+      "type": "wedge",
+      "label": "My upper wedge",
+      "x0": "2026-02-04",
+      "y0": 61.29999923706055,
+      "x1": "2026-10-14",
+      "y1": 45.63,
+      "anchor_x": [
+        "2026-02-04",
+        "2026-10-14"
+      ],
+      "anchor_y": [
+        61.29999923706055,
+        45.63
+      ],
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": true,
+      "saved_by_user": true
+    },
+    {
+      "id": "0f63a1ef-0f72-4400-9cd3-cd59bec3de5c",
+      "type": "wedge",
+      "label": "My lower wedge",
+      "x0": "2026-06-29",
+      "y0": 42.625,
+      "x1": "2026-10-14",
+      "y1": 45.29,
+      "anchor_x": [
+        "2026-06-29",
+        "2026-10-14"
+      ],
+      "anchor_y": [
+        42.625,
+        45.29
+      ],
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true,
+      "saved_by_user": true
+    }
+  ],
+  "level_points": {
+    "high": {
+      "price": 61.3,
+      "plot_price": 61.3,
+      "date": "2026-02-04",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 42.63,
+      "plot_price": 42.63,
+      "date": "2026-06-29",
+      "auto_wedge": true
+    }
+  },
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
   "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
-  "drawn_objects": [],
-  "__saved_fibo_by_user__": false,
   "__scanner_breakout_date__": "2026-03-02",
   "__scanner_breakout_direction__": "short",
   "__scanner_retest_count__": "2",
   "__scanner_latest_retest_date__": "2026-08-05",
-  "__scanner_latest_retest_pattern__": "bearish_engulfing"
+  "__scanner_latest_retest_pattern__": "bearish_engulfing",
+  "__journal_source_technique__": "Ichimoku"
 }

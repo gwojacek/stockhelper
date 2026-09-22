@@ -55,6 +55,41 @@ MARKET_REFRESH_LOCK = threading.Lock()
 REFRESH_STATE_FILE = STATE_DATA_DIR / "sessions" / "search_refresh_state.json"
 API_METAL_COMMODITIES: set[str] = set()
 
+# Accumulated for the in-process allsearch runner.  Health warnings are kept
+# separate by market so one slightly stale instrument can be reported at the
+# end without hiding the otherwise usable results from that market.
+MARKET_DATA_WARNINGS: dict[str, set[str]] = {}
+
+
+def _record_market_data_warnings(market: str, warnings: Sequence[str]) -> None:
+    key = str(market or "unknown").upper()
+    if warnings:
+        MARKET_DATA_WARNINGS.setdefault(key, set()).update(str(item) for item in warnings)
+
+
+def reset_market_data_warnings() -> None:
+    MARKET_DATA_WARNINGS.clear()
+
+
+def print_market_data_warnings_summary() -> None:
+    print("\n[allsearch-data] unresolved market-data warnings by group:")
+    populated = False
+    for market in sorted(MARKET_DATA_WARNINGS):
+        warnings = sorted(MARKET_DATA_WARNINGS[market])
+        if not warnings:
+            continue
+        populated = True
+        print(f"[allsearch-data] {market} ({len(warnings)}):")
+        for warning in warnings:
+            print(f"[allsearch-data]   - {warning}")
+    if not populated:
+        print("[allsearch-data] none")
+
+
+def _market_data_warning_limit_exceeded(warning_count: int, market_size: int) -> bool:
+    """Allow up to 10% incomplete instruments before stopping a market scan."""
+    return market_size <= 0 or (warning_count / market_size) > 0.10
+
 
 @dataclass(frozen=True)
 class MarketDataRule:
@@ -230,10 +265,10 @@ WIG_SEARCH_TICKERS = [
     "TPE","TRN","TSG","AAT","ULM","UNI","VIN","VOT","VOX","VRG","WAS","WIK","WLT","WWL","WXF","ZEP","MGT","ZMT","PGV","ZUE",
     "ZUK","DIG","GVT","OPM","OPN","PGM","SEK","DEL","FEE","CPI","NTC","MAB","MAK","OTS","TLX","TAR","PEN","APE","MFO","BMX",
     "BLO","SVE","CLD","CPR","EAH","IMS","MDG","PHR","DAT","RVU","SNT","VVD","ALL","11B","CSR","TXT","NWG",
-    "MRC","ALI","TOR","PWX","BCM","CLC","DGA","MLG","MOJ","MZA","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKH","VGO",
+    "MRC","ALI","TOR","PWX","BCM","CLC","DGA","MLG","MZA","PCR","IFR","EQU","SNX","UNT","UNF","YAN","ZRE","SKH","VGO",
     "CDL","AWM","DEK","WPR","OML","XPL","ECB","ERG","BIP","1AT","PBX","WTN","LKD","ENT","XTB","ARH","APR","KMP","ASM",
     "BNP","IZO","KCI","GRX","SKL","SNW","YRL","PLW","ART","CLN","DNP","CAP","SCP","XTP","NNG","CBF","MVP","MOC","TEN","SVRS",
-    "MLS","ULG","CRJ","PAS","PUR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
+    "MLS","ULG","CRJ","PAS","MQR","MOV","4MS","ICE","BBT","SLV","DBE","GOP","SIM","SPR","GIF","ALE","DAD","PCF","ANR","HUG",
     "GMT","CTX","VRC","OND","DRG","CAV","WPR","CRI","URT","BCX","PTG","BCS","GPP","RND","NCL","SCW","MUR","QNA","ZAB",
     "DGN","ARL",
 ]
@@ -1086,6 +1121,9 @@ def _completed_month_side_trend_phases(
     df_slice: pd.DataFrame,
     *,
     band_pct: float = 0.20,
+    max_progress_pct: float = 0.08,
+    max_outlier_candles: int = 2,
+    max_regression_move_pct: float | None = None,
 ) -> list[tuple[int, int]]:
     """Return distinct four-week channels inside a leg.
 
@@ -1109,11 +1147,20 @@ def _completed_month_side_trend_phases(
             lows.iloc[start:end].reset_index(drop=True),
             closes.iloc[start:end].reset_index(drop=True),
             band_pct=band_pct,
-            max_progress_pct=0.08,
-            max_outlier_candles=2,
+            max_progress_pct=max_progress_pct,
+            max_outlier_candles=max_outlier_candles,
         )
-        if stats is not None:
-            qualifying.append((start, end - 1))
+        if stats is None:
+            continue
+        if max_regression_move_pct is not None:
+            window_closes = closes.iloc[start:end].to_numpy(dtype=float)
+            x = np.arange(window_days, dtype=float)
+            slope = float(np.polyfit(x, window_closes, 1)[0])
+            mean_close = float(np.nanmean(window_closes))
+            regression_move = abs(slope * (window_days - 1)) / max(abs(mean_close), 1e-9)
+            if regression_move > max_regression_move_pct:
+                continue
+        qualifying.append((start, end - 1))
     phases: list[list[int]] = []
     for start, end in qualifying:
         if not phases or start > phases[-1][1] + 3:
@@ -1152,7 +1199,7 @@ def _short_bottom_is_inside_month_side_trend(
 def _impulse_has_disqualifying_month_side_trend(
     df_slice: pd.DataFrame,
     *,
-    continuation_min_gain: float = 0.65,
+    continuation_min_gain: float = 0.30,
     continuation_min_daily_gain: float = 0.006,
 ) -> bool:
     """Reject a monthly shelf unless it is absorbed by an exceptional impulse.
@@ -1189,6 +1236,24 @@ def _impulse_has_disqualifying_month_side_trend(
     return not exceptional_continuation
 
 
+def _is_coherent_directional_impulse(
+    frame: pd.DataFrame,
+    direction: str = "long",
+) -> bool:
+    """Return whether closes describe one strong, orderly directional leg."""
+    closes = pd.to_numeric(frame["Close"], errors="coerce").to_numpy(dtype=float)
+    if len(closes) < 3 or not np.isfinite(closes).all():
+        return False
+    x = np.arange(len(closes), dtype=float)
+    correlation = float(np.corrcoef(x, closes)[0, 1])
+    slope = float(np.polyfit(x, closes, 1)[0])
+    signed_move = slope * (len(closes) - 1) / max(abs(float(np.mean(closes))), 1e-9)
+    if direction == "short":
+        correlation = -correlation
+        signed_move = -signed_move
+    return correlation >= 0.80 and signed_move >= 0.10
+
+
 def _impulse_stalls_before_peak(
     df_slice: pd.DataFrame,
     *,
@@ -1218,6 +1283,12 @@ def _impulse_stalls_before_peak(
         return False
     lows = pd.to_numeric(leg["Low"], errors="coerce")
     highs = pd.to_numeric(leg["High"], errors="coerce")
+    # A smooth stair-step advance can put its final month inside the loose
+    # 15% channel even though it is still one coherent impulse (BAS).  Reserve
+    # the stall rejection for genuinely flat/marginal tops rather than a leg
+    # whose full-series regression still explains a strong rise.
+    if _is_coherent_directional_impulse(leg, "long"):
+        return False
     launch = float(lows.iloc[0])
     pre_channel_high = float(highs.iloc[:channel_start + 1].max())
     gain_before_channel = (pre_channel_high - launch) / max(abs(launch), 1e-9)
@@ -1322,6 +1393,11 @@ def _sideways_range_spans_impulse_end(
         start <= relative_peak - min_before
         and end >= relative_peak + min_after
         and end - start + 1 >= 30
+        # A range that reaches the newest available candle has not broken out
+        # and therefore cannot prove that the selected peak lived inside a
+        # *completed* shelf. ACP's active correction is the representative
+        # false positive; settled correction shelves are handled separately.
+        and end < len(around) - 1
         for start, end in phases
     )
 
@@ -1588,6 +1664,8 @@ def _repeated_range_acceleration_launch_long(
     """
     leg = w.iloc[start_idx:peak_idx + 1].reset_index(drop=True)
     phases = _completed_month_side_trend_phases(leg, band_pct=0.08)
+    if not phases:
+        return None
 
     lows = pd.to_numeric(w["Low"], errors="coerce")
     highs = pd.to_numeric(w["High"], errors="coerce")
@@ -1629,7 +1707,14 @@ def _repeated_range_acceleration_launch_long(
         breaks_prior_month = confirmation_high >= prior_high * 1.03
         total_gain = (float(highs.iloc[peak_idx]) - candidate_low) / max(abs(candidate_low), 1e-9)
         if launch_expansion >= 0.15 and breaks_prior_month and total_gain >= 0.15:
-            return idx
+            # Keep walking a genuinely multi-stage impulse, but only when the
+            # shortened leg contains another completed tight range. Without
+            # that requirement ordinary reaction lows late in XTB-like moves
+            # would repeatedly drag the anchor into the impulse itself.
+            later_launch = _repeated_range_acceleration_launch_long(
+                w, idx, peak_idx, min_impulse_days,
+            )
+            return later_launch if later_launch is not None else idx
     return None
 
 
@@ -2272,8 +2357,10 @@ def _commodity_csv_health_check(members: Sequence[str]) -> list[str]:
             f"[commodity-check] final group summary: ok={len(final_checked) - len(final_retry)}, "
             f"warn={len(final_retry)}, total={len(final_checked)}"
         )
+        _record_market_data_warnings("commodities", final_retry)
         return final_retry
 
+    _record_market_data_warnings("commodities", retry_tickers)
     return retry_tickers
 
 
@@ -2291,7 +2378,7 @@ def _forex_missing_session_count(latest: date, expected_latest: date) -> int:
     )
 
 
-def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> None:
+def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | None = None) -> list[str]:
     """Report and retry FX caches that are incomplete or missing recent sessions."""
     source_by_ticker = {
         (ticker or "").strip().upper(): source
@@ -2363,7 +2450,8 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
     )
     retry_tickers = _print_summary([_health_row(ticker) for ticker in members])
     if not retry_tickers or os.getenv("STOCKHELPER_FOREX_HEALTH_RETRY", "1") == "0":
-        return
+        _record_market_data_warnings("forex", retry_tickers)
+        return retry_tickers
 
     try:
         retry_workers_setting = max(1, int(os.getenv("STOCKHELPER_FOREX_HEALTH_WORKERS", "4")))
@@ -2383,20 +2471,6 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                 and oldest != "-"
                 and date.fromisoformat(oldest) <= oldest_tolerance
             )
-            if history_complete and missing == 1 and yahoo_like < YAHOO_RECENT_CANDLE_REBASE_THRESHOLD:
-                # Stooq's daily table commonly ends at yesterday.  When the
-                # rolling history is already complete and only today's session
-                # is absent, fetching ten Stooq pages cannot repair anything.
-                # Append Yahoo's single freshest row directly instead.
-                local = pd.read_csv(csv_path)
-                merged, _candidate, _name, added = _merge_yahoo_fresh_candle(
-                    local, raw, "forex", trim_to_last_year=False
-                )
-                if added <= 0:
-                    raise ValueError("Yahoo did not provide the missing latest FX candle")
-                merged.to_csv(csv_path, index=False)
-                print(f"[forex-check] {raw}: appended Yahoo newest candle; skipped Stooq history retry")
-                return "cache+yahoo"
             contaminated_tail = (
                 history_complete
                 and missing == 0
@@ -2418,9 +2492,21 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
                             f"[forex-check] {raw}: healthy history with {yahoo_like} Yahoo-like tail rows; "
                             "refreshing only newest Stooq page before Yahoo latest-candle merge"
                         )
-                    else:
+                    elif not history_complete:
                         os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
                         csv_path.unlink(missing_ok=True)
+                        print(f"[forex-check] {raw}: incomplete/unreadable history; performing full replacement")
+                    else:
+                        # Match commodity repair semantics: retain a complete
+                        # Stooq base and run the normal remote refresh path.
+                        # That path retries Stooq before merging Yahoo's newest
+                        # candle, instead of silently bypassing Stooq whenever
+                        # exactly one FX session is absent.
+                        os.environ.pop("STOCKHELPER_STOOQ_TAIL_REFRESH", None)
+                        print(
+                            f"[forex-check] {raw}: healthy rolling history but "
+                            f"missing {missing} session(s); preserving base for Stooq/Yahoo refresh"
+                        )
                     _df, _path, meta = load_or_update_daily_data(
                         symbol=raw, instrument_type="forex", persist=True, fetch_older_data=False
                     )
@@ -2474,6 +2560,8 @@ def _forex_csv_health_check(members: Sequence[str], sources: dict[str, str] | No
             os.environ.pop("STOCKHELPER_FORCE_REMOTE_REFRESH", None)
         else:
             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = old_force_refresh
+    _record_market_data_warnings("forex", retry_tickers)
+    return retry_tickers
 
 
 def _passes_scanner_liquidity(avg_10d_pln: float | None, instrument_type: str, min_avg: float) -> bool:
@@ -3088,6 +3176,7 @@ def _print_stale_stock_data_warning(
 ) -> None:
     stale = _stale_stock_data_warnings(group_name, members, exchange_suffix)
     if stale:
+        _record_market_data_warnings(group_name, stale)
         print(
             "\033[31;1m[DATA WARNING] No new stock data for at least 3 days versus "
             f"the newest stock in this run. Check and remove: {'; '.join(stale)}\033[0m",
@@ -3960,7 +4049,7 @@ def _build_chart_command(ticker: str, mode: str, anchor_start: str = "", anchor_
         )
         if pattern_after_anchor and pattern_name and pattern_name.lower() not in {"-", "none"}:
             pattern_args = f" --scanner-pattern-date {pattern_date} --scanner-pattern-name {shlex.quote(pattern_name)}"
-        return f"{base} --fibo-lines 5 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
+        return f"{base} --fibo-lines 6 --fibo-anchor-start {start} --fibo-anchor-end {end} --fibo-right{pattern_args}"
     if mode == "wedge" and wedge is not None:
         saved_flag = " --wedge-saved-by-user" if wedge.saved_by_user else ""
         return (
@@ -4882,11 +4971,19 @@ def run_ichimoku_search(target: str) -> int:
         os.environ.pop("STOCKHELPER_COMMODITIES_REFRESH_TICKERS", None)
         os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)
         if unresolved:
+            ratio = len(unresolved) / max(len(members), 1)
+            if _market_data_warning_limit_exceeded(len(unresolved), len(members)):
+                print(
+                    "[commodity-check] aborting Ichimoku: unresolved commodity history exceeds "
+                    f"the 10% market threshold ({len(unresolved)}/{len(members)}={ratio:.1%}): "
+                    f"{', '.join(unresolved)}"
+                )
+                return 1
             print(
-                "[commodity-check] aborting Ichimoku: commodity history is still unhealthy after repair: "
+                "[commodity-check] continuing Ichimoku with unresolved warnings within "
+                f"the 10% market threshold ({len(unresolved)}/{len(members)}={ratio:.1%}): "
                 f"{', '.join(unresolved)}"
             )
-            return 1
     print(f"[search] grupa={group_name}, liczba instrumentów={len(members)}, źródło={source}")
     dbg = _debug_symbol_target()
     if dbg:
@@ -5456,25 +5553,291 @@ def _fibo_crosses_saved_sidetrend(
     )
 
 
-def _fibo_has_detected_month_sidetrend(df: pd.DataFrame, candidate: FiboScanResult) -> bool:
-    """Reject old anchors and corrections separated by an automatic side phase.
+def _clear_month_sidetrend_date_ranges(df: pd.DataFrame) -> list[tuple[str, str]]:
+    """Return completed, tight monthly ranges once for Fibo finalization.
 
-    A new formation remains possible, but its first anchor must occur after the
-    completed range.  Therefore this check never relocates an old anchor; the
-    normal selector must independently find a sufficiently mature new impulse.
+    The broad 20% detector is useful while locating structural reset candidates,
+    but it is intentionally too permissive for invalidating a finished Fibo.
+    Here a range must fit inside an 8% channel for at least 19 sessions.  This
+    keeps directional stair-step moves from being mistaken for consolidation.
     """
-    dates = pd.to_datetime(df["Date"], errors="coerce")
-    start = pd.to_datetime(candidate.incline_start_date, errors="coerce")
-    end = pd.to_datetime(candidate.incline_end_date, errors="coerce")
-    touch = pd.to_datetime(candidate.first_61_8_touch_date, errors="coerce")
-    if pd.isna(start) or pd.isna(end):
+    if df.empty:
+        return []
+    ordered = df.reset_index(drop=True)
+    dates = pd.to_datetime(ordered["Date"], errors="coerce")
+    phase_indexes: list[tuple[int, int]] = list(_completed_month_side_trend_phases(
+        ordered,
+        band_pct=0.08,
+        max_progress_pct=0.04,
+        max_outlier_candles=0,
+        max_regression_move_pct=0.035,
+    ))
+    # Some genuine shelves are deliberately volatile (WAS/LWB/DIG): they have
+    # no narrow 8% core, but repeatedly cross their median and finish near the
+    # level where they started. Detect those as whole, untrimmed 22-46 session
+    # blocks. Shorter one-month blocks use an 11-19% envelope (MQR), while
+    # longer blocks must span 15-19%; this keeps the fallback selective enough
+    # not to suppress most otherwise valid WIG Fibos.
+    highs = pd.to_numeric(ordered["High"], errors="coerce").to_numpy(dtype=float)
+    lows = pd.to_numeric(ordered["Low"], errors="coerce").to_numpy(dtype=float)
+    closes = pd.to_numeric(ordered["Close"], errors="coerce").to_numpy(dtype=float)
+    broad_candidates: list[tuple[int, int]] = []
+    for size in (22, 26, 30, 34, 38, 42, 46):
+        if len(ordered) < size:
+            continue
+        x = np.arange(size, dtype=float)
+        x_centered = x - float(x.mean())
+        x_variance = float(np.dot(x_centered, x_centered))
+        close_windows = np.lib.stride_tricks.sliding_window_view(closes, size)
+        high_windows = np.lib.stride_tricks.sliding_window_view(highs, size)
+        low_windows = np.lib.stride_tricks.sliding_window_view(lows, size)
+        means = np.mean(close_windows, axis=1)
+        centered = close_windows - means[:, None]
+        slopes = centered @ x_centered / max(x_variance, 1e-9)
+        total_variance = np.sum(centered * centered, axis=1)
+        residual = centered - slopes[:, None] * x_centered
+        trend_fit = 1.0 - np.sum(residual * residual, axis=1) / np.maximum(total_variance, 1e-9)
+        hi = np.max(high_windows, axis=1)
+        lo = np.min(low_windows, axis=1)
+        width = (hi - lo) / np.maximum(np.abs((hi + lo) / 2.0), 1e-9)
+        first = np.median(close_windows[:, :3], axis=1)
+        last = np.median(close_windows[:, -3:], axis=1)
+        endpoint_move = np.abs(last - first) / np.maximum(np.abs(first), 1e-9)
+        regression_move = np.abs(slopes * (size - 1)) / np.maximum(np.abs(means), 1e-9)
+        min_width = 0.11 if size <= 26 else 0.15
+        eligible = (
+            np.isfinite(close_windows).all(axis=1)
+            & (width >= min_width)
+            & (width <= 0.19)
+            & (endpoint_move <= 0.08)
+            & (regression_move <= 0.065)
+            & (trend_fit <= 0.60)
+        )
+        for start in np.flatnonzero(eligible).tolist():
+            window = close_windows[start]
+            median = float(np.median(window))
+            signs = np.sign(window - median)
+            signs = signs[signs != 0]
+            crossings = int(np.sum(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
+            min_crossings = 10 if size <= 26 else 8
+            if crossings < min_crossings:
+                continue
+            broad_candidates.append((start, start + size - 1))
+    # Keep maximal overlapping broad candidates. Their union is used only
+    # when it remains within the 19% volatility ceiling.
+    all_candidates = sorted(phase_indexes + broad_candidates)
+    phase_indexes = []
+    for start, end in all_candidates:
+        if phase_indexes and start <= phase_indexes[-1][1] + 3:
+            merged_start = phase_indexes[-1][0]
+            merged_end = max(phase_indexes[-1][1], end)
+            hi = float(np.max(highs[merged_start:merged_end + 1]))
+            lo = float(np.min(lows[merged_start:merged_end + 1]))
+            if (hi - lo) / max(abs((hi + lo) / 2.0), 1e-9) <= 0.19:
+                phase_indexes[-1] = (merged_start, merged_end)
+                continue
+        phase_indexes.append((start, end))
+    # A still-active correction shelf has no right-side breakout with which to
+    # seed a normal completed window. Preserve a genuinely flat suffix so a
+    # BAYN-like multi-month decline shelf invalidates the old Fibo, while the
+    # tighter width/progress limits keep broad BFT/ACP pullbacks out.
+    for size in range(min(60, len(ordered)), 18, -1):
+        start = len(ordered) - size
+        suffix = closes[start:]
+        mean = max(abs(float(np.mean(suffix))), 1e-9)
+        x = np.arange(size, dtype=float)
+        x_centered = x - float(x.mean())
+        centered = suffix - float(np.mean(suffix))
+        slope = float(np.dot(centered, x_centered) / max(np.dot(x_centered, x_centered), 1e-9))
+        width = (float(np.max(highs[start:])) - float(np.min(lows[start:]))) / mean
+        regression_move = abs(slope * (size - 1)) / mean
+        endpoint_move = abs(float(np.median(suffix[-3:])) - float(np.median(suffix[:3]))) / max(abs(float(np.median(suffix[:3]))), 1e-9)
+        median = float(np.median(suffix))
+        signs = np.sign(suffix - median)
+        signs = signs[signs != 0]
+        crossings = int(np.sum(signs[1:] != signs[:-1])) if len(signs) > 1 else 0
+        if width <= 0.13 and regression_move <= 0.05 and endpoint_move <= 0.06 and crossings >= 6:
+            phase_indexes.append((start, len(ordered) - 1))
+            break
+    ranges: list[tuple[str, str]] = []
+    for start, end in sorted(phase_indexes):
+        # Fibo invalidation is based on a *completed* shelf.  A candidate that
+        # grows through the newest candle has no confirmed exit yet and is
+        # frequently just the impulse peak plus its still-active correction
+        # (BFT is the representative case).  Calling that a completed monthly
+        # sidetrend removed excellent live impulses from column one.
+        if end >= len(ordered) - 1:
+            active_closes = closes[start:end + 1]
+            active_highs = highs[start:end + 1]
+            active_lows = lows[start:end + 1]
+            size = len(active_closes)
+            x = np.arange(size, dtype=float)
+            x_centered = x - float(x.mean())
+            centered = active_closes - float(np.mean(active_closes))
+            slope = float(np.dot(centered, x_centered) / max(np.dot(x_centered, x_centered), 1e-9))
+            mean = max(abs(float(np.mean(active_closes))), 1e-9)
+            width = (float(np.max(active_highs)) - float(np.min(active_lows))) / mean
+            regression_move = abs(slope * max(size - 1, 1)) / mean
+            first = float(np.median(active_closes[:3]))
+            last = float(np.median(active_closes[-3:]))
+            endpoint_move = abs(last - first) / max(abs(first), 1e-9)
+            # An unfinished range can invalidate a Fibo only when the whole
+            # active block is genuinely tight and flat. This retains BAYN's
+            # settled correction shelf while avoiding broad BFT/ACP
+            # peak-plus-pullback false ranges.
+            if width > 0.13 or regression_move > 0.05 or endpoint_move > 0.06:
+                continue
+        start_date = dates.iloc[start]
+        end_date = dates.iloc[end]
+        if pd.isna(start_date) or pd.isna(end_date):
+            continue
+        ranges.append((str(start_date.date()), str(end_date.date())))
+    return ranges
+
+
+def _fibo_crosses_detected_sidetrend(
+    candidate: FiboScanResult,
+    ranges: list[tuple[str, str]],
+    *,
+    latest_date: str,
+    df: pd.DataFrame | None = None,
+) -> bool:
+    """Reject a completed monthly range after anchor one and before 61.8.
+
+    Anchor selection is responsible for moving the first anchor behind a range
+    when a new strong impulse follows it.  If any complete range still remains
+    between that final anchor and the first 61.8 touch (or today's candle while
+    waiting), the formation is no longer one uninterrupted Fibo cycle.
+    """
+    horizon = candidate.first_61_8_touch_date or latest_date
+    if not horizon:
         return False
-    impulse = df.loc[(dates >= start) & (dates <= end)].reset_index(drop=True)
-    if _has_completed_month_side_trend(impulse):
-        return True
-    correction_end = touch if not pd.isna(touch) else dates.max()
-    correction = df.loc[(dates >= end) & (dates <= correction_end)].reset_index(drop=True)
-    return _has_completed_month_side_trend(correction)
+    anchor = pd.Timestamp(candidate.incline_start_date)
+    second_anchor = pd.Timestamp(candidate.incline_end_date)
+    limit = pd.Timestamp(horizon)
+    # Finalization must agree with candidate construction. A coherent strong
+    # leg may contain internal pauses, and its peak plus the first few pullback
+    # candles can resemble an active month window. Those are not completed
+    # cycles separating the two anchors (DNP/BAS/PCO); a shelf that persists
+    # well after anchor two remains disqualifying (APP).
+    impulse = pd.DataFrame()
+    if df is not None and not df.empty:
+        impulse_dates = pd.to_datetime(df["Date"], errors="coerce")
+        impulse = df.loc[(impulse_dates >= anchor) & (impulse_dates <= second_anchor)]
+    coherent_impulse = _is_coherent_directional_impulse(impulse, candidate.direction) if not impulse.empty else False
+    if not coherent_impulse and impulse.empty:
+        try:
+            fib_range = abs(float(candidate.fib_23_6) - float(candidate.fib_61_8)) / 0.382
+            if candidate.direction == "short":
+                first_price = float(candidate.fib_23_6) + 0.764 * fib_range
+            else:
+                first_price = float(candidate.fib_23_6) - 0.764 * fib_range
+            gain = fib_range / max(abs(first_price), 1e-9)
+            bars = max(int(candidate.incline_duration_days), 1)
+            coherent_impulse = gain >= 0.30 and gain / bars >= 0.003
+        except (AttributeError, TypeError, ValueError):
+            coherent_impulse = False
+    returned_across_236 = False
+    if df is not None and not df.empty:
+        correction_closes = pd.to_numeric(
+            df.loc[impulse_dates > second_anchor, "Close"], errors="coerce"
+        ).dropna()
+        if not correction_closes.empty:
+            fib_236 = float(candidate.fib_23_6)
+            if candidate.direction == "short":
+                returned_across_236 = bool(
+                    (correction_closes > fib_236).any()
+                    and float(correction_closes.iloc[-1]) < fib_236
+                )
+            else:
+                returned_across_236 = bool(
+                    (correction_closes < fib_236).any()
+                    and float(correction_closes.iloc[-1]) > fib_236
+                )
+    for start, end in ranges:
+        phase_start = pd.Timestamp(start)
+        phase_end = pd.Timestamp(end)
+        if phase_end > limit or phase_end < anchor:
+            continue
+        if coherent_impulse and phase_end <= second_anchor:
+            continue
+        if (
+            coherent_impulse
+            and returned_across_236
+            and phase_start > second_anchor
+            and phase_end == limit
+        ):
+            # A correction which crossed 23.6 and then reclaimed it is back in
+            # the strong-impulse state. Its still-active pullback shelf must not
+            # turn PCO/BFT into a dropout; a pre-23.6 shelf such as APP remains
+            # disqualifying because no reclaim occurred.
+            continue
+        if (
+            coherent_impulse
+            and phase_start <= second_anchor <= phase_end
+            and (
+                phase_end - second_anchor <= pd.Timedelta(days=14)
+                or (
+                    str(getattr(candidate, "status", "")).startswith("3p_steep")
+                    and phase_end == limit
+                    and (returned_across_236 or df is None)
+                )
+            )
+        ):
+            continue
+        if phase_start >= anchor:
+            return True
+        # Anchor one cannot be placed near the beginning of a shelf merely
+        # because fewer than 28 calendar days remain. MQR's July anchor is the
+        # representative case: it sits only days after the shelf began and the
+        # breakout launch belongs near the shelf's end.
+        if anchor - phase_start <= pd.Timedelta(days=14):
+            return True
+        # An anchor placed inside an already-running shelf is invalid only
+        # when a full calendar month of that shelf remains after the anchor.
+        if phase_end - anchor >= pd.Timedelta(days=28):
+            return True
+    return False
+
+
+def _fibo_anchors_remain_extreme(
+    df: pd.DataFrame,
+    candidate: FiboScanResult,
+) -> bool:
+    """Ensure neither Fibo anchor is superseded before the 61.8 horizon."""
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    start = pd.Timestamp(candidate.incline_start_date)
+    end = pd.Timestamp(candidate.incline_end_date)
+    impulse = df.loc[(dates >= start) & (dates <= end)]
+    if impulse.empty:
+        return False
+    first_rows = impulse.loc[pd.to_datetime(impulse["Date"], errors="coerce") == start]
+    if first_rows.empty:
+        return False
+    if candidate.direction == "short":
+        anchor = float(pd.to_numeric(first_rows["High"], errors="coerce").max())
+        if float(pd.to_numeric(impulse["High"], errors="coerce").max()) > anchor + 1e-9:
+            return False
+    else:
+        anchor = float(pd.to_numeric(first_rows["Low"], errors="coerce").min())
+        if float(pd.to_numeric(impulse["Low"], errors="coerce").min()) < anchor - 1e-9:
+            return False
+    horizon = pd.to_datetime(candidate.first_61_8_touch_date, errors="coerce")
+    if pd.isna(horizon):
+        horizon = dates.max()
+    correction = df.loc[(dates >= end) & (dates <= horizon)]
+    second_rows = impulse.loc[pd.to_datetime(impulse["Date"], errors="coerce") == end]
+    if correction.empty or second_rows.empty:
+        return False
+    if candidate.direction == "short":
+        second_anchor = float(pd.to_numeric(second_rows["Low"], errors="coerce").min())
+        if float(pd.to_numeric(impulse["Low"], errors="coerce").min()) < second_anchor - 1e-9:
+            return False
+        return float(pd.to_numeric(correction["Low"], errors="coerce").min()) >= second_anchor - 1e-9
+    second_anchor = float(pd.to_numeric(second_rows["High"], errors="coerce").max())
+    if float(pd.to_numeric(impulse["High"], errors="coerce").max()) > second_anchor + 1e-9:
+        return False
+    return float(pd.to_numeric(correction["High"], errors="coerce").max()) <= second_anchor + 1e-9
 
 
 def _update_saved_fibo_lifecycle(ticker: str, *, valid: bool, as_of: date) -> str | None:
@@ -7363,9 +7726,22 @@ def _find_fibo_3p_steep_setup(
         _log("Rejected 3P steep: incline shorter than 21 sessions.")
         return None
 
-    if _sideways_range_spans_impulse_end(w, i_peak):
+    peak_spanning_sideways = _sideways_range_spans_impulse_end(w, i_peak)
+    preliminary_gain = (fib_end - fib_start) / max(abs(fib_start), 1e-9)
+    preliminary_daily_gain = preliminary_gain / max(incline_days, 1)
+    exceptional_impulse_into_peak = (
+        preliminary_gain >= 0.50
+        and preliminary_daily_gain >= 0.003
+    )
+    if peak_spanning_sideways and not exceptional_impulse_into_peak:
         _log("Rejected 3P steep: selected high is inside a completed month-long side trend.")
         return None
+    if peak_spanning_sideways:
+        _log(
+            "3P steep: retained genuine peak despite a straddling range because "
+            f"the complete impulse gained {preliminary_gain * 100:.2f}% at "
+            f"{preliminary_daily_gain * 100:.2f}% per session."
+        )
 
     early_sideways = _early_sideways_after_anchor_window(
         w,
@@ -7428,9 +7804,11 @@ def _find_fibo_3p_steep_setup(
     if reached_618_after_peak:
         _log("Rejected 3P steep: pullback already touched 61.8; regular pattern rules must handle it.")
         return None
-    if not _mirrored_short and _has_completed_month_side_trend(
-        w.iloc[i_peak + 1:].reset_index(drop=True)
-    ):
+    long_correction_has_month_side_trend = (
+        not _mirrored_short
+        and _has_completed_month_side_trend(w.iloc[i_peak + 1:].reset_index(drop=True))
+    )
+    if long_correction_has_month_side_trend and not exceptional_impulse_into_peak:
         # Column one/two describes an active correction, not a stock which has
         # spent a complete month (or two) parked in a range after its peak.
         # This guard is deliberately independent of the latest close's place
@@ -7438,6 +7816,14 @@ def _find_fibo_3p_steep_setup(
         # the channel boundary.
         _log("Rejected 3P steep: post-peak correction contains a completed month-long side trend.")
         return None
+    if (
+        long_correction_has_month_side_trend
+        and exceptional_impulse_into_peak
+    ):
+        _log(
+            "3P steep: retained active pullback after an exceptional impulse; "
+            "the broad correction window is not treated as a settled post-peak shelf."
+        )
     if _mirrored_short and _has_completed_month_side_trend(w.iloc[i_peak:]):
         # A completed month-long base ends the old short cycle even when price
         # subsequently breaks upward and is currently near the recovery high.
@@ -7756,9 +8142,14 @@ def _find_fibo_setup(
             # A newest-peak formation with a decisive immediate pullback is a
             # current setup, not a stale historical leg. Apply the 3P steepness
             # floor so Silver's July-August advance survives its internal shelf.
-            continuation_min_gain=0.15 if recent_peak_waiting and not _mirrored_short else 0.65,
+            continuation_min_gain=0.15 if recent_peak_waiting and not _mirrored_short else 0.30,
             continuation_min_daily_gain=0.003 if recent_peak_waiting and not _mirrored_short else 0.006,
         )
+        if impulse_side_disqualifying and _is_coherent_directional_impulse(
+            impulse_seg, "short" if _mirrored_short else "long"
+        ):
+            impulse_side_disqualifying = False
+            _log(f"{direction.capitalize()}: retained coherent impulse across internal monthly pauses.")
         if impulse_side_disqualifying:
             # A first 61.8 touch is an active, incomplete reversal event. Keep
             # its original anchors during the three-candle confirmation window
@@ -7960,6 +8351,13 @@ def _find_fibo_setup(
         return None
     fib_start = float(high.iloc[i_start])
     fib_end = float(low.iloc[i_bottom])
+    later_impulse_high = float(pd.to_numeric(high.iloc[i_start + 1:i_bottom + 1], errors="coerce").max())
+    if later_impulse_high > fib_start:
+        _log(
+            "Rejected short: first anchor is not the impulse's local top; "
+            f"a later candle reached {later_impulse_high:.4f} above {fib_start:.4f}."
+        )
+        return None
     rng = fib_start - fib_end
     if rng <= 0:
         _log("Rejected short: non-positive fib range.")
@@ -8553,17 +8951,22 @@ def run_fibo_search(target: str) -> int:
                         c.latest_candle_date = latest_candle_date
                         c.expected_latest_session_date = expected_latest_session_date
                         out_rows.append(c)
-            # A broad steep leg with a genuine monthly range is superseded only
-            # when this same scan found a much smaller regular long formation.
-            # This removes JP225's stale broad leg while preserving stepwise
-            # trends such as ROST when no actionable nested replacement exists.
+            # Candidate builders relocate anchor one when a strong post-range
+            # impulse exists. Scan tight monthly ranges only once per ticker,
+            # then reject any candidate that still spans a completed range from
+            # its final first anchor through its first 61.8 touch/current bar.
+            # This avoids the former per-candidate rolling-window rescan.
             saved_sidetrends = _saved_sidetrends_for_ticker(ticker)
+            detected_sidetrends = _clear_month_sidetrend_date_ranges(df)
             latest_date_text = str(pd.to_datetime(df["Date"], errors="coerce").max().date())
             out_rows = [
                 item for item in out_rows
                 if isinstance(item, WedgeScanResult)
                 or (
-                    not _fibo_has_detected_month_sidetrend(df, item)
+                    _fibo_anchors_remain_extreme(df, item)
+                    and not _fibo_crosses_detected_sidetrend(
+                        item, detected_sidetrends, latest_date=latest_date_text, df=df,
+                    )
                     and not _fibo_crosses_saved_sidetrend(
                         item, saved_sidetrends, latest_date=latest_date_text,
                     )
@@ -8880,7 +9283,13 @@ def run_fibo_search(target: str) -> int:
 
 
 def run_fibo_explain(scope: str, symbol: str) -> int:
-    group_name, _, _, exchange_suffix = _get_members(scope)
+    # `python run -explain BAS.DE` has no explicit search scope. Passing the
+    # parser's sentinel "single" through `_get_members` treated SINGLE as an
+    # instrument and failed scope validation before diagnostics could run.
+    if str(scope or "").strip().lower() == "single":
+        group_name, exchange_suffix = "single", ""
+    else:
+        group_name, _, _, exchange_suffix = _get_members(scope)
     ticker = symbol.strip().upper()
     instrument = "stock"
     if group_name == "forex":

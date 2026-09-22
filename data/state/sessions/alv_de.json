@@ -2,8 +2,67 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [],
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__saved_manual_wedges__": [
+    {
+      "id": "a2fd4a2b-6c70-45ef-a084-89b08d483bdd",
+      "type": "wedge",
+      "label": "My upper wedge",
+      "x0": "2026-09-03",
+      "y0": 454.6000061035156,
+      "x1": "2026-10-02",
+      "y1": 425.68,
+      "anchor_x": [
+        "2026-09-03",
+        "2026-10-02"
+      ],
+      "anchor_y": [
+        454.6000061035156,
+        425.68
+      ],
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": true,
+      "saved_by_user": true
+    },
+    {
+      "id": "2fe16af7-b023-400b-a4a4-1b2e9e60f2b5",
+      "type": "wedge",
+      "label": "My lower wedge",
+      "x0": "2026-03-23",
+      "y0": 339.79998779296875,
+      "x1": "2026-10-14",
+      "y1": 422.11,
+      "anchor_x": [
+        "2026-03-23",
+        "2026-10-14"
+      ],
+      "anchor_y": [
+        339.79998779296875,
+        422.11
+      ],
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true,
+      "saved_by_user": true
+    }
+  ],
+  "__saved_wedge_by_user__": false,
+  "position_type": "long",
+  "capital": 304000,
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {},
+  "__scanner_breakout_date__": "2026-04-10",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-06-04",
+  "__scanner_latest_retest_pattern__": "bullish_harami"
 }

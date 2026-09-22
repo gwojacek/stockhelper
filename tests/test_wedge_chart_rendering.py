@@ -1,10 +1,42 @@
+import csv
+import json
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 
 UI_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "lightweight_chart_ui.py"
 I18N_SOURCE = Path(__file__).resolve().parents[1] / "utilities" / "web_i18n.py"
 SCANNER_SOURCE = Path(__file__).resolve().parents[1] / "scanner_search.py"
 LEVEL_SELECTOR_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "level_selector.py"
+
+
+def test_lightweight_fibonacci_drawings_include_23_6_for_scanner_and_manual_groups():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
+    scanner_source = SCANNER_SOURCE.read_text(encoding="utf-8")
+
+    assert "const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];" in source
+    assert "fibRatios.forEach((r) =>" in source
+    assert "levels = [0.0, 0.236, 0.382, 0.5, 0.618, 1.0]" in selector_source
+    assert "--fibo-lines 6" in scanner_source
+
+
+def test_first_fibonacci_anchor_uses_the_original_single_preview_path():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    first_anchor = "if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}"
+    assert first_anchor in source
+
+
+def test_toggling_fibonacci_tool_discards_an_unfinished_first_anchor():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    handler = source[source.index("$('tool-fib').onclick"):source.index("$('tool-half').onclick")]
+
+    assert "clearPreviews(); fibAnchor=null;" in handler
+    assert "activeTool=same ? 'level' : 'fib'" in handler
 
 
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
@@ -29,8 +61,117 @@ def test_sidetrend_debug_editor_draws_and_allows_date_or_validity_corrections():
     assert 'type="checkbox"' in source
     assert 'type="date"' in source
     assert "debug-add-sidetrend" in source
-    assert "bestWidth <= 0.185" in source
-    assert "Math.abs(last-first)" in source
+
+
+def test_saved_sidetrends_take_precedence_over_overlapping_scanner_ranges():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    editor = source[source.index("function renderSidetrendEditor()") : source.index("function renderGeometryEditor")]
+
+    assert "const overlaps=(left,right)=>left.start<=right.end&&right.start<=left.end" in editor
+    assert "const removeScannerOverlaps=(saved,keep=null)" in editor
+    assert "range===keep||range.saved||!overlaps(range,coverage)" in editor
+    assert "removeScannerOverlaps(saved,match)" in editor
+
+
+def test_sidetrend_scanner_grows_monthly_cores_without_crossing_price_gaps():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
+
+    assert "minSessions=19" in detector
+    assert "coreLimits={{channelWidth:0.09" in detector
+    assert "volatileCoreLimits={{channelWidth:0.11,regressionMove:0.03" in detector
+    assert "phaseLimits={{channelWidth:0.185,regressionMove:0.06" in detector
+    assert "maxBackwardGap=0.055,maxForwardGap=0.04" in detector
+    assert "maxShoulderSessions=12" in detector
+    assert "boundaryGap" in detector
+    assert "withinCoreEnvelope" in detector
+    assert "envelopePadding=strictCore?0.022:0.035" in detector
+    assert "strictCoreStarts=new Set()" in detector
+    assert "medianCrossings" in detector
+    assert "const broadLimits={{channelWidth:0.19" in detector
+    assert "for(const size of [22,26,30,34,38,42,46])" in detector
+    assert "shadowsStrictCore" in detector
+    assert "backwardLimit=strictCore?maxShoulderSessions:2" in detector
+    assert "phaseStart=candidate" in detector
+    assert "days < 30" not in detector
+    assert "bestWidth <= 0.185" not in detector
+
+
+def _run_sidetrend_detector(csv_name, boundary=None):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required to execute the embedded detector")
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
+    detector = detector.replace("{{", "{").replace("}}", "}")
+    csv_path = UI_SOURCE.parents[1] / "data" / "csv" / "stocks" / csv_name
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = [
+            {"time": row["Date"], "high": float(row["High"]), "low": float(row["Low"]), "close": float(row["Close"])}
+            for row in csv.DictReader(handle)
+        ]
+    initial_objects = [] if boundary is None else [{"type": "fib-boundary", **boundary}]
+    script = f"const ohlc={json.dumps(rows)},initialScannerDrawnObjects={json.dumps(initial_objects)};{detector};console.log(JSON.stringify(detectedMonthlySidetrends()));"
+    result = subprocess.run([node, "-e", script], check=True, capture_output=True, text=True)
+    return {(item["start"], item["end"]) for item in json.loads(result.stdout)}
+
+
+def test_sidetrend_scanner_matches_sap_review_boundaries():
+    ranges = _run_sidetrend_detector("SAP_DE.csv")
+
+    assert ("2026-01-29", "2026-03-18") in ranges
+    assert ("2026-06-19", "2026-07-23") in ranges
+    assert ("2025-06-25", "2025-08-08") not in ranges
+    assert ("2025-04-30", "2025-06-13") in ranges
+    assert ("2025-08-13", "2025-09-09") in ranges
+    assert ("2025-09-17", "2025-11-05") in ranges
+    assert ("2025-11-17", "2026-01-09") in ranges
+
+
+def test_sidetrend_scanner_matches_puma_review_boundaries():
+    ranges = _run_sidetrend_detector("PUM_DE.csv")
+
+    assert ("2025-09-18", "2025-10-29") in ranges
+    assert ("2026-02-03", "2026-03-18") in ranges
+    assert ("2026-06-01", "2026-08-14") not in ranges
+
+
+def test_sidetrend_scanner_rejects_grx_top_of_incline_pullback():
+    ranges = _run_sidetrend_detector("GRX_WA.csv")
+
+    assert ("2026-08-13", "2026-09-15") not in ranges
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    detector = source[source.index("function detectedMonthlySidetrends()") : source.index("function sidetrendNearFibo")]
+    assert "reachesLatest&&lastPeak-range._startIndex>=3&&approachGain>0.08" in detector
+
+
+@pytest.mark.parametrize(
+    ("csv_name", "expected_start", "expected_end"),
+    [
+        ("WAS_WA.csv", "2026-08-07", "2026-09-08"),
+        ("LWB_WA.csv", "2026-06-25", "2026-08-07"),
+        ("DIG_WA.csv", "2026-07-07", "2026-09-03"),
+    ],
+)
+def test_sidetrend_scanner_recovers_volatile_oscillating_months(csv_name, expected_start, expected_end):
+    ranges = _run_sidetrend_detector(csv_name)
+
+    assert any(start <= expected_start and end >= expected_end for start, end in ranges)
+
+
+def test_mqr_shelf_is_detected_around_invalid_first_anchor():
+    ranges = _run_sidetrend_detector("MQR_WA.csv")
+
+    assert any(start <= "2026-07-06" and end >= "2026-07-31" for start, end in ranges)
+
+
+def test_bft_peak_straddling_pullback_is_not_added_as_volatile_shelf():
+    ranges = _run_sidetrend_detector(
+        "BFT_WA.csv",
+        {"x0": "2026-03-23", "x1": "2026-08-14"},
+    )
+
+    assert not any(start < "2026-08-14" < end for start, end in ranges if start >= "2026-07-01")
 
 
 def test_chart_debug_reports_include_ticker_and_full_name():
@@ -408,8 +549,16 @@ def test_changed_sidetrend_report_tab_excludes_all_fibo_data():
     assert "Changed / invalid" in report
     assert "debugSidetrendReportFilter!=='changed'" in report
     assert "sidetrendChanged(r)" in report
-    assert "if(boundary && debugSidetrendReportFilter!=='changed')" in report
-    assert "mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0" in report
+    assert "reportFiboBoundary&&reportTouchesFibo&&debugSidetrendReportFilter!=='changed'" in report
+    assert "debugSidetrendReportFilter!=='changed'&&reportTouchesFibo&&fibStart>=0" in report
+
+
+def test_sidetrend_report_requires_a_selected_valid_fibo_overlap():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    report = source[source.index("function showCorrectionReport"):source.index("function restoreUnkeptDebugCorrection")]
+
+    assert "const reportTouchesFibo=" in report
+    assert "reportSidetrends.some(range=>range.valid&&range.start<=boundaryDates[1]&&range.end>=boundaryDates[0])" in report
 
 
 def test_corrected_sidetrend_report_uses_union_of_scanner_and_corrected_dates():

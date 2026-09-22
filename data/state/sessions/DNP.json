@@ -11,70 +11,97 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
   "drawn_objects": [
     {
-      "id": "auto-wedge-upper",
-      "type": "wedge",
-      "label": "Falling wedge upper",
-      "x": [
-        "2026-05-26",
-        "2026-06-25",
-        "2026-11-06"
-      ],
-      "y": [
-        32.33,
-        29.68,
-        17.56571
-      ],
-      "x0": "2026-05-26",
-      "x1": "2026-11-06",
-      "y0": 32.33,
-      "y1": 17.56571,
-      "anchor_x": [
-        "2026-05-26",
-        "2026-06-25"
-      ],
-      "anchor_y": [
-        32.33,
-        29.68
-      ],
-      "price": 17.56571,
-      "color": "#dc2626",
-      "group_id": "auto-wedge",
-      "free_extension": false
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (37.73)",
+      "x0": "2026-09-08",
+      "x1": "2034-08-10",
+      "y0": 37.73,
+      "y1": 37.73,
+      "price": 37.73,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
     },
     {
-      "id": "auto-wedge-lower",
-      "type": "wedge",
-      "label": "Falling wedge lower",
-      "x": [
-        "2026-05-13",
-        "2026-07-03",
-        "2026-11-06"
-      ],
-      "y": [
-        28.24,
-        27.31,
-        24.985
-      ],
-      "x0": "2026-05-13",
-      "x1": "2026-11-06",
-      "y0": 28.24,
-      "y1": 24.985,
-      "anchor_x": [
-        "2026-05-13",
-        "2026-07-03"
-      ],
-      "anchor_y": [
-        28.24,
-        27.31
-      ],
-      "price": 24.985,
-      "color": "#2563eb",
-      "group_id": "auto-wedge",
-      "free_extension": false
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (35.17176)",
+      "x0": "2026-08-25",
+      "x1": "2034-08-10",
+      "y0": 35.17176,
+      "y1": 35.17176,
+      "price": 35.17176,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (33.58912)",
+      "x0": "2026-08-14",
+      "x1": "2034-08-10",
+      "y0": 33.58912,
+      "y1": 33.58912,
+      "price": 33.58912,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (32.31)",
+      "x0": "2026-08-07",
+      "x1": "2034-08-10",
+      "y0": 32.31,
+      "y1": 32.31,
+      "price": 32.31,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (31.03088)",
+      "x0": "2026-07-31",
+      "x1": "2034-08-10",
+      "y0": 31.03088,
+      "y1": 31.03088,
+      "price": 31.03088,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (26.89)",
+      "x0": "2026-07-08",
+      "x1": "2034-08-10",
+      "y0": 26.89,
+      "y1": 26.89,
+      "price": 26.89,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-07-08",
+      "x1": "2026-09-08",
+      "y0": 26.89,
+      "y1": 37.73,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
     }
   ],
   "position_calculations": {
@@ -161,10 +188,5 @@
   "spread": 0,
   "spread_pips": null,
   "level_points": {},
-  "__scanner_breakout_date__": "2026-07-31",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-08-06",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__scanner_previous_respect_months__": "4.1"
+  "__saved_fibo_by_user__": false
 }

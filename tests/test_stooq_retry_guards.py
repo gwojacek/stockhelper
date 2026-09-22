@@ -125,7 +125,8 @@ def test_commodity_health_repair_precedes_ichimoku_calculation():
     audited_targets_cleared = ichimoku_source.index('os.environ.pop("STOCKHELPER_MARKET_REFRESH_SYMBOLS", None)')
     scan_start = ichimoku_source.index("def _record_scan_error(")
     assert health < targets_cleared < audited_targets_cleared < scan_start
-    assert "aborting Ichimoku: commodity history is still unhealthy after repair" in ichimoku_source
+    assert "the 10% market threshold" in ichimoku_source
+    assert "continuing Ichimoku with unresolved warnings" in ichimoku_source
     assert ichimoku_source.count("_commodity_csv_health_check(members)") == 1
 
     commodity_loader = LOADER_SOURCE[

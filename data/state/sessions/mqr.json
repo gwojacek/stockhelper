@@ -1,0 +1,86 @@
+{
+  "apply_currency_conversion_fee": false,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": false,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Fibo",
+  "drawn_objects": [
+    {
+      "id": "auto-fibo-0",
+      "type": "fib",
+      "label": "FIB 0% (3.18)",
+      "x0": "2026-08-07",
+      "x1": "2034-08-07",
+      "y0": 3.18,
+      "y1": 3.18,
+      "price": 3.18,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-382",
+      "type": "fib",
+      "label": "FIB 38.2% (2.75025)",
+      "x0": "2026-07-27",
+      "x1": "2034-08-07",
+      "y0": 2.75025,
+      "y1": 2.75025,
+      "price": 2.75025,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-500",
+      "type": "fib",
+      "label": "FIB 50% (2.6175)",
+      "x0": "2026-07-22",
+      "x1": "2034-08-07",
+      "y0": 2.6175,
+      "y1": 2.6175,
+      "price": 2.6175,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-618",
+      "type": "fib",
+      "label": "FIB 61.8% (2.48475)",
+      "x0": "2026-07-17",
+      "x1": "2034-08-07",
+      "y0": 2.48475,
+      "y1": 2.48475,
+      "price": 2.48475,
+      "color": "#facc15",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-1000",
+      "type": "fib",
+      "label": "FIB 100% (2.055)",
+      "x0": "2026-07-06",
+      "x1": "2034-08-07",
+      "y0": 2.055,
+      "y1": 2.055,
+      "price": 2.055,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-boundary",
+      "type": "fib-boundary",
+      "label": "FIB anchor",
+      "x0": "2026-07-06",
+      "x1": "2026-08-07",
+      "y0": 2.055,
+      "y1": 3.18,
+      "color": "#64748b",
+      "group_id": "auto-fibo"
+    }
+  ],
+  "__saved_fibo_by_user__": false
+}

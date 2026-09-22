@@ -998,7 +998,7 @@ class LightweightChartLevelSelectorUI:
   const addDays = (date, days) => {{ const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }};
   const compareTime = (a, b) => new Date(String(a).slice(0, 10) + 'T00:00:00Z') - new Date(String(b).slice(0, 10) + 'T00:00:00Z');
   const extendFuture = (time, minDays = 180) => addDays(P.ohlc[P.ohlc.length - 1]?.time || time, minDays);
-  const fibRatios = [0, 0.382, 0.5, 0.618, 1];
+  const fibRatios = [0, 0.236, 0.382, 0.5, 0.618, 1];
   const fibGoldenColor = '#facc15';
   const fibHighlightColor = '#22c55e';
   const fibLineColor = fibGoldenColor;
@@ -1667,29 +1667,193 @@ class LightweightChartLevelSelectorUI:
     $('chart-wrap').releasePointerCapture?.(ev.pointerId); sidetrendDrag=null; renderSidetrendEditor(); ev.preventDefault(); ev.stopImmediatePropagation?.(); return true;
   }}
   function detectedMonthlySidetrends() {{
-    const ranges = [];
-    for (let start=0; start<ohlc.length; start++) {{
-      let end=start;
-      for (let j=start+1; j<ohlc.length; j++) {{
-        const days=(Date.parse(ohlc[j].time)-Date.parse(ohlc[start].time))/86400000;
-        if (days < 30) continue;
-        const sample=ohlc.slice(start,j+1);
-        const extremes=[...sample.keys()].sort((a,b)=>Number(sample[b].high)-Number(sample[a].high)).slice(0,3)
-          .concat([...sample.keys()].sort((a,b)=>Number(sample[a].low)-Number(sample[b].low)).slice(0,3))
-          .filter((idx,pos,all)=>{{
-            if(idx<2||idx>sample.length-4||all.indexOf(idx)!==pos)return false;
-            const row=sample[idx],close=Number(row.close),lo=Number(row.low),hi=Number(row.high);
-            return (close-lo)/Math.max(Math.abs(lo),1e-9)>0.08||(hi-close)/Math.max(Math.abs(hi),1e-9)>0.08;
-          }});
-        let bestWidth=Infinity;
-        const score=excluded=>{{const kept=sample.filter((_row,idx)=>!excluded.includes(idx));const hi=Math.max(...kept.map(r=>Number(r.high))),lo=Math.min(...kept.map(r=>Number(r.low))),mid=(hi+lo)/2;if(mid)bestWidth=Math.min(bestWidth,(hi-lo)/mid);}};
-        score([]);
-        extremes.forEach((a,i)=>{{score([a]);extremes.slice(i+1).forEach(b=>score([a,b]));}});
-        const first=sample.slice(0,3).map(r=>Number(r.close)).sort((a,b)=>a-b)[1],last=sample.slice(-3).map(r=>Number(r.close)).sort((a,b)=>a-b)[1];
-        if (bestWidth <= 0.185 && Math.abs(last-first)/Math.max(Math.abs(first),1e-9)<=0.08) end=j; else if (end>start) break;
+    // Find a convincing one-month core, then recover the quieter shoulders
+    // around it.  This keeps directional cycles out while allowing SAP-like
+    // volatile shelves whose full range is wider than their stable core.
+    const ranges=[],minSessions=19,maxShoulderSessions=12,maxBackwardGap=0.055,maxForwardGap=0.04;
+    const score=(sample,limits)=>{{
+      const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low)),closes=sample.map(row=>Number(row.close));
+      if([...highs,...lows,...closes].some(value=>!Number.isFinite(value)))return false;
+      const size=sample.length,hi=Math.max(...highs),lo=Math.min(...lows),mid=(hi+lo)/2;
+      if(!mid||(hi-lo)/Math.abs(mid)>limits.channelWidth)return false;
+      const mean=closes.reduce((sum,value)=>sum+value,0)/size,xMean=(size-1)/2;
+      let numerator=0,denominator=0,totalVariance=0,residualVariance=0;
+      closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;totalVariance+=(value-mean)**2;}});
+      const slope=numerator/Math.max(denominator,1);
+      closes.forEach((value,index)=>{{residualVariance+=(value-(mean+slope*(index-xMean)))**2;}});
+      const regressionMove=Math.abs(slope)*(size-1)/Math.max(Math.abs(mean),1e-9);
+      const endpointMove=Math.abs(closes.at(-1)-closes[0])/Math.max(Math.abs(closes[0]),1e-9);
+      const trendFit=totalVariance>1e-9?1-residualVariance/totalVariance:0;
+      return regressionMove<=limits.regressionMove&&endpointMove<=limits.endpointMove&&trendFit<=limits.trendFit;
+    }};
+    const coreLimits={{channelWidth:0.09,regressionMove:0.01,endpointMove:0.08,trendFit:0.35}};
+    const volatileCoreLimits={{channelWidth:0.11,regressionMove:0.03,endpointMove:0.08,trendFit:0.35}};
+    const phaseLimits={{channelWidth:0.185,regressionMove:0.06,endpointMove:0.10,trendFit:0.60}};
+    const phaseQuality=sample=>{{
+      const closes=sample.map(row=>Number(row.close)),size=closes.length,mean=closes.reduce((sum,value)=>sum+value,0)/size,xMean=(size-1)/2;
+      let numerator=0,denominator=0,total=0,residual=0;
+      closes.forEach((value,index)=>{{numerator+=(index-xMean)*(value-mean);denominator+=(index-xMean)**2;total+=(value-mean)**2;}});
+      const slope=numerator/Math.max(denominator,1);
+      closes.forEach((value,index)=>{{residual+=(value-(mean+slope*(index-xMean)))**2;}});
+      return Math.abs(slope)*(size-1)/Math.max(Math.abs(mean),1e-9)+(total>1e-9?1-residual/total:0);
+    }};
+    const medianCrossings=sample=>{{
+      const values=sample.map(row=>Number(row.close)).sort((a,b)=>a-b),median=values[Math.floor(values.length/2)];
+      const signs=sample.map(row=>Math.sign(Number(row.close)-median)).filter(Boolean);
+      let crossings=0;for(let index=1;index<signs.length;index++)if(signs[index]!==signs[index-1])crossings++;
+      return crossings;
+    }};
+    const boundaryGap=(left,right)=>Math.abs(Number(right.close)-Number(left.close))/Math.max(Math.abs(Number(left.close)),1e-9);
+    const strictCoreStarts=new Set();
+    for(let index=0;index+minSessions<=ohlc.length;index++)if(score(ohlc.slice(index,index+minSessions),coreLimits))strictCoreStarts.add(index);
+    for(let start=0;start+minSessions<=ohlc.length;start++) {{
+      let end=start+minSessions-1;
+      const opening=ohlc.slice(start,end+1);
+      const strictCore=strictCoreStarts.has(start);
+      const shadowsStrictCore=[...strictCoreStarts].some(index=>index>start&&index<=end);
+      if(!strictCore&&(shadowsStrictCore||!score(opening,volatileCoreLimits)))continue;
+      const coreHigh=Math.max(...opening.map(row=>Number(row.high))),coreLow=Math.min(...opening.map(row=>Number(row.low)));
+      const envelopePadding=strictCore?0.022:0.035;
+      const withinCoreEnvelope=row=>Number(row.high)<=coreHigh*(1+envelopePadding)&&Number(row.low)>=coreLow*(1-envelopePadding);
+      let phaseStart=start;
+      const backwardLimit=strictCore?maxShoulderSessions:2;
+      for(let candidate=start-1,checked=0;candidate>=0&&checked<backwardLimit;candidate--,checked++){{
+        if((ranges.length&&candidate<=ranges.at(-1)._endIndex)||!withinCoreEnvelope(ohlc[candidate])||boundaryGap(ohlc[candidate],ohlc[candidate+1])>maxBackwardGap)break;
+        if(score(ohlc.slice(candidate,end+1),phaseLimits))phaseStart=candidate;
       }}
-      if (end>start) {{ ranges.push({{id:`S${{ranges.length+1}}`, scannerStart:ohlc[start].time, scannerEnd:ohlc[end].time, start:ohlc[start].time, end:ohlc[end].time, valid:true}}); start=end; }}
+      let phaseEnd=end;
+      for(let candidate=end+1,checked=0;candidate<ohlc.length&&checked<maxShoulderSessions;candidate++,checked++){{
+        if(!withinCoreEnvelope(ohlc[candidate])||boundaryGap(ohlc[candidate-1],ohlc[candidate])>maxForwardGap)break;
+        if(score(ohlc.slice(phaseStart,candidate+1),phaseLimits))phaseEnd=candidate;
+      }}
+      end=phaseEnd;
+      // A core can sit late inside a long channel. Search past temporary
+      // non-qualifying shoulders, but move the start only when the complete
+      // range is materially flatter than the scanner's original range.
+      const originalStart=phaseStart;
+      let bestStart=phaseStart,earliestStart=phaseStart,bestQuality=phaseQuality(ohlc.slice(phaseStart,end+1));
+      for(let candidate=phaseStart-1,checked=0;candidate>=0&&checked<23;candidate--,checked++){{
+        if(ranges.length&&candidate<=ranges.at(-1)._endIndex)break;
+        const sample=ohlc.slice(candidate,end+1),quality=phaseQuality(sample);
+        if(score(sample,phaseLimits)){{
+          earliestStart=candidate;
+          if(withinCoreEnvelope(ohlc[candidate])&&quality<bestQuality*0.8){{bestStart=candidate;bestQuality=quality;}}
+        }}
+      }}
+      if(originalStart-earliestStart>=15)phaseStart=earliestStart;
+      else if(originalStart-bestStart>=5&&bestStart>=2&&boundaryGap(ohlc[bestStart-2],ohlc[bestStart-1])>0.10)phaseStart=bestStart;
+      const previous=ranges.at(-1);
+      if(previous){{
+        const gapSessions=phaseStart-previous._endIndex-1;
+        const meanClose=(from,to)=>ohlc.slice(from,to+1).reduce((sum,row)=>sum+Number(row.close),0)/(to-from+1);
+        const levelShift=Math.abs(meanClose(phaseStart,end)-meanClose(previous._startIndex,previous._endIndex))/Math.max(Math.abs(meanClose(previous._startIndex,previous._endIndex)),1e-9);
+        if(gapSessions>=5&&gapSessions<=10&&levelShift>0.03){{start=end;continue;}}
+      }}
+      ranges.push({{id:`S${{ranges.length+1}}`,scannerStart:ohlc[phaseStart].time,scannerEnd:ohlc[end].time,start:ohlc[phaseStart].time,end:ohlc[end].time,valid:true,_startIndex:phaseStart,_endIndex:end}});start=end;
     }}
+    // Volatile but genuinely oscillating shelves such as WAS/LWB/DIG may not
+    // contain a narrow 9% core. Search a small set of complete month-scale
+    // widths, require repeated median crossings, and never trim spike candles.
+    const broadLimits={{channelWidth:0.19,regressionMove:0.065,endpointMove:0.08,trendFit:0.60}};
+    const fibBoundary=typeof initialScannerDrawnObjects!=='undefined'?initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary'):null;
+    const fibAnchorDate=fibBoundary?Date.parse(String(fibBoundary.x0||'').slice(0,10)):NaN;
+    const fibSecondDate=fibBoundary?Date.parse(String(fibBoundary.x1||'').slice(0,10)):NaN;
+    const broadCandidates=[];
+    for(const size of [22,26,30,34,38,42,46])for(let start=0;start+size<=ohlc.length;start++){{
+      const end=start+size-1,sample=ohlc.slice(start,end+1);
+      const highs=sample.map(row=>Number(row.high)),lows=sample.map(row=>Number(row.low));
+      const hi=Math.max(...highs),lo=Math.min(...lows),width=(hi-lo)/Math.max(Math.abs((hi+lo)/2),1e-9);
+      const minWidth=size<=26?0.11:0.15;
+      const minCrossings=size<=26?10:8;
+      if(width<minWidth||!score(sample,broadLimits)||medianCrossings(sample)<minCrossings)continue;
+      const startTime=Date.parse(ohlc[start].time),endTime=Date.parse(ohlc[end].time);
+      if(Number.isFinite(fibAnchorDate)&&startTime<fibAnchorDate&&endTime>fibAnchorDate&&endTime-fibAnchorDate<28*86400000)continue;
+      if(Number.isFinite(fibSecondDate)&&startTime<fibSecondDate&&endTime>fibSecondDate)continue;
+      broadCandidates.push({{start,end}});
+    }}
+    // Very long candidates often bridge two shelves across a directional
+    // transition. Split only when both sides contain a full month and the
+    // six-session transition moves at least 7%; otherwise discard the broad
+    // candidate instead of presenting a misleading sidetrend (Puma).
+    const normalizedRanges=[];
+    ranges.forEach(range=>{{
+      const prior=normalizedRanges.at(-1);
+      const priorGapDays=prior?(Date.parse(ohlc[range._startIndex].time)-Date.parse(ohlc[prior._endIndex].time))/86400000:Infinity;
+      if(prior&&priorGapDays<=10){{
+        let reset=-1;
+        for(let index=range._startIndex+1;index<=Math.min(range._endIndex,range._startIndex+10);index++){{
+          const change=(Number(ohlc[index].close)-Number(ohlc[index-1].close))/Math.max(Math.abs(Number(ohlc[index-1].close)),1e-9);
+          if(change<=-0.03)reset=index+1;
+        }}
+        if(reset>0&&range._endIndex-reset>=minSessions){{
+          range={{...range,scannerStart:ohlc[reset].time,start:ohlc[reset].time,_startIndex:reset}};
+          const extensionLimit=range._endIndex+12;
+          for(let candidate=range._endIndex+1;candidate<ohlc.length&&candidate<=extensionLimit;candidate++){{
+            const resetDays=(Date.parse(ohlc[candidate].time)-Date.parse(ohlc[reset].time))/86400000;
+            if(resetDays<=55&&score(ohlc.slice(reset,candidate+1),phaseLimits))range={{...range,scannerEnd:ohlc[candidate].time,end:ohlc[candidate].time,_endIndex:candidate}};
+          }}
+        }}
+      }}
+      const firstThree=ohlc.slice(range._startIndex,range._startIndex+3).map(row=>Number(row.close));
+      const firstCandle=ohlc[range._startIndex],firstCandleWidth=(Number(firstCandle.high)-Number(firstCandle.low))/Math.max(Math.abs(Number(firstCandle.close)),1e-9);
+      const smoothEntry=firstCandleWidth<=0.05&&firstThree.length===3&&firstThree[0]<firstThree[1]&&firstThree[1]<firstThree[2]&&(firstThree[2]-firstThree[0])/Math.max(Math.abs(firstThree[0]),1e-9)>0.02;
+      if(smoothEntry&&range._endIndex+1<ohlc.length){{
+        const shiftedStart=range._startIndex+2,nextEnd=range._endIndex+1;
+        const exitMove=Math.abs(Number(ohlc[nextEnd].close)-Number(ohlc[range._endIndex].close))/Math.max(Math.abs(Number(ohlc[range._endIndex].close)),1e-9);
+        if(exitMove<0.03)range={{...range,scannerStart:ohlc[shiftedStart].time,start:ohlc[shiftedStart].time,scannerEnd:ohlc[nextEnd].time,end:ohlc[nextEnd].time,_startIndex:shiftedStart,_endIndex:nextEnd}};
+      }}
+      let lastPeak=range._startIndex;
+      for(let index=range._startIndex+1;index<=range._endIndex;index++)if(Number(ohlc[index].high)>=Number(ohlc[lastPeak].high))lastPeak=index;
+      const riseIntoPeak=(Number(ohlc[lastPeak].close)-Number(ohlc[range._startIndex].close))/Math.max(Math.abs(Number(ohlc[range._startIndex].close)),1e-9);
+      const postPeakSessions=range._endIndex-lastPeak+1;
+      const approach=ohlc.slice(Math.max(0,range._startIndex-15),range._startIndex+1).map(row=>Number(row.close));
+      const approachLow=Math.min(...approach),approachGain=(Number(ohlc[range._startIndex].close)-approachLow)/Math.max(Math.abs(approachLow),1e-9);
+      // A range which climbs into a fresh high and only then starts a short
+      // pullback is still the top of the incline.  It becomes a completed
+      // sidetrend only after a full trading month has elapsed past the last
+      // equal high, rather than merely because its endpoints look flat.
+      const reachesLatest=range._endIndex>=ohlc.length-3;
+      if(reachesLatest&&lastPeak-range._startIndex>=3&&approachGain>0.08&&riseIntoPeak>0.06&&postPeakSessions<minSessions)return;
+      const calendarDays=(Date.parse(ohlc[range._endIndex].time)-Date.parse(ohlc[range._startIndex].time))/86400000;
+      if(calendarDays<=60){{normalizedRanges.push(range);return;}}
+      let split=-1;
+      for(let index=range._startIndex;index+6<=range._endIndex;index++){{
+        const leftSessions=index-range._startIndex+1,rightSessions=range._endIndex-index-5;
+        const transition=Math.abs(Number(ohlc[index+5].close)-Number(ohlc[index].close))/Math.max(Math.abs(Number(ohlc[index].close)),1e-9);
+        if(leftSessions+3>=minSessions&&rightSessions>=minSessions&&transition>=0.07){{split=index;break;}}
+      }}
+      if(split<0)return;
+      const leftStart=Math.max(0,range._startIndex-Math.max(0,20-(split-range._startIndex+1)));
+      normalizedRanges.push({{...range,scannerStart:ohlc[leftStart].time,start:ohlc[leftStart].time,scannerEnd:ohlc[split].time,end:ohlc[split].time,_startIndex:leftStart,_endIndex:split}});
+      const rightStart=split+6;
+      normalizedRanges.push({{...range,scannerStart:ohlc[rightStart].time,start:ohlc[rightStart].time,_startIndex:rightStart}});
+    }});
+    ranges.splice(0,ranges.length,...normalizedRanges);
+    // A high-volatility reset can start a valid shelf without ever producing
+    // a narrow core.  Only admit this broader seed immediately after a >5%
+    // shock and away from an already detected phase.
+    const resetCoreLimits={{channelWidth:0.14,regressionMove:0.03,endpointMove:0.08,trendFit:0.20}};
+    const resetPhaseLimits={{channelWidth:0.185,regressionMove:0.08,endpointMove:0.10,trendFit:0.60}};
+    const resetStarts=[];
+    for(let start=2;start+minSessions<=ohlc.length;start++)if(boundaryGap(ohlc[start-2],ohlc[start-1])>0.05&&score(ohlc.slice(start,start+minSessions),resetCoreLimits))resetStarts.push(start);
+    for(const start of resetStarts){{
+      const overlaps=ranges.some(range=>start<=range._endIndex+10&&start+minSessions-1>=range._startIndex-10);
+      if(overlaps||resetStarts.some(later=>later>start&&later<=start+2))continue;
+      let end=start+minSessions-1;
+      for(let candidate=end+1;candidate<ohlc.length&&candidate<start+35;candidate++)if(score(ohlc.slice(start,candidate+1),resetPhaseLimits))end=candidate;
+      ranges.push({{scannerStart:ohlc[start].time,scannerEnd:ohlc[end].time,start:ohlc[start].time,end:ohlc[end].time,valid:true,_startIndex:start,_endIndex:end}});
+    }}
+    broadCandidates.sort((a,b)=>(b.end-b.start)-(a.end-a.start)||a.start-b.start);
+    for(const candidate of broadCandidates){{
+      if(ranges.some(range=>candidate.start<=range._endIndex&&candidate.end>=range._startIndex))continue;
+      ranges.push({{id:'',scannerStart:ohlc[candidate.start].time,scannerEnd:ohlc[candidate.end].time,start:ohlc[candidate.start].time,end:ohlc[candidate.end].time,valid:true,_startIndex:candidate.start,_endIndex:candidate.end}});
+    }}
+    if(Number.isFinite(fibSecondDate))ranges.splice(0,ranges.length,...ranges.filter(range=>{{
+      const startTime=Date.parse(ohlc[range._startIndex].time),endTime=Date.parse(ohlc[range._endIndex].time);
+      return !(startTime<fibSecondDate&&fibSecondDate<endTime);
+    }}));
+    ranges.sort((a,b)=>a._startIndex-b._startIndex).forEach((range,index)=>range.id=`S${{index+1}}`);
+    ranges.forEach(range=>{{delete range._startIndex;delete range._endIndex;}});
     return ranges;
   }}
 
@@ -1715,11 +1879,6 @@ class LightweightChartLevelSelectorUI:
     const correctedBoundary = [...currentBoundaries].reverse().find(obj => !scannerBoundary || obj.x0 !== scannerBoundary.x0 || obj.x1 !== scannerBoundary.x1 || Number(obj.y0) !== Number(scannerBoundary.y0) || Number(obj.y1) !== Number(scannerBoundary.y1));
     const boundaryText = obj => obj ? `${{String(obj.x0).slice(0,10)}} @ ${{fmt(obj.y0)}} -> ${{String(obj.x1).slice(0,10)}} @ ${{fmt(obj.y1)}}` : 'none';
     lines.push(`${{boundaryText(scannerBoundary)}},${{boundaryText(correctedBoundary || scannerBoundary)}},${{correctedBoundary ? 'Adjusted' : 'No change'}}`);
-    lines.push('');
-    lines.push('SIDETRENDS (>30 calendar days; review candidates):');
-    const sideRanges = debugSideRanges || detectedMonthlySidetrends();
-    if (sideRanges.length) sideRanges.forEach(r=>lines.push(`${{r.id}},${{r.scannerStart}} -> ${{r.scannerEnd}},${{r.valid ? `${{r.start}} -> ${{r.end}}` : '-'}},${{!r.valid ? 'Marked invalid' : (r.start !== r.scannerStart || r.end !== r.scannerEnd ? 'Adjusted' : 'No change')}}`));
-    else lines.push('none');
     if (!fibs.length) lines.push('No Fibonacci lines on chart.');
     const groups = new Map();
     fibs.forEach(obj => {{ const gid = obj.group_id || obj.id || 'manual'; if (!groups.has(gid)) groups.set(gid, []); groups.get(gid).push(obj); }});
@@ -1951,19 +2110,21 @@ class LightweightChartLevelSelectorUI:
     drawer.querySelector('.calc-toolbar')?.classList.add('debug-instrument');
     $('debug-report-identity').innerHTML=`<strong>${{esc(debugTickerText())}}</strong><span>${{esc(P.sourceName || '-')}}</span>`;
     const csvTable=(csv,title)=>{{const csvRows=csv.trim().split('\\n').filter(Boolean).map(line=>line.split(','));if(!csvRows.length)return'';return `<section class="debug-data-section"><h4>${{esc(title)}}</h4><table><thead><tr>${{csvRows[0].map(c=>`<th>${{esc(c)}}</th>`).join('')}}</tr></thead><tbody>${{csvRows.slice(1).map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table></section>`;}};
+    const reportFiboBoundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
+    const boundaryDates=reportFiboBoundary?[String(reportFiboBoundary.x0||'').slice(0,10),String(reportFiboBoundary.x1||'').slice(0,10)].sort():[];
+    const reportTouchesFibo=boundaryDates.length===2&&reportSidetrends.some(range=>range.valid&&range.start<=boundaryDates[1]&&range.end>=boundaryDates[0]);
     let dataHtml='',copyData=[];
     if(mode==='sidetrend') {{
       reportSidetrends.forEach(r=>{{const coverage=sidetrendCoverage(r),csv=scannerCandlesCsv(500,coverage.start).split('\\n');const stop=csv.findIndex((line,index)=>index>0&&line.slice(0,10)>coverage.end);const selected=(stop>0?csv.slice(0,stop):csv).join('\\n');const comparison=r.scannerStart==='not found'?`added ${{r.start}} → ${{r.end}}`:(r.markedInvalid?`invalid · scanner ${{r.scannerStart}} → ${{r.scannerEnd}}`:`scanner ${{r.scannerStart}} → ${{r.scannerEnd}} · corrected ${{r.start}} → ${{r.end}}`);dataHtml+=csvTable(selected,`${{r.id}} · ${{comparison}} · full coverage ${{coverage.start}} → ${{coverage.end}}`);copyData.push(`${{r.id}} DATA · FULL COVERAGE ${{coverage.start}} → ${{coverage.end}}\\n${{selected}}`);}});
-      const boundary=initialScannerDrawnObjects.find(obj=>obj.type==='fib-boundary');
-      if(boundary && debugSidetrendReportFilter!=='changed') {{
-        const start=String(boundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
+      if(reportFiboBoundary&&reportTouchesFibo&&debugSidetrendReportFilter!=='changed') {{
+        const start=String(reportFiboBoundary.x0||'').slice(0,10),csv=scannerCandlesCsv(500,start);
         dataHtml+=csvTable(csv,`Complete Fibo candle data · from ${{start}}`);copyData.push(`COMPLETE FIBO DATA\\n${{csv}}`);
       }}
     }}
     else {{const marker=tech==='Fibo'?'CSV candles since first anchor':'CSV candles since oldest wedge anchor';const at=text.lastIndexOf(marker),nl=at<0?-1:text.indexOf('\\n',at);const csv=nl<0?'No candle data available.':text.slice(nl+1);dataHtml=csvTable(csv,'Candle data');copyData=[csv];}}
     const instrumentRows=debugInstrumentLines();
     const fibStart=text.indexOf('FIB group:'),fibEnd=text.lastIndexOf('CSV candles since first anchor');
-    const fibInfo=mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
+    const fibInfo=mode==='sidetrend'&&debugSidetrendReportFilter!=='changed'&&reportTouchesFibo&&fibStart>=0?text.slice(fibStart,fibEnd>fibStart?fibEnd:text.length).trim():'';
     const reportHeaders=mode==='sidetrend'?['#','From (scanner)','To (scanner)','Days (scanner)','From (corrected)','To (corrected)','Days (corrected)','Difference','Status']:(mode==='fibo'?['Item','Date (scanner)','Date (corrected)','Price (scanner)','Price (corrected)']:['Item','Start date (scanner)','Start date (corrected)','End date (scanner)','End date (corrected)','Start price (scanner)','Start price (corrected)','End price (scanner)','End price (corrected)']);
     table.innerHTML=`<table><thead><tr>${{reportHeaders.map(h=>`<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(r=>`<tr>${{r.map(c=>`<td>${{esc(c)}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>${{fibInfo?`<section class="debug-data-section"><h4>Fibo formation containing the sidetrend</h4><pre>${{esc(fibInfo)}}</pre></section>`:''}}${{dataHtml}}`;
     const copyText=[$('calc-title').textContent,instrumentRows.join('\\n'),[reportHeaders.join(','),...rows.map(r=>r.join(','))].join('\\n'),fibInfo,...copyData].filter(Boolean).join('\\n\\n');
@@ -2008,16 +2169,21 @@ class LightweightChartLevelSelectorUI:
     const firstOpen=!debugSideRanges;
     if (firstOpen) {{
       debugSideRanges=detectedMonthlySidetrends().map(range=>({{...range,valid:sidetrendNearFibo(range)}}));
+      const overlaps=(left,right)=>left.start<=right.end&&right.start<=left.end;
+      const removeScannerOverlaps=(saved,keep=null)=>{{
+        const coverage={{start:saved.start,end:saved.end}};
+        debugSideRanges=debugSideRanges.filter(range=>range===keep||range.saved||!overlaps(range,coverage));
+      }};
       savedSidetrends.forEach(saved=>{{
         const match=debugSideRanges.find(r=>(saved.scannerStart&&r.scannerStart===saved.scannerStart&&r.scannerEnd===saved.scannerEnd)||(r.start===saved.start&&r.end===saved.end));
-        if (!match) debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:sidetrendNearFibo(saved),saved:true}});
-        else {{match.start=saved.start;match.end=saved.end;match.valid=sidetrendNearFibo(match);match.saved=true;}}
+        if (!match) {{removeScannerOverlaps(saved);debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:sidetrendNearFibo(saved),saved:true}});}}
+        else {{match.start=saved.start;match.end=saved.end;match.valid=sidetrendNearFibo(match);match.saved=true;removeScannerOverlaps(saved,match);}}
       }});
       const invalidSidetrends=Array.isArray(levels.__saved_invalid_sidetrends__)?levels.__saved_invalid_sidetrends__:[];
       invalidSidetrends.forEach(saved=>{{
         const match=debugSideRanges.find(r=>(saved.scannerStart&&r.scannerStart===saved.scannerStart&&r.scannerEnd===saved.scannerEnd)||(r.start===saved.start&&r.end===saved.end));
-        if(match) Object.assign(match,{{start:saved.start,end:saved.end,valid:false,markedInvalid:true}});
-        else debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:false,markedInvalid:true,saved:true}});
+        if(match) {{Object.assign(match,{{start:saved.start,end:saved.end,valid:false,markedInvalid:true,saved:true}});removeScannerOverlaps(saved,match);}}
+        else {{removeScannerOverlaps(saved);debugSideRanges.push({{id:`S${{debugSideRanges.length+1}}`,scannerStart:saved.scannerStart||'not found',scannerEnd:saved.scannerEnd||'not found',start:saved.start,end:saved.end,valid:false,markedInvalid:true,saved:true}});}}
       }});
       debugSideRanges.sort((a,b)=>String(a.start).localeCompare(String(b.start)));
     }}
@@ -3728,7 +3894,7 @@ class LightweightChartLevelSelectorUI:
     clearPreviews(); activeTool='manual-wedge'; activeField=null; lineAnchor=null; $('line-tool-group').classList.remove('kind-open');
     $('result-box').textContent='Draw the upper wedge line.'; updatePanel(); render();
   }};
-  $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
+  $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); fibAnchor=null; activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
   $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');

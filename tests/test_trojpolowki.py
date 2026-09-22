@@ -356,11 +356,34 @@ def test_fibo_recent_dropouts_are_retained_for_ten_days(tmp_path: Path):
     assert "DROP ↗️ (2026-06-01)" not in (tmp_path / "fibo_dropouts.json").read_text(encoding="utf-8")
 
 
+def test_current_strong_impulse_header_is_read_for_dropout_history(tmp_path: Path):
+    mod = load_run_module()
+    board = tmp_path / "fibo.md"
+    board.write_text(
+        "# Trójpolówki — Fibo\n\n"
+        "| 🚀 Strong impulse | ⚠️ Waiting 23.6→61.8 | 🎯 Near 61.8 > 75% / deeper pullback | ✅ Pattern ≤14d / SL intact | 🕘 Recent dropouts (10d) |\n"
+        "|---|---|---|---|---|\n"
+        "| **🇵🇱 BFT ↗️ (2026-03-23)** <!--fibo-end:2026-08-14-->[link](https://example.test/?s=BFT.WA) |  |  |  |  |\n",
+        encoding="utf-8",
+    )
+
+    assert mod._read_previous_fibo_board(board) == {
+        ("BFT", "long", "2026-03-23"): (
+            "**🇵🇱 BFT ↗️ (2026-03-23)** <!--fibo-end:2026-08-14-->[link](https://example.test/?s=BFT.WA)",
+            0,
+        )
+    }
+
+    mod._write_trojpolowki_fibo([], tmp_path, datetime(2026, 9, 20, 9, 0, 0))
+    assert "BFT ↗️ (2026-03-23)" in board.read_text(encoding="utf-8")
+    assert "OTHER_SETUP_FILTER" in board.read_text(encoding="utf-8")
+
+
 def test_fibo_dropout_chart_never_falls_back_to_ichimoku():
     source = Path("run").read_text(encoding="utf-8")
     fibo_branch = source[source.index('elif "fibo" in section_id:'):source.index('else:', source.index('elif "fibo" in section_id:'))]
     assert "troj_row_by_ticker.get(ticker)" not in fibo_branch
-    assert "--ichimoku-mode off --fibo-lines 5" in source
+    assert "--ichimoku-mode off --fibo-lines 6" in source
 
 
 def test_fibo_dropouts_have_per_instrument_analyzer_sidebar_and_codex_copy():
@@ -433,6 +456,7 @@ def test_chart_fibo_debug_ends_with_requested_csv_data():
     assert "61.8 value:" in snapshot
     assert "61.8 pattern:" in snapshot
     assert "CSV candles since first anchor" in snapshot
+    assert "SIDETRENDS (>30 calendar days; review candidates):" not in snapshot
     assert "FIBO ANCHOR / CHANNEL DEBUG" not in snapshot
     assert "scanner audit command" not in snapshot
 
@@ -508,6 +532,21 @@ def test_extended_short_side_trends_expire_even_near_the_recovery_extreme():
     assert "max_progress_pct=0.08" in helper
     assert waiting.index("if _has_extended_sideways") < waiting.index("return not _sideways_correction_near_active_extreme")
     assert "correction, max_days=22, band_pct=0.12" in waiting
+
+
+def test_fibo_finalization_scans_monthly_sidetrends_once_per_ticker():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    worker_start = source.index("def _scan_fibo_one(")
+    worker_end = source.index("workers_override = _scan_workers_override()", worker_start)
+    worker = source[worker_start:worker_end]
+
+    assert "detected_sidetrends = _clear_month_sidetrend_date_ranges(df)" in worker
+    assert worker.count("_clear_month_sidetrend_date_ranges(df)") == 1
+    assert "_fibo_crosses_detected_sidetrend" in worker
+    assert "_fibo_crosses_saved_sidetrend" in worker
+    assert "_fibo_anchors_remain_extreme(df, item)" in worker
+    assert "later_impulse_high > fib_start" in source
+    assert "later_launch = _repeated_range_acceleration_launch_long(" in source
 
 
 def test_fibo_pattern_may_finish_later_but_must_include_initial_touch_candle():
@@ -1700,7 +1739,7 @@ def test_allsearch_html_has_trojpolowki_links(tmp_path: Path):
     assert "data-cmd='python run -c RWE.DE --ichimoku-mode on --scanner-breakout-date 2026-05-29 --scanner-retest-count 1 --scanner-latest-retest-date 2026-05-30 --scanner-previous-respect-months 7.5'" in text
     assert "Fibo pattern: none" not in text
     assert "Fibo valid" not in text
-    assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 5 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
+    assert "data-cmd='python run -c AEP.US --ichimoku-mode off --fibo-lines 6 --fibo-anchor-start 2026-01-05 --fibo-anchor-end 2026-02-20 --fibo-right'" in text
     assert "href='fibo.md'" not in text
     assert "href='ichimoku.md'" not in text
 

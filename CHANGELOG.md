@@ -1,12 +1,44 @@
 # Changelog
 
+- Extended manual Fibo previews across the full future chart area, removed sidetrend sections from Fibo-only debug reports, repaired single-symbol dropout diagnostics, and kept coherent DNP/BAS/BFT-style impulses through internal or peak-adjacent range candidates.
+- Completed 23.6% rendering for scanner-opened Fibos, removed the empty first-anchor preview artifact, returned reclaimed 23.6 setups to the strong-impulse column, and recognized active volatile monthly shelves such as APP before finalizing Fibos.
+- Added the 23.6% level to both automatic scanner and manually drawn Fibonacci groups in the lightweight chart.
+- Tightened Fibo lifecycle validation: second anchors must be the true impulse extreme, harami confirmations must close back across 61.8, active tight correction shelves invalidate stale formations, and strong post-pause impulses such as ACP remain eligible.
+
+- Allowed allsearch to continue when at most 10% of a market group remains stale after data repair, while still stopping groups whose unresolved share exceeds that threshold.
+- Added an end-of-allsearch market-data warning summary grouped by market, so tolerated missing or stale instruments remain visible after both scanner phases finish.
+
+- Fixed current 3P boards failing to populate recent Fibo dropouts after the first column was renamed from “Steep incline” to “Strong impulse”.
+- Kept live exceptional impulses such as BFT in Fibo results when a range candidate extends through the newest candle and therefore is not yet a completed monthly sidetrend.
+
+- Improved sidetrend review detection to split long candidates at sustained transitions, discard unsplittable multi-regime ranges, recover post-shock shelves, and refine smooth entry/exit boundaries.
+- Updated the WIG scanner universe by removing stale MOJ and PUR entries and adding MQR (MultiQure SA).
+- Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
+- Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
+- Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo.
+- Restored full Stooq-first health retries for stale Forex caches, matching commodity repair behavior instead of bypassing history refresh for a single missing candle.
+- Made Fibo sidetrend invalidation anchor-aware: completed tight monthly ranges are checked only from the final first anchor through the first 61.8 touch/current candle, after anchor selection has had a chance to restart at a strong post-range impulse.
+- Replaced per-candidate month-window rescans and tuple caching with one tight-range scan per instrument, and rejected short Fibos whose first anchor is superseded by a later high.
+- Tightened Fibo-only sidetrend qualification to reject directional or spike-trimmed windows, preserved BFT-style coherent impulses, and allowed repeated strong post-range legs to advance the first anchor more than once.
+- Added oscillation-based volatile sidetrends for WAS/LWB/DIG, invalidated Fibos whose first anchor sits inside a continuing month-long shelf, and applied the first-anchor extreme check to every regular, steep, and saved Fibo result.
+- Reduced volatile-shelf over-filtering with stricter oscillation requirements, rejected anchors placed near a shelf's beginning, and required both Fibo anchors to remain the true extrema through the first 61.8 horizon (including MQR's later peak).
+
 All notable release changes for StockHelper are documented here.
 
 The project currently documents release tags `1.0` through `9.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
 
 ## [Unreleased]
 
-No unreleased changes are documented yet.
+### Fixed
+
+- Restored the original single-preview manual Fibonacci drawing workflow after
+  the viewport/anchor-reset changes caused duplicated charts and triplicated
+  levels; the only drawing addition remains the new 23.6% line.
+- Clear an unfinished first manual Fibonacci anchor whenever the Fibo tool is
+  switched off or back on, so every newly activated drawing starts cleanly.
+- Keep a coherent steep Fibonacci formation active after its correction briefly
+  crosses 23.6% and then reclaims the impulse side, preventing valid formations
+  such as PEPCO from being reported as dropouts.
 
 Compare: [`9.0...HEAD`](https://github.com/gwojacek/stockhelper/compare/9.0...HEAD)
 

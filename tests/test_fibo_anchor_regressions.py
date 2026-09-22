@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -69,6 +70,21 @@ def test_ftnt_exceptional_post_base_impulse_survives_loose_month_window():
     assert result.incline_end_date == "2026-08-05"
     assert result.status == "3p_steep_incline"
     assert any("monthly pause absorbed" in message for message in explain)
+
+
+def test_bft_live_impulse_is_not_rejected_by_unfinished_correction_range():
+    frame = _fixture("data/csv/stocks/BFT_WA.csv")
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert result is not None
+    assert result.incline_start_date == "2026-03-23"
+    assert result.incline_end_date == "2026-08-14"
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+    latest = frame["Date"].max().date().isoformat()
+    assert not scanner._fibo_crosses_detected_sidetrend(
+        result, ranges, latest_date=latest,
+    )
 
 
 @pytest.mark.parametrize(
@@ -150,6 +166,63 @@ def test_bft_stair_step_shelves_do_not_replace_march_launch_bottom():
     assert frame.iloc[start_idx]["Date"].strftime("%Y-%m-%d") == "2026-03-23"
     assert start_low == pytest.approx(3265.00, abs=0.01)
     assert peak == pytest.approx(5695.00, abs=0.01)
+
+
+def test_bft_impulse_is_not_misclassified_as_a_monthly_sidetrend():
+    frame = _fixture("data/csv/stocks/BFT_WA.csv")
+    explain: list[str] = []
+
+    result = scanner._find_fibo_3p_steep_setup(frame, "long", explain)
+
+    assert result is not None, "\n".join(explain)
+    assert result.incline_start_date == "2026-03-23"
+    assert result.incline_end_date == "2026-08-14"
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+    assert scanner._fibo_crosses_detected_sidetrend(
+        result,
+        ranges,
+        latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+    ) is False
+
+
+def test_fibo_clear_sidetrend_requires_flat_untrimmed_month():
+    dates = pd.bdate_range("2026-01-02", periods=19)
+    flat_close = pd.Series([100.0, 101.0, 99.5, 100.5] * 5)[:19]
+    flat = pd.DataFrame({
+        "Date": dates,
+        "Open": flat_close,
+        "High": flat_close + 0.8,
+        "Low": flat_close - 0.8,
+        "Close": flat_close,
+    })
+    directional_close = pd.Series([100.0 + i * 0.38 for i in range(19)])
+    directional = flat.assign(
+        Open=directional_close,
+        High=directional_close + 0.3,
+        Low=directional_close - 0.3,
+        Close=directional_close,
+    )
+    spike = flat.copy()
+    spike.loc[9, "High"] = 112.0
+
+    assert scanner._clear_month_sidetrend_date_ranges(flat)
+    assert scanner._clear_month_sidetrend_date_ranges(directional) == []
+    assert scanner._clear_month_sidetrend_date_ranges(spike) == []
+
+
+@pytest.mark.parametrize(
+    ("csv_name", "expected_start", "expected_end"),
+    [
+        ("WAS_WA.csv", "2026-08-04", "2026-09-08"),
+        ("LWB_WA.csv", "2026-06-25", "2026-08-07"),
+        ("DIG_WA.csv", "2026-07-07", "2026-09-03"),
+    ],
+)
+def test_fibo_sidetrends_include_volatile_oscillating_ranges(csv_name, expected_start, expected_end):
+    frame = _fixture(f"data/csv/stocks/{csv_name}")
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+
+    assert any(start <= expected_start and end >= expected_end for start, end in ranges)
 
 
 def test_pur_completed_channel_drops_immature_post_channel_impulse():
@@ -550,6 +623,57 @@ def test_regular_fibo_uses_xtb_post_range_structural_launch():
     assert any("confirmed structural launch" in item for item in explain)
 
 
+def test_xtb_does_not_emit_short_with_anchor_below_later_impulse_high():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+
+    result = scanner._find_fibo_setup(frame, "short")
+
+    assert result is None
+
+
+def test_xtb_short_is_rejected_when_later_high_pierces_first_anchor():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    candidate = SimpleNamespace(
+        direction="short",
+        incline_start_date="2026-08-12",
+        incline_end_date="2026-09-11",
+        first_61_8_touch_date="",
+    )
+
+    assert scanner._fibo_anchors_remain_extreme(frame, candidate) is False
+
+
+def test_mqr_anchor_cannot_start_inside_shelf_or_miss_next_higher_peak():
+    frame = _fixture("data/csv/stocks/MQR_WA.csv")
+    candidate = SimpleNamespace(
+        direction="long",
+        incline_start_date="2026-07-06",
+        incline_end_date="2026-08-07",
+        first_61_8_touch_date="2026-09-11",
+    )
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        ranges,
+        latest_date="2026-09-11",
+    ) is True
+    assert scanner._fibo_anchors_remain_extreme(frame, candidate) is False
+
+
+def test_xtb_long_has_no_clear_monthly_range_after_reanchoring():
+    frame = _fixture("data/csv/stocks/XTB_WA.csv")
+    result = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert result is not None
+    assert result.incline_start_date == "2026-05-28"
+    assert scanner._fibo_crosses_detected_sidetrend(
+        result,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+    ) is False
+
+
 def test_xtb_extended_range_does_not_keep_april_pre_range_anchor():
     frame = _fixture("data/csv/stocks/XTB_WA.csv")
     dates = frame["Date"].dt.strftime("%Y-%m-%d")
@@ -705,3 +829,218 @@ def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     )
 
     assert "--scanner-pattern-date" not in command
+
+
+def test_acp_impulse_pause_does_not_remove_valid_waiting_fibo():
+    frame = _fixture("data/csv/stocks/ACP_WA.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 227.60, 229.60, 224.00, 225.40, 139453),
+            ("2026-09-15", 225.70, 226.90, 217.50, 219.60, 159733),
+            ("2026-09-16", 219.70, 221.30, 215.10, 221.30, 187126),
+            ("2026-09-17", 219.90, 228.30, 219.90, 226.20, 130971),
+            ("2026-09-18", 226.40, 229.80, 220.30, 221.40, 337681),
+            ("2026-09-21", 222.40, 224.80, 220.80, 221.30, 21127),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+
+    result = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-06-26", "2026-08-28"),
+    )
+
+    assert result is not None
+    assert result.status == "reached_23_6_waiting_for_61_8"
+
+
+def test_second_anchor_must_be_the_impulse_extreme():
+    frame = _fixture("data/csv/stocks/ARM_US.csv")
+    candidate = scanner._find_fibo_setup(frame, "long", end_offset=0)
+
+    assert candidate is not None
+    assert candidate.incline_end_date == "2026-09-09"
+    assert not scanner._fibo_anchors_remain_extreme(frame, candidate)
+
+
+def test_bayn_active_flat_correction_is_detected_as_sidetrend():
+    frame = _fixture("data/csv/stocks/BAYN_DE.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 48.52, 50.32, 48.30, 49.33, 3112798),
+            ("2026-09-15", 49.79, 50.04, 48.15, 48.71, 2001373),
+            ("2026-09-16", 48.54, 49.42, 48.35, 48.98, 1359637),
+            ("2026-09-17", 49.27, 49.65, 48.70, 49.04, 1758395),
+            ("2026-09-21", 48.40, 48.65, 47.98, 48.58, 232085),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+
+    assert ("2026-07-27", "2026-09-21") in scanner._clear_month_sidetrend_date_ranges(frame)
+
+
+def test_app_active_volatile_month_shelf_invalidates_old_short_fibo():
+    frame = _fixture("data/csv/stocks/APP_US.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 324.04, 338.34, 320.40, 334.24, 5056600),
+            ("2026-09-15", 328.33, 334.46, 323.80, 331.46, 6604900),
+            ("2026-09-16", 333.58, 336.44, 322.01, 326.56, 3522600),
+            ("2026-09-17", 331.86, 333.43, 314.82, 321.60, 4537400),
+            ("2026-09-18", 323.39, 328.15, 307.76, 308.06, 10936300),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+
+    ranges = scanner._clear_month_sidetrend_date_ranges(frame)
+
+    assert any(start <= "2026-08-11" and end == "2026-09-18" for start, end in ranges)
+    candidate = scanner._find_fibo_3p_steep_setup(frame, "short")
+    assert candidate is not None
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        ranges,
+        latest_date="2026-09-18",
+        df=frame,
+    ) is True
+
+
+def test_dnp_peak_pullback_window_does_not_invalidate_coherent_impulse():
+    frame = _fixture("data/csv/stocks/DNP_WA.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 35.32, 35.47, 34.82, 35.00, 2452882),
+            ("2026-09-15", 35.02, 35.65, 34.52, 35.50, 4561381),
+            ("2026-09-16", 35.45, 35.94, 35.20, 35.80, 3247619),
+            ("2026-09-17", 36.00, 36.32, 35.82, 36.15, 4251167),
+            ("2026-09-18", 36.20, 36.45, 35.66, 35.74, 3382248),
+            ("2026-09-21", 35.99, 36.04, 35.14, 35.49, 3389905),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+    candidate = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-07-08", "2026-09-08"),
+    )
+
+    assert candidate is not None
+    assert candidate.status == "returned_before_61_8"
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date="2026-09-21",
+        df=frame,
+    ) is False
+
+
+@pytest.mark.parametrize("csv_name", ["ACP_WA.csv", "PCO_WA.csv"])
+def test_strong_wig_impulses_survive_final_sidetrend_filter(csv_name):
+    frame = _fixture(f"data/csv/stocks/{csv_name}")
+    candidate = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert candidate is not None
+    assert scanner._fibo_anchors_remain_extreme(frame, candidate)
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date=frame["Date"].max().strftime("%Y-%m-%d"),
+        df=frame,
+    ) is False
+
+
+def test_pco_23_6_reclaim_returns_active_correction_to_strong_impulse():
+    frame = _fixture("data/csv/stocks/PCO_WA.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 40.09, 41.20, 39.71, 41.03, 1119278),
+            ("2026-09-15", 41.00, 42.15, 40.53, 41.70, 1069536),
+            ("2026-09-16", 41.67, 41.69, 40.70, 41.60, 628923),
+            ("2026-09-17", 41.47, 42.45, 41.24, 42.31, 969884),
+            ("2026-09-18", 42.49, 42.71, 41.65, 41.87, 2408895),
+            ("2026-09-21", 42.09, 42.30, 41.50, 42.30, 320699),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+    candidate = scanner._find_fibo_3p_steep_setup(frame, "long")
+
+    assert candidate is not None
+    assert candidate.incline_start_date == "2026-03-23"
+    assert candidate.incline_end_date == "2026-08-05"
+    assert float(candidate.current_close) > float(candidate.fib_23_6)
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date="2026-09-21",
+        df=frame,
+    ) is False
+
+
+def test_pre_61_8_return_moves_back_to_strong_impulse_column():
+    assert scanner._fibo_pre_61_8_status("long", 35.56, 35.17) == "returned_before_61_8"
+    assert scanner._fibo_pre_61_8_status("long", 35.00, 35.17) == "reached_23_6_waiting_for_61_8"
+
+
+def test_bas_coherent_stair_step_impulse_is_not_a_terminal_stall():
+    frame = _fixture("data/csv/stocks/BAS_DE.csv")
+    recent = pd.DataFrame(
+        [
+            ("2026-09-14", 51.99, 52.67, 51.82, 52.38, 1592018),
+            ("2026-09-15", 52.08, 52.08, 51.24, 51.84, 1576258),
+            ("2026-09-16", 51.80, 52.56, 51.80, 52.13, 1712624),
+            ("2026-09-17", 52.04, 52.65, 51.84, 52.37, 1462275),
+            ("2026-09-21", 51.25, 51.91, 51.22, 51.84, 199626),
+        ],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    recent["Date"] = pd.to_datetime(recent["Date"])
+    frame = pd.concat([frame, recent], ignore_index=True)
+    dates = frame["Date"].dt.strftime("%Y-%m-%d")
+    impulse = frame.loc[(dates >= "2026-07-01") & (dates <= "2026-09-09")]
+
+    assert scanner._impulse_stalls_before_peak(impulse) is False
+    candidate = scanner._find_fibo_setup(
+        frame,
+        "long",
+        forced_anchor_dates=("2026-07-01", "2026-09-09"),
+    )
+    assert candidate is not None
+    assert candidate.status == "reached_23_6_waiting_for_61_8"
+    assert scanner._fibo_crosses_detected_sidetrend(
+        candidate,
+        scanner._clear_month_sidetrend_date_ranges(frame),
+        latest_date="2026-09-21",
+        df=frame,
+    ) is False
+
+
+def test_single_instrument_dropout_explain_does_not_validate_literal_single(monkeypatch):
+    frame = pd.DataFrame(
+        [("2026-09-18", 10.0, 10.5, 9.5, 10.1, 1000)],
+        columns=["Date", "Open", "High", "Low", "Close", "Volume"],
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_get_members",
+        lambda _scope: (_ for _ in ()).throw(AssertionError("must not validate SINGLE")),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "_load_daily_data_with_retries",
+        lambda **_kwargs: (frame, None, None),
+    )
+    monkeypatch.setattr(scanner, "_find_fibo_3p_steep_setup", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(scanner, "_find_fibo_setup", lambda *_args, **_kwargs: None)
+
+    assert scanner.run_fibo_explain("single", "BAS.DE") == 0

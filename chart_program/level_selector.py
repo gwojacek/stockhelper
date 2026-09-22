@@ -750,7 +750,7 @@ def run_level_selector(raw_args=None):
                     span = pd.Timedelta(days=7)
                 extension = max(span * 6, pd.Timedelta(days=2880))
                 x_common_end = x_right + extension if args.fibo_right else x_right
-                levels = [0.0, 0.382, 0.5, 0.618, 1.0][: max(1, min(args.fibo_lines, 5))]
+                levels = [0.0, 0.236, 0.382, 0.5, 0.618, 1.0][: max(1, min(args.fibo_lines, 6))]
                 fib_color = '#64748b'
                 fib_golden_color = '#facc15'
                 objs = []

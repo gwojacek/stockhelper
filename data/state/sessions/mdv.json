@@ -3,85 +3,98 @@
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
   "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__journal_source_technique__": "Kliny",
   "drawn_objects": [
     {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (104.7)",
-      "x0": "2026-07-06",
-      "x1": "2034-07-21",
-      "y0": 104.7,
-      "y1": 104.7,
-      "price": 104.7,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2025-10-01",
+        "2026-09-10",
+        "2026-10-09"
+      ],
+      "y": [
+        187.9,
+        92.26,
+        83.71345
+      ],
+      "x0": "2025-10-01",
+      "x1": "2026-10-09",
+      "y0": 187.9,
+      "y1": 83.71345,
+      "anchor_x": [
+        "2025-10-01",
+        "2026-09-10"
+      ],
+      "anchor_y": [
+        187.9,
+        92.26
+      ],
+      "price": 83.71345,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
     },
     {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (92.07108)",
-      "x0": "2026-06-16",
-      "x1": "2034-07-21",
-      "y0": 92.07108,
-      "y1": 92.07108,
-      "price": 92.07108,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (88.17)",
-      "x0": "2026-06-10",
-      "x1": "2034-07-21",
-      "y0": 88.17,
-      "y1": 88.17,
-      "price": 88.17,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (84.26892)",
-      "x0": "2026-06-02",
-      "x1": "2034-07-21",
-      "y0": 84.26892,
-      "y1": 84.26892,
-      "price": 84.26892,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (71.64)",
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-05-13",
+        "2026-09-15",
+        "2026-10-09"
+      ],
+      "y": [
+        71.64,
+        84.32,
+        86.91364
+      ],
       "x0": "2026-05-13",
-      "x1": "2034-07-21",
+      "x1": "2026-10-09",
       "y0": 71.64,
-      "y1": 71.64,
-      "price": 71.64,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-05-13",
-      "x1": "2026-07-06",
-      "y0": 71.64,
-      "y1": 104.7,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
+      "y1": 86.91364,
+      "anchor_x": [
+        "2026-05-13",
+        "2026-09-15"
+      ],
+      "anchor_y": [
+        71.64,
+        84.32
+      ],
+      "price": 86.91364,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": false
     }
   ],
   "__saved_fibo_by_user__": false,
-  "__saved_wedge_by_user__": false
+  "__saved_wedge_by_user__": false,
+  "high": 215,
+  "__wedge_auto_high__": true,
+  "low": 71.64,
+  "__wedge_auto_low__": true,
+  "__half_points__": [],
+  "capital": 304000,
+  "calculation_currency": "PLN",
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 215,
+      "plot_price": 215,
+      "date": "2025-07-21",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 71.64,
+      "plot_price": 71.64,
+      "date": "2026-05-13",
+      "auto_wedge": true
+    }
+  }
 }
