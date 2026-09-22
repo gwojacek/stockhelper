@@ -31,6 +31,14 @@ def test_first_fibonacci_anchor_uses_the_original_single_preview_path():
     assert first_anchor in source
 
 
+def test_toggling_fibonacci_tool_discards_an_unfinished_first_anchor():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    handler = source[source.index("$('tool-fib').onclick"):source.index("$('tool-half').onclick")]
+
+    assert "clearPreviews(); fibAnchor=null;" in handler
+    assert "activeTool=same ? 'level' : 'fib'" in handler
+
+
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

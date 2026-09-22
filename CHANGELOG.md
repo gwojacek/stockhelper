@@ -34,6 +34,8 @@ The project currently documents release tags `1.0` through `9.0`, plus unrelease
 - Restored the original single-preview manual Fibonacci drawing workflow after
   the viewport/anchor-reset changes caused duplicated charts and triplicated
   levels; the only drawing addition remains the new 23.6% line.
+- Clear an unfinished first manual Fibonacci anchor whenever the Fibo tool is
+  switched off or back on, so every newly activated drawing starts cleanly.
 - Keep a coherent steep Fibonacci formation active after its correction briefly
   crosses 23.6% and then reclaims the impulse side, preventing valid formations
   such as PEPCO from being reported as dropouts.
