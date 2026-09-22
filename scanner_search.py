@@ -4654,6 +4654,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
     found_too_late = False
     events: list[tuple[str, str, str]] = []
     last_pattern_abs: int | None = None
+    last_pattern_extreme: float | None = None
     i = flip_idx + 1
     while i < len(df):
         if current_side == "above":
@@ -4879,6 +4880,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 valid_count += 1
                 events.append((ev_date, formation, depth))
                 last_pattern_abs = pattern_abs
+                last_pattern_extreme = probe
                 if first_valid_date == "-":
                     first_valid_date = ev_date
                     first_valid_depth = depth
@@ -4921,34 +4923,40 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             first_valid_status = "shallow_retest_pattern"
             events = [(ev_date, "bullish_engulfing", "shallow")]
             last_pattern_abs = confirm_idx
+            last_pattern_extreme = float(min(first["Low"], confirm["Low"]))
 
     if valid_count > 0:
         # If after a valid retest pattern price returned to cloud and then broke
         # the last pattern candle extreme in the opposite direction, downgrade
         # current state back to waiting_for_pattern.
-        if last_pattern_abs is not None and last_pattern_abs + 1 < len(df):
+        if last_pattern_abs is not None and last_pattern_extreme is not None and last_pattern_abs + 1 < len(df):
+            def _drop_invalidated_latest_pattern() -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+                remaining_events = events[:-1]
+                remaining_first_date = remaining_events[0][0] if remaining_events else "-"
+                return (
+                    "returned_to_cloud_waiting_for_pattern",
+                    "-",
+                    len(remaining_events),
+                    remaining_first_date,
+                    remaining_events,
+                )
+
             if current_side == "above":
-                last_pattern_floor = float(df["Low"].iloc[last_pattern_abs])
+                last_pattern_floor = last_pattern_extreme
                 returned_to_cloud = False
                 for k in range(last_pattern_abs + 1, len(df)):
                     if float(df["Low"].iloc[k]) <= float(top.iloc[k]):
                         returned_to_cloud = True
-                    if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
-                        latest_idx = len(df) - 1
-                        if body_low.iloc[latest_idx] > top.iloc[latest_idx]:
-                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
-                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
+                    if returned_to_cloud and float(df["Low"].iloc[k]) < last_pattern_floor:
+                        return _drop_invalidated_latest_pattern()
             else:
-                last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
+                last_pattern_ceiling = last_pattern_extreme
                 returned_to_cloud = False
                 for k in range(last_pattern_abs + 1, len(df)):
                     if float(df["High"].iloc[k]) >= float(bottom.iloc[k]):
                         returned_to_cloud = True
-                    if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
-                        latest_idx = len(df) - 1
-                        if body_high.iloc[latest_idx] < bottom.iloc[latest_idx]:
-                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
-                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
+                    if returned_to_cloud and float(df["High"].iloc[k]) > last_pattern_ceiling:
+                        return _drop_invalidated_latest_pattern()
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
         return latest_status, latest_depth, valid_count, first_valid_date, events

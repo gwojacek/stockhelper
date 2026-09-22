@@ -355,6 +355,70 @@ def test_outside_confirmation_candle_is_not_counted_as_a_second_retest(monkeypat
     assert events == [(confirmation_date.strftime("%Y-%m-%d"), "bullish_piercing_line", "shallow")]
 
 
+def test_long_retest_pattern_expires_when_later_cloud_price_breaks_its_low(monkeypatch):
+    dates = pd.date_range("2026-09-01", periods=6, freq="D")
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [9.0, 10.3, 10.2, 10.5, 10.1, 10.4],
+        "High": [9.5, 10.8, 10.7, 10.9, 10.6, 10.8],
+        "Low": [8.5, 10.1, 9.5, 10.3, 9.4, 10.2],
+        "Close": [9.0, 10.6, 10.5, 10.8, 10.2, 10.6],
+        "cloud_top": [10.0] * 6,
+        "cloud_bottom": [9.0] * 6,
+    })
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bullish_hammer",
+        lambda row: pd.Timestamp(row["Date"]) == dates[2],
+    )
+    monkeypatch.setattr(scanner_search, "_is_bullish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bullish_piercing_line", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_morning_star", lambda *_args, **_kwargs: False)
+
+    status, depth, count, first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="above"
+    )
+
+    assert status == "returned_to_cloud_waiting_for_pattern"
+    assert depth == "-"
+    assert count == 0
+    assert first_date == "-"
+    assert events == []
+
+
+def test_short_retest_pattern_expires_when_later_cloud_price_breaks_its_high(monkeypatch):
+    dates = pd.date_range("2026-09-01", periods=6, freq="D")
+    df = pd.DataFrame({
+        "Date": dates,
+        "Open": [11.0, 9.7, 9.8, 9.5, 9.9, 9.6],
+        "High": [11.5, 9.9, 10.5, 9.7, 10.6, 9.8],
+        "Low": [10.5, 9.2, 9.3, 9.1, 9.4, 9.2],
+        "Close": [11.0, 9.4, 9.5, 9.2, 9.8, 9.4],
+        "cloud_top": [11.0] * 6,
+        "cloud_bottom": [10.0] * 6,
+    })
+    monkeypatch.setattr(
+        scanner_search,
+        "_is_bearish_shooting_star",
+        lambda row: pd.Timestamp(row["Date"]) == dates[2],
+    )
+    monkeypatch.setattr(scanner_search, "_is_bearish_engulfing", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_bearish_harami", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_dark_cloud_cover", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(scanner_search, "_is_evening_star", lambda *_args, **_kwargs: False)
+
+    status, depth, count, first_date, events = scanner_search._detect_ichimoku_retest(
+        df, flip_idx=1, current_side="below"
+    )
+
+    assert status == "returned_to_cloud_waiting_for_pattern"
+    assert depth == "-"
+    assert count == 0
+    assert first_date == "-"
+    assert events == []
+
+
 def test_hammer_after_breakout_is_valid_retest_only_when_hammer_touches_cloud(monkeypatch):
     dates = pd.date_range("2026-08-01", periods=7, freq="D")
     df = pd.DataFrame(
@@ -456,7 +520,7 @@ def test_local_low_resets_after_price_exits_and_returns_to_cloud(monkeypatch):
     assert events == [(hammer_date.strftime("%Y-%m-%d"), "hammer", "medium")]
 
 
-def test_mdv_piercing_line_inside_cloud_is_latest_local_low_retest():
+def test_mdv_lower_cloud_low_invalidates_old_piercing_but_keeps_new_harami():
     df = pd.DataFrame(
         [
             {"Date": "2026-06-17", "Open": 92.50, "High": 92.50, "Low": 89.00, "Close": 91.00},
@@ -486,12 +550,9 @@ def test_mdv_piercing_line_inside_cloud_is_latest_local_low_retest():
 
     assert status == "deep_retest_pattern"
     assert depth == "deep"
-    assert count == 2
-    assert first_date == "2026-08-18"
-    assert events == [
-        ("2026-08-18", "bullish_piercing_line", "deep"),
-        ("2026-08-21", "bullish_harami", "deep"),
-    ]
+    assert count == 1
+    assert first_date == "2026-08-21"
+    assert events == [("2026-08-21", "bullish_harami", "deep")]
 
 
 def test_short_retest_prefers_newer_higher_dark_cloud_cover(monkeypatch):
