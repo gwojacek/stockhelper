@@ -3781,7 +3781,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     # Stooq starts with the normal connection and switches to the local Tor
     # SOCKS proxy only when the history table is missing.
     os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")
-    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "6")
+    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "3")
     print("[allsearch] Stooq connection mode=direct-first, Tor SOCKS fallback=socks5://127.0.0.1:9050", flush=True)
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)

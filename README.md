@@ -381,7 +381,7 @@ Only variables referenced by the code are listed here.
 | `STOCKHELPER_STOOQ_CAPTCHA_DEBUG` | `1` | Prints extra CAPTCHA OCR/debug details and writes CAPTCHA debug screenshots. |
 | `STOCKHELPER_STOOQ_CAPTCHA_ATTEMPTS` | `5` | Number of OCR CAPTCHA attempts before giving up/falling back. Default in code is `5`. |
 | `STOCKHELPER_STOOQ_MAX_RUNTIME_S` | `900` | Watchdog timeout for Stooq web scraping. Code enforces at least 30 seconds. |
-| `STOCKHELPER_COMMODITIES_WORKERS` | `6` | Worker count for bounded parallel commodity Stooq web scans. Default is `6`; lower it when Stooq/VPN/CAPTCHA handling is noisy. |
+| `STOCKHELPER_COMMODITIES_WORKERS` | `3` | Worker count for bounded parallel commodity Stooq web scans. Allsearch defaults Forex and commodities to `3`; other markets use all available CPU workers. |
 | `STOCKHELPER_COMMODITIES_SEQUENTIAL` | `1` | Forces commodity scans to single-threaded Stooq web fetching. Useful when VPN/CAPTCHA prompts are noisy. |
 | `STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES` | `3` | Automatic blank/no-table and pre-inspector CAPTCHA/limit Stooq reload attempts before falling back to alternate browser/inspector handling. |
 | `STOCKHELPER_STOOQ_BLANK_PROMPT` | `1` | Restores the old manual “press Enter after VPN change” pause for blank/no-table Stooq pages. Default is automatic retry (`0`). |
@@ -1128,7 +1128,7 @@ STOCKHELPER_STOOQ_DEBUG=1 STOCKHELPER_STOOQ_CAPTCHA_DEBUG=1 stock --debug-stooq 
 
 Check `debug/stooq/` for JSON, HTML, and screenshots. If visible rows are correct and you want to merge them into commodity CSV cache, add `--debug-stooq-fetch`.
 
-For `stock -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode by default (`STOCKHELPER_COMMODITIES_WORKERS=6`). If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1` or lower the worker count. Blank/no-table pages and CAPTCHA/limit states just before Playwright inspector are refreshed automatically (`STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES=3`), then a Firefox Playwright fallback can be tried for blank Chrome pages before the headed inspector. Set `STOCKHELPER_STOOQ_BLANK_PROMPT=1` only when you explicitly want the old pause-before-retry behavior. After commodities scans, StockHelper prints a `[commodity-check]` CSV row-count summary using `STOCKHELPER_COMMODITIES_MIN_ROWS` (default `250`).
+For `stock -allsearch commodities`, commodity Stooq web fetches run in bounded parallel mode with three workers by default (`STOCKHELPER_COMMODITIES_WORKERS=3`). Forex also uses three workers during allsearch; other markets use every available CPU worker. If VPN/CAPTCHA handling becomes confusing, retry with `STOCKHELPER_COMMODITIES_SEQUENTIAL=1` or lower the worker count. Blank/no-table pages and CAPTCHA/limit states just before Playwright inspector are refreshed automatically (`STOCKHELPER_STOOQ_BLANK_AUTO_RETRIES=3`), then a Firefox Playwright fallback can be tried for blank Chrome pages before the headed inspector. Set `STOCKHELPER_STOOQ_BLANK_PROMPT=1` only when you explicitly want the old pause-before-retry behavior. After commodities scans, StockHelper prints a `[commodity-check]` CSV row-count summary using `STOCKHELPER_COMMODITIES_MIN_ROWS` (default `250`).
 
 #### Stooq Playwright proxies
 

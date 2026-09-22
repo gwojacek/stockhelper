@@ -164,6 +164,22 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
     assert "with MARKET_REFRESH_LOCK:" in fibo_worker
 
 
+def test_allsearch_worker_defaults_use_all_cpus_except_forex_and_commodities():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    helper = source[
+        source.index("def _allsearch_default_workers"):
+        source.index("def _stale_stock_data_warnings")
+    ]
+
+    assert 'os.getenv("STOCKHELPER_BATCH_MODE") != "1"' in helper
+    assert "available = max(1, os.cpu_count() or 4)" in helper
+    assert 'requested = 3 if group_name.lower() in {"forex", "commodities"} else available' in helper
+    assert source.count("_allsearch_default_workers(group_name,") == 2
+
+    run_source = Path("run").read_text(encoding="utf-8")
+    assert 'os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "3")' in run_source
+
+
 def test_allsearch_accepts_comma_separated_selected_instruments():
     mod = load_run_module()
 

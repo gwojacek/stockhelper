@@ -3139,6 +3139,15 @@ def _scan_workers_override() -> int | None:
         return None
 
 
+def _allsearch_default_workers(group_name: str, instrument_count: int) -> int | None:
+    """Return the batch default, leaving standalone scanner defaults untouched."""
+    if os.getenv("STOCKHELPER_BATCH_MODE") != "1":
+        return None
+    available = max(1, os.cpu_count() or 4)
+    requested = 3 if group_name.lower() in {"forex", "commodities"} else available
+    return min(requested, max(1, instrument_count))
+
+
 def _stale_stock_data_warnings(
     group_name: str,
     members: Sequence[str],
@@ -5060,6 +5069,8 @@ def run_ichimoku_search(target: str) -> int:
     else:
         if workers_override is not None:
             max_workers = min(max(1, workers_override), len(rest))
+        elif (allsearch_workers := _allsearch_default_workers(group_name, len(rest))) is not None:
+            max_workers = allsearch_workers
         elif group_name == "commodities":
             try:
                 commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "6"))
@@ -9012,6 +9023,8 @@ def run_fibo_search(target: str) -> int:
     workers_override = _scan_workers_override()
     if workers_override is not None:
         max_workers = min(max(1, workers_override), len(members))
+    elif (allsearch_workers := _allsearch_default_workers(group_name, len(members))) is not None:
+        max_workers = allsearch_workers
     elif group_name == "commodities":
         try:
             max_workers = min(max(1, int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "1"))), len(members))
