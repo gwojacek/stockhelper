@@ -2721,7 +2721,7 @@ def _allsearch_ichimoku_yahoo_probe(
     members: list[str],
     exchange_suffix: str | None,
 ) -> bool:
-    """Compare three random cached latest candles exactly with live Yahoo data."""
+    """Verify three random caches against Yahoo without downgrading newer data."""
     probe_count = min(3, len(members))
     candidates = random.sample(list(members), k=len(members)) if members else []
     print(
@@ -2746,14 +2746,19 @@ def _allsearch_ichimoku_yahoo_probe(
                 and yahoo_signature is not None
                 and yahoo_signature[0] < cached_signature[0]
             ):
-                # Illiquid Yahoo symbols sometimes expose an older last-trade
-                # candle than a valid cached candle.  Such a symbol cannot say
-                # whether the market cache is fresh, so replace this probe with
-                # another random member rather than forcing a bogus refresh.
+                # Stooq/bulk can already contain today's session while Yahoo
+                # still exposes yesterday (especially before Yahoo publishes
+                # its daily candle).  The remote source has no newer data to
+                # merge, so this is positive cache-freshness evidence. Counting
+                # it also bounds the probe to three instruments instead of
+                # walking the entire market and eventually forcing a refresh.
+                compared += 1
                 print(
                     f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature[0]} is older "
-                    f"than cached newest={cached_signature[0]}; probe not comparable, trying another"
+                    f"than cached newest={cached_signature[0]}; cache is newer, no refresh needed"
                 )
+                if compared >= probe_count:
+                    return False
                 continue
             compared += 1
             matches = (

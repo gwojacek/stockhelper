@@ -1160,7 +1160,7 @@ def test_allsearch_ichimoku_probe_ignores_csv_float_round_trip_noise():
     assert scanner._latest_candle_signatures_match(cached, yahoo)
 
 
-def test_allsearch_ichimoku_probe_skips_yahoo_symbol_older_than_cache(monkeypatch, tmp_path):
+def test_allsearch_ichimoku_probe_accepts_three_caches_newer_than_yahoo(monkeypatch, tmp_path, capsys):
     import os
     import scanner_search as scanner
 
@@ -1170,19 +1170,25 @@ def test_allsearch_ichimoku_probe_skips_yahoo_symbol_older_than_cache(monkeypatc
     for ticker in members:
         cached.to_csv(tmp_path / f"{ticker}.csv", index=False)
 
+    monkeypatch.delenv("STOCKHELPER_CACHE_ONLY", raising=False)
+    monkeypatch.delenv("STOCKHELPER_FORCE_REMOTE_REFRESH", raising=False)
     monkeypatch.setenv("STOCKHELPER_ALLSEARCH_ICHIMOKU_PROBES", "1")
     monkeypatch.setattr(scanner, "_warsaw_daily_bulk_day", lambda: None)
     monkeypatch.setattr(scanner.random, "sample", lambda population, k: members)
     monkeypatch.setattr(scanner, "_search_fetch_symbol", lambda ticker, *_args: (ticker, "stock"))
     monkeypatch.setattr(scanner, "local_csv_path_for_symbol", lambda symbol, *_args: tmp_path / f"{symbol}.csv")
+    calls = []
     monkeypatch.setattr(
         scanner,
         "_yahoo_download_window",
-        lambda symbol, *_args, **_kwargs: (older if symbol == "IPE" else cached, symbol, None),
+        lambda symbol, *_args, **_kwargs: (calls.append(symbol) or older.copy(), symbol, None),
     )
 
     assert scanner._should_refresh_group_data("WIG", members, ".WA") is False
     assert os.environ.get("STOCKHELPER_CACHE_ONLY") == "1"
+    assert calls == members[:3]
+    output = capsys.readouterr().out
+    assert output.count("cache is newer, no refresh needed") == 3
 
 
 def test_allsearch_wig_refreshes_stooq_bulk_before_yahoo_probe(monkeypatch):
