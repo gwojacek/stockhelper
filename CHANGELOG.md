@@ -1,28 +1,5 @@
 # Changelog
 
-- Extended manual Fibo previews across the full future chart area, removed sidetrend sections from Fibo-only debug reports, repaired single-symbol dropout diagnostics, and kept coherent DNP/BAS/BFT-style impulses through internal or peak-adjacent range candidates.
-- Completed 23.6% rendering for scanner-opened Fibos, removed the empty first-anchor preview artifact, returned reclaimed 23.6 setups to the strong-impulse column, and recognized active volatile monthly shelves such as APP before finalizing Fibos.
-- Added the 23.6% level to both automatic scanner and manually drawn Fibonacci groups in the lightweight chart.
-- Tightened Fibo lifecycle validation: second anchors must be the true impulse extreme, harami confirmations must close back across 61.8, active tight correction shelves invalidate stale formations, and strong post-pause impulses such as ACP remain eligible.
-
-- Allowed allsearch to continue when at most 10% of a market group remains stale after data repair, while still stopping groups whose unresolved share exceeds that threshold.
-- Added an end-of-allsearch market-data warning summary grouped by market, so tolerated missing or stale instruments remain visible after both scanner phases finish.
-
-- Fixed current 3P boards failing to populate recent Fibo dropouts after the first column was renamed from “Steep incline” to “Strong impulse”.
-- Kept live exceptional impulses such as BFT in Fibo results when a range candidate extends through the newest candle and therefore is not yet a completed monthly sidetrend.
-
-- Improved sidetrend review detection to split long candidates at sustained transitions, discard unsplittable multi-regime ranges, recover post-shock shelves, and refine smooth entry/exit boundaries.
-- Updated the WIG scanner universe by removing stale MOJ and PUR entries and adding MQR (MultiQure SA).
-- Made saved user sidetrends dominant in the review chart by removing overlapping scanner-only ranges before rendering.
-- Prevented short pullbacks after the last high of an incline from being classified as completed sidetrends.
-- Limited Fibo details in sidetrend reports to selected valid ranges that overlap the Fibo.
-- Restored full Stooq-first health retries for stale Forex caches, matching commodity repair behavior instead of bypassing history refresh for a single missing candle.
-- Made Fibo sidetrend invalidation anchor-aware: completed tight monthly ranges are checked only from the final first anchor through the first 61.8 touch/current candle, after anchor selection has had a chance to restart at a strong post-range impulse.
-- Replaced per-candidate month-window rescans and tuple caching with one tight-range scan per instrument, and rejected short Fibos whose first anchor is superseded by a later high.
-- Tightened Fibo-only sidetrend qualification to reject directional or spike-trimmed windows, preserved BFT-style coherent impulses, and allowed repeated strong post-range legs to advance the first anchor more than once.
-- Added oscillation-based volatile sidetrends for WAS/LWB/DIG, invalidated Fibos whose first anchor sits inside a continuing month-long shelf, and applied the first-anchor extreme check to every regular, steep, and saved Fibo result.
-- Reduced volatile-shelf over-filtering with stricter oscillation requirements, rejected anchors placed near a shelf's beginning, and required both Fibo anchors to remain the true extrema through the first 61.8 horizon (including MQR's later peak).
-
 All notable release changes for StockHelper are documented here.
 
 The project currently documents release tags `1.0` through `9.0`, plus unreleased changes currently on `HEAD`. Each section summarizes the important feature work delivered up to that tag, with later sections describing what changed since the previous tag.
@@ -49,6 +26,10 @@ Compare: [`8.1...9.0`](https://github.com/gwojacek/stockhelper/compare/8.1...9.0
 
 ### Added
 
+- Added the 23.6% level to automatic scanner and manually drawn Fibonacci
+  groups, including scanner-opened charts and full-width future previews.
+- Added oscillation-based detection for volatile month-scale sidetrends and an
+  end-of-allsearch data-quality summary grouped by market.
 - Added a two-line manual wedge drawing workflow with candle-extreme snapping, freely movable projected endpoints, and a dedicated **Save wedge** action. Dedicated wedge saves preserve the user's exact geometry for future wedge scans without saving unrelated chart edits.
 - Added an interactive month-scale sidetrend review tool with individually colored ranges, selection controls, draggable boundaries, saved-range persistence, and detailed candle data in correction reports.
 - Added richer Fibo, wedge, Ichimoku, and sidetrend debug reports with instrument identity, live-updating correction comparisons, separately grouped date/price columns, and copyable formation candle data.
@@ -56,6 +37,23 @@ Compare: [`8.1...9.0`](https://github.com/gwojacek/stockhelper/compare/8.1...9.0
 
 ### Changed
 
+- Allsearch now continues when no more than 10% of a market group remains
+  missing or stale after repair, while groups above that threshold still stop.
+- Improved sidetrend review detection to split ranges at sustained regime
+  transitions, recover post-shock shelves, refine smooth boundaries, and make
+  saved user ranges take precedence over overlapping scanner-only ranges.
+- Made Fibo sidetrend invalidation anchor-aware and more efficient. Completed
+  ranges are evaluated between the final first anchor and the first 61.8 touch
+  (or current candle), while coherent impulses and repeated strong post-range
+  legs can remain eligible.
+- Tightened Fibo lifecycle rules so both anchors remain true extrema through
+  the first-61.8 horizon, harami confirmations close back across 61.8, and
+  active tight correction shelves invalidate stale formations without
+  over-filtering directional or merely spike-trimmed windows.
+- Updated the WIG scanner universe by removing MOJ and PUR and adding MQR
+  (MultiQure SA).
+- Restored full Stooq-first health retries for stale Forex caches, matching the
+  commodity repair workflow.
 - Made dedicated manual wedges authoritative in the Wedges scanner until invalidation. Their precise saved anchor geometry is retained after allsearch, while their saved state and lines remain isolated from Fibo, Ichimoku, and unrelated chart contexts.
 - Made manual wedge projections editable up to 60 candles beyond the newest available candle and ensured wedge discovery controls operate with user-saved geometry.
 - Strengthened Fibo validation around month-long sidetrends: a qualifying range between anchors invalidates the original impulse, and a qualifying range after the second anchor but before the 61.8 touch invalidates the complete formation.
@@ -65,6 +63,17 @@ Compare: [`8.1...9.0`](https://github.com/gwojacek/stockhelper/compare/8.1...9.0
 
 ### Fixed
 
+- Restored recent Fibo dropouts on current 3P boards after the first lifecycle
+  column was renamed from **Steep incline** to **Strong impulse**.
+- Returned setups that reclaim 23.6% to the strong-impulse column and preserved
+  live range candidates that have not yet formed a completed monthly
+  sidetrend.
+- Prevented short post-peak pullbacks from being classified as completed
+  sidetrends and limited sidetrend report Fibo details to selected valid ranges
+  that actually overlap the formation.
+- Repaired single-symbol dropout diagnostics, removed unrelated sidetrend
+  sections from Fibo-only debug reports, and removed the empty first-anchor
+  preview artifact.
 - Fixed dedicated manual wedges being automatically replaced by newly detected scanner anchors even though the saved geometry remained valid.
 - Fixed wedge-only saves incorrectly affecting the saved status or visible drawings of Ichimoku, Fibo, and other technique charts.
 - Fixed the saved-chart control not appearing active when an authoritative wedge-only save was loaded in the Wedges chart.
