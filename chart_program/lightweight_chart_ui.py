@@ -1256,13 +1256,13 @@ class LightweightChartLevelSelectorUI:
     const isShort = secondMid < firstMid;
     const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high;
     if (!Number.isFinite(low) || !Number.isFinite(high) || high <= low) return;
-    // Cover the useful future chart area without using the committed Fibo's
-    // multi-year endpoint.  The preview series is excluded from autoscaling and
-    // the viewport is restored below, so moving the pointer cannot pan or zoom.
-    const xEnd = addDays(P.ohlc[P.ohlc.length - 1].time, 540);
+    // A temporary preview must not introduce a far-future time point. Doing
+    // so makes Lightweight Charts expand/shift the visible time range after
+    // the first anchor click, only to jump back when the Fibo is committed.
+    const xEnd = P.ohlc[P.ohlc.length - 1].time;
     const needed = fibRatios.length + 1;
     while (fibPreviewSeries.length < needed) {{
-      fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:'', autoscaleInfoProvider:() => null}}));
+      fibPreviewSeries.push(addLineSeries({{color:'#94a3b8', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}));
     }}
     const paletteIndex = nextFibPaletteIndex();
     fibRatios.forEach((r, idx) => {{
@@ -1276,7 +1276,6 @@ class LightweightChartLevelSelectorUI:
     const yA = fibPrice(low, high, 1, isShort), yB = fibPrice(low, high, 0, isShort);
     try {{ boundary.setData(normalizeLineData([{{time:row1.time, value:yA}}, {{time:row2.time, value:yB}}])); boundary.applyOptions?.({{color:fibPalette(paletteIndex).boundary, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, priceLineVisible:false, lastValueVisible:false, title:''}}); }} catch(e) {{ console.warn('fib boundary preview failed', e); }}
     restoreViewport(viewport);
-    requestAnimationFrame(() => restoreViewport(viewport));
   }}
 
   function updateFibPreview(time) {{
@@ -3895,16 +3894,7 @@ class LightweightChartLevelSelectorUI:
     clearPreviews(); activeTool='manual-wedge'; activeField=null; lineAnchor=null; $('line-tool-group').classList.remove('kind-open');
     $('result-box').textContent='Draw the upper wedge line.'; updatePanel(); render();
   }};
-  $('tool-fib').onclick = () => {{
-    const same = activeTool === 'fib';
-    const viewport = captureViewport();
-    clearPreviews();
-    // Every toggle starts a new two-click operation. Never carry an abandoned
-    // first anchor into a later preview or duplicate the old preview series.
-    fibAnchor=null;
-    activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null;
-    restoreViewport(viewport); requestAnimationFrame(() => restoreViewport(viewport)); updatePanel();
-  }};
+  $('tool-fib').onclick = () => {{ const same = activeTool === 'fib'; clearPreviews(); activeTool=same ? 'level' : 'fib'; activeField=null; lineAnchor=halfAnchor=null; updatePanel(); }};
   $('tool-half').onclick = () => {{ const same = activeTool === 'half'; clearPreviews(); activeTool=same ? 'level' : 'half'; activeField=null; lineAnchor=fibAnchor=percentDiffAnchor=null; updatePanel(); }};
   $('tool-percent-diff').onclick = () => {{ const same = activeTool === 'percent-diff'; clearPreviews(); safeRemoveSeries(percentDiffSeries); percentDiffSeries=null; activeTool=same ? 'level' : 'percent-diff'; activeField=null; lineAnchor=fibAnchor=halfAnchor=percentDiffAnchor=null; $('result-box').textContent = same ? '' : 'Select the first candle.'; updatePanel(); }};
   $('line-color-toggle').onclick = () => $('line-color-picker').classList.toggle('open');
@@ -4115,21 +4105,15 @@ class LightweightChartLevelSelectorUI:
       return;
     }}
     if (activeTool === 'fib') {{
-      const viewport = captureViewport();
       const row = nearest(time); const mid = (row.low + row.high) / 2;
-      // A single anchor has no Fibo geometry yet.  Do not create empty preview
-      // series until the pointer reaches a different candle: Lightweight
-      // Charts otherwise reserves a blank price-scale marker/plot area until
-      // the second anchor is clicked.
-      if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updatePanel(); return; }}
+      if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}
       const row1 = nearest(fibAnchor.x), row2 = nearest(time); const firstMid = fibAnchor.mid, secondMid = (row2.low + row2.high)/2; const isShort = secondMid < firstMid;
       const low = isShort ? row2.low : row1.low, high = isShort ? row1.high : row2.high; const gid = crypto.randomUUID();
       const paletteIndex = nextFibPaletteIndex();
       const xEnd = addDays(P.ohlc[P.ohlc.length-1].time, Math.max(2880, Math.abs(row2.idx-row1.idx)*24));
       fibRatios.forEach((r) => {{ const y = fibPrice(low, high, r, isShort); const pct = `${{(r*100).toFixed(1)}}%`.replace('.0%','%'); drawnObjects.push({{id:crypto.randomUUID(), type:'fib', label:`FIB ${{pct}} (${{fmt(y)}})`, ratio:r, x0:fibStartDate(row1, row2, r), x1:xEnd, y0:y, y1:y, price:y, color:fibColor(r, paletteIndex), fib_palette:paletteIndex, group_id:gid, direction:isShort?'short':'long'}}); }});
       drawnObjects.push({{id:crypto.randomUUID(), type:'fib-boundary', label:'FIB anchor', x0:row1.time, x1:row2.time, y0:fibPrice(low, high, 1, isShort), y1:fibPrice(low, high, 0, isShort), color:fibPalette(paletteIndex).boundary, fib_palette:paletteIndex, group_id:gid}});
-      fibAnchor=null; clearPreviews(); activeTool='level'; render();
-      restoreViewport(viewport); requestAnimationFrame(() => restoreViewport(viewport)); updatePanel(); return;
+      fibAnchor=null; clearPreviews(); render(); return;
     }}
     if (activeTool === 'half') {{ if (!halfAnchor) {{ levels.__half_points__ = [{{date:time, price}}]; halfAnchor = {{x:time, y:price}}; refreshHalfSeries(); return; }} const midpoint = roundPrice((halfAnchor.y + price)/2); levels.stop_loss = midpoint; levelPoints.stop_loss = {{price:midpoint, plot_price:midpoint, date:time}}; levels.__half_points__ = [{{date:halfAnchor.x, price:halfAnchor.y}}, {{date:time, price}}]; halfAnchor=null; refreshHalfSeries(); refreshLevelSeries('stop_loss'); return; }}
     if (activeTool === 'level' && activeField) {{ const row = nearest(time); let selected = price, plot = price; if (activeField === 'high' || activeField === 'low') {{ selected = roundPrice(activeField === 'high' ? row.high : row.low); plot = selected; }} levels[activeField] = selected; levelPoints[activeField] = {{price:selected, plot_price:plot, date:row.time}}; if (activeField === 'stop_loss') {{ levels.__half_points__ = []; refreshHalfSeries(); }} refreshLevelSeries(activeField); }}

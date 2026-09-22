@@ -24,27 +24,11 @@ def test_lightweight_fibonacci_drawings_include_23_6_for_scanner_and_manual_grou
     assert "--fibo-lines 6" in scanner_source
 
 
-def test_first_fibonacci_anchor_does_not_create_empty_preview_series():
+def test_first_fibonacci_anchor_uses_the_original_single_preview_path():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    first_anchor = "if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updatePanel(); return; }}"
+    first_anchor = "if (!fibAnchor) {{ fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time); updatePanel(); return; }}"
     assert first_anchor in source
-    assert "fibAnchor = {{x:row.time, mid}}; updateFibPreview(row.time)" not in source
-
-
-def test_fibonacci_tool_toggle_clears_abandoned_anchor_and_preserves_viewport():
-    source = UI_SOURCE.read_text(encoding="utf-8")
-    handler = source[source.index("$('tool-fib').onclick"):source.index("$('tool-half').onclick")]
-
-    assert "const viewport = captureViewport();" in handler
-    assert "clearPreviews();" in handler
-    assert "fibAnchor=null;" in handler
-    assert "requestAnimationFrame(() => restoreViewport(viewport))" in handler
-
-    completion = source[source.index("if (activeTool === 'fib')"):source.index("if (activeTool === 'half')")]
-    assert "const viewport = captureViewport();" in completion
-    assert "fibAnchor=null; clearPreviews(); activeTool='level'; render();" in completion
-    assert "restoreViewport(viewport); requestAnimationFrame(() => restoreViewport(viewport))" in completion
 
 
 def test_debug_tools_offer_technique_specific_choosers_and_shared_report_drawer():

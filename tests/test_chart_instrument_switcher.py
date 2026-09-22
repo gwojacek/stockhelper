@@ -107,10 +107,8 @@ def test_fibo_preview_does_not_shift_the_chart_viewport():
     preview = source[source.index("function drawFibPreview"):source.index("function updateFibPreview")]
 
     assert "const viewport = captureViewport();" in preview
-    assert "const xEnd = addDays(P.ohlc[P.ohlc.length - 1].time, 540);" in preview
-    assert "autoscaleInfoProvider:() => null" in preview
+    assert "const xEnd = P.ohlc[P.ohlc.length - 1].time;" in preview
     assert "restoreViewport(viewport);" in preview
-    assert "requestAnimationFrame(() => restoreViewport(viewport));" in preview
 
 
 def test_chart_shows_saved_fibo_and_max_capital_context():

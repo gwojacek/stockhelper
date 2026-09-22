@@ -31,9 +31,9 @@ The project currently documents release tags `1.0` through `9.0`, plus unrelease
 
 ### Fixed
 
-- Reset the manual Fibonacci tool after its second anchor (and whenever the
-  toolbar button is toggled), prevent abandoned anchors from producing duplicate
-  previews, and preserve the exact chart viewport throughout preview and commit.
+- Restored the original single-preview manual Fibonacci drawing workflow after
+  the viewport/anchor-reset changes caused duplicated charts and triplicated
+  levels; the only drawing addition remains the new 23.6% line.
 - Keep a coherent steep Fibonacci formation active after its correction briefly
   crosses 23.6% and then reclaims the impulse side, preventing valid formations
   such as PEPCO from being reported as dropouts.
