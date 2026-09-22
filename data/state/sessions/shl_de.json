@@ -70,6 +70,8 @@
   "__journal_source_technique__": "Ichimoku",
   "__scanner_breakout_date__": "2026-07-29",
   "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "0",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-09-21",
+  "__scanner_latest_retest_pattern__": "bullish_harami",
   "__scanner_previous_respect_months__": "6.3"
 }

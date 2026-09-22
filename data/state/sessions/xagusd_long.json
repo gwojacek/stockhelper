@@ -1,5 +1,5 @@
 {
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
   "lot_cost": 137626.31,
   "pip_value": 18100.75,
@@ -9,10 +9,23 @@
       "type": "fib",
       "label": "FIB 0% (71.113)",
       "x0": "2026-08-28",
-      "x1": "2034-07-31",
+      "x1": "2034-08-11",
       "y0": 71.113,
       "y1": 71.113,
       "price": 71.113,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (67.25794)",
+      "x0": "2026-08-19",
+      "x1": "2034-08-11",
+      "y0": 67.25794,
+      "y1": 67.25794,
+      "price": 67.25794,
       "color": "#64748b",
       "group_id": "auto-fibo",
       "direction": "long"
@@ -22,7 +35,7 @@
       "type": "fib",
       "label": "FIB 38.2% (64.87303)",
       "x0": "2026-08-13",
-      "x1": "2034-07-31",
+      "x1": "2034-08-11",
       "y0": 64.87303,
       "y1": 64.87303,
       "price": 64.87303,
@@ -35,7 +48,7 @@
       "type": "fib",
       "label": "FIB 50% (62.9455)",
       "x0": "2026-08-07",
-      "x1": "2034-07-31",
+      "x1": "2034-08-11",
       "y0": 62.9455,
       "y1": 62.9455,
       "price": 62.9455,
@@ -48,7 +61,7 @@
       "type": "fib",
       "label": "FIB 61.8% (61.01797)",
       "x0": "2026-08-03",
-      "x1": "2034-07-31",
+      "x1": "2034-08-11",
       "y0": 61.01797,
       "y1": 61.01797,
       "price": 61.01797,
@@ -61,7 +74,7 @@
       "type": "fib",
       "label": "FIB 100% (54.778)",
       "x0": "2026-07-17",
-      "x1": "2034-07-31",
+      "x1": "2034-08-11",
       "y0": 54.778,
       "y1": 54.778,
       "price": 54.778,
@@ -81,37 +94,14 @@
       "group_id": "auto-fibo"
     }
   ],
-  "high": 121.64,
-  "__wedge_auto_high__": true,
-  "low": 54.78,
-  "__wedge_auto_low__": true,
   "__half_points__": [],
-  "capital": 295000,
+  "capital": 304000,
   "calculation_currency": "PLN",
   "spread_multiplier": 0,
   "spread": 0,
   "spread_pips": null,
-  "level_points": {
-    "high": {
-      "price": 121.64,
-      "plot_price": 121.64,
-      "date": "2026-01-29",
-      "auto_wedge": true
-    },
-    "low": {
-      "price": 54.78,
-      "plot_price": 54.78,
-      "date": "2026-07-17",
-      "auto_wedge": true
-    }
-  },
+  "level_points": {},
   "__saved_fibo_by_user__": false,
-  "__saved_wedge_by_user__": true,
-  "position_type": "long",
-  "__scanner_breakout_date__": "2026-09-03",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-09-11",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__scanner_previous_respect_months__": "6.0"
+  "__saved_wedge_by_user__": false,
+  "position_type": "long"
 }

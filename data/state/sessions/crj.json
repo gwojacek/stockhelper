@@ -2,36 +2,36 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
   "drawn_objects": [
     {
       "id": "auto-wedge-upper",
       "type": "wedge",
       "label": "Falling wedge upper",
       "x": [
-        "2026-01-12",
-        "2026-09-02",
-        "2026-09-30"
+        "2026-04-10",
+        "2026-09-01",
+        "2026-10-14"
       ],
       "y": [
-        840.0,
-        548.0,
-        515.7546
+        597.6,
+        505.378,
+        476.78918
       ],
-      "x0": "2026-01-12",
-      "x1": "2026-09-30",
-      "y0": 840.0,
-      "y1": 515.7546,
+      "x0": "2026-04-10",
+      "x1": "2026-10-14",
+      "y0": 597.6,
+      "y1": 476.78918,
       "anchor_x": [
-        "2026-01-12",
-        "2026-09-02"
+        "2026-04-10",
+        "2026-09-01"
       ],
       "anchor_y": [
-        840.0,
-        548.0
+        597.6,
+        505.378
       ],
-      "price": 515.7546,
+      "price": 476.78918,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -42,27 +42,27 @@
       "label": "Falling wedge lower",
       "x": [
         "2026-07-02",
-        "2026-07-21",
-        "2026-09-30"
+        "2026-09-14",
+        "2026-10-14"
       ],
       "y": [
-        459.0,
-        474.0,
-        530.53846
+        423.3,
+        468.0,
+        486.91154
       ],
       "x0": "2026-07-02",
-      "x1": "2026-09-30",
-      "y0": 459.0,
-      "y1": 530.53846,
+      "x1": "2026-10-14",
+      "y0": 423.3,
+      "y1": 486.91154,
       "anchor_x": [
         "2026-07-02",
-        "2026-07-21"
+        "2026-09-14"
       ],
       "anchor_y": [
-        459.0,
-        474.0
+        423.3,
+        468.0
       ],
-      "price": 530.53846,
+      "price": 486.91154,
       "color": "#2563eb",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -96,11 +96,5 @@
   "__wedge_auto_low__": true,
   "position_type": "short",
   "__saved_fibo_by_user__": false,
-  "__saved_wedge_by_user__": false,
-  "__scanner_breakout_date__": "2026-08-06",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-08-28",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__scanner_previous_respect_months__": "3.8"
+  "__saved_wedge_by_user__": false
 }

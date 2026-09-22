@@ -1,10 +1,6 @@
 {
   "current_balance": 304000.0,
-  "favorite_instruments": [
-    "ALV.DE",
-    "CRI",
-    "MRK.DE"
-  ],
+  "favorite_instruments": [],
   "chart_sidebar_collapsed": {
     "manual-card": false,
     "instrument-card": true,

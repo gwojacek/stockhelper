@@ -1,9 +1,8 @@
 {
-  "high": 12.24,
-  "low": 7.23,
-  "entry": 10.38,
-  "stop_loss": 9.76,
-  "capital": 241000,
+  "high": 15.2,
+  "low": 7.87,
+  "stop_loss": 11.37,
+  "capital": 304000,
   "symbol": "LBW.WA",
   "name": "LBW",
   "apply_currency_conversion_fee": false,
@@ -12,82 +11,107 @@
   "__show_ichimoku__": false,
   "drawn_objects": [
     {
-      "id": "auto-fibo-0",
-      "type": "fib",
-      "label": "FIB 0% (12.67)",
-      "x0": "2026-08-28",
-      "x1": "2034-07-21",
-      "y0": 12.67,
-      "y1": 12.67,
-      "price": 12.67,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-06-12",
+        "2026-08-24",
+        "2026-10-06"
+      ],
+      "y": [
+        15.2,
+        12.54,
+        10.92314
+      ],
+      "x0": "2026-06-12",
+      "x1": "2026-10-06",
+      "y0": 15.2,
+      "y1": 10.92314,
+      "anchor_x": [
+        "2026-06-12",
+        "2026-08-24"
+      ],
+      "anchor_y": [
+        15.2,
+        12.54
+      ],
+      "price": 10.92314,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
     },
     {
-      "id": "auto-fibo-382",
-      "type": "fib",
-      "label": "FIB 38.2% (11.95566)",
-      "x0": "2026-08-17",
-      "x1": "2034-07-21",
-      "y0": 11.95566,
-      "y1": 11.95566,
-      "price": 11.95566,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-500",
-      "type": "fib",
-      "label": "FIB 50% (11.735)",
-      "x0": "2026-08-13",
-      "x1": "2034-07-21",
-      "y0": 11.735,
-      "y1": 11.735,
-      "price": 11.735,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-618",
-      "type": "fib",
-      "label": "FIB 61.8% (11.51434)",
-      "x0": "2026-08-10",
-      "x1": "2034-07-21",
-      "y0": 11.51434,
-      "y1": 11.51434,
-      "price": 11.51434,
-      "color": "#facc15",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-1000",
-      "type": "fib",
-      "label": "FIB 100% (10.8)",
-      "x0": "2026-07-28",
-      "x1": "2034-07-21",
-      "y0": 10.8,
-      "y1": 10.8,
-      "price": 10.8,
-      "color": "#64748b",
-      "group_id": "auto-fibo",
-      "direction": "long"
-    },
-    {
-      "id": "auto-fibo-boundary",
-      "type": "fib-boundary",
-      "label": "FIB anchor",
-      "x0": "2026-07-28",
-      "x1": "2026-08-28",
-      "y0": 10.8,
-      "y1": 12.67,
-      "color": "#64748b",
-      "group_id": "auto-fibo"
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-04-27",
+        "2026-10-07"
+      ],
+      "y": [
+        7.87,
+        11.53
+      ],
+      "x0": "2026-09-02",
+      "x1": "2026-10-06",
+      "y0": 10.95,
+      "y1": 11.25,
+      "anchor_x": [
+        "2026-04-27",
+        "2026-10-07"
+      ],
+      "anchor_y": [
+        7.87,
+        11.53
+      ],
+      "price": 11.25,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true
     }
   ],
-  "__journal_source_technique__": "Fibo",
-  "__saved_fibo_by_user__": false
+  "__journal_source_technique__": "Kliny",
+  "__saved_fibo_by_user__": false,
+  "__saved_wedge_by_user__": true,
+  "__wedge_auto_high__": true,
+  "__wedge_auto_low__": true,
+  "line_cross_value": 11.63,
+  "__wedge_auto_line_cross__": true,
+  "position_type": "long",
+  "__wedge_auto_position_type__": true,
+  "__wedge_auto_stop_loss__": true,
+  "__half_points__": [],
+  "calculation_currency": "PLN",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 15.2,
+      "plot_price": 15.2,
+      "date": "2026-06-12",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 7.87,
+      "plot_price": 7.87,
+      "date": "2026-04-27",
+      "auto_wedge": true
+    },
+    "line_cross_value": {
+      "price": 11.63,
+      "plot_price": 11.63,
+      "date": "2026-09-18",
+      "auto_wedge": true
+    },
+    "stop_loss": {
+      "price": 11.37,
+      "plot_price": 11.37,
+      "date": "2026-09-18",
+      "auto_wedge": true
+    }
+  }
 }

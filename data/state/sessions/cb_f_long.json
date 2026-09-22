@@ -1,10 +1,5 @@
 {
   "__show_ichimoku__": false,
-  "__scanner_breakout_date__": "2026-05-29",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-06-08",
-  "__scanner_latest_retest_pattern__": "shooting_star",
-  "__scanner_previous_respect_months__": "4.4",
   "__journal_source_technique__": "Fibo",
   "lot_cost": 35631.2,
   "pip_value": 3618.75,
@@ -86,6 +81,18 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__scanner_pattern_date__": "2026-07-24",
-  "__scanner_pattern_name__": "dark_cloud_cover"
+  "__saved_fibo_invalid__": {
+    "since": "2026-09-21",
+    "delete_on": "2026-09-26",
+    "fingerprint": "1c4a78e1452c7916"
+  },
+  "capital": 304000,
+  "calculation_currency": "PLN",
+  "__saved_fibo_by_user__": false,
+  "__saved_wedge_by_user__": false,
+  "position_type": "long",
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {}
 }
